@@ -22,8 +22,14 @@ $petugasQuery = "SELECT id, nama FROM users WHERE role = 'petugas' ORDER BY nama
 $petugasResult = $conn->query($petugasQuery);
 
 // Base query
-$baseQuery = "SELECT a.*, u.nama FROM absensi a JOIN users u ON a.user_id = u.id";
-$countQuery = "SELECT COUNT(*) as total FROM absensi a JOIN users u ON a.user_id = u.id";
+$baseQuery = "SELECT a.*, u.nama, pt.petugas1_nama, pt.petugas2_nama 
+              FROM absensi a 
+              JOIN users u ON a.user_id = u.id 
+              LEFT JOIN petugas_tugas pt ON a.tanggal = pt.tanggal";
+$countQuery = "SELECT COUNT(*) as total 
+               FROM absensi a 
+               JOIN users u ON a.user_id = u.id 
+               LEFT JOIN petugas_tugas pt ON a.tanggal = pt.tanggal";
 
 // Add WHERE clauses for filters
 $whereClause = [];
@@ -95,7 +101,10 @@ $result = $stmt->get_result();
 // Handle export requests
 if (isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'])) {
     // For export, we need all results without pagination
-    $exportQuery = "SELECT a.*, u.nama FROM absensi a JOIN users u ON a.user_id = u.id";
+    $exportQuery = "SELECT a.*, u.nama, pt.petugas1_nama, pt.petugas2_nama 
+                    FROM absensi a 
+                    JOIN users u ON a.user_id = u.id 
+                    LEFT JOIN petugas_tugas pt ON a.tanggal = pt.tanggal";
     
     // Add filters if they exist
     if (!empty($whereClause)) {
@@ -158,6 +167,8 @@ function exportToExcel($result) {
                     <th>Tanggal</th>
                     <th>Waktu Masuk</th>
                     <th>Waktu Keluar</th>
+                    <th>Petugas 1</th>
+                    <th>Petugas 2</th>
                 </tr>
             </thead>
             <tbody>';
@@ -170,7 +181,9 @@ function exportToExcel($result) {
                 <td>' . htmlspecialchars($row['tanggal']) . '</td>
                 <td>' . htmlspecialchars($row['waktu_masuk'] ?? '-') . '</td>
                 <td>' . htmlspecialchars($row['waktu_keluar'] ?? '-') . '</td>
-            </tr>';
+                <td>' . htmlspecialchars($row['petugas1_nama'] ?? '-') . '</td>
+                <td>' . htmlspecialchars($row['petugas2_nama'] ?? '-') . '</td>
+              </tr>';
     }
             
     echo '</tbody>
@@ -231,7 +244,9 @@ function exportToPDF($result) {
     $pdf->Cell(50, 10, 'Nama Petugas', 1, 0, 'C', 1);
     $pdf->Cell(40, 10, 'Tanggal', 1, 0, 'C', 1);
     $pdf->Cell(40, 10, 'Waktu Masuk', 1, 0, 'C', 1);
-    $pdf->Cell(40, 10, 'Waktu Keluar', 1, 1, 'C', 1);
+    $pdf->Cell(40, 10, 'Waktu Keluar', 1, 0, 'C', 1);
+    $pdf->Cell(40, 10, 'Petugas 1', 1, 0, 'C', 1);
+    $pdf->Cell(40, 10, 'Petugas 2', 1, 1, 'C', 1);
     
     // Table data
     $pdf->SetFont('helvetica', '', 10);
@@ -252,7 +267,9 @@ function exportToPDF($result) {
         $pdf->Cell(50, 8, $row['nama'], 1, 0, 'L', 1);
         $pdf->Cell(40, 8, $row['tanggal'], 1, 0, 'C', 1);
         $pdf->Cell(40, 8, $row['waktu_masuk'] ?? '-', 1, 0, 'C', 1);
-        $pdf->Cell(40, 8, $row['waktu_keluar'] ?? '-', 1, 1, 'C', 1);
+        $pdf->Cell(40, 8, $row['waktu_keluar'] ?? '-', 1, 0, 'C', 1);
+        $pdf->Cell(40, 8, $row['petugas1_nama'] ?? '-', 1, 0, 'C', 1);
+        $pdf->Cell(40, 8, $row['petugas2_nama'] ?? '-', 1, 1, 'C', 1);
         
         $row_color = !$row_color; // Toggle for next row
     }
@@ -273,377 +290,284 @@ function exportToPDF($result) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rekap Absen - SCHOBANK SYSTEM</title>
-    <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #3498db;
-            --secondary-color: #2ecc71;
-            --accent-color: #f39c12;
-            --danger-color: #e74c3c;
-            --text-color: #333;
-            --light-bg: #f8f9fa;
-            --border-radius: 8px;
-            --shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --primary-light: #e0e9f5;
+            --secondary-color: #4caf50;
+            --accent-color: #ff9800;
+            --danger-color: #f44336;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f8faff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
         }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f2f7ff;
+
+        * {
             margin: 0;
             padding: 0;
-            color: var(--text-color);
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
         }
-        
-        .container {
+
+        body {
+            background-color: var(--bg-light);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .main-content {
             width: 100%;
             max-width: 1200px;
-            padding: 20px;
             margin: 0 auto;
-            box-sizing: border-box;
-        }
-        
-        h1 {
-            color: var(--primary-color);
-            text-align: center;
-            margin-bottom: 20px;
-            font-size: 28px;
-        }
-        
-        .card {
-            background-color: #fff;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
             padding: 20px;
+        }
+
+        .welcome-banner {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
             margin-bottom: 20px;
+            text-align: center;
+            position: relative;
+            box-shadow: var(--shadow-md);
             overflow: hidden;
         }
-        
-        .filter-form {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 15px;
+
+        .cancel-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .cancel-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: rotate(90deg);
+        }
+
+        .transfer-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: var(--shadow-sm);
             margin-bottom: 20px;
         }
-        
+
         .form-group {
-            display: flex;
-            flex-direction: column;
+            margin-bottom: 15px;
         }
-        
+
         .form-group label {
             display: block;
             margin-bottom: 5px;
-            font-weight: 500;
+            font-size: 14px;
+            color: var(--text-secondary);
         }
-        
+
         .form-control {
             width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #ddd;
-            border-radius: var(--border-radius);
-            font-size: 14px;
-            box-sizing: border-box;
-        }
-        
-        .btn {
             padding: 10px 15px;
-            border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            font-weight: 500;
+            border: 1px solid #ddd;
+            border-radius: 8px;
             font-size: 14px;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 5px;
         }
-        
-        .btn-primary {
-            background-color: var(--primary-color);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background-color: #2980b9;
-        }
-        
-        .btn-success {
-            background-color: var(--secondary-color);
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background-color: #27ae60;
-        }
-        
-        .btn-warning {
-            background-color: var(--accent-color);
-            color: white;
-        }
-        
-        .btn-warning:hover {
-            background-color: #e67e22;
-        }
-        
-        .btn-default {
-            background-color: #95a5a6;
-            color: white;
-        }
-        
-        .btn-default:hover {
-            background-color: #7f8c8d;
-        }
-        
-        .btn-danger {
-            background-color: var(--danger-color);
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background-color: #c0392b;
-        }
-        
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .actions-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        
-        th, td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: center;
-        }
-        
-        th {
-            background-color: var(--light-bg);
-            font-weight: 600;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            box-shadow: 0 1px 0 #ddd;
-        }
-        
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        
-        tr:hover {
-            background-color: #f1f1f1;
-        }
-        
-        .table-responsive {
-            overflow-x: auto;
-            box-shadow: var(--shadow);
-            border-radius: var(--border-radius);
-            background: white;
-            max-height: 500px;
-            overflow-y: auto;
-        }
-        
-        .pagination {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 5px;
-            margin-top: 20px;
-        }
-        
-        .pagination a, .pagination span {
-            padding: 8px 14px;
-            border: 1px solid #ddd;
-            text-decoration: none;
-            color: var(--primary-color);
-            background-color: white;
-            border-radius: var(--border-radius);
-            min-width: 16px;
-            text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .pagination a:hover {
-            background-color: var(--light-bg);
-        }
-        
-        .pagination .active {
-            background-color: var(--primary-color);
-            color: white;
-            border-color: var(--primary-color);
-        }
-        
-        .pagination .disabled {
-            color: #aaa;
-            cursor: not-allowed;
-        }
-        
-        .export-buttons {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        .count-info {
-            margin-bottom: 10px;
-            font-style: italic;
-            color: #666;
-        }
-        
-        .header-with-close {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-            gap: 15px;
-        }
-        
-        .search-box {
-            position: relative;
-            width: 100%;
-        }
-        
-        .search-box input {
-            padding-left: 35px;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        
-        .search-box i {
-            position: absolute;
-            left: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #aaa;
-        }
-        
+
         .filter-buttons {
             display: flex;
             gap: 10px;
+        }
+
+        .btn-verify, .btn-back {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-verify {
+            background-color: var(--primary-color);
+        }
+
+        .btn-back {
+            background-color: #6c757d;
+        }
+
+        .actions-bar {
+            display: flex;
             flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 10px;
         }
-        
-        /* Mobile Responsive Styles */
-        @media (max-width: 768px) {
-            h1 {
-                font-size: 22px;
-                margin-bottom: 15px;
-                width: 100%;
-            }
-            
-            .header-with-close {
-                justify-content: center;
-            }
-            
-            .btn-close {
-                margin-left: auto;
-            }
-            
-            .filter-form {
-                grid-template-columns: 1fr;
-                gap: 12px;
-            }
-            
-            .form-group {
-                margin-bottom: 0;
-            }
-            
-            .actions-bar {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 12px;
-            }
-            
-            .count-info {
-                width: 100%;
-                text-align: center;
-                margin-bottom: 12px;
-            }
-            
-            .export-buttons {
-                width: 100%;
-                justify-content: space-between;
-            }
-            
-            .export-buttons .btn {
-                flex: 1;
-                padding: 8px 10px;
-                font-size: 13px;
-            }
-            
-            .pagination {
-                gap: 4px;
-            }
-            
-            .pagination a, .pagination span {
-                padding: 6px 10px;
-                font-size: 13px;
-            }
-            
-            .filter-buttons {
-                width: 100%;
-                justify-content: space-between;
-            }
-            
-            .filter-buttons .btn {
-                flex: 1;
-                white-space: nowrap;
-            }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
         }
-        
-        @media (max-width: 480px) {
-            .container {
+
+        .table-responsive {
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        table th {
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .pagination a, .pagination span {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            text-decoration: none;
+            color: var(--text-primary);
+            border-radius: 4px;
+        }
+
+        .pagination .active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        @media screen and (max-width: 768px) {
+            .main-content {
                 padding: 10px;
             }
-            
-            .card {
-                padding: 15px;
+
+            .welcome-banner {
+                padding: 20px;
             }
-            
-            .btn {
-                padding: 8px 12px;
-                font-size: 13px;
+
+            .actions-bar {
+                flex-direction: column;
+                align-items: stretch;
             }
-            
-            th, td {
-                padding: 8px 5px;
-                font-size: 13px;
+
+            .export-buttons {
+                flex-direction: column;
             }
-            
-            .form-control {
-                padding: 8px 10px;
+
+            .filter-buttons {
+                flex-direction: column;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            table th, table td {
+                padding: 6px;
+            }
+
+            .pagination {
+                flex-wrap: wrap;
             }
         }
-    </style>
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-export {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .btn-export-excel {
+            background-color:rgb(22, 9, 86);
+            color: white;
+        }
+
+        .btn-export-excel:hover {
+            background-color:rgb(22, 9, 86);
+            transform: translateY(-2px);
+        }
+
+        .btn-export-pdf {
+            background-color:rgb(22, 9, 86);
+            color: white;
+        }
+
+        .btn-export-pdf:hover {
+            background-color:rgb(22, 9, 86);
+            transform: translateY(-2px);
+        }
+
+        /* Responsive adjustments for export buttons */
+        @media screen and (max-width: 768px) {
+            .export-buttons {
+                flex-direction: column;
+            }
+
+            .btn-export {
+                width: 100%;
+            }
+        }
+        </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header-with-close">
-            <h1>Rekap Absensi Petugas</h1>
-            <a href="dashboard.php" class="btn btn-danger btn-close">
-                <i class="fas fa-sign-out-alt"></i> 
+    <div class="main-content">
+        <div class="welcome-banner">
+            <h2><i class="fas fa-calendar-alt"></i> Rekap Absensi Petugas</h2>
+            <p>Lihat dan kelola data absensi petugas dengan mudah</p>
+            <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
+                <i class="fas fa-arrow-left"></i>
             </a>
         </div>
-        
-        <div class="card">
+
+        <div class="transfer-card">
             <form method="get" action="" class="filter-form">
                 <div class="form-group">
                     <label for="start_date">Tanggal Mulai:</label>
@@ -655,37 +579,29 @@ function exportToPDF($result) {
                     <input type="date" id="end_date" name="end_date" class="form-control" value="<?php echo $end_date; ?>">
                 </div>
                                 
-                <div class="form-group">
-                    <label for="search">Cari Nama Petugas:</label>
-                    <div class="search-box">
-                        <i class="fas fa-search"></i>
-                        <input type="text" id="search" name="search" class="form-control" placeholder="Ketik nama petugas..." value="<?php echo htmlspecialchars($search); ?>">
-                    </div>
-                </div>
-                
                 <div class="form-group filter-buttons">
-                    <button type="submit" class="btn btn-primary">
+                    <button type="submit" class="btn-verify">
                         <i class="fas fa-search"></i> Filter
                     </button>
                     
-                    <a href="rekap_absen.php" class="btn btn-default">
+                    <a href="rekap_absen.php" class="btn-back">
                         <i class="fas fa-redo"></i> Reset
                     </a>
                 </div>
             </form>
         </div>
-        
+
         <div class="actions-bar">
             <div class="count-info">
                 Menampilkan <?php echo $result->num_rows; ?> dari <?php echo $totalRows; ?> total data
             </div>
             
             <div class="export-buttons">
-                <a href="<?php echo $_SERVER['REQUEST_URI'] . (strpos($_SERVER['REQUEST_URI'], '?') !== false ? '&' : '?') . 'export=excel'; ?>" class="btn btn-success">
+                <a href="<?php echo $_SERVER['REQUEST_URI'] . (strpos($_SERVER['REQUEST_URI'], '?') !== false ? '&' : '?') . 'export=excel'; ?>" class="btn-export btn-export-excel">
                     <i class="fas fa-file-excel"></i> Export Excel
                 </a>
                 
-                <a href="<?php echo $_SERVER['REQUEST_URI'] . (strpos($_SERVER['REQUEST_URI'], '?') !== false ? '&' : '?') . 'export=pdf'; ?>" class="btn btn-warning">
+                <a href="<?php echo $_SERVER['REQUEST_URI'] . (strpos($_SERVER['REQUEST_URI'], '?') !== false ? '&' : '?') . 'export=pdf'; ?>" class="btn-export btn-export-pdf">
                     <i class="fas fa-file-pdf"></i> Export PDF
                 </a>
             </div>
@@ -700,6 +616,8 @@ function exportToPDF($result) {
                         <th>Tanggal</th>
                         <th>Waktu Masuk</th>
                         <th>Waktu Keluar</th>
+                        <th>Petugas 1</th>
+                        <th>Petugas 2</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -712,11 +630,13 @@ function exportToPDF($result) {
                                 <td><?php echo htmlspecialchars($row['tanggal']); ?></td>
                                 <td><?php echo htmlspecialchars($row['waktu_masuk'] ?? '-'); ?></td>
                                 <td><?php echo htmlspecialchars($row['waktu_keluar'] ?? '-'); ?></td>
+                                <td><?php echo htmlspecialchars($row['petugas1_nama'] ?? '-'); ?></td>
+                                <td><?php echo htmlspecialchars($row['petugas2_nama'] ?? '-'); ?></td>
                             </tr>
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="5" style="text-align: center;">Tidak ada data absensi yang ditemukan.</td>
+                            <td colspan="7" style="text-align: center;">Tidak ada data absensi yang ditemukan.</td>
                         </tr>
                     <?php endif; ?>
                 </tbody>

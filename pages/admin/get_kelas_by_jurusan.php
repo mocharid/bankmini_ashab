@@ -1,20 +1,23 @@
 <?php
 require_once '../../includes/db_connection.php';
 
-if (isset($_GET['jurusan_id'])) {
-    $jurusan_id = $_GET['jurusan_id'];
+// Ambil jurusan_id dari parameter GET
+$jurusan_id = filter_input(INPUT_GET, 'jurusan_id', FILTER_VALIDATE_INT);
 
-    $query = "SELECT * FROM kelas WHERE jurusan_id = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $jurusan_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
+if (!$jurusan_id) {
+    echo "<option value=''>Pilih Kelas</option>";
+    exit;
+}
 
-    $options = '<option value="">Pilih Kelas</option>';
-    while ($row = $result->fetch_assoc()) {
-        $options .= '<option value="' . $row['id'] . '">' . $row['nama_kelas'] . '</option>';
-    }
+// Query untuk mendapatkan kelas berdasarkan jurusan
+$query = $conn->prepare("SELECT id, nama_kelas FROM kelas WHERE jurusan_id = ?");
+$query->bind_param("i", $jurusan_id);
+$query->execute();
+$result = $query->get_result();
 
-    echo $options;
+// Buat dropdown options
+echo "<option value=''>Pilih Kelas</option>";
+while ($row = $result->fetch_assoc()) {
+    echo "<option value='" . $row['id'] . "'>" . htmlspecialchars($row['nama_kelas']) . "</option>";
 }
 ?>

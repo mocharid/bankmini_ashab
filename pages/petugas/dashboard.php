@@ -5,6 +5,7 @@ require_once '../../includes/db_connection.php';
 $username = $_SESSION['username'] ?? 'Petugas';
 $petugas_id = $_SESSION['user_id'] ?? 0;
 
+date_default_timezone_set('Asia/Jakarta');
 // Query untuk mengambil total transaksi, uang masuk, dan uang keluar
 $query = "SELECT COUNT(id) as total_transaksi 
           FROM transaksi 
@@ -57,6 +58,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['officer1_name'])) {
     $stmt->bind_param("sssss", $petugas1_name, $petugas1_class, $petugas2_name, $petugas2_class, $tanggal);
     $stmt->execute();
 }
+// [1] Ambil jadwal petugas hari ini
+$query_schedule = "SELECT * FROM petugas_tugas WHERE tanggal = CURDATE()";
+$stmt_schedule = $conn->prepare($query_schedule);
+$stmt_schedule->execute();
+$result_schedule = $stmt_schedule->get_result();
+$schedule = $result_schedule->fetch_assoc();
+
+// [2] Cek absensi petugas
+$attendance = null;
+if ($petugas_id) {
+    $query_attendance = "SELECT * FROM absensi 
+                       WHERE user_id = ? AND tanggal = CURDATE()";
+    $stmt_attendance = $conn->prepare($query_attendance);
+    $stmt_attendance->bind_param("i", $petugas_id);
+    $stmt_attendance->execute();
+    $attendance = $stmt_attendance->get_result()->fetch_assoc();
+}
+
+// [3] Handle form absensi
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['check_in'])) {
+        $query = "INSERT INTO absensi (user_id, tanggal, waktu_masuk) 
+                 VALUES (?, CURDATE(), NOW())";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("i", $petugas_id);
+        $stmt->execute();
+        header("Refresh:0");
+    } 
+    elseif (isset($_POST['check_out'])) {
+        $query = "UPDATE absensi SET waktu_keluar = NOW() 
+                 WHERE user_id = ? AND tanggal = CURDATE()";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("i", $petugas_id);
+        $stmt->execute();
+        header("Refresh:0");
+    }
+}
+
 
 // Fungsi untuk mengonversi tanggal ke bahasa Indonesia
 function tanggal_indonesia($tanggal) {
@@ -131,6 +170,37 @@ function tanggal_indonesia($tanggal) {
         }
         .logout-btn {
             color: red !important; /* Warna teks merah */
+        }
+        .attendance-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+
+        .attendance-status {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #28a745;
+        }
+
+        .attendance-status p {
+            margin: 5px 0;
+            color: #333;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         
         .sidebar-header {
@@ -504,122 +574,141 @@ function tanggal_indonesia($tanggal) {
             transform: translateX(50%);
         }
 
-        /* Officer Section Styles */
-        .officer-section {
-            margin-top: 10px;
-    background: white;
-    border-radius: 18px;
-    padding: 30px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.04);
-    position: relative;
-    overflow: hidden;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
-        }
-        .officer-section:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 25px rgba(0,0,0,0.1);
-}
+    /* Officer Section Styles */
+    .officer-section {
+        margin-top: 30px;
+        background: white;
+        border-radius: 12px;
+        padding: 30px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        border: 1px solid #e0e0e0;
+        transition: all 0.3s ease;
+    }
 
-        .officer-grid {
-            display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 25px;
-    margin-bottom: 25px;
-        }
+    .officer-section:hover {
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    }
 
-        .officer-box {
-            background: #f8fafc;
-    padding: 25px;
-    border-radius: 15px;
-    border-left: 5px solid #3b82f6;
-    transition: all 0.3s ease;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.02);
-        }
-        
-        .officer-box:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
-        }
+    .officer-section h2 {
+        font-size: 24px;
+        font-weight: 600;
+        color: #1a365d;
+        margin-bottom: 25px;
+        position: relative;
+        padding-bottom: 10px;
+    }
 
-        .officer-box h3 {
-            color: #0f172a;
-    margin-bottom: 18px;
-    font-size: 20px;
-    font-weight: 600;
-    position: relative;
-    padding-bottom: 10px;
-        }
-        
-        .officer-box h3::after {
-            content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 40px;
-    height: 3px;
-    background: #3b82f6;
-    border-radius: 2px;
-        }
+    .officer-section h2::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 50px;
+        height: 3px;
+        background: #2563eb;
+        border-radius: 2px;
+    }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+    .officer-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 25px;
+        margin-bottom: 25px;
+    }
 
-        .form-group label {
-            display: block;
-    margin-bottom: 8px;
-    color: #64748b;
-    font-size: 14px;
-    font-weight: 500;
-        }
+    .officer-box {
+        background: #f8fafc;
+        padding: 25px;
+        border-radius: 10px;
+        border-left: 4px solid #2563eb;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+    }
 
-        .form-group input {
-            width: 100%;
-    padding: 12px 15px;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    font-size: 15px;
-    transition: all 0.3s ease;
-    background-color: white;
-        }
+    .officer-box:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+    }
 
-        .form-group input:focus {
-            border-color: #3b82f6;
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
+    .officer-box h3 {
+        color: #1a365d;
+        margin-bottom: 20px;
+        font-size: 20px;
+        font-weight: 600;
+        position: relative;
+        padding-bottom: 10px;
+    }
 
-        .save-btn {
-            background: linear-gradient(to right, #3b82f6, #2563eb);
-    color: white;
-    border: none;
-    padding: 14px 28px;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin-top: 15px;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-        }
-        
-        .save-btn i {
-            margin-right: 10px;
-        }
+    .officer-box h3::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 40px;
+        height: 3px;
+        background: #2563eb;
+        border-radius: 2px;
+    }
 
-        .save-btn:hover {
-            background: linear-gradient(to right, #2563eb, #1d4ed8);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 15px rgba(37, 99, 235, 0.25);
-        }
-        
-        .save-btn:active {
-            transform: translateY(0);
-        }
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        color: #4a5568;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 12px 15px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        background-color: white;
+        color: #1a365d;
+    }
+
+    .form-group input:focus {
+        border-color: #2563eb;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .save-btn {
+        background: linear-gradient(to right, #2563eb, #1d4ed8);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        margin-top: 20px;
+        box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .save-btn i {
+        margin-right: 8px;
+    }
+
+    .save-btn:hover {
+        background: linear-gradient(to right, #1d4ed8, #1e40af);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(37, 99, 235, 0.25);
+    }
+
+    .save-btn:active {
+        transform: translateY(0);
+    }
 
         /* Mobile menu toggle */
         .menu-toggle {
@@ -916,6 +1005,38 @@ function tanggal_indonesia($tanggal) {
         .officer-info-section .save-btn:active {
             transform: translateY(0);
         }
+        .transfer-btn {
+    background: linear-gradient(to right, #3b82f6, #2563eb);
+    color: white;
+    border: none;
+    padding: 12px 20px; /* Ukuran padding yang lebih kecil */
+    border-radius: 8px; /* Border-radius yang lebih kecil */
+    font-size: 14px; /* Ukuran font yang lebih kecil */
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin: 10px 0; /* Margin yang lebih kecil */
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto; /* Lebar menyesuaikan konten */
+    max-width: 200px; /* Lebar maksimal */
+}
+
+.transfer-btn:hover {
+    background: linear-gradient(to right, #2563eb, #1d4ed8);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(37, 99, 235, 0.25);
+}
+
+.transfer-btn:active {
+    transform: translateY(0);
+}
+
+.transfer-btn i {
+    margin-right: 8px; /* Jarak antara ikon dan teks */
+}
     </style>
 </head>
 <body>
@@ -1004,19 +1125,10 @@ function tanggal_indonesia($tanggal) {
             
             <div class="menu-item">
                 <a href="profil.php">
-                    <i class="fas fa-user-cog"></i> Profil Petugas
+                    <i class="fas fa-user-cog"></i> Pengaturan Akun
                 </a>
             </div>
-
-            <!-- Dropdown Absen -->
-            <div class="menu-item">
-                <a href="absensi.php" class="attendance-btn">
-            <div class="menu-icon">
-                <i class="fas fa-calendar-check"></i> Absensi
-            </div>
-                </a>
-            </div>
-            
+        
             <div class="menu-item">
                 <a href="../../logout.php" class="logout-btn">
                     <i class="fas fa-sign-out-alt"></i> Logout
@@ -1098,69 +1210,51 @@ function tanggal_indonesia($tanggal) {
         </div>
     </div>
 </div>
-    
-    <!-- Money Transfer Section -->
-<!-- Money Transfer Section -->
-        <!-- Money Transfer Section -->
-        <div class="money-transfer-section">
-            <h2>Serahkan Uang</h2>
-            <form id="serahkanUangForm" method="POST">
-                <div class="form-group">
-                    <label for="saldo_bersih">Saldo Bersih yang Akan Diserahkan</label>
-                    <input type="text" id="saldo_bersih" name="saldo_bersih" value="Rp <?= number_format($saldo_bersih, 0, ',', '.') ?>" readonly>
-                </div>
-                <button type="submit" class="transfer-btn">
-                    <i class="fas fa-hand-holding-usd"></i> Serahkan Uang
-                </button>
-            </form>
+<!-- Tambahkan di bagian main-content setelah statistik -->
+<div class="officer-section">
+    <h2>Jadwal Petugas Hari Ini</h2>
+    <?php if ($schedule): ?>
+        <div class="officer-grid">
+            <div class="officer-box">
+                <h3>Petugas 1</h3>
+                <p><?= htmlspecialchars($schedule['petugas1_nama']) ?></p>
+            </div>
+            <div class="officer-box">
+                <h3>Petugas 2</h3>
+                <p><?= htmlspecialchars($schedule['petugas2_nama']) ?></p>
+            </div>
         </div>
+    <?php else: ?>
+        <p>Belum ada jadwal petugas untuk hari ini.</p>
+    <?php endif; ?>
+</div>
 
-        <!-- Officer Information Section -->
-        <div class="officer-info-section">
-            <h2>Informasi Petugas</h2>
-            <form id="officerForm" class="officer-form" method="POST">
-                <div class="officer-grid">
-                    <!-- Officer 1 Information -->
-                    <div class="officer-box">
-                        <h3>Petugas 1</h3>
-                        <div class="form-group">
-                            <label for="officer1_name">Nama Petugas 1</label>
-                            <input type="text" id="officer1_name" name="officer1_name" 
-                                   placeholder="Masukkan nama petugas 1"
-                                   value="<?= htmlspecialchars($_SESSION['officer1_name'] ?? '') ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="officer1_class">Kelas Petugas 1</label>
-                            <input type="text" id="officer1_class" name="officer1_class" 
-                                   placeholder="Contoh: XI IPS 1"
-                                   value="<?= htmlspecialchars($_SESSION['officer1_class'] ?? '') ?>" required>
-                        </div>
-                    </div>
-                    
-                    <!-- Officer 2 Information -->
-                    <div class="officer-box">
-                        <h3>Petugas 2</h3>
-                        <div class="form-group">
-                            <label for="officer2_name">Nama Petugas 2</label>
-                            <input type="text" id="officer2_name" name="officer2_name" 
-                                   placeholder="Masukkan nama petugas 2"
-                                   value="<?= htmlspecialchars($_SESSION['officer2_name'] ?? '') ?>" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="officer2_class">Kelas Petugas 2</label>
-                            <input type="text" id="officer2_class" name="officer2_class" 
-                                   placeholder="Contoh: XI IPA 2"
-                                   value="<?= htmlspecialchars($_SESSION['officer2_class'] ?? '') ?>" required>
-                        </div>
-                    </div>
-                </div>
-                <button type="submit" class="save-btn">
-                    <i class="fas fa-save"></i> Simpan Informasi Petugas
+<div class="attendance-section">
+    <h2>Absensi Harian</h2>
+    <?php if ($schedule): ?>
+        <?php if (!$attendance): ?>
+            <form method="post">
+                <button type="submit" name="check_in" class="btn">
+                    <i class="fas fa-fingerprint"></i> Check In
                 </button>
             </form>
-        </div>
-    </div>
-    <!-- Tambahkan di bagian bawah sebelum penutup </div> -->
+        <?php elseif ($attendance && !$attendance['waktu_keluar']): ?>
+            <form method="post">
+                <button type="submit" name="check_out" class="btn">
+                    <i class="fas fa-sign-out-alt"></i> Check Out
+                </button>
+            </form>
+        <?php else: ?>
+            <div class="attendance-status">
+                <p>✅ Anda telah absen hari ini</p>
+                <p>Check In: <?= date('H:i', strtotime($attendance['waktu_masuk'])) ?></p>
+                <p>Check Out: <?= date('H:i', strtotime($attendance['waktu_keluar'])) ?></p>
+            </div>
+        <?php endif; ?>
+    <?php else: ?>
+        <p>Tidak ada jadwal absen hari ini.</p>
+    <?php endif; ?>
+</div>
 
     <script>
 document.addEventListener('DOMContentLoaded', function() {

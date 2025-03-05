@@ -2,6 +2,8 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
+date_default_timezone_set('Asia/Jakarta');
+
 // Fungsi untuk mengubah nama hari ke Bahasa Indonesia
 function getHariIndonesia($date) {
     $hari = date('l', strtotime($date)); // Ambil nama hari dalam bahasa Inggris
@@ -461,31 +463,32 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
 
         .table-wrapper {
             overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid #e0e0e0;
         }
 
         .table-container table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px; /* Minimal lebar tabel */
+            min-width: 600px;
+            border-radius: 12px;
+            overflow: hidden;
         }
 
         .table-container th, .table-container td {
             padding: 12px;
             text-align: left;
-            border-bottom: 1px solid #ddd;
+            border-bottom: 1px solid #e0e0e0;
         }
 
         .table-container th {
-    background-color: #0a2e5c; /* Warna biru tua */
-    color: white; /* Warna teks putih */
-    font-weight: 600;
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
+            background-color: #0a2e5c;
+            color: white;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
 
         .table-container tr:nth-child(even) {
             background-color: #f9f9f9;
@@ -493,6 +496,7 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
 
         .table-container tr:hover {
             background-color: #f1f1f1;
+            transition: background-color 0.3s ease;
         }
 
         /* Pagination */
@@ -506,10 +510,12 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
             color: #3b82f6;
             padding: 8px 16px;
             text-decoration: none;
-            border: 1px solid #ddd;
+            border: 1px solid #e0e0e0;
             margin: 0 4px;
-            border-radius: 4px;
+            border-radius: 8px;
             transition: all 0.3s ease;
+            font-size: 14px;
+            background-color: white;
         }
 
         .pagination a.active {
@@ -520,6 +526,8 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
 
         .pagination a:hover:not(.active) {
             background-color: #f1f1f1;
+            color: #3b82f6;
+            border-color: #3b82f6;
         }
 
         /* Animations */
@@ -723,6 +731,11 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
                 </a>
             </div>
             <div class="menu-item">
+                <a href="buat_jadwal.php">
+                    <i class="fas fa-user-cog"></i> Jadwal Petugas
+                </a>
+            </div>
+            <div class="menu-item">
                 <a href="rekap_absen.php">
                     <i class="fas fa-user-check"></i> Rekap Absen Petugas
                 </a>
@@ -828,50 +841,50 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
         </div>
 
         <!-- Latest Transactions Section -->
-        <div class="table-container">
-            <h3>Transaksi Terbaru</h3>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
+<!-- Latest Transactions Section -->
+<div class="table-container">
+    <h3>Transaksi Terbaru</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>No. Transaksi</th>
+                    <th>Jenis</th>
+                    <th>Jumlah</th>
+                    <th>Petugas</th>
+                    <th>Status</th>
+                    <th>Tanggal</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (!empty($transactions)): ?>
+                    <?php foreach ($transactions as $transaction): ?>
                         <tr>
-                            <th>No. Transaksi</th>
-                            <th>Jenis</th>
-                            <th>Jumlah</th>
-                            <th>Petugas</th>
-                            <th>Status</th>
-                            <th>Tanggal</th>
+                            <td><?= $transaction['no_transaksi'] ?></td>
+                            <td><?= ucfirst($transaction['jenis_transaksi']) ?></td>
+                            <td>Rp <?= number_format($transaction['jumlah'], 0, ',', '.') ?></td>
+                            <td><?= $transaction['petugas_nama'] ?></td>
+                            <td><?= ucfirst($transaction['status']) ?></td>
+                            <td><?= date('d M Y H:i', strtotime($transaction['created_at'])) ?></td>
                         </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (!empty($transactions)): ?>
-                            <?php foreach ($transactions as $transaction): ?>
-                                <tr>
-                                    <td><?= $transaction['no_transaksi'] ?></td>
-                                    <td><?= ucfirst($transaction['jenis_transaksi']) ?></td>
-                                    <td>Rp <?= number_format($transaction['jumlah'], 0, ',', '.') ?></td>
-                                    <td><?= $transaction['petugas_nama'] ?></td>
-                                    <td><?= ucfirst($transaction['status']) ?></td>
-                                    <td><?= date('d M Y H:i', strtotime($transaction['created_at'])) ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="6" style="text-align: center;">Tidak ada transaksi terbaru.</td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-            <!-- Pagination -->
-            <?php if ($total_pages > 1): ?>
-                <div class="pagination">
-                    <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                        <a href="?page=<?= $i ?>" class="<?= $i == $page ? 'active' : '' ?>"><?= $i ?></a>
-                    <?php endfor; ?>
-                </div>
-            <?php endif; ?>
-        </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="6" style="text-align: center;">Tidak ada transaksi terbaru.</td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
     </div>
+    <!-- Pagination -->
+    <?php if ($total_pages > 1): ?>
+        <div class="pagination">
+            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                <a href="?page=<?= $i ?>" class="<?= $i == $page ? 'active' : '' ?>"><?= $i ?></a>
+            <?php endfor; ?>
+        </div>
+    <?php endif; ?>
+</div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>

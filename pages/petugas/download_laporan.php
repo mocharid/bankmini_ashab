@@ -6,13 +6,40 @@ require_once '../../includes/db_connection.php';
 $date = $_GET['date'] ?? date('Y-m-d'); 
 $format = $_GET['format'] ?? 'pdf'; 
 
-// Get officer information from session
-$officer1_name = $_SESSION['officer1_name'] ?? 'Tidak Ada Data';
-$officer1_class = $_SESSION['officer1_class'] ?? 'Tidak Ada Data';
-$officer2_name = $_SESSION['officer2_name'] ?? 'Tidak Ada Data';
-$officer2_class = $_SESSION['officer2_class'] ?? 'Tidak Ada Data';
+// Get officer information from database for the specific date
+$officer_query = "SELECT petugas1_name, petugas1_class, petugas2_name, petugas2_class 
+                 FROM petugas_tugas 
+                 WHERE tanggal = ?";
+$officer_stmt = $conn->prepare($officer_query);
+$officer_stmt->bind_param("s", $date);
+$officer_stmt->execute();
+$officer_result = $officer_stmt->get_result();
 
-// Query to calculate opening balance - CORRECTED to avoid reference to non-existent r.id
+// Set default values
+$officer1_name = 'Tidak Ada Data';
+$officer1_class = 'Tidak Ada Data';
+$officer2_name = 'Tidak Ada Data';
+$officer2_class = 'Tidak Ada Data';
+
+// If officer data exists in database for this date, use it
+if($officer_result->num_rows > 0) {
+    $officer_data = $officer_result->fetch_assoc();
+    $officer1_name = $officer_data['petugas1_name'];
+    $officer1_class = $officer_data['petugas1_class'];
+    $officer2_name = $officer_data['petugas2_name'];
+    $officer2_class = $officer_data['petugas2_class'];
+} 
+// Fallback to session data only if the report is for today
+else if ($date == date('Y-m-d') && 
+         isset($_SESSION['officer1_name']) && isset($_SESSION['officer1_class']) && 
+         isset($_SESSION['officer2_name']) && isset($_SESSION['officer2_class'])) {
+    $officer1_name = $_SESSION['officer1_name'];
+    $officer1_class = $_SESSION['officer1_class'];
+    $officer2_name = $_SESSION['officer2_name'];
+    $officer2_class = $_SESSION['officer2_class'];
+}
+
+// Query to calculate opening balance
 $balance_query = "SELECT 
     COALESCE(
         (SELECT 

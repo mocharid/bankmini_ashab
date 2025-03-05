@@ -971,6 +971,18 @@ tbody tr:hover {
     from { opacity: 0; transform: translateY(-10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+.menu-title {
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 1.5rem 0;
+    color: #1e3c72;
+    font-family: 'Poppins', sans-serif;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #1e3c72 0%, #4776c9 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
 </style>
 </head>
 <body>
@@ -1034,6 +1046,9 @@ tbody tr:hover {
     </div>
     <?php endif; ?>
 
+    <!-- Tambahkan judul "Menu Utama" di atas card-menu -->
+    <h2 class="menu-title">Menu Utama</h2>
+
     <!-- Enhanced Card Menu -->
     <div class="card-menu">
         <div class="card" onclick="window.location.href='profil.php'">
@@ -1055,7 +1070,7 @@ tbody tr:hover {
                 <i class="fas fa-paper-plane"></i>
             </div>
             <h3>Transfer Lokal</h3>
-            <p>Kirim uang dengan cepat dan aman ke rekening tujuan</p>
+            <p>Kirim uang dengan cepat dan aman ke rekening Lokal</p>
         </div>
     </div>
 
