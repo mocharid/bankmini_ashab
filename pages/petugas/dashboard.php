@@ -1037,6 +1037,132 @@ function tanggal_indonesia($tanggal) {
 .transfer-btn i {
     margin-right: 8px; /* Jarak antara ikon dan teks */
 }
+/* Attendance Container */
+.attendance-container {
+    background: white;
+    border-radius: 16px;
+    padding: 25px;
+    margin-top: 30px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e0e0e0;
+    transition: all 0.3s ease;
+}
+
+.attendance-container:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.attendance-container h2 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1a365d;
+    margin-bottom: 25px;
+    position: relative;
+    padding-bottom: 10px;
+}
+
+.attendance-container h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 50px;
+    height: 3px;
+    background: #2563eb;
+    border-radius: 2px;
+}
+
+/* Attendance Grid */
+.attendance-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 25px;
+}
+
+/* Attendance Box */
+.attendance-box {
+    background: #f8fafc;
+    padding: 25px;
+    border-radius: 12px;
+    border-left: 4px solid #2563eb;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.attendance-box:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+.attendance-box h3 {
+    color: #1a365d;
+    margin-bottom: 20px;
+    font-size: 20px;
+    font-weight: 600;
+    position: relative;
+    padding-bottom: 10px;
+}
+
+.attendance-box h3::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 40px;
+    height: 3px;
+    background: #2563eb;
+    border-radius: 2px;
+}
+
+.attendance-box p {
+    margin: 10px 0;
+    color: #4a5568;
+    font-size: 16px;
+}
+
+.attendance-box .btn {
+    background: linear-gradient(to right, #2563eb, #1d4ed8);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 20px;
+    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.attendance-box .btn i {
+    margin-right: 8px;
+}
+
+.attendance-box .btn:hover {
+    background: linear-gradient(to right, #1d4ed8, #1e40af);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(37, 99, 235, 0.25);
+}
+
+.attendance-box .btn:active {
+    transform: translateY(0);
+}
+
+.attendance-status {
+    background: #f0f4f8;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #28a745;
+}
+
+.attendance-status p {
+    margin: 5px 0;
+    color: #333;
+    font-size: 14px;
+}
     </style>
 </head>
 <body>
@@ -1046,7 +1172,6 @@ function tanggal_indonesia($tanggal) {
 
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <i class="fa-solid fa-landmark bank-icon"></i>
             <h2 class="bank-title">SCHOBANK</h2>
         </div>
 
@@ -1137,7 +1262,6 @@ function tanggal_indonesia($tanggal) {
 
         </div>
     </div>
-
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <h2>Hai, <?= htmlspecialchars($username) ?>!</h2>
@@ -1146,7 +1270,6 @@ function tanggal_indonesia($tanggal) {
                 <i class="far fa-calendar-alt"></i> <?= tanggal_indonesia(date('Y-m-d')) ?>
             </div>
         </div>
-
         <div class="dashboard-container">
     <!-- Financial Stats Section -->
     <div class="stats-container">
@@ -1163,8 +1286,7 @@ function tanggal_indonesia($tanggal) {
                 <span>Hari Ini</span>
             </div>
         </div>
-    </div>
-    
+    </div> 
     <!-- Income Box -->
     <div class="stat-box income">
         <div class="stat-icon">
@@ -1179,7 +1301,6 @@ function tanggal_indonesia($tanggal) {
             </div>
         </div>
     </div>
-    
     <!-- Expense Box -->
     <div class="stat-box expense">
         <div class="stat-icon">
@@ -1194,7 +1315,6 @@ function tanggal_indonesia($tanggal) {
             </div>
         </div>
     </div>
-    
     <!-- Net Balance Box -->
     <div class="stat-box balance">
         <div class="stat-icon">
@@ -1211,49 +1331,50 @@ function tanggal_indonesia($tanggal) {
     </div>
 </div>
 <!-- Tambahkan di bagian main-content setelah statistik -->
-<div class="officer-section">
-    <h2>Jadwal Petugas Hari Ini</h2>
-    <?php if ($schedule): ?>
-        <div class="officer-grid">
-            <div class="officer-box">
-                <h3>Petugas 1</h3>
-                <p><?= htmlspecialchars($schedule['petugas1_nama']) ?></p>
-            </div>
-            <div class="officer-box">
-                <h3>Petugas 2</h3>
-                <p><?= htmlspecialchars($schedule['petugas2_nama']) ?></p>
-            </div>
+<div class="attendance-container">
+    <h2>Jadwal & Absensi Petugas Hari Ini</h2>
+    <div class="attendance-grid">
+        <!-- Jadwal Petugas -->
+        <div class="attendance-box">
+            <h3>Jadwal Petugas</h3>
+            <?php if ($schedule): ?>
+                <div class="schedule-info">
+                    <p><strong>Petugas Utama:</strong> <?= htmlspecialchars($schedule['petugas1_nama']) ?></p>
+                    <p><strong>Petugas Pendamping:</strong> <?= htmlspecialchars($schedule['petugas2_nama']) ?></p>
+                </div>
+            <?php else: ?>
+                <p>Belum ada jadwal petugas untuk hari ini.</p>
+            <?php endif; ?>
         </div>
-    <?php else: ?>
-        <p>Belum ada jadwal petugas untuk hari ini.</p>
-    <?php endif; ?>
-</div>
 
-<div class="attendance-section">
-    <h2>Absensi Harian</h2>
-    <?php if ($schedule): ?>
-        <?php if (!$attendance): ?>
-            <form method="post">
-                <button type="submit" name="check_in" class="btn">
-                    <i class="fas fa-fingerprint"></i> Check In
-                </button>
-            </form>
-        <?php elseif ($attendance && !$attendance['waktu_keluar']): ?>
-            <form method="post">
-                <button type="submit" name="check_out" class="btn">
-                    <i class="fas fa-sign-out-alt"></i> Check Out
-                </button>
-            </form>
-        <?php else: ?>
-            <div class="attendance-status">
-                <p>✅ Anda telah absen hari ini</p>
-                <p>Check In: <?= date('H:i', strtotime($attendance['waktu_masuk'])) ?></p>
-                <p>Check Out: <?= date('H:i', strtotime($attendance['waktu_keluar'])) ?></p>
-            </div>
-        <?php endif; ?>
-    <?php else: ?>
-        <p>Tidak ada jadwal absen hari ini.</p>
-    <?php endif; ?>
+        <!-- Absensi Harian -->
+        <div class="attendance-box">
+            <h3>Absensi Harian</h3>
+            <?php if ($schedule): ?>
+                <?php if (!$attendance): ?>
+                    <form method="post">
+                        <button type="submit" name="check_in" class="btn">
+                            <i class="fas fa-fingerprint"></i> Check In
+                        </button>
+                    </form>
+                <?php elseif ($attendance && !$attendance['waktu_keluar']): ?>
+                    <form method="post">
+                        <button type="submit" name="check_out" class="btn">
+                            <i class="fas fa-sign-out-alt"></i> Check Out
+                        </button>
+                    </form>
+                <?php else: ?>
+                    <div class="attendance-status">
+                        <p>✅ Anda telah absen hari ini</p>
+                        <p><strong>Check In:</strong> <?= date('H:i', strtotime($attendance['waktu_masuk'])) ?></p>
+                        <p><strong>Check Out:</strong> <?= date('H:i', strtotime($attendance['waktu_keluar'])) ?></p>
+                    </div>
+                <?php endif; ?>
+            <?php else: ?>
+                <p>Tidak ada jadwal absen hari ini.</p>
+            <?php endif; ?>
+        </div>
+    </div>
 </div>
 
     <script>

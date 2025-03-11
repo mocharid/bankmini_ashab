@@ -1,342 +1,295 @@
 <?php
 session_start();
 require_once '../includes/db_connection.php';
+date_default_timezone_set('Asia/Jakarta'); // Set timezone ke WIB
 
-$token = isset($_GET['token']) ? $_GET['token'] : '';
-$success_message = "";
 $error_message = "";
-$token_valid = false;
-$user_id = null;
+$success_message = "";
+$current_time = date('H:i:s - d M Y'); // Format waktu WIB
 
-// Check if token is valid
-if ($token) {
-    $current_time = date('Y-m-d H:i:s');
-    $query = "SELECT user_id FROM password_reset WHERE token = ? AND expiry > ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("ss", $token, $current_time);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows > 0) {
-        $row = $result->fetch_assoc();
-        $user_id = $row['user_id'];
-        $token_valid = true;
-    } else {
-        $error_message = "Token tidak valid atau sudah kedaluwarsa!";
-    }
-}
-
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && $token_valid) {
-    $password = $_POST['password'];
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $token = $_POST['token'];
+    $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
-    
-    if ($password !== $confirm_password) {
-        $error_message = "Password dan konfirmasi password tidak cocok!";
+
+    if ($new_password !== $confirm_password) {
+        $error_message = "Password baru tidak cocok!";
     } else {
-        // Update password using the same SHA2 encryption as in the login script
-        $update_query = "UPDATE users SET password = SHA2(?, 256) WHERE id = ?";
-        $update_stmt = $conn->prepare($update_query);
-        $update_stmt->bind_param("si", $password, $user_id);
-        $update_stmt->execute();
-        
-        // Delete the reset token
-        $delete_query = "DELETE FROM password_reset WHERE user_id = ?";
-        $delete_stmt = $conn->prepare($delete_query);
-        $delete_stmt->bind_param("i", $user_id);
-        $delete_stmt->execute();
-        
-        $success_message = "Password berhasil diubah! Silahkan <a href='login.php'>login</a> dengan password baru Anda.";
-        $token_valid = false; // Hide the form
+        // Cek token dan waktu kadaluarsa
+        $query = "SELECT user_id FROM password_reset WHERE token = ? AND expiry > NOW()";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("s", $token);
+        $stmt->execute();
+        $result = $stmt->get_result();
+
+        if ($result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $user_id = $row['user_id'];
+
+            // Hash password baru dengan SHA2-256
+            $hashed_password = hash('sha256', $new_password);
+
+            // Update password di database
+            $update_query = "UPDATE users SET password = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("si", $hashed_password, $user_id);
+            $update_stmt->execute();
+
+            // Hapus token reset
+            $delete_query = "DELETE FROM password_reset WHERE token = ?";
+            $delete_stmt = $conn->prepare($delete_query);
+            $delete_stmt->bind_param("s", $token);
+            $delete_stmt->execute();
+
+            $success_message = "Password berhasil direset! Silakan login dengan password baru Anda.";
+        } else {
+            $error_message = "Token tidak valid atau sudah kadaluarsa!";
+        }
     }
+} elseif (isset($_GET['token'])) {
+    $token = $_GET['token'];
+} else {
+    header("Location: forgot_password.php");
+    exit();
 }
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Reset Password - Bank Mini Sekolah</title>
+    <title>Reset Password - SCHOBANK SYSTEM</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
 
-        body {
-            background-color: #f0f2f5;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-image: url('https://www.transparenttextures.com/patterns/geometry.png');
-            background-size: cover;
-            background-position: center;
-            padding: 20px;
-        }
+    body {
+        background: linear-gradient(135deg, #0a2e5c, #2c5282);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
+    }
 
-        .login-container {
-            background: rgba(255, 255, 255, 0.9);
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            backdrop-filter: blur(5px);
-        }
+    .login-container {
+        background: white;
+        padding: 2.5rem;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: 450px;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+    }
 
-        .logo-container {
-            margin-bottom: 1.5rem;
-        }
+    .login-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 8px;
+        background: linear-gradient(90deg, #0a2e5c, #4299e1, #0a2e5c);
+        background-size: 200% 100%;
+        animation: gradientMove 3s ease infinite;
+    }
 
-        .logo {
-            font-size: 2.5rem;
-            color: #0a2e5c;
-            margin-bottom: 0.5rem;
-        }
+    @keyframes gradientMove {
+        0% {background-position: 0% 50%}
+        50% {background-position: 100% 50%}
+        100% {background-position: 0% 50%}
+    }
 
-        .bank-name {
-            font-size: 1.3rem;
-            color: #0a2e5c;
-            font-weight: bold;
-            margin-bottom: 1.2rem;
-        }
+    .login-container h2 {
+        font-size: 2rem;
+        margin-bottom: 1.5rem;
+        color: #0a2e5c;
+        font-weight: 600;
+    }
 
-        .form-description {
-            margin-bottom: 1.5rem;
-            color: #555;
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
+    .time-display {
+        font-size: 0.9rem;
+        color: #666;
+        margin-bottom: 1.5rem;
+        background: #f5f7fa;
+        padding: 8px 15px;
+        border-radius: 20px;
+        display: inline-block;
+    }
 
-        .input-group {
-            position: relative;
-            margin-bottom: 1.2rem;
-        }
+    .time-display i {
+        margin-right: 5px;
+        color: #0a2e5c;
+    }
 
-        .input-group i.icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #0a2e5c;
-        }
+    .input-group {
+        margin-bottom: 1.8rem;
+        text-align: left;
+        position: relative;
+    }
 
-        .input-group i.toggle-password {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #0a2e5c;
-            cursor: pointer;
-            padding: 5px;
-        }
+    .input-group label {
+        display: block;
+        margin-bottom: 0.7rem;
+        font-size: 0.95rem;
+        color: #555;
+        font-weight: 500;
+    }
 
-        input {
-            width: 100%;
-            padding: 12px 40px;
-            border: 2px solid #e1e5ee;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            -webkit-appearance: none;
-            appearance: none;
-        }
+    .input-group input {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        background-color: #f8fafc;
+    }
 
-        input[type="password"] {
-            padding-right: 45px;
-        }
+    .input-group input:focus {
+        border-color: #0a2e5c;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(10, 46, 92, 0.1);
+        background-color: #fff;
+    }
 
-        input:focus {
-            border-color: #0a2e5c;
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(10, 46, 92, 0.1);
-        }
+    .password-toggle {
+        position: absolute;
+        right: 15px;
+        top: 43px;
+        color: #718096;
+        cursor: pointer;
+    }
 
-        button {
-            width: 100%;
-            padding: 12px;
-            background: #0a2e5c;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: background 0.3s ease;
-            -webkit-appearance: none;
-            appearance: none;
-        }
+    button {
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(90deg, #0a2e5c, #3182ce);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(10, 46, 92, 0.1);
+    }
 
-        button:hover, button:active {
-            background: #154785;
-        }
+    button:hover {
+        background: linear-gradient(90deg, #0a2e5c, #2c5282);
+        transform: translateY(-2px);
+        box-shadow: 0 7px 14px rgba(10, 46, 92, 0.15);
+    }
 
-        button:focus {
-            outline: none;
-        }
+    button:active {
+        transform: translateY(0);
+    }
 
-        .error-message {
-            background: #ffe5e5;
-            color: #e74c3c;
-            padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
+    .error-message {
+        background: #fff5f5;
+        color: #e53e3e;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+        border-left: 4px solid #e53e3e;
+        text-align: left;
+    }
 
-        .success-message {
-            background: #e5ffe7;
-            color: #27ae60;
-            padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
-        
-        .back-to-login {
-            margin-top: 1.5rem;
-            font-size: 0.9rem;
-        }
-        
-        .back-to-login a {
-            color: #0a2e5c;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        
-        .back-to-login a:hover {
-            text-decoration: underline;
-        }
-        
-        .password-requirements {
-            text-align: left;
-            margin-bottom: 1.2rem;
-            font-size: 0.8rem;
-            color: #555;
-            padding: 0.5rem;
-            border-radius: 5px;
-            background-color: #f9f9f9;
-        }
-        
-        .password-requirements ul {
-            margin-left: 1.5rem;
-        }
-    </style>
+    .success-message {
+        background: #f0fff4;
+        color: #38a169;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+        border-left: 4px solid #38a169;
+        text-align: left;
+    }
+
+    .back-to-login {
+        margin-top: 2rem;
+        font-size: 0.95rem;
+        color: #718096;
+    }
+
+    .back-to-login a {
+        color: #0a2e5c;
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.3s;
+    }
+
+    .back-to-login a:hover {
+        color: #3182ce;
+    }
+</style>
 </head>
 <body>
     <div class="login-container">
-        <div class="logo-container">
-            <i class="fas fa-university logo"></i>
-            <div class="bank-name">SCHOBANK</div>
+        <h2>Reset Password</h2>
+        <div class="time-display">
+            <i class="fas fa-clock"></i> <?= $current_time ?> WIB
         </div>
-
         <?php if ($error_message): ?>
-            <div class="error-message" id="error-alert">
-                <i class="fas fa-exclamation-circle"></i>
-                <?php echo $error_message; ?>
+            <div class="error-message">
+                <i class="fas fa-exclamation-circle"></i> <?= $error_message ?>
             </div>
         <?php endif; ?>
-        
         <?php if ($success_message): ?>
-            <div class="success-message" id="success-alert">
-                <i class="fas fa-check-circle"></i>
-                <?php echo $success_message; ?>
+            <div class="success-message">
+                <i class="fas fa-check-circle"></i> <?= $success_message ?>
             </div>
-        <?php endif; ?>
-        
-        <?php if ($token_valid): ?>
-            <div class="form-description">
-                Masukkan password baru Anda di bawah ini.
+            <div class="back-to-login">
+                <a href="login.php"><i class="fas fa-sign-in-alt"></i> Kembali ke halaman login</a>
             </div>
-            
+        <?php else: ?>
             <form method="POST">
-                <div class="password-requirements">
-                    <strong>Password sebaiknya:</strong>
-                    <ul>
-                        <li>Minimal 8 karakter</li>
-                        <li>Kombinasi huruf dan angka</li>
-                        <li>Mengandung karakter khusus</li>
-                    </ul>
-                </div>
-                
+                <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
                 <div class="input-group">
-                    <i class="fas fa-lock icon"></i>
-                    <input type="password" name="password" id="password" placeholder="Password Baru" required minlength="8">
-                    <i class="fas fa-eye toggle-password" id="togglePassword"></i>
+                    <label for="new_password"><i class="fas fa-lock"></i> Password Baru</label>
+                    <input type="password" id="new_password" name="new_password" required>
+                    <span class="password-toggle" onclick="togglePassword('new_password')">
+                        <i class="fas fa-eye"></i>
+                    </span>
                 </div>
-                
                 <div class="input-group">
-                    <i class="fas fa-lock icon"></i>
-                    <input type="password" name="confirm_password" id="confirm_password" placeholder="Konfirmasi Password" required minlength="8">
-                    <i class="fas fa-eye toggle-password" id="toggleConfirmPassword"></i>
+                    <label for="confirm_password"><i class="fas fa-lock"></i> Konfirmasi Password Baru</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required>
+                    <span class="password-toggle" onclick="togglePassword('confirm_password')">
+                        <i class="fas fa-eye"></i>
+                    </span>
                 </div>
-                
-                <button type="submit">
-                    <i class="fas fa-save"></i> Simpan Password Baru
-                </button>
+                <button type="submit"><i class="fas fa-key"></i> Reset Password</button>
             </form>
+            <div class="back-to-login">
+                <a href="login.php"><i class="fas fa-arrow-left"></i> Kembali ke halaman login</a>
+            </div>
         <?php endif; ?>
-        
-        <div class="back-to-login">
-            <a href="login.php"><i class="fas fa-arrow-left"></i> Kembali ke halaman login</a>
-        </div>
     </div>
 
     <script>
-        // Toggle Password Visibility
-        const togglePassword = document.getElementById('togglePassword');
-        const toggleConfirmPassword = document.getElementById('toggleConfirmPassword');
-        const password = document.getElementById('password');
-        const confirmPassword = document.getElementById('confirm_password');
-
-        if (togglePassword) {
-            togglePassword.addEventListener('click', function () {
-                const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
-                password.setAttribute('type', type);
-                
-                if (type === 'text') {
-                    this.classList.remove('fa-eye');
-                    this.classList.add('fa-eye-slash');
-                } else {
-                    this.classList.remove('fa-eye-slash');
-                    this.classList.add('fa-eye');
-                }
-            });
+    function togglePassword(inputId) {
+        const input = document.getElementById(inputId);
+        const icon = input.nextElementSibling.querySelector('i');
+        
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
         }
-
-        if (toggleConfirmPassword) {
-            toggleConfirmPassword.addEventListener('click', function () {
-                const type = confirmPassword.getAttribute('type') === 'password' ? 'text' : 'password';
-                confirmPassword.setAttribute('type', type);
-                
-                if (type === 'text') {
-                    this.classList.remove('fa-eye');
-                    this.classList.add('fa-eye-slash');
-                } else {
-                    this.classList.remove('fa-eye-slash');
-                    this.classList.add('fa-eye');
-                }
-            });
-        }
-
-        // Error Message Auto Dismiss
-        document.addEventListener('DOMContentLoaded', function() {
-            const errorAlert = document.getElementById('error-alert');
-            
-            if (errorAlert) {
-                setTimeout(() => {
-                    errorAlert.style.opacity = '0';
-                }, 3000);
-
-                setTimeout(() => {
-                    errorAlert.style.display = 'none';
-                }, 3500);
-            }
-        });
+    }
     </script>
 </body>
 </html>

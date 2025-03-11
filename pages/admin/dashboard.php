@@ -74,7 +74,7 @@ $chart_data = $result_chart->fetch_all(MYSQLI_ASSOC);
 
 // Query untuk transaksi terbaru dengan pagination
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$limit = 5;
+$limit = 10;
 $offset = ($page - 1) * $limit;
 
 $query_transactions = "SELECT t.*, u.nama as petugas_nama, r.no_rekening 
@@ -149,6 +149,7 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
             margin-right: 12px;
             text-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
+        
 
         .bank-title {
             color: #fff; 
@@ -584,6 +585,9 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
         }
 
         @media (max-width: 768px) {
+            .bank-logo {
+        width: 100px; /* Ukuran lebih kecil untuk mobile */
+    }
             .stats-container {
                 grid-template-columns: 1fr;
             }
@@ -682,6 +686,11 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
                 padding: 4px 8px;
             }
         }
+        .bank-logo {
+    width: 150px; /* Sesuaikan ukuran lebar logo */
+    height: auto; /* Menjaga aspek rasio */
+    margin-right: 12px; /* Jarak antara logo dan teks */
+}
     </style>
 </head>
 <body>
@@ -691,10 +700,8 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
 
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <i class="fa-solid fa-landmark bank-icon"></i>
-            <h2 class="bank-title">SCHOBANK</h2>
+        <h1 class="bank-name">SCHOBANK</h1>
         </div>
-
         <div class="sidebar-menu">
             <div class="menu-label">Menu Utama</div>
             <div class="menu-item">
@@ -765,7 +772,6 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <h2>Selamat Datang, Admin!</h2>
-            <p>Kelola semua aktivitas perbankan dengan mudah dan efisien.</p>
             <div class="date">
                 <i class="far fa-calendar-alt"></i> <?= getHariIndonesia(date('Y-m-d')) . ', ' . date('d F Y') ?>
             </div>
@@ -834,57 +840,10 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
                 </div>
             </div>
         </div>
-
-        <!-- Chart Section -->
+        
         <div class="chart-container">
             <canvas id="transactionChart"></canvas>
         </div>
-
-        <!-- Latest Transactions Section -->
-<!-- Latest Transactions Section -->
-<div class="table-container">
-    <h3>Transaksi Terbaru</h3>
-    <div class="table-wrapper">
-        <table>
-            <thead>
-                <tr>
-                    <th>No. Transaksi</th>
-                    <th>Jenis</th>
-                    <th>Jumlah</th>
-                    <th>Petugas</th>
-                    <th>Status</th>
-                    <th>Tanggal</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($transactions)): ?>
-                    <?php foreach ($transactions as $transaction): ?>
-                        <tr>
-                            <td><?= $transaction['no_transaksi'] ?></td>
-                            <td><?= ucfirst($transaction['jenis_transaksi']) ?></td>
-                            <td>Rp <?= number_format($transaction['jumlah'], 0, ',', '.') ?></td>
-                            <td><?= $transaction['petugas_nama'] ?></td>
-                            <td><?= ucfirst($transaction['status']) ?></td>
-                            <td><?= date('d M Y H:i', strtotime($transaction['created_at'])) ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="6" style="text-align: center;">Tidak ada transaksi terbaru.</td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-    <!-- Pagination -->
-    <?php if ($total_pages > 1): ?>
-        <div class="pagination">
-            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                <a href="?page=<?= $i ?>" class="<?= $i == $page ? 'active' : '' ?>"><?= $i ?></a>
-            <?php endfor; ?>
-        </div>
-    <?php endif; ?>
-</div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>

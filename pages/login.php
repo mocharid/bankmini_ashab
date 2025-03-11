@@ -67,9 +67,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .logo {
-            font-size: 2.5rem;
-            color: #0a2e5c;
-            margin-bottom: 0.5rem;
+            width: 100px; /* Ukuran logo yang ditampilkan di halaman */
+            height: auto; /* Menjaga aspek rasio */
+            margin-bottom: 0.2rem; /* Jarak antara logo dan teks di bawahnya */
         }
 
         .bank-name {
@@ -193,6 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             .logo {
                 font-size: 2rem;
+                width: 80px; 
             }
             
             .bank-name {
@@ -233,9 +234,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <body>
     <div class="login-container">
         <div class="logo-container">
-            <i class="fas fa-university logo"></i>
-            <div class="bank-name">SCHOBANK</div>
-        </div>
+            <img src="/bankmini/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
+        <div class="bank-name">SCHOBANK</div>
+    </div>
 
         <?php if (isset($error_message)): ?>
             <div class="error-message" id="error-alert">

@@ -141,7 +141,7 @@ if (isset($_GET['export']) && in_array($_GET['export'], ['pdf', 'excel'])) {
     exit;
 }
 
-// Function to export data to Excel
+// Function to export data to Excel with improved styling and consistent widths
 function exportToExcel($result) {
     header('Content-Type: application/vnd.ms-excel');
     header('Content-Disposition: attachment; filename="rekap_absensi.xls"');
@@ -153,51 +153,67 @@ function exportToExcel($result) {
     <head>
         <meta charset="UTF-8">
         <style>
-            table { border-collapse: collapse; width: 100%; }
-            th, td { border: 1px solid #000; padding: 8px; text-align: center; }
-            th { background-color: #f2f2f2; }
+            body { font-family: Arial, sans-serif; }
+            table { border-collapse: collapse; width: 100%; max-width: 700px; margin: 0 auto; }
+            th, td { border: 1px solid #000; padding: 6px; text-align: center; }
+            th { background-color: #0c4da2; color: white; font-weight: bold; }
+            .title { text-align: center; font-size: 16pt; font-weight: bold; margin-bottom: 15px; }
+            .subtitle { text-align: center; font-size: 12pt; margin-bottom: 20px; }
+            .col-no { width: 40px; }
+            .col-tanggal { width: 90px; }
+            .col-waktu { width: 90px; }
+            .col-petugas { width: 110px; }
+            .print-date { text-align: right; font-style: italic; font-size: 10pt; margin-bottom: 10px; }
         </style>
     </head>
     <body>
+        <div class="title">REKAP ABSENSI PETUGAS</div>
+        <div class="subtitle">MINI BANK SEKOLAH</div>
+        <div class="print-date">Tanggal Cetak: ' . date('d-m-Y') . '</div>
         <table>
             <thead>
                 <tr>
-                    <th>No</th>
-                    <th>Nama Petugas</th>
-                    <th>Tanggal</th>
-                    <th>Waktu Masuk</th>
-                    <th>Waktu Keluar</th>
-                    <th>Petugas 1</th>
-                    <th>Petugas 2</th>
+                    <th class="col-no">No</th>
+                    <th class="col-tanggal">Tanggal</th>
+                    <th class="col-waktu">Waktu Masuk</th>
+                    <th class="col-waktu">Waktu Keluar</th>
+                    <th class="col-petugas">Petugas 1</th>
+                    <th class="col-petugas">Petugas 2</th>
                 </tr>
             </thead>
             <tbody>';
             
     $no = 1;
     while ($row = $result->fetch_assoc()) {
+        // Format tanggal to dd-mm-yyyy for better readability
+        $tanggal = date('d-m-Y', strtotime($row['tanggal']));
+        
         echo '<tr>
-                <td>' . $no++ . '</td>
-                <td>' . htmlspecialchars($row['nama']) . '</td>
-                <td>' . htmlspecialchars($row['tanggal']) . '</td>
-                <td>' . htmlspecialchars($row['waktu_masuk'] ?? '-') . '</td>
-                <td>' . htmlspecialchars($row['waktu_keluar'] ?? '-') . '</td>
-                <td>' . htmlspecialchars($row['petugas1_nama'] ?? '-') . '</td>
-                <td>' . htmlspecialchars($row['petugas2_nama'] ?? '-') . '</td>
+                <td class="col-no">' . $no++ . '</td>
+                <td class="col-tanggal">' . $tanggal . '</td>
+                <td class="col-waktu">' . htmlspecialchars($row['waktu_masuk'] ?? '-') . '</td>
+                <td class="col-waktu">' . htmlspecialchars($row['waktu_keluar'] ?? '-') . '</td>
+                <td class="col-petugas" style="text-align: left;">' . htmlspecialchars($row['petugas1_nama'] ?? '-') . '</td>
+                <td class="col-petugas" style="text-align: left;">' . htmlspecialchars($row['petugas2_nama'] ?? '-') . '</td>
               </tr>';
     }
             
     echo '</tbody>
         </table>
+        <div style="text-align: right; margin-top: 20px; font-size: 10pt;">
+            <p style="margin-bottom: 60px;">Kepala Sekolah</p>
+            <p><strong>____________________</strong></p>
+        </div>
     </body>
     </html>';
 }
 
-// Function to export data to PDF with improved styling
+// Function to export data to PDF with consistent column widths
 function exportToPDF($result) {
     // Require the TCPDF library
     require_once '../../tcpdf/tcpdf.php';
     
-    // Create new TCPDF object
+    // Create new TCPDF object with Portrait orientation
     $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8');
     
     // Set document information
@@ -206,8 +222,8 @@ function exportToPDF($result) {
     $pdf->SetTitle('Rekap Absensi');
     $pdf->SetSubject('Rekap Absensi Petugas');
     
-    // Set margins
-    $pdf->SetMargins(15, 20, 15);
+    // Set margins to ensure content fits on page
+    $pdf->SetMargins(20, 20, 20);  // Adjusted margins for better balance
     $pdf->SetHeaderMargin(10);
     $pdf->SetFooterMargin(10);
     
@@ -221,41 +237,50 @@ function exportToPDF($result) {
     // Add a page
     $pdf->AddPage();
     
-    // Create a colorful header
-    $pdf->SetFillColor(52, 152, 219); // Blue header background
-    $pdf->SetTextColor(255, 255, 255); // White text
-    $pdf->SetFont('helvetica', 'B', 18);
-    $pdf->Cell(0, 15, 'REKAP ABSENSI PETUGAS', 0, 1, 'C', 1);
+    // Create a header with logo and title
+    $pdf->SetFont('helvetica', 'B', 16);
+    $pdf->Cell(0, 10, 'REKAP ABSENSI PETUGAS', 0, 1, 'C');
+    
+    $pdf->SetFont('helvetica', '', 12);
+    $pdf->Cell(0, 8, 'MINI BANK SEKOLAH', 0, 1, 'C');
     
     // Add current date
     $pdf->SetFont('helvetica', 'I', 10);
-    $pdf->SetTextColor(100, 100, 100); // Gray text
+    $pdf->SetTextColor(100, 100, 100);
     $pdf->Cell(0, 8, 'Tanggal Cetak: ' . date('d-m-Y'), 0, 1, 'R');
     $pdf->Ln(5);
     
+    // Define column widths (total width is now 170mm with balanced proportions)
+    $colNo = 15;        // "No" column width
+    $colTanggal = 30;   // "Tanggal" column width
+    $colWaktu = 30;     // "Waktu" columns width
+    $colPetugas = 35;   // "Petugas" columns width
+    
     // Table header
-    $pdf->SetFillColor(41, 128, 185); // Slightly darker blue for header
+    $pdf->SetFillColor(12, 77, 162); // Primary blue color
     $pdf->SetTextColor(255, 255, 255); // White text
     $pdf->SetDrawColor(200, 200, 200); // Light gray borders
     $pdf->SetLineWidth(0.3);
-    $pdf->SetFont('helvetica', 'B', 11);
+    $pdf->SetFont('helvetica', 'B', 10);
     
-    $pdf->Cell(10, 10, 'No', 1, 0, 'C', 1);
-    $pdf->Cell(50, 10, 'Nama Petugas', 1, 0, 'C', 1);
-    $pdf->Cell(40, 10, 'Tanggal', 1, 0, 'C', 1);
-    $pdf->Cell(40, 10, 'Waktu Masuk', 1, 0, 'C', 1);
-    $pdf->Cell(40, 10, 'Waktu Keluar', 1, 0, 'C', 1);
-    $pdf->Cell(40, 10, 'Petugas 1', 1, 0, 'C', 1);
-    $pdf->Cell(40, 10, 'Petugas 2', 1, 1, 'C', 1);
+    $pdf->Cell($colNo, 10, 'No', 1, 0, 'C', 1);
+    $pdf->Cell($colTanggal, 10, 'Tanggal', 1, 0, 'C', 1);
+    $pdf->Cell($colWaktu, 10, 'Waktu Masuk', 1, 0, 'C', 1);
+    $pdf->Cell($colWaktu, 10, 'Waktu Keluar', 1, 0, 'C', 1);
+    $pdf->Cell($colPetugas, 10, 'Petugas 1', 1, 0, 'C', 1);
+    $pdf->Cell($colPetugas, 10, 'Petugas 2', 1, 1, 'C', 1);
     
     // Table data
-    $pdf->SetFont('helvetica', '', 10);
+    $pdf->SetFont('helvetica', '', 9);
     $pdf->SetTextColor(0, 0, 0); // Black text
     
     $no = 1;
     $row_color = false; // For alternating row colors
     
     while ($row = $result->fetch_assoc()) {
+        // Format tanggal to dd-mm-yyyy for better readability
+        $tanggal = date('d-m-Y', strtotime($row['tanggal']));
+        
         // Alternating row colors
         if ($row_color) {
             $pdf->SetFillColor(240, 248, 255); // Light blue for even rows
@@ -263,19 +288,37 @@ function exportToPDF($result) {
             $pdf->SetFillColor(255, 255, 255); // White for odd rows
         }
         
-        $pdf->Cell(10, 8, $no++, 1, 0, 'C', 1);
-        $pdf->Cell(50, 8, $row['nama'], 1, 0, 'L', 1);
-        $pdf->Cell(40, 8, $row['tanggal'], 1, 0, 'C', 1);
-        $pdf->Cell(40, 8, $row['waktu_masuk'] ?? '-', 1, 0, 'C', 1);
-        $pdf->Cell(40, 8, $row['waktu_keluar'] ?? '-', 1, 0, 'C', 1);
-        $pdf->Cell(40, 8, $row['petugas1_nama'] ?? '-', 1, 0, 'C', 1);
-        $pdf->Cell(40, 8, $row['petugas2_nama'] ?? '-', 1, 1, 'C', 1);
+        // Add ellipsis for long text and limit cell content
+        $petugas1 = isset($row['petugas1_nama']) ? (strlen($row['petugas1_nama']) > 18 ? substr($row['petugas1_nama'], 0, 15).'...' : $row['petugas1_nama']) : '-';
+        $petugas2 = isset($row['petugas2_nama']) ? (strlen($row['petugas2_nama']) > 18 ? substr($row['petugas2_nama'], 0, 15).'...' : $row['petugas2_nama']) : '-';
+        
+        $pdf->Cell($colNo, 8, $no++, 1, 0, 'C', 1);
+        $pdf->Cell($colTanggal, 8, $tanggal, 1, 0, 'C', 1);
+        $pdf->Cell($colWaktu, 8, $row['waktu_masuk'] ?? '-', 1, 0, 'C', 1);
+        $pdf->Cell($colWaktu, 8, $row['waktu_keluar'] ?? '-', 1, 0, 'C', 1);
+        $pdf->Cell($colPetugas, 8, $petugas1, 1, 0, 'L', 1);
+        $pdf->Cell($colPetugas, 8, $petugas2, 1, 1, 'L', 1);
         
         $row_color = !$row_color; // Toggle for next row
     }
     
+    // Add signature section
+    $pdf->Ln(15);
+    $pdf->SetFont('helvetica', '', 10);
+    $pdf->Cell(($colNo + $colTanggal + $colWaktu*2), 5, '', 0, 0, 'L', 0);
+    $pdf->Cell(($colPetugas*2), 5, date('d F Y'), 0, 1, 'C', 0);
+    
+    $pdf->Cell(($colNo + $colTanggal + $colWaktu*2), 5, '', 0, 0, 'L', 0);
+    $pdf->Cell(($colPetugas*2), 5, 'Kepala Sekolah', 0, 1, 'C', 0);
+    
+    $pdf->Ln(15); // Space for signature
+    
+    $pdf->Cell(($colNo + $colTanggal + $colWaktu*2), 5, '', 0, 0, 'L', 0);
+    $pdf->SetFont('helvetica', 'B', 10);
+    $pdf->Cell(($colPetugas*2), 5, '____________________', 0, 1, 'C', 0);
+    
     // Add footer with page number
-    $pdf->Ln(10);
+    $pdf->Ln(5);
     $pdf->SetFont('helvetica', 'I', 8);
     $pdf->Cell(0, 10, 'Halaman ' . $pdf->getAliasNumPage() . ' dari ' . $pdf->getAliasNbPages(), 0, 1, 'C');
     

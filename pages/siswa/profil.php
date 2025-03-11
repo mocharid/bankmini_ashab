@@ -173,6 +173,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+// Handle form submission for email
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
+    $email = trim($_POST['email']);
+
+    if (empty($email)) {
+        $error = "Email tidak boleh kosong!";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Format email tidak valid!";
+    } else {
+        // Cek apakah email sudah digunakan oleh pengguna lain
+        $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+
+        if ($check_result->num_rows > 0) {
+            $error = "Email sudah digunakan oleh pengguna lain!";
+        } else {
+            // Update email
+            $update_query = "UPDATE users SET email = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("si", $email, $_SESSION['user_id']);
+
+            if ($update_stmt->execute()) {
+                $message = "Email berhasil diperbarui!";
+                $user['email'] = $email; // Update email di session
+            } else {
+                $error = "Gagal memperbarui email!";
+            }
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -859,6 +892,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </form>
                     </div>
                 </div>
+                <!-- Form untuk menambahkan email -->
+                <!-- Form untuk menambahkan/mengubah email -->
+                <div class="form-section">
+                    <div class="form-header">
+                        <i class="fas fa-envelope"></i> Email
+                    </div>
+                    <div class="form-content">
+                        <?php if (!empty($user['email'])): ?>
+                            <!-- Tampilkan email yang sudah terdaftar -->
+                            <div class="info-item">
+                                <i class="fas fa-envelope"></i>
+                                <div>
+                                    <div class="label">Email Terdaftar</div>
+                                    <div class="value"><?= htmlspecialchars($user['email']) ?></div>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Form untuk menambahkan/mengubah email -->
+                        <form method="POST" action="" id="emailForm">
+                            <div class="form-group">
+                                <label for="email"><?= !empty($user['email']) ? 'Ubah Email' : 'Tambahkan Email' ?></label>
+                                <div class="input-wrapper">
+                                    <i class="fas fa-envelope input-icon"></i>
+                                    <input type="email" id="email" name="email" required placeholder="Masukkan email Anda">
+                                </div>
+                            </div>
+                            <button type="submit" name="update_email" class="btn btn-primary" id="emailBtn">
+                                <i class="fas fa-save"></i> <span><?= !empty($user['email']) ? 'Simpan Perubahan' : 'Simpan Email' ?></span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -940,6 +1006,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 const button = document.getElementById('pinBtn');
                 button.classList.add('btn-loading');
             });
+        });
+        // Handle email form submission with loading animation
+        document.getElementById('emailForm').addEventListener('submit', function() {
+            const button = document.getElementById('emailBtn');
+            button.classList.add('btn-loading');
         });
     </script>
 </body>

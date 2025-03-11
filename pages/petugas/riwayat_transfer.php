@@ -8,22 +8,18 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
     exit;
 }
 
-// Make sure $conn variable is available from db_connection.php
-// If your db_connection.php uses a different variable name (e.g., $conn instead of $koneksi),
-// adjust the line below accordingly
+
+// Connection handling (same as before)
 if (!isset($conn) && isset($koneksi)) {
     $conn = $koneksi;
 } else if (!isset($conn) && !isset($koneksi)) {
-    // Fallback connection if needed - adjust these credentials to match your configuration
     $servername = "localhost";
     $username = "root";
     $password = "";
     $dbname = "bankmini";
     
-    // Create connection
     $conn = new mysqli($servername, $username, $password, $dbname);
     
-    // Check connection
     if ($conn->connect_error) {
         die("Connection failed: " . $conn->connect_error);
     }
@@ -32,27 +28,17 @@ if (!isset($conn) && isset($koneksi)) {
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
 
-// Prepare the query based on user role
+// Set timezone to WIB (Western Indonesian Time)
+date_default_timezone_set('Asia/Jakarta');
+
+// Get today's date
+$today = date('Y-m-d');
+
+// Search parameter
+$search_rekening = isset($_GET['search_rekening']) ? $_GET['search_rekening'] : '';
+
+// Prepare the query based on user role with today's date filter and optional search
 if ($role == 'siswa') {
-    // For students, show only their transfers
-    $sql = "SELECT t.*, 
-            r_asal.no_rekening as rekening_asal, u_asal.nama as nama_asal,
-            r_tujuan.no_rekening as rekening_tujuan, u_tujuan.nama as nama_tujuan,
-            u_petugas.nama as nama_petugas
-            FROM transaksi t
-            JOIN rekening r_asal ON t.rekening_id = r_asal.id
-            JOIN users u_asal ON r_asal.user_id = u_asal.id
-            JOIN rekening r_tujuan ON t.rekening_tujuan_id = r_tujuan.id
-            JOIN users u_tujuan ON r_tujuan.user_id = u_tujuan.id
-            JOIN users u_petugas ON t.petugas_id = u_petugas.id
-            WHERE t.jenis_transaksi = 'transfer' 
-            AND (r_asal.user_id = ? OR r_tujuan.user_id = ?)
-            ORDER BY t.created_at DESC";
-    
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ii", $user_id, $user_id);
-} else {
-    // For admin and officers, show all transfers
     $sql = "SELECT t.*, 
             r_asal.no_rekening as rekening_asal, u_asal.nama as nama_asal,
             r_tujuan.no_rekening as rekening_tujuan, u_tujuan.nama as nama_tujuan,
@@ -64,9 +50,41 @@ if ($role == 'siswa') {
             JOIN users u_tujuan ON r_tujuan.user_id = u_tujuan.id
             JOIN users u_petugas ON t.petugas_id = u_petugas.id
             WHERE t.jenis_transaksi = 'transfer'
+            AND DATE(t.created_at) = ?
+            AND (r_asal.user_id = ? OR r_tujuan.user_id = ?)
+            " . ($search_rekening ? "AND r_asal.no_rekening LIKE ?" : "") . "
             ORDER BY t.created_at DESC";
     
     $stmt = $conn->prepare($sql);
+    if ($search_rekening) {
+        $search_param = "%$search_rekening%";
+        $stmt->bind_param("siis", $today, $user_id, $user_id, $search_param);
+    } else {
+        $stmt->bind_param("sii", $today, $user_id, $user_id);
+    }
+} else {
+    $sql = "SELECT t.*, 
+            r_asal.no_rekening as rekening_asal, u_asal.nama as nama_asal,
+            r_tujuan.no_rekening as rekening_tujuan, u_tujuan.nama as nama_tujuan,
+            u_petugas.nama as nama_petugas
+            FROM transaksi t
+            JOIN rekening r_asal ON t.rekening_id = r_asal.id
+            JOIN users u_asal ON r_asal.user_id = u_asal.id
+            JOIN rekening r_tujuan ON t.rekening_tujuan_id = r_tujuan.id
+            JOIN users u_tujuan ON r_tujuan.user_id = u_tujuan.id
+            JOIN users u_petugas ON t.petugas_id = u_petugas.id
+            WHERE t.jenis_transaksi = 'transfer'
+            AND DATE(t.created_at) = ?
+            " . ($search_rekening ? "AND r_asal.no_rekening LIKE ?" : "") . "
+            ORDER BY t.created_at DESC";
+    
+    $stmt = $conn->prepare($sql);
+    if ($search_rekening) {
+        $search_param = "%$search_rekening%";
+        $stmt->bind_param("ss", $today, $search_param);
+    } else {
+        $stmt->bind_param("s", $today);
+    }
 }
 
 $stmt->execute();
@@ -76,9 +94,6 @@ while ($row = $result->fetch_assoc()) {
     $transfers[] = $row;
 }
 $stmt->close();
-
-// Set timezone to WIB (Western Indonesian Time)
-date_default_timezone_set('Asia/Jakarta');
 ?>
 
 <!DOCTYPE html>
@@ -86,7 +101,7 @@ date_default_timezone_set('Asia/Jakarta');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Riwayat Transfer - SCHOBANK SYSTEM</title>
+    <title>Riwayat Transfer Harian - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -393,6 +408,69 @@ date_default_timezone_set('Asia/Jakarta');
                 padding: 10px 12px;
             }
         }
+        .search-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .search-form {
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+        .search-form input {
+            flex-grow: 1;
+            max-width: 250px; /* Limit input width */
+            padding: 10px 15px;
+            margin-right: 10px;
+            border: 1px solid #4a90e2;
+            border-radius: 25px;
+            background-color: #f0f4f8;
+            transition: all 0.3s ease;
+        }
+        .search-form input:focus {
+            outline: none;
+            border-color: #2c7be5;
+            box-shadow: 0 0 0 3px rgba(44, 123, 229, 0.2);
+        }
+        .search-form button {
+            padding: 10px 20px;
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .search-form button:hover {
+            background-color: #2c7be5;
+        }
+        .search-form a.cancel-btn {
+            margin-left: 10px;
+            color: #4a90e2;
+            border-radius: 50%;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f0f4f8;
+            transition: background-color 0.3s ease;
+        }
+        .search-form a.cancel-btn:hover {
+            background-color: #e0e8f0;
+        }
+        .today-info {
+            font-weight: bold;
+            color: #4a90e2;  /* Changed text color to match the theme */
+            background-color: #f0f4f8;
+            padding: 8px 15px;
+            border-radius: 20px;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -400,20 +478,36 @@ date_default_timezone_set('Asia/Jakarta');
         include '../../includes/header.php';
     } ?>
 
-    <div class="main-content">
+<div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-history"></i> Riwayat Transfer</h2>
-            <p>Daftar transaksi transfer rekening Anda</p>
+            <h2><i class="fas fa-history"></i> Riwayat Transfer Harian</h2>
+            <p class="today-info">Transaksi Transfer per <?= date('d F Y') ?></p>
             <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
                 <i class="fas fa-arrow-left"></i>
             </a>
         </div>
 
         <div class="transaction-card">
+            <div class="search-container">
+                <form method="GET" class="search-form">
+                    <input type="text" name="search_rekening" placeholder="Cari No. Rekening Pengirim" 
+                           value="<?= htmlspecialchars($search_rekening) ?>">
+                    <button type="submit"><i class="fas fa-search"></i> Cari</button>
+                    <?php if (!empty($search_rekening)): ?>
+                        <a href="riwayat_transfer.php" class="cancel-btn" style="margin-left: 10px;" title="Hapus Filter">
+                            <i class="fas fa-times"></i>
+                        </a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
             <?php if (empty($transfers)): ?>
                 <div class="empty-state">
                     <i class="fas fa-inbox"></i>
-                    <p>Belum ada transaksi transfer.</p>
+                    <p>Tidak ada transaksi transfer hari ini.</p>
+                    <?php if (!empty($search_rekening)): ?>
+                        <p>Tidak ditemukan transfer dengan nomor rekening "<?= htmlspecialchars($search_rekening) ?>".</p>
+                    <?php endif; ?>
                 </div>
             <?php else: ?>
                 <div class="table-container">

@@ -54,6 +54,15 @@ $result_pin = $stmt_pin->get_result();
 $user_pin_data = $result_pin->fetch_assoc();
 $has_pin = !empty($user_pin_data['pin']);
 
+// Cek apakah pengguna sudah mengatur email
+$query_email = "SELECT email FROM users WHERE id = ?";
+$stmt_email = $conn->prepare($query_email);
+$stmt_email->bind_param("i", $user_id);
+$stmt_email->execute();
+$result_email = $stmt_email->get_result();
+$user_email_data = $result_email->fetch_assoc();
+$has_email = !empty($user_email_data['email']);
+
 // Pagination settings
 $limit = 5; // Jumlah transaksi per halaman
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1; // Halaman saat ini
@@ -1032,19 +1041,34 @@ tbody tr:hover {
     </div>
     <!-- Notifikasi PIN jika belum diatur -->
     <?php if (!$has_pin): ?>
-    <div class="pin-alert">
-        <div class="pin-alert-content">
-            <i class="fas fa-exclamation-triangle"></i>
-            <div class="pin-alert-text">
-                <strong>Perhatian!</strong> Anda belum mengatur PIN keamanan.  
-                <a href="profil.php" class="pin-alert-button">Atur PIN Sekarang</a>
-            </div>
-            <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
-                <i class="fas fa-times"></i>
-            </button>
+<div class="pin-alert">
+    <div class="pin-alert-content">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div class="pin-alert-text">
+            <strong>Perhatian!</strong> Anda belum mengatur PIN keamanan.  
+            <a href="profil.php#account-tab" class="pin-alert-button">Atur PIN Sekarang</a>
         </div>
+        <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
+            <i class="fas fa-times"></i>
+        </button>
     </div>
-    <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if (!$has_email): ?>
+<div class="pin-alert">
+    <div class="pin-alert-content">
+        <i class="fas fa-exclamation-triangle"></i>
+        <div class="pin-alert-text">
+            <strong>Perhatian!</strong> Anda belum menambahkan email.  
+            <a href="profil.php#account-tab" class="pin-alert-button">Tambahkan Email Sekarang</a>
+        </div>
+        <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>
+<?php endif; ?>
 
     <!-- Tambahkan judul "Menu Utama" di atas card-menu -->
     <h2 class="menu-title">Menu Utama</h2>
