@@ -1,8 +1,152 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
+require_once '../../vendor/autoload.php'; // Pastikan path ke autoload Composer benar
+use TCPDF as TCPDF;
 
-// Ensure user is authenticated
+// Fungsi untuk generate struk
+function generateStruk($data) {
+    // Set timezone to WIB
+    date_default_timezone_set('Asia/Jakarta');
+    
+    // Ukuran custom untuk struk (80mm x 130mm) - reduced height to ensure single page
+    $pdf = new TCPDF('P', 'mm', array(80, 130), true, 'UTF-8', false);
+
+    // Remove default header/footer
+    $pdf->setPrintHeader(false);
+    $pdf->setPrintFooter(false);
+
+    // Set document information
+    $pdf->SetCreator('SCHOBANK SYSTEM');
+    $pdf->SetAuthor('SCHOBANK SYSTEM');
+    $pdf->SetTitle('Bukti Transaksi');
+
+    // Set margins - balanced margins for better spacing
+    $pdf->SetMargins(7, 7, 7);
+    $pdf->SetAutoPageBreak(TRUE, 7);
+
+    // Add a page
+    $pdf->AddPage();
+
+    // --- HEADER SECTION ---
+    // Logo or bank name
+    $pdf->SetFont('helvetica', 'B', 12);
+    $pdf->Cell(0, 6, 'SCHOBANK', 0, 1, 'C');
+    $pdf->SetFont('helvetica', '', 8);
+    $pdf->Cell(0, 4, 'BUKTI TRANSFER', 0, 1, 'C');
+    
+    // Add horizontal line
+    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
+    $pdf->Ln(4);
+
+    // --- TRANSACTION DETAILS ---
+    $pdf->SetFont('helvetica', 'B', 8);
+    $pdf->Cell(0, 4, 'DETAIL TRANSAKSI', 0, 1, 'C');
+    $pdf->Ln(2);
+
+    // Transaction details in table-like format with consistent alignment
+    $pdf->SetFont('helvetica', '', 8);
+    
+    // Define a consistent width for labels and position for colons
+    $labelWidth = 28;
+    $colonWidth = 4;
+    $valueWidth = 34;
+    
+    // Format each row with aligned colons
+    $pdf->Cell($labelWidth, 4, 'TANGGAL', 0, 0, 'L');
+    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
+    $pdf->Cell($valueWidth, 4, date('d/m/Y', strtotime($data['tanggal'])), 0, 1, 'R');
+    
+    $pdf->Cell($labelWidth, 4, 'NO. TRANSAKSI', 0, 0, 'L');
+    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
+    $pdf->Cell($valueWidth, 4, $data['no_transaksi'], 0, 1, 'R');
+    
+    $pdf->Cell($labelWidth, 4, 'REKENING ASAL', 0, 0, 'L');
+    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
+    $pdf->Cell($valueWidth, 4, $data['rekening_asal'], 0, 1, 'R');
+    
+    $pdf->Cell($labelWidth, 4, 'REKENING TUJUAN', 0, 0, 'L');
+    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
+    $pdf->Cell($valueWidth, 4, $data['rekening_tujuan'], 0, 1, 'R');
+    
+    $pdf->Cell($labelWidth, 4, 'NAMA PENERIMA', 0, 0, 'L');
+    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
+    $pdf->Cell($valueWidth, 4, $data['nama_penerima'], 0, 1, 'R');
+    
+    // Add horizontal line
+    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
+    $pdf->Ln(4);
+    
+    // Jumlah transfer (bigger and bold) with aligned colon
+    $pdf->SetFont('helvetica', 'B', 9);
+    $pdf->Cell($labelWidth, 5, 'JUMLAH TRANSFER', 0, 0, 'L');
+    $pdf->Cell($colonWidth, 5, ':', 0, 0, 'L');
+    $pdf->Cell($valueWidth, 5, 'Rp ' . number_format($data['jumlah'], 0, ',', '.'), 0, 1, 'R');
+    
+    // Add horizontal line
+    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
+    $pdf->Ln(3);
+    
+    // --- FOOTER SECTION (moved up to ensure single page) ---
+    $pdf->SetFont('helvetica', 'I', 7);
+    $pdf->Cell(0, 3, 'Terima kasih telah menggunakan layanan', 0, 1, 'C');
+    $pdf->SetFont('helvetica', 'BI', 8);
+    $pdf->Cell(0, 3, 'SCHOBANK SYSTEM', 0, 1, 'C');
+    
+    // --- QR CODE with only transaction number (smaller size) ---
+    $style = array(
+        'border' => false,
+        'vpadding' => 'auto',
+        'hpadding' => 'auto',
+        'fgcolor' => array(0, 0, 0),
+        'bgcolor' => false,
+        'module_width' => 1, // width of a single module in points
+        'module_height' => 1 // height of a single module in points
+    );
+
+    // MODIFIED: Only use transaction number for QR code
+    $qrContent = $data['no_transaksi'];
+
+    // Generate QR code - centered on the receipt (smaller size: 25x25)
+    $pdf->write2DBarcode($qrContent, 'QRCODE,L', 27.5, $pdf->GetY(), 25, 25, $style, 'N');
+    
+    // MODIFIED: Reduced line spacing after QR code to position text closer
+    $pdf->Ln(1);
+    
+    // Add current time with WIB time zone and note with reduced spacing
+    $pdf->SetFont('helvetica', '', 7);
+    $pdf->Cell(0, 3, 'Dicetak pada: ' . date('d/m/Y H:i:s') . ' WIB', 0, 1, 'C');
+    
+    // Add note
+    $pdf->SetFont('helvetica', 'I', 7);
+    $pdf->MultiCell(0, 3, 'Bukti transfer ini merupakan bukti yang sah dan tidak memerlukan tanda tangan.', 0, 'C');
+    
+    // Simpan PDF ke folder yang dapat diakses oleh browser
+    $pdfFolder = __DIR__ . '/struk/'; // Path ke folder struk
+    if (!is_dir($pdfFolder)) {
+        if (mkdir($pdfFolder, 0755, true)) {
+            echo "Folder struk berhasil dibuat: " . $pdfFolder . "<br>";
+        } else {
+            echo "Gagal membuat folder struk!<br>";
+        }
+    }
+
+    // Path lengkap ke file PDF
+    $pdfFilePath = $pdfFolder . 'struk_' . $data['no_transaksi'] . '.pdf';
+
+    // Simpan file PDF
+    $pdf->Output($pdfFilePath, 'F');
+
+    // URL untuk mengakses file PDF
+    $pdfUrl = '/bankmini/pages/siswa/struk/struk_' . $data['no_transaksi'] . '.pdf';
+
+    return [
+        'file_path' => $pdfFilePath,
+        'file_url' => $pdfUrl
+    ];
+}
+
+// Pastikan user sudah login
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../login.php");
     exit();
@@ -10,19 +154,7 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
-// Function to check and restore MySQL connection if needed
-function check_connection($conn) {
-    if (!$conn->ping()) {
-        // Connection lost, attempt to reconnect
-        $conn->close();
-        require_once '../../includes/db_connection.php';
-        return $GLOBALS['conn']; // Return the new connection
-    }
-    return $conn;
-}
-
 // Fetch user's rekening data
-$conn = check_connection($conn);
 $query = "SELECT r.id, r.saldo, r.no_rekening 
           FROM rekening r 
           WHERE r.user_id = ?";
@@ -45,24 +177,23 @@ if ($rekening_data) {
 // Initialize variables
 $current_step = 1;
 $tujuan_data = null;
-$input_jumlah = ""; // Store amount input in case of invalid PIN
+$input_jumlah = "";
 $transfer_amount = null;
 $transfer_rekening = null;
 $transfer_name = null;
+$error = null;
+$success = null;
 
 // Handle account number verification (Step 1)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'verify_account') {
     $rekening_tujuan = trim($_POST['rekening_tujuan']);
-    
+
     // Validate input
     if (empty($rekening_tujuan)) {
         $error = "Nomor rekening tujuan harus diisi!";
     } elseif ($rekening_tujuan == $no_rekening) {
         $error = "Tidak dapat transfer ke rekening sendiri!";
     } else {
-        // Check connection before proceeding
-        $conn = check_connection($conn);
-        
         // Check if tujuan rekening exists and get user details
         $query = "SELECT r.id, r.user_id, r.no_rekening, u.nama 
                  FROM rekening r 
@@ -88,99 +219,69 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 }
 
 // Handle transfer submission (Step 2)
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'confirm_transfer') {
-    // Get data from form
-    $rekening_tujuan = trim($_POST['rekening_tujuan']);
-    $rekening_tujuan_nama = $_POST['rekening_tujuan_nama'];
-    $jumlah = floatval($_POST['jumlah']); // Convert to float for proper comparison
-    $input_jumlah = $jumlah; // Store for redisplay if PIN is wrong
-    $pin = trim($_POST['pin']);
-    $rekening_tujuan_id = isset($_POST['rekening_tujuan_id']) ? $_POST['rekening_tujuan_id'] : null;
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
+    if ($_POST['action'] == 'confirm_transfer') {
+        // Get data from form
+        $rekening_tujuan = trim($_POST['rekening_tujuan']);
+        $rekening_tujuan_nama = $_POST['rekening_tujuan_nama'];
+        $jumlah = floatval($_POST['jumlah']);
+        $input_jumlah = $jumlah;
+        $pin = trim($_POST['pin']);
+        $rekening_tujuan_id = $_POST['rekening_tujuan_id'];
 
-    // Validate input
-    if (empty($rekening_tujuan) || empty($jumlah) || empty($pin)) {
-        $error = "Semua field harus diisi!";
-        $current_step = 2;
-    } elseif ($jumlah <= 0) {
-        $error = "Jumlah transfer harus lebih dari 0!";
-        $current_step = 2;
-    } elseif ($jumlah > $saldo) {
-        $error = "Saldo tidak mencukupi!";
-        $current_step = 2;
-    } else {
-        // Verify PIN
-        $conn = check_connection($conn);
-        $query = "SELECT pin FROM users WHERE id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $user_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $user_data = $result->fetch_assoc();
-
-        if (!$user_data || $user_data['pin'] !== $pin) {
-            $error = "PIN yang Anda masukkan salah!";
+        // Validate input
+        if (empty($rekening_tujuan) || empty($jumlah) || empty($pin)) {
+            $error = "Semua field harus diisi!";
+            $current_step = 2;
+        } elseif ($jumlah <= 0) {
+            $error = "Jumlah transfer harus lebih dari 0!";
+            $current_step = 2;
+        } elseif ($jumlah > $saldo) {
+            $error = "Saldo tidak mencukupi!";
             $current_step = 2;
         } else {
-            // Check connection before proceeding
-            $conn = check_connection($conn);
-            
-            // Get rekening tujuan data (just to verify it exists)
-            $query = "SELECT id FROM rekening WHERE no_rekening = ?";
+            // Verify PIN
+            $query = "SELECT pin FROM users WHERE id = ?";
             $stmt = $conn->prepare($query);
-            $stmt->bind_param("s", $rekening_tujuan);
+            $stmt->bind_param("i", $user_id);
             $stmt->execute();
             $result = $stmt->get_result();
-            $rekening_tujuan_data = $result->fetch_assoc();
+            $user_data = $result->fetch_assoc();
 
-            if (!$rekening_tujuan_data) {
-                $error = "Nomor rekening tujuan tidak ditemukan!";
-                $current_step = 1;
+            if (!$user_data || $user_data['pin'] !== $pin) {
+                $error = "PIN yang Anda masukkan salah!";
+                $current_step = 2;
             } else {
-                $rekening_tujuan_id = $rekening_tujuan_data['id'];
-
                 // Process transfer
                 try {
-                    $conn = check_connection($conn);
                     $conn->begin_transaction();
 
-                    // Generate unique transaction number with better format
+                    // Generate unique transaction number
                     $no_transaksi = 'TF' . date('YmdHis') . rand(1000, 9999);
-                    
+
                     // Insert transaction record
                     $query = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, rekening_tujuan_id, status, created_at) 
                               VALUES (?, ?, 'transfer', ?, ?, 'approved', NOW())";
                     $stmt = $conn->prepare($query);
                     $stmt->bind_param("sidi", $no_transaksi, $rekening_id, $jumlah, $rekening_tujuan_id);
                     $stmt->execute();
-                    
-                    if ($stmt->affected_rows <= 0) {
-                        throw new Exception("Gagal membuat catatan transaksi");
-                    }
 
-                    // Update sender's balance (subtract amount)
+                    // Update sender's balance
                     $query = "UPDATE rekening SET saldo = saldo - ? WHERE id = ? AND saldo >= ?";
                     $stmt = $conn->prepare($query);
                     $stmt->bind_param("did", $jumlah, $rekening_id, $jumlah);
                     $stmt->execute();
-                    
-                    if ($stmt->affected_rows <= 0) {
-                        throw new Exception("Gagal memperbarui saldo pengirim, pastikan saldo mencukupi");
-                    }
 
-                    // Update recipient's balance (add amount)
+                    // Update recipient's balance
                     $query = "UPDATE rekening SET saldo = saldo + ? WHERE id = ?";
                     $stmt = $conn->prepare($query);
                     $stmt->bind_param("di", $jumlah, $rekening_tujuan_id);
                     $stmt->execute();
-                    
-                    if ($stmt->affected_rows <= 0) {
-                        throw new Exception("Gagal memperbarui saldo penerima");
-                    }
 
-                    // All operations successful, commit transaction
+                    // Commit transaction
                     $conn->commit();
 
-                    // Get updated saldo after transfer
+                    // Get updated saldo
                     $query = "SELECT saldo FROM rekening WHERE id = ?";
                     $stmt = $conn->prepare($query);
                     $stmt->bind_param("i", $rekening_id);
@@ -188,56 +289,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                     $result = $stmt->get_result();
                     $updated_rekening = $result->fetch_assoc();
                     if ($updated_rekening) {
-                        $saldo = $updated_rekening['saldo']; // Update displayed balance
+                        $saldo = $updated_rekening['saldo'];
                     }
 
+                    // Set success message
                     $success = "Transfer berhasil!";
                     $current_step = 1;
-                    
+
+                    // Generate struk with proper WIB time
+                    $strukData = [
+                        'no_transaksi' => $no_transaksi,
+                        'tanggal' => date('Y-m-d'), // Store as Y-m-d format for consistency
+                        'rekening_asal' => $no_rekening,
+                        'rekening_tujuan' => $rekening_tujuan,
+                        'nama_penerima' => $rekening_tujuan_nama,
+                        'jumlah' => $jumlah,
+                    ];
+                    $pdfData = generateStruk($strukData);
+                    $pdfFilePath = $pdfData['file_path'];
+                    $pdfUrl = $pdfData['file_url'];
+
                     // Store transfer details for display
                     $transfer_amount = $jumlah;
                     $transfer_rekening = $rekening_tujuan;
                     $transfer_name = $rekening_tujuan_nama;
-                    
-                    // Log successful transaction
-                    error_log("Transfer successful: {$jumlah} from account {$no_rekening} to {$rekening_tujuan}");
-                    
                 } catch (Exception $e) {
                     // Rollback transaction on error
                     $conn->rollback();
                     $error = "Terjadi kesalahan: " . $e->getMessage();
                     $current_step = 2;
-                    
-                    // Log error
-                    error_log("Transfer error: " . $e->getMessage());
                 }
             }
         }
     }
 }
-
-// If we're in step 2 and have a rekening_tujuan from POST but no tujuan_data yet, fetch it
-if ($current_step == 2 && empty($tujuan_data) && isset($_POST['rekening_tujuan'])) {
-    $rekening_tujuan = trim($_POST['rekening_tujuan']);
-    $conn = check_connection($conn);
-    
-    $query = "SELECT r.id, r.user_id, r.no_rekening, u.nama 
-             FROM rekening r 
-             JOIN users u ON r.user_id = u.id 
-             WHERE r.no_rekening = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("s", $rekening_tujuan);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $tujuan_data = $result->fetch_assoc();
-    
-    if (!$tujuan_data) {
-        $error = "Nomor rekening tujuan tidak ditemukan!";
-        $current_step = 1;
-    }
-}
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -807,9 +893,33 @@ if ($current_step == 2 && empty($tujuan_data) && isset($_POST['rekening_tujuan']
                 right: -35%;
             }
         }
-    </style>
-</head>
+        .btn-view {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background-color: #4CAF50; /* Warna hijau */
+            color: white;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+        }
 
+        .btn-view:hover {
+            background-color: #45a049; /* Warna hijau lebih gelap */
+            transform: translateY(-2px);
+        }
+
+        .btn-view i {
+            margin-right: 8px;
+        }
+
+</style>
+</head>
 <body>
     <?php if (file_exists('../../includes/header.php')) {
         include '../../includes/header.php';
@@ -840,28 +950,27 @@ if ($current_step == 2 && empty($tujuan_data) && isset($_POST['rekening_tujuan']
             </div>
         </div>
 
-        <!-- Loading overlay -->
-        <div id="loading-overlay" class="loading-overlay" style="display: none;">
-            <div class="loading-spinner">
-                <i class="fas fa-circle-notch fa-spin"></i>
-                <p id="loading-text">Memproses...</p>
-            </div>
-        </div>
-
+        <!-- Notifikasi Error -->
         <?php if (isset($error)): ?>
             <div class="alert alert-danger" id="error-alert">
                 <i class="fas fa-exclamation-circle"></i> <?= $error ?>
             </div>
         <?php endif; ?>
 
+        <!-- Notifikasi Sukses -->
         <?php if (isset($success)): ?>
             <div class="alert alert-success" id="success-alert">
                 <div class="success-animation">
-                    <div class="waves">
-                        <span class="checkmark"></span>
-                    </div>
+                    <div class="waves"><span class="checkmark"></span></div>
                     <div class="success-title"><?= $success ?></div>
-                    <div class="success-details"><?= "Rp " . number_format($transfer_amount, 0, ',', '.') . " telah ditransfer ke rekening " . $transfer_rekening . " atas nama " . $transfer_name ?></div>
+                    <div class="success-details">Rp <?= number_format($transfer_amount, 0, ',', '.') ?> telah ditransfer ke rekening <?= $transfer_rekening ?> atas nama <?= $transfer_name ?></div>
+                    <?php if (file_exists($pdfFilePath)): ?>
+                    <a href="<?= $pdfUrl ?>" target="_blank" class="btn-view">
+                        <i class="fas fa-eye"></i> Lihat Bukti Transfer
+                    </a>
+                    <?php else: ?>
+                        <div class="alert alert-danger">File bukti transfer tidak ditemukan.</div>
+                    <?php endif; ?>
                 </div>
             </div>
             <div class="notif-badge">
@@ -870,6 +979,7 @@ if ($current_step == 2 && empty($tujuan_data) && isset($_POST['rekening_tujuan']
             </div>
         <?php endif; ?>
 
+        <!-- Form Transfer -->
         <div class="transfer-card">
             <div class="saldo-display">
                 <div class="saldo-title">Saldo Anda</div>
@@ -941,156 +1051,79 @@ if ($current_step == 2 && empty($tujuan_data) && isset($_POST['rekening_tujuan']
         </div>
     </div>
     <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Loading overlay functionality
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const loadingText = document.getElementById('loading-text');
-    
-    function showLoading(message) {
-        loadingText.textContent = message || 'Memproses...';
-        loadingOverlay.style.display = 'flex';
-    }
-    
-    function hideLoading() {
-        loadingOverlay.style.display = 'none';
-    }
-    
-    // Button loading state functions
-    function setButtonLoading(button, textId, iconId, loadingSpan, isLoading) {
-        const buttonText = document.getElementById(textId);
-        const buttonIcon = iconId ? document.getElementById(iconId) : null;
-        
-        if (isLoading) {
-            if (buttonText) buttonText.style.visibility = 'hidden';
-            if (buttonIcon) buttonIcon.style.display = 'none';
-            loadingSpan.style.display = 'inline-block';
-            button.disabled = true;
-        } else {
-            if (buttonText) buttonText.style.visibility = 'visible';
-            if (buttonIcon) buttonIcon.style.display = 'inline-block';
-            loadingSpan.style.display = 'none';
-            button.disabled = false;
-        }
-    }
-    
-    // Handle form submissions with loading overlay
-    const verifyForm = document.getElementById('verifyForm');
-    const verifyButton = document.getElementById('verify-button');
-    const verifyLoadingIcon = verifyButton ? verifyButton.querySelector('.loading-icon') : null;
-    
-    if (verifyForm && verifyButton && verifyLoadingIcon) {
-        verifyForm.addEventListener('submit', function(e) {
-            const rekening = document.getElementById('rekening_tujuan').value;
-            if (rekening.trim() !== '') {
-                // Show loading in button
-                setButtonLoading(verifyButton, 'verify-text', null, verifyLoadingIcon, true);
-                
-                // Show loading overlay
-                showLoading('Memeriksa nomor rekening...');
-                
-                // Continue with form submission (don't prevent default)
-            }
-        });
-    }
-    
-    const transferForm = document.getElementById('transferForm');
-    const transferButton = document.getElementById('transfer-button');
-    const transferLoadingIcon = transferButton ? transferButton.querySelector('.transfer-loading') : null;
-    
-    if (transferForm && transferButton && transferLoadingIcon) {
-        transferForm.addEventListener('submit', function(e) {
-            const jumlah = document.getElementById('jumlah').value;
-            const pin = document.getElementById('pin').value;
-            
-            if (jumlah.trim() !== '' && pin.trim() !== '') {
-                // Show loading in button
-                setButtonLoading(transferButton, 'transfer-text', 'transfer-icon', transferLoadingIcon, true);
-                
-                // Show loading overlay
-                showLoading('Memproses transfer...');
-                
-                // Continue with form submission
-            }
-        });
-    }
-    
-    // Handle back button using form submission to maintain state
-    const backButton = document.getElementById('backButton');
-    if (backButton) {
-        backButton.addEventListener('click', function() {
-            // Create and submit a form to go back to step 1
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '';
-            
-            const actionInput = document.createElement('input');
-            actionInput.type = 'hidden';
-            actionInput.name = 'action';
-            actionInput.value = 'go_back';
-            
-            form.appendChild(actionInput);
-            document.body.appendChild(form);
-            form.submit();
-        });
-    }
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set durasi notifikasi menjadi 10 detik (10000 milidetik)
+            const notificationDismissTime = 10000;
 
-    // Password visibility toggle
-    const togglePasswordButtons = document.querySelectorAll('.password-toggle');
-    
-    togglePasswordButtons.forEach(function(button) {
-        button.addEventListener('click', function() {
-            const targetId = this.getAttribute('data-target');
-            const passwordInput = document.getElementById(targetId);
-            
-            if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                this.classList.remove('fa-eye');
-                this.classList.add('fa-eye-slash');
-            } else {
-                passwordInput.type = 'password';
-                this.classList.remove('fa-eye-slash');
-                this.classList.add('fa-eye');
+            // Auto-dismiss alerts setelah waktu tertentu
+            const errorAlert = document.getElementById('error-alert');
+            const successAlert = document.getElementById('success-alert');
+            const notifBadge = document.querySelector('.notif-badge');
+
+            if (errorAlert) {
+                setTimeout(function() {
+                    errorAlert.style.opacity = '0';
+                    errorAlert.style.transform = 'translateY(-20px)';
+                    setTimeout(() => {
+                        errorAlert.style.display = 'none';
+                    }, 500);
+                }, notificationDismissTime);
+            }
+
+            if (successAlert) {
+                setTimeout(function() {
+                    successAlert.style.opacity = '0';
+                    successAlert.style.transform = 'translateY(-20px)';
+                    setTimeout(() => {
+                        successAlert.style.display = 'none';
+                    }, 500);
+                }, notificationDismissTime);
+            }
+
+            if (notifBadge) {
+                setTimeout(function() {
+                    notifBadge.style.opacity = '0';
+                    setTimeout(() => {
+                        notifBadge.style.display = 'none';
+                    }, 500);
+                }, notificationDismissTime);
+            }
+
+            // Handle toggle password visibility
+            const togglePasswordButtons = document.querySelectorAll('.password-toggle');
+            togglePasswordButtons.forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const targetId = this.getAttribute('data-target');
+                    const passwordInput = document.getElementById(targetId);
+                    if (passwordInput.type === 'password') {
+                        passwordInput.type = 'text';
+                        this.classList.remove('fa-eye');
+                        this.classList.add('fa-eye-slash');
+                    } else {
+                        passwordInput.type = 'password';
+                        this.classList.remove('fa-eye-slash');
+                        this.classList.add('fa-eye');
+                    }
+                });
+            });
+
+            // Handle back button
+            const backButton = document.getElementById('backButton');
+            if (backButton) {
+                backButton.addEventListener('click', function() {
+                    const form = document.createElement('form');
+                    form.method = 'POST';
+                    form.action = '';
+                    const actionInput = document.createElement('input');
+                    actionInput.type = 'hidden';
+                    actionInput.name = 'action';
+                    actionInput.value = 'go_back';
+                    form.appendChild(actionInput);
+                    document.body.appendChild(form);
+                    form.submit();
+                });
             }
         });
-    });
-
-    // Auto-dismiss alerts after consistent time periods
-    const errorAlert = document.getElementById('error-alert');
-    const successAlert = document.getElementById('success-alert');
-    const notifBadge = document.querySelector('.notif-badge');
-    
-    // Set consistent timing for all notifications
-    const notificationDismissTime = 5000; // 5 seconds
-    
-    if (errorAlert) {
-        setTimeout(function() {
-            errorAlert.style.opacity = '0';
-            errorAlert.style.transform = 'translateY(-20px)';
-            setTimeout(() => {
-                errorAlert.style.display = 'none';
-            }, 500); // Wait for fade out animation
-        }, notificationDismissTime);
-    }
-    
-    if (successAlert) {
-        setTimeout(function() {
-            successAlert.style.opacity = '0';
-            successAlert.style.transform = 'translateY(-20px)';
-            setTimeout(() => {
-                successAlert.style.display = 'none';
-            }, 500); // Wait for fade out animation
-        }, notificationDismissTime);
-    }
-    
-    if (notifBadge) {
-        setTimeout(function() {
-            notifBadge.style.opacity = '0';
-            setTimeout(() => {
-                notifBadge.style.display = 'none';
-            }, 500); // Wait for fade out animation
-        }, notificationDismissTime);
-    }
-});
     </script>
 </body>
 </html>

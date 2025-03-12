@@ -11,8 +11,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cari Transaksi - SCHOBANK SYSTEM</title>
-    
-    <!-- CSS Libraries -->
+
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
@@ -473,7 +472,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 grid-template-columns: 1fr;
             }
         }
-    </style>
+        </style>
 </head>
 <body>
     <!-- Navigation -->
@@ -518,13 +517,28 @@ $username = $_SESSION['username'] ?? 'Petugas';
             // Secure against SQL injection
             $no_transaksi = $conn->real_escape_string($no_transaksi);
             
-            // Query dasar untuk semua jenis transaksi
-            $query = "SELECT t.*, r.no_rekening, u.nama as nama_nasabah, p.nama as nama_petugas 
-                      FROM transaksi t 
-                      JOIN rekening r ON t.rekening_id = r.id 
-                      JOIN users u ON r.user_id = u.id 
-                      JOIN users p ON t.petugas_id = p.id 
-                      WHERE t.no_transaksi = '$no_transaksi'";
+            // Query untuk mengambil semua jenis transaksi
+            $query = "SELECT 
+                        t.*, 
+                        r1.no_rekening AS rekening_asal, 
+                        u1.nama AS nama_nasabah, 
+                        p.nama AS nama_petugas,
+                        r2.no_rekening AS rekening_tujuan,
+                        u2.nama AS nama_penerima
+                      FROM 
+                        transaksi t
+                      JOIN 
+                        rekening r1 ON t.rekening_id = r1.id
+                      JOIN 
+                        users u1 ON r1.user_id = u1.id
+                      LEFT JOIN 
+                        rekening r2 ON t.rekening_tujuan_id = r2.id
+                      LEFT JOIN 
+                        users u2 ON r2.user_id = u2.id
+                      LEFT JOIN 
+                        users p ON t.petugas_id = p.id
+                      WHERE 
+                        t.no_transaksi = '$no_transaksi'";
                       
             $result = $conn->query($query);
 
@@ -557,7 +571,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     <p><strong>Jenis Transaksi:</strong> <span><span class="badge ' . $badgeClass . '">' . strtoupper($row['jenis_transaksi']) . '</span></span></p>
                     <p><strong>Jumlah:</strong> <span>Rp ' . number_format($row['jumlah'], 0, ',', '.') . '</span></p>
                     <p><strong>Tanggal:</strong> <span>' . date('d/m/Y H:i', strtotime($row['created_at'])) . '</span></p>
-                    <p><strong>Petugas:</strong> <span>' . $row['nama_petugas'] . '</span></p>
+                    <p><strong>Petugas:</strong> <span>' . ($row['nama_petugas'] ?? '-') . '</span></p>
                     <p><strong>Status:</strong> <span>' . strtoupper($row['status']) . '</span></p>
                 </div>';
                 
@@ -570,7 +584,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         <div class="account-info">
                             <div class="account-box">
                                 <h4><i class="fas fa-user-circle"></i> Rekening Tujuan</h4>
-                                <p><strong>No Rekening:</strong> ' . $row['no_rekening'] . '</p>
+                                <p><strong>No Rekening:</strong> ' . $row['rekening_asal'] . '</p>
                                 <p><strong>Nama:</strong> ' . $row['nama_nasabah'] . '</p>
                                 <p><strong>Keterangan:</strong> Setoran tunai ke rekening</p>
                             </div>
@@ -582,7 +596,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         <div class="account-info">
                             <div class="account-box">
                                 <h4><i class="fas fa-user-circle"></i> Rekening Sumber</h4>
-                                <p><strong>No Rekening:</strong> ' . $row['no_rekening'] . '</p>
+                                <p><strong>No Rekening:</strong> ' . $row['rekening_asal'] . '</p>
                                 <p><strong>Nama:</strong> ' . $row['nama_nasabah'] . '</p>
                                 <p><strong>Keterangan:</strong> Penarikan tunai dari rekening</p>
                             </div>
@@ -590,32 +604,21 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         break;
                     
                     case 'transfer':
-                        // Ambil data penerima untuk transaksi transfer
-                        $query_penerima = "SELECT r.no_rekening as rek_penerima, u.nama as nama_penerima 
-                                          FROM rekening r 
-                                          JOIN users u ON r.user_id = u.id 
-                                          WHERE r.id = " . $row['rekening_tujuan_id'];
-                        $result_penerima = $conn->query($query_penerima);
-                        
-                        if ($result_penerima->num_rows > 0) {
-                            $penerima = $result_penerima->fetch_assoc();
-                            
-                            echo '<h3>' . $transactionIcon . ' Detail Transfer</h3>
-                            <div class="account-info">
-                                <div class="transfer-details">
-                                    <div class="account-box">
-                                        <h4><i class="fas fa-user-circle"></i> Rekening Pengirim</h4>
-                                        <p><strong>No Rekening:</strong> ' . $row['no_rekening'] . '</p>
-                                        <p><strong>Nama:</strong> ' . $row['nama_nasabah'] . '</p>
-                                    </div>
-                                    <div class="account-box">
-                                        <h4><i class="fas fa-user-circle"></i> Rekening Penerima</h4>
-                                        <p><strong>No Rekening:</strong> ' . $penerima['rek_penerima'] . '</p>
-                                        <p><strong>Nama:</strong> ' . $penerima['nama_penerima'] . '</p>
-                                    </div>
+                        echo '<h3>' . $transactionIcon . ' Detail Transfer</h3>
+                        <div class="account-info">
+                            <div class="transfer-details">
+                                <div class="account-box">
+                                    <h4><i class="fas fa-user-circle"></i> Rekening Pengirim</h4>
+                                    <p><strong>No Rekening:</strong> ' . $row['rekening_asal'] . '</p>
+                                    <p><strong>Nama:</strong> ' . $row['nama_nasabah'] . '</p>
                                 </div>
-                            </div>';
-                        }
+                                <div class="account-box">
+                                    <h4><i class="fas fa-user-circle"></i> Rekening Penerima</h4>
+                                    <p><strong>No Rekening:</strong> ' . $row['rekening_tujuan'] . '</p>
+                                    <p><strong>Nama:</strong> ' . $row['nama_penerima'] . '</p>
+                                </div>
+                            </div>
+                        </div>';
                         break;
                 }
                 

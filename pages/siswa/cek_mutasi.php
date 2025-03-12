@@ -242,33 +242,42 @@ if (!$rekening_data) {
         }
 
         .tab-container {
-            margin-top: 20px;
-            margin-bottom: 20px;
-        }
+    margin-top: 20px;
+    margin-bottom: 20px;
+}
 
-        .tabs {
-            display: flex;
-            background: #f1f5f9;
-            border-radius: 8px;
-            overflow: hidden;
-        }
+.tabs {
+    display: flex;
+    background: #f1f5f9;
+    border-radius: 12px; /* Sudut lebih rounded */
+    overflow: hidden;
+    padding: 5px; /* Padding untuk memberikan ruang di dalam container */
+    box-shadow: var(--shadow-sm); /* Shadow untuk container */
+}
 
-        .tab {
-            flex: 1;
-            padding: 12px;
-            text-align: center;
-            cursor: pointer;
-            font-weight: 500;
-            color: var(--text-secondary);
-            border-bottom: 3px solid transparent;
-            transition: var(--transition);
-        }
+.tab {
+    flex: 1;
+    padding: 12px 15px; /* Padding lebih lebar */
+    text-align: center;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--text-secondary);
+    border-radius: 8px; /* Sudut rounded untuk tab */
+    margin: 3px; /* Jarak antar tab */
+    transition: var(--transition);
+    background: transparent; /* Latar belakang transparan saat tidak aktif */
+}
 
-        .tab.active {
-            background: white;
-            color: var(--primary-color);
-            border-bottom: 3px solid var(--primary-color);
-        }
+.tab:hover {
+    background: rgba(255, 255, 255, 0.5); /* Efek hover */
+}
+
+.tab.active {
+    background: white; /* Latar belakang putih saat aktif */
+    color: var(--primary-color);
+    box-shadow: var(--shadow-sm); /* Shadow untuk tab aktif */
+    transform: translateY(-2px); /* Efek sedikit naik */
+}
 
         table {
             width: 100%;
@@ -387,6 +396,33 @@ if (!$rekening_data) {
                 padding: 12px;
             }
         }
+        @media (max-width: 768px) {
+/* Responsif untuk mobile */
+@media (max-width: 768px) {
+    .tabs {
+        flex-direction: column;
+        background: none;
+        border-radius: 0;
+        padding: 0;
+        box-shadow: none;
+    }
+
+    .tab {
+        width: 100%;
+        padding: 15px;
+        text-align: left;
+        border-radius: 8px; /* Tetap rounded di mobile */
+        margin-bottom: 10px; /* Jarak antar tab di mobile */
+        background: white; /* Latar belakang putih di mobile */
+        box-shadow: var(--shadow-sm); /* Shadow untuk tab di mobile */
+    }
+
+    .tab.active {
+        background: var(--primary-light); /* Warna latar belakang saat aktif di mobile */
+        border-bottom: 3px solid var(--primary-color);
+        transform: none; /* Hilangkan efek naik di mobile */
+    }
+}
     </style>
 </head>
 <body>

@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         // Generate unique token
         $token = bin2hex(random_bytes(32));
-        $expiry = date('Y-m-d H:i:s', strtotime('+24 hours')); // Perpanjang masa berlaku token menjadi 24 jam
+        $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes')); // Ubah masa berlaku token menjadi 5 menit
         
         // Hapus token lama jika ada untuk user ini
         $delete_query = "DELETE FROM password_reset WHERE user_id = ?";
@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <style>
                         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
                         .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-                        h2 { color: #0a2e5c; border-bottom: 2px solid #0a2e5c; padding-bottom: 10px; }
+                        h2 { color:rgb(4, 20, 41); border-bottom: 2px solidrgb(243, 244, 245); padding-bottom: 10px; }
                         .btn { display: inline-block; background: #0a2e5c; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
                         .expire-note { font-size: 0.9em; color: #666; margin-top: 20px; }
                         .footer { margin-top: 30px; font-size: 0.8em; color: #666; border-top: 1px solid #ddd; padding-top: 10px; }
@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <p style='text-align: center;'><a class='btn' href='{$reset_link}'>Reset Password Saya</a></p>
                         <p>Atau gunakan link berikut:</p>
                         <p><a href='{$reset_link}'>{$reset_link}</a></p>
-                        <p class='expire-note'>Link ini akan kadaluarsa dalam 24 jam (sampai " . date('d M Y H:i', strtotime($expiry)) . " WIB).</p>
+                        <p class='expire-note'>Link ini akan kadaluarsa dalam 5 menit (sampai " . date('d M Y H:i:s', strtotime($expiry)) . " WIB).</p>
                         <p>Jika Anda tidak melakukan permintaan ini, abaikan email ini dan password Anda tidak akan berubah.</p>
                         <div class='footer'>
                             <p>Email ini dikirim otomatis oleh sistem, mohon tidak membalas email ini.</p>
@@ -133,46 +133,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         body {
-            background: linear-gradient(135deg, #0a2e5c, #2c5282);
+            background-color: #f0f2f5;
             min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
+            background-image: url('https://www.transparenttextures.com/patterns/geometry.png');
+            background-size: cover;
+            background-position: center;
             padding: 20px;
         }
 
         .login-container {
-            background: white;
-            padding: 2.5rem;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 2rem;
             border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 450px;
+            max-width: 400px;
             text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .login-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 8px;
-            background: linear-gradient(90deg, #0a2e5c, #4299e1, #0a2e5c);
-            background-size: 200% 100%;
-            animation: gradientMove 3s ease infinite;
-        }
-
-        @keyframes gradientMove {
-            0% {background-position: 0% 50%}
-            50% {background-position: 100% 50%}
-            100% {background-position: 0% 50%}
+            backdrop-filter: blur(5px);
         }
 
         .logo-container {
@@ -180,50 +164,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .logo {
-            font-size: 3rem;
-            color: #0a2e5c;
-            margin-bottom: 0.5rem;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+            width: 100px;
+            height: auto;
+            margin-bottom: 0.2rem;
         }
 
         .bank-name {
-            font-size: 1.5rem;
+            font-size: 1.3rem;
             color: #0a2e5c;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-
-        .time-display {
-            font-size: 0.9rem;
-            color: #666;
-            margin-bottom: 1.5rem;
-            background: #f5f7fa;
-            padding: 8px 15px;
-            border-radius: 20px;
-            display: inline-block;
-        }
-
-        .time-display i {
-            margin-right: 5px;
-            color: #0a2e5c;
+            font-weight: bold;
+            margin-bottom: 1.2rem;
         }
 
         .form-description {
-            margin-bottom: 1.8rem;
-            color: #555;
-            font-size: 0.95rem;
-            line-height: 1.5;
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 1.2rem;
+            line-height: 1.4;
         }
 
         .input-group {
             position: relative;
-            margin-bottom: 1.8rem;
+            margin-bottom: 1.2rem;
         }
 
         .input-group i.icon {
@@ -232,111 +194,91 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             top: 50%;
             transform: translateY(-50%);
             color: #0a2e5c;
-            font-size: 1.1rem;
         }
 
         input {
             width: 100%;
-            padding: 14px 15px 14px 45px;
-            border: 2px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 1rem;
+            padding: 12px 40px;
+            border: 2px solid #e1e5ee;
+            border-radius: 10px;
+            font-size: 16px;
             transition: all 0.3s ease;
-            background-color: #f8fafc;
+            -webkit-appearance: none;
+            appearance: none;
         }
 
         input:focus {
             border-color: #0a2e5c;
             outline: none;
             box-shadow: 0 0 0 3px rgba(10, 46, 92, 0.1);
-            background-color: #fff;
         }
 
         button {
             width: 100%;
-            padding: 14px;
-            background: linear-gradient(90deg, #0a2e5c, #3182ce);
+            padding: 12px;
+            background: #0a2e5c;
             color: white;
             border: none;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: 600;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 6px rgba(10, 46, 92, 0.1);
+            transition: background 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
+            -webkit-appearance: none;
+            appearance: none;
         }
 
         button i {
             margin-right: 8px;
         }
 
-        button:hover {
-            background: linear-gradient(90deg, #0a2e5c, #2c5282);
-            transform: translateY(-2px);
-            box-shadow: 0 7px 14px rgba(10, 46, 92, 0.15);
-        }
-
-        button:active {
-            transform: translateY(0);
+        button:hover, button:active {
+            background: #154785;
         }
 
         .error-message {
-            background: #fff5f5;
-            color: #e53e3e;
+            background: #ffe5e5;
+            color: #e74c3c;
             padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            font-size: 0.95rem;
-            border-left: 4px solid #e53e3e;
-            text-align: left;
-            animation: fadeIn 0.3s ease-in;
-            display: flex;
-            align-items: center;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
         }
 
-        .error-message i {
-            margin-right: 10px;
-            font-size: 1.1rem;
+        .error-message.fade-out {
+            opacity: 0;
         }
 
         .success-message {
-            background: #f0fff4;
-            color: #38a169;
+            background: #e5ffe5;
+            color: #27ae60;
             padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1.5rem;
-            font-size: 0.95rem;
-            border-left: 4px solid #38a169;
-            text-align: left;
-            animation: fadeIn 0.3s ease-in;
-            display: flex;
-            align-items: center;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
         }
 
-        .success-message i {
-            margin-right: 10px;
-            font-size: 1.1rem;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .success-message.fade-out {
+            opacity: 0;
         }
 
         .back-to-login {
-            margin-top: 2rem;
-            font-size: 0.95rem;
-            color: #718096;
+            text-align: center;
+            margin-top: 1.5rem;
         }
 
         .back-to-login a {
             color: #0a2e5c;
+            font-size: 0.9rem;
             text-decoration: none;
-            font-weight: 600;
-            transition: color 0.3s;
+            transition: color 0.3s ease;
             display: inline-flex;
             align-items: center;
         }
@@ -346,21 +288,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .back-to-login a:hover {
-            color: #3182ce;
+            color: #154785;
+            text-decoration: underline;
         }
 
         /* Responsive adjustments */
         @media (max-width: 480px) {
             .login-container {
-                padding: 1.8rem;
+                padding: 1.5rem;
             }
             
             .logo {
-                font-size: 2.5rem;
+                width: 80px;
             }
             
             .bank-name {
-                font-size: 1.3rem;
+                font-size: 1.2rem;
+            }
+            
+            input, button {
+                font-size: 16px;
+                padding: 10px 40px;
+            }
+            
+            button {
+                padding: 10px;
+            }
+        }
+
+        /* Fix for iOS zoom on input focus */
+        @media screen and (-webkit-min-device-pixel-ratio: 0) { 
+            select,
+            textarea,
+            input {
+                font-size: 16px;
             }
         }
     </style>
@@ -368,23 +329,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <body>
     <div class="login-container">
         <div class="logo-container">
-            <i class="fas fa-university logo"></i>
+            <img src="/bankmini/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
             <div class="bank-name">SCHOBANK</div>
         </div>
-        
         
         <div class="form-description">
             Masukkan email akun Anda untuk memulai proses reset password. Kami akan mengirimkan link reset ke email Anda.
         </div>
 
-        <?php if ($error_message): ?>
+        <?php if (isset($error_message) && !empty($error_message)): ?>
             <div class="error-message" id="error-alert">
                 <i class="fas fa-exclamation-circle"></i>
                 <?php echo $error_message; ?>
             </div>
         <?php endif; ?>
         
-        <?php if ($success_message): ?>
+        <?php if (isset($success_message) && !empty($success_message)): ?>
             <div class="success-message" id="success-alert">
                 <i class="fas fa-check-circle"></i>
                 <?php echo $success_message; ?>
@@ -408,33 +368,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </div>
 
     <script>
-        // Auto-dismiss messages after 5 seconds
+        // Auto-dismiss messages after 3 seconds
         document.addEventListener('DOMContentLoaded', function() {
             const errorAlert = document.getElementById('error-alert');
             const successAlert = document.getElementById('success-alert');
             
             if (errorAlert) {
                 setTimeout(() => {
-                    errorAlert.style.opacity = '0';
-                    errorAlert.style.transform = 'translateY(-10px)';
-                    errorAlert.style.transition = 'opacity 0.5s, transform 0.5s';
-                }, 5000);
+                    errorAlert.classList.add('fade-out');
+                }, 3000);
 
                 setTimeout(() => {
                     errorAlert.style.display = 'none';
-                }, 5500);
+                }, 3500);
             }
             
             if (successAlert) {
                 setTimeout(() => {
-                    successAlert.style.opacity = '0';
-                    successAlert.style.transform = 'translateY(-10px)';
-                    successAlert.style.transition = 'opacity 0.5s, transform 0.5s';
-                }, 5000);
+                    successAlert.classList.add('fade-out');
+                }, 3000);
 
                 setTimeout(() => {
                     successAlert.style.display = 'none';
-                }, 5500);
+                }, 3500);
             }
         });
     </script>

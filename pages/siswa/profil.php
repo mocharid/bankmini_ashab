@@ -1,20 +1,17 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
+require '../../vendor/autoload.php'; // Sesuaikan path ke autoload Composer
+date_default_timezone_set('Asia/Jakarta'); // Set timezone ke WIB
 
-function logout() {
-    session_start();
-    session_unset();
-    session_destroy();
-    header("Location: ../../index.php");
-    exit();
-}
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 $message = '';
 $error = '';
 
 // Ambil data user lengkap dan rekening
-$query = "SELECT u.username, u.nama, u.role, k.nama_kelas, j.nama_jurusan, 
+$query = "SELECT u.username, u.nama, u.role, u.email, k.nama_kelas, j.nama_jurusan, 
           r.no_rekening, r.saldo, u.created_at as tanggal_bergabung, u.pin
           FROM users u 
           LEFT JOIN rekening r ON u.id = r.user_id 
@@ -34,7 +31,7 @@ if (!$user) {
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['update_username'])) {
-        // Username update code remains unchanged
+        // Username update code
         $new_username = trim($_POST['new_username']);
         
         if (empty($new_username)) {
@@ -63,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif (isset($_POST['update_password'])) {
-        // Password update code remains unchanged
+        // Password update code
         $current_password = $_POST['current_password'];
         $new_password = $_POST['new_password'];
         $confirm_password = $_POST['confirm_password'];
@@ -103,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 if ($password_verified) {
-                    // FIX: Use consistent hashing method - if original was SHA-256, use SHA-256 for new password too
+                    // Use consistent hashing method - if original was SHA-256, use SHA-256 for new password too
                     if ($is_sha256) {
                         $hashed_password = hash('sha256', $new_password);
                     } else {
@@ -126,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif (isset($_POST['update_pin'])) {
-        // Modified PIN update code with fix for undefined array key
+        // PIN update code
         $new_pin = $_POST['new_pin'];
         $confirm_pin = $_POST['confirm_pin'];
 
@@ -171,37 +168,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-    }
-}
-// Handle form submission for email
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
-    $email = trim($_POST['email']);
+    } elseif (isset($_POST['update_email'])) {
+        $email = trim($_POST['email']);
 
-    if (empty($email)) {
-        $error = "Email tidak boleh kosong!";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = "Format email tidak valid!";
-    } else {
-        // Cek apakah email sudah digunakan oleh pengguna lain
-        $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
-        $check_stmt->execute();
-        $check_result = $check_stmt->get_result();
-
-        if ($check_result->num_rows > 0) {
-            $error = "Email sudah digunakan oleh pengguna lain!";
+        if (empty($email)) {
+            $error = "Email tidak boleh kosong!";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = "Format email tidak valid!";
         } else {
-            // Update email
-            $update_query = "UPDATE users SET email = ? WHERE id = ?";
-            $update_stmt = $conn->prepare($update_query);
-            $update_stmt->bind_param("si", $email, $_SESSION['user_id']);
+            // Cek apakah email sudah digunakan oleh pengguna lain
+            $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
 
-            if ($update_stmt->execute()) {
-                $message = "Email berhasil diperbarui!";
-                $user['email'] = $email; // Update email di session
+            if ($check_result->num_rows > 0) {
+                $error = "Email sudah digunakan oleh pengguna lain!";
             } else {
-                $error = "Gagal memperbarui email!";
+                // Generate OTP
+                $otp = rand(100000, 999999);
+                $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes')); // OTP berlaku 5 menit
+
+                // Simpan OTP ke database
+                $update_query = "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?";
+                $update_stmt = $conn->prepare($update_query);
+                $update_stmt->bind_param("ssi", $otp, $expiry, $_SESSION['user_id']);
+
+                if ($update_stmt->execute()) {
+                    // Kirim OTP ke email
+                    try {
+                        $mail = new PHPMailer(true);
+                        $mail->isSMTP();
+                        $mail->Host = 'smtp.gmail.com'; // Ganti dengan SMTP host Anda
+                        $mail->SMTPAuth = true;
+                        $mail->Username = 'mocharid.ip@gmail.com'; // Ganti dengan email pengirim
+                        $mail->Password = 'spjs plkg ktuu lcxh'; // Ganti dengan password email pengirim
+                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                        $mail->Port = 587;
+                        $mail->CharSet = 'UTF-8';
+
+                        // Pengirim dan penerima
+                        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+                        $mail->addAddress($email, $user['nama']);
+
+                        // Konten email
+                        $mail->isHTML(true);
+                        $mail->Subject = "Verifikasi Email - SCHOBANK SYSTEM";
+                        $mail->Body = "
+                            <html>
+                            <body>
+                                <h2>Verifikasi Email</h2>
+                                <p>Halo, <strong>{$user['nama']}</strong>!</p>
+                                <p>Kode OTP Anda adalah: <strong>{$otp}</strong>.</p>
+                                <p>Kode ini berlaku hingga " . date('d M Y H:i:s', strtotime($expiry)) . " WIB.</p>
+                                <p>Jika Anda tidak melakukan permintaan ini, abaikan email ini.</p>
+                                <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
+                            </body>
+                            </html>
+                        ";
+
+                        // Kirim email
+                        $mail->send();
+                        $_SESSION['new_email'] = $email; // Simpan email baru di session
+                        header("Location: verify_otp.php"); // Redirect ke halaman verifikasi OTP
+                        exit();
+                    } catch (Exception $e) {
+                        error_log("Mail error: " . $mail->ErrorInfo); // Log error
+                        $error = "Gagal mengirim OTP. Silakan coba lagi nanti.";
+                    }
+                } else {
+                    $error = "Gagal menyimpan OTP. Silakan coba lagi.";
+                }
             }
         }
     }
@@ -330,17 +368,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
 
         .profile-container {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 25px;
         }
 
-        @media (max-width: 768px) {
-            .profile-container {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .profile-card, .form-section {
+        .profile-card, .edit-form-container {
             background: white;
             border-radius: 15px;
             box-shadow: var(--shadow-sm);
@@ -348,12 +380,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             overflow: hidden;
         }
 
-        .profile-card:hover, .form-section:hover {
+        .profile-card:hover, .edit-form-container:hover {
             box-shadow: var(--shadow-md);
             transform: translateY(-5px);
         }
 
-        .profile-header {
+        .profile-header, .edit-form-header {
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
             color: white;
             padding: 15px 20px;
@@ -361,11 +393,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             font-weight: 600;
             display: flex;
             align-items: center;
+            justify-content: space-between;
         }
 
-        .profile-header i {
+        .profile-header i, .edit-form-header i {
             margin-right: 10px;
             font-size: 20px;
+        }
+
+        .edit-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .edit-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
         }
 
         .profile-info {
@@ -377,6 +429,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             display: flex;
             align-items: center;
             border-bottom: 1px solid #eee;
+            position: relative;
         }
 
         .info-item:last-child {
@@ -408,9 +461,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             color: var(--text-primary);
         }
 
-        .saldo-value {
-            color: var(--secondary-color);
-            font-weight: 600;
+        .info-item .edit-icon {
+            position: absolute;
+            right: 10px;
+            background: var(--primary-light);
+            color: var(--primary-color);
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .info-item .edit-icon:hover {
+            background: var(--primary-color);
+            color: white;
         }
 
         .badge {
@@ -424,27 +493,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             color: var(--primary-color);
         }
 
-        .form-section {
-            margin-bottom: 25px;
-        }
-
-        .form-header {
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-            color: white;
-            padding: 15px 20px;
-            font-size: 18px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-        }
-
-        .form-header i {
-            margin-right: 10px;
-            font-size: 20px;
-        }
-
-        .form-content {
+        .edit-form-content {
             padding: 20px;
+            display: none;
+        }
+
+        .edit-form-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease-in;
         }
 
         .form-group {
@@ -518,7 +574,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             transition: var(--transition);
             border: none;
             text-align: center;
-            width: 100%;
         }
 
         .btn-primary {
@@ -529,6 +584,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
         .btn-primary:hover {
             background: var(--primary-dark);
             transform: translateY(-2px);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+        }
+
+        .btn-outline:hover {
+            background: var(--primary-light);
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
         }
 
         .btn i {
@@ -616,39 +687,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             opacity: 1;
         }
 
-        .tab-buttons {
-            display: flex;
-            margin-bottom: 25px;
-            padding: 0 5px;
-        }
-
-        .tab-button {
-            flex: 1;
-            padding: 12px;
-            text-align: center;
-            background: white;
-            border: none;
-            border-bottom: 3px solid #eee;
-            color: var(--text-secondary);
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        .tab-button.active {
-            color: var(--primary-color);
-            border-bottom-color: var(--primary-color);
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease-in;
-        }
-
         @keyframes fadeIn {
             from {
                 opacity: 0;
@@ -685,6 +723,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
         @keyframes rotate {
             to {
                 transform: rotate(360deg);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .btn-container {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: var(--shadow-md);
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .modal-header .close-modal {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: var(--transition);
+        }
+
+        .modal-header .close-modal:hover {
+            color: var(--primary-color);
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
             }
         }
         </style>
@@ -728,203 +847,270 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
             </div>
         <?php endif; ?>
 
-        <!-- Tab Navigation -->
-        <div class="tab-buttons">
-            <button class="tab-button active" data-tab="profile">
-                <i class="fas fa-user"></i> Profil
-            </button>
-            <button class="tab-button" data-tab="account">
-                <i class="fas fa-cog"></i> Pengaturan
-            </button>
-        </div>
-
-        <!-- Profile Tab -->
-        <div id="profile-tab" class="tab-content active">
-            <div class="profile-container">
-                <div class="profile-card">
-                    <div class="profile-header">
+        <div class="profile-container">
+            <!-- Informasi Pribadi -->
+            <div class="profile-card">
+                <div class="profile-header">
+                    <div>
                         <i class="fas fa-user-circle"></i> Informasi Pribadi
                     </div>
-                    <div class="profile-info">
-                        <div class="info-item">
-                            <i class="fas fa-user"></i>
-                            <div>
-                                <div class="label">Nama Lengkap</div>
-                                <div class="value"><?= htmlspecialchars($user['nama']) ?></div>
+                </div>
+                <div class="profile-info">
+                    <div class="info-item">
+                        <i class="fas fa-user"></i>
+                        <div>
+                            <div class="label">Nama Lengkap</div>
+                            <div class="value"><?= htmlspecialchars($user['nama']) ?></div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <i class="fas fa-user-tag"></i>
+                        <div>
+                            <div class="label">Username</div>
+                            <div class="value"><?= htmlspecialchars($user['username']) ?></div>
+                        </div>
+                        <button class="edit-icon" data-target="username">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="info-item">
+                        <i class="fas fa-envelope"></i>
+                        <div>
+                            <div class="label">Email</div>
+                            <div class="value">
+                                <?= !empty($user['email']) ? htmlspecialchars($user['email']) : 'Belum diatur' ?>
                             </div>
                         </div>
-                        <div class="info-item">
-                            <i class="fas fa-user-tag"></i>
-                            <div>
-                                <div class="label">Username</div>
-                                <div class="value"><?= htmlspecialchars($user['username']) ?></div>
+                        <button class="edit-icon" data-target="email">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="info-item">
+                        <i class="fas fa-user-shield"></i>
+                        <div>
+                            <div class="label">Role</div>
+                            <div class="value">
+                                <span class="badge"><?= htmlspecialchars(ucfirst($user['role'])) ?></span>
                             </div>
                         </div>
-                        <div class="info-item">
-                            <i class="fas fa-user-shield"></i>
-                            <div>
-                                <div class="label">Role</div>
-                                <div class="value">
-                                    <span class="badge"><?= htmlspecialchars(ucfirst($user['role'])) ?></span>
-                                </div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <i class="fas fa-calendar-alt"></i>
+                        <div>
+                            <div class="label">Bergabung Sejak</div>
+                            <div class="value"><?= date('d F Y', strtotime($user['tanggal_bergabung'])) ?></div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <i class="fas fa-lock"></i>
+                        <div>
+                            <div class="label">Password</div>
+                            <div class="value">••••••••</div>
+                        </div>
+                        <button class="edit-icon" data-target="password">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="info-item">
+                        <i class="fas fa-key"></i>
+                        <div>
+                            <div class="label">PIN</div>
+                            <div class="value">
+                                <?= !empty($user['pin']) ? '••••••' : 'Belum diatur' ?>
                             </div>
                         </div>
-                        <div class="info-item">
-                            <i class="fas fa-calendar-alt"></i>
-                            <div>
-                                <div class="label">Bergabung Sejak</div>
-                                <div class="value"><?= date('d F Y', strtotime($user['tanggal_bergabung'])) ?></div>
-                            </div>
-                        </div>
-                        <div class="info-item">
-                            <i class="fas fa-lock"></i>
-                            <div>
-                                <div class="label">Status PIN</div>
-                                <div class="value">
-                                    <?= !empty($user['pin']) ? 'PIN sudah diatur' : 'PIN belum diatur' ?>
-                                </div>
-                            </div>
-                        </div>
+                        <button class="edit-icon" data-target="pin">
+                            <i class="fas fa-pen"></i>
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Account Settings Tab -->
-        <div id="account-tab" class="tab-content">
-            <div class="profile-container">
-                <!-- Form untuk mengubah username -->
-                <div class="form-section">
-                    <div class="form-header">
-                        <i class="fas fa-user-edit"></i> Ubah Username
+    <!-- Modal for Edit Username -->
+    <div id="usernameModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-user-edit"></i> Ubah Username</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" id="usernameForm">
+                    <div class="form-group">
+                        <label for="new_username">Username Baru</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-user input-icon"></i>
+                            <input type="text" id="new_username" name="new_username" required placeholder="Masukkan username baru">
+                        </div>
                     </div>
-                    <div class="form-content">
-                        <form method="POST" action="" id="usernameForm">
-                            <div class="form-group">
-                                <label for="new_username">Username Baru</label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-user input-icon"></i>
-                                    <input type="text" id="new_username" name="new_username" required placeholder="Masukkan username baru">
-                                </div>
-                            </div>
-                            <button type="submit" name="update_username" class="btn btn-primary" id="usernameBtn">
-                                <i class="fas fa-save"></i> <span>Simpan Username Baru</span>
-                            </button>
-                        </form>
+                    <div class="modal-footer">
+                        <button type="submit" name="update_username" class="btn btn-primary" id="usernameBtn">
+                            <i class="fas fa-save"></i> <span>Simpan</span>
+                        </button>
+                        <button type="button" class="btn btn-outline close-modal">
+                            <i class="fas fa-times"></i> <span>Batal</span>
+                        </button>
                     </div>
-                </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                <!-- Form untuk mengubah password -->
-                <div class="form-section">
-                    <div class="form-header">
-                        <i class="fas fa-lock"></i> Ubah Password
+    <!-- Modal for Edit Email -->
+    <div id="emailModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-envelope"></i> Ubah Email</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" id="emailForm">
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-envelope input-icon"></i>
+                            <input type="email" id="email" name="email" required placeholder="Masukkan email" value="<?= !empty($user['email']) ? htmlspecialchars($user['email']) : '' ?>">
+                        </div>
                     </div>
-                    <div class="form-content">
-                        <form method="POST" action="" id="passwordForm">
-                            <div class="form-group">
-                                <label for="current_password">Password Saat Ini</label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-key input-icon"></i>
-                                    <input type="password" id="current_password" name="current_password" required placeholder="Password saat ini">
-                                    <i class="fas fa-eye password-toggle" data-target="current_password"></i>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="new_password">Password Baru</label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-lock input-icon"></i>
-                                    <input type="password" id="new_password" name="new_password" required placeholder="Masukkan password baru">
-                                    <i class="fas fa-eye password-toggle" data-target="new_password"></i>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="confirm_password">Konfirmasi Password Baru</label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-check-circle input-icon"></i>
-                                    <input type="password" id="confirm_password" name="confirm_password" required placeholder="Konfirmasi password baru">
-                                    <i class="fas fa-eye password-toggle" data-target="confirm_password"></i>
-                                </div>
-                            </div>
-                            <button type="submit" name="update_password" class="btn btn-primary" id="passwordBtn">
-                                <i class="fas fa-save"></i> <span>Simpan Password Baru</span>
-                            </button>
-                        </form>
+                    <div class="modal-footer">
+                        <button type="submit" name="update_email" class="btn btn-primary" id="emailBtn">
+                            <i class="fas fa-save"></i> <span>Simpan</span>
+                        </button>
+                        <button type="button" class="btn btn-outline close-modal">
+                            <i class="fas fa-times"></i> <span>Batal</span>
+                        </button>
                     </div>
-                </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                <!-- Modified Form untuk membuat/mengubah PIN -->
-                <div class="form-section">
-                    <div class="form-header">
-                        <i class="fas fa-lock"></i> Buat/Ubah PIN
+    <!-- Modal for Verify OTP -->
+    <div id="otpModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-shield-alt"></i> Verifikasi OTP</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" id="otpForm">
+                    <div class="form-group">
+                        <label for="otp">Kode OTP</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-shield-alt input-icon"></i>
+                            <input type="text" id="otp" name="otp" required placeholder="Masukkan kode OTP">
+                        </div>
                     </div>
-                    <div class="form-content">
-                        <form method="POST" action="" id="pinForm">
-                            <?php if (!empty($user['pin'])): ?>
-                            <!-- Show current PIN field only if the user already has a PIN -->
-                            <div class="form-group">
-                                <label for="current_pin">PIN Saat Ini</label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-key input-icon"></i>
-                                    <input type="password" id="current_pin" name="current_pin" required placeholder="Masukkan PIN saat ini" maxlength="6">
-                                    <i class="fas fa-eye password-toggle" data-target="current_pin"></i>
-                                </div>
-                            </div>
-                            <?php endif; ?>
-                            <div class="form-group">
-                                <label for="new_pin">PIN Baru (6 digit angka)</label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-lock input-icon"></i>
-                                    <input type="password" id="new_pin" name="new_pin" required placeholder="Masukkan PIN baru" maxlength="6">
-                                    <i class="fas fa-eye password-toggle" data-target="new_pin"></i>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="confirm_pin">Konfirmasi PIN Baru</label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-check-circle input-icon"></i>
-                                    <input type="password" id="confirm_pin" name="confirm_pin" required placeholder="Konfirmasi PIN baru" maxlength="6">
-                                    <i class="fas fa-eye password-toggle" data-target="confirm_pin"></i>
-                                </div>
-                            </div>
-                            <button type="submit" name="update_pin" class="btn btn-primary" id="pinBtn">
-                                <i class="fas fa-save"></i> <span>Simpan PIN Baru</span>
-                            </button>
-                        </form>
+                    <div class="modal-footer">
+                        <button type="submit" name="verify_otp" class="btn btn-primary" id="otpBtn">
+                            <i class="fas fa-check"></i> <span>Verifikasi</span>
+                        </button>
+                        <button type="button" class="btn btn-outline close-modal">
+                            <i class="fas fa-times"></i> <span>Batal</span>
+                        </button>
                     </div>
-                </div>
-                <!-- Form untuk menambahkan email -->
-                <!-- Form untuk menambahkan/mengubah email -->
-                <div class="form-section">
-                    <div class="form-header">
-                        <i class="fas fa-envelope"></i> Email
-                    </div>
-                    <div class="form-content">
-                        <?php if (!empty($user['email'])): ?>
-                            <!-- Tampilkan email yang sudah terdaftar -->
-                            <div class="info-item">
-                                <i class="fas fa-envelope"></i>
-                                <div>
-                                    <div class="label">Email Terdaftar</div>
-                                    <div class="value"><?= htmlspecialchars($user['email']) ?></div>
-                                </div>
-                            </div>
-                        <?php endif; ?>
+                </form>
+            </div>
+        </div>
+    </div>
 
-                        <!-- Form untuk menambahkan/mengubah email -->
-                        <form method="POST" action="" id="emailForm">
-                            <div class="form-group">
-                                <label for="email"><?= !empty($user['email']) ? 'Ubah Email' : 'Tambahkan Email' ?></label>
-                                <div class="input-wrapper">
-                                    <i class="fas fa-envelope input-icon"></i>
-                                    <input type="email" id="email" name="email" required placeholder="Masukkan email Anda">
-                                </div>
-                            </div>
-                            <button type="submit" name="update_email" class="btn btn-primary" id="emailBtn">
-                                <i class="fas fa-save"></i> <span><?= !empty($user['email']) ? 'Simpan Perubahan' : 'Simpan Email' ?></span>
-                            </button>
-                        </form>
+    <!-- Modal for Edit Password -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-lock"></i> Ubah Password</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" id="passwordForm">
+                    <div class="form-group">
+                        <label for="current_password">Password Saat Ini</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-key input-icon"></i>
+                            <input type="password" id="current_password" name="current_password" required placeholder="Password saat ini">
+                            <i class="fas fa-eye password-toggle" data-target="current_password"></i>
+                        </div>
                     </div>
-                </div>
+                    <div class="form-group">
+                        <label for="new_password">Password Baru</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-lock input-icon"></i>
+                            <input type="password" id="new_password" name="new_password" required placeholder="Masukkan password baru">
+                            <i class="fas fa-eye password-toggle" data-target="new_password"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm_password">Konfirmasi Password Baru</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-check-circle input-icon"></i>
+                            <input type="password" id="confirm_password" name="confirm_password" required placeholder="Konfirmasi password baru">
+                            <i class="fas fa-eye password-toggle" data-target="confirm_password"></i>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" name="update_password" class="btn btn-primary" id="passwordBtn">
+                            <i class="fas fa-save"></i> <span>Simpan</span>
+                        </button>
+                        <button type="button" class="btn btn-outline close-modal">
+                            <i class="fas fa-times"></i> <span>Batal</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Edit PIN -->
+    <div id="pinModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-key"></i> Buat/Ubah PIN</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" id="pinForm">
+                    <?php if (!empty($user['pin'])): ?>
+                    <div class="form-group">
+                        <label for="current_pin">PIN Saat Ini</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-key input-icon"></i>
+                            <input type="password" id="current_pin" name="current_pin" required placeholder="Masukkan PIN saat ini" maxlength="6">
+                            <i class="fas fa-eye password-toggle" data-target="current_pin"></i>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                    <div class="form-group">
+                        <label for="new_pin">PIN Baru (6 digit angka)</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-lock input-icon"></i>
+                            <input type="password" id="new_pin" name="new_pin" required placeholder="Masukkan PIN baru" maxlength="6">
+                            <i class="fas fa-eye password-toggle" data-target="new_pin"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirm_pin">Konfirmasi PIN Baru</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-check-circle input-icon"></i>
+                            <input type="password" id="confirm_pin" name="confirm_pin" required placeholder="Konfirmasi PIN baru" maxlength="6">
+                            <i class="fas fa-eye password-toggle" data-target="confirm_pin"></i>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" name="update_pin" class="btn btn-primary" id="pinBtn">
+                            <i class="fas fa-save"></i> <span>Simpan</span>
+                        </button>
+                        <button type="button" class="btn btn-outline close-modal">
+                            <i class="fas fa-times"></i> <span>Batal</span>
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -954,24 +1140,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
                 }, 3000);
             }
 
-            // Tab switching functionality
-            const tabButtons = document.querySelectorAll('.tab-button');
-            const tabContents = document.querySelectorAll('.tab-content');
-
-            tabButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const tabId = this.getAttribute('data-tab');
-                    
-                    // Update active button
-                    tabButtons.forEach(btn => btn.classList.remove('active'));
-                    this.classList.add('active');
-                    
-                    // Show active tab content
-                    tabContents.forEach(content => content.classList.remove('active'));
-                    document.getElementById(tabId + '-tab').classList.add('active');
-                });
-            });
-
             // Toggle password visibility
             const toggles = document.querySelectorAll('.password-toggle');
             toggles.forEach(toggle => {
@@ -991,6 +1159,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
                 });
             });
 
+            // Handle modal open and close
+            const editIcons = document.querySelectorAll('.edit-icon');
+            const modals = document.querySelectorAll('.modal');
+            const closeModalButtons = document.querySelectorAll('.close-modal');
+
+            // Open modal when edit icon is clicked
+            editIcons.forEach(icon => {
+                icon.addEventListener('click', function() {
+                    const target = this.getAttribute('data-target');
+                    const modal = document.getElementById(target + 'Modal');
+                    if (modal) {
+                        modal.style.display = 'block';
+                    }
+                });
+            });
+
+            // Close modal when close button is clicked
+            closeModalButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    if (modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            });
+
+            // Close modal when clicking outside the modal
+            window.addEventListener('click', function(event) {
+                modals.forEach(modal => {
+                    if (event.target === modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            });
+
             // Form submission with loading animation
             document.getElementById('usernameForm').addEventListener('submit', function() {
                 const button = document.getElementById('usernameBtn');
@@ -1006,11 +1209,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_email'])) {
                 const button = document.getElementById('pinBtn');
                 button.classList.add('btn-loading');
             });
-        });
-        // Handle email form submission with loading animation
-        document.getElementById('emailForm').addEventListener('submit', function() {
-            const button = document.getElementById('emailBtn');
-            button.classList.add('btn-loading');
+
+            document.getElementById('emailForm').addEventListener('submit', function() {
+                const button = document.getElementById('emailBtn');
+                button.classList.add('btn-loading');
+            });
+
+            document.getElementById('otpForm').addEventListener('submit', function() {
+                const button = document.getElementById('otpBtn');
+                button.classList.add('btn-loading');
+            });
         });
     </script>
 </body>

@@ -173,7 +173,7 @@ class MYPDF extends TCPDF {
         
         // Bank name with custom styling
         $this->SetTextColor(0, 48, 135);
-        $this->Cell(0, 15, 'LITTLEBANK', 0, false, 'C', 0, '', 0, false, 'M', 'M');
+        $this->Cell(0, 15, 'SCHOBANK', 0, false, 'C', 0, '', 0, false, 'M', 'M');
         $this->Ln(12);
         
         // Subtitle

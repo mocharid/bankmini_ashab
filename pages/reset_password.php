@@ -61,196 +61,254 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
-    body {
-        background: linear-gradient(135deg, #0a2e5c, #2c5282);
-        min-height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 20px;
-    }
+        body {
+            background-color: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: url('https://www.transparenttextures.com/patterns/geometry.png');
+            background-size: cover;
+            background-position: center;
+            padding: 20px;
+        }
 
-    .login-container {
-        background: white;
-        padding: 2.5rem;
-        border-radius: 15px;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-        width: 100%;
-        max-width: 450px;
-        text-align: center;
-        position: relative;
-        overflow: hidden;
-    }
+        .login-container {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            backdrop-filter: blur(5px);
+        }
 
-    .login-container::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 8px;
-        background: linear-gradient(90deg, #0a2e5c, #4299e1, #0a2e5c);
-        background-size: 200% 100%;
-        animation: gradientMove 3s ease infinite;
-    }
+        .logo-container {
+            margin-bottom: 1.5rem;
+        }
 
-    @keyframes gradientMove {
-        0% {background-position: 0% 50%}
-        50% {background-position: 100% 50%}
-        100% {background-position: 0% 50%}
-    }
+        .logo {
+            width: 100px;
+            height: auto;
+            margin-bottom: 0.2rem;
+        }
 
-    .login-container h2 {
-        font-size: 2rem;
-        margin-bottom: 1.5rem;
-        color: #0a2e5c;
-        font-weight: 600;
-    }
+        .bank-name {
+            font-size: 1.3rem;
+            color: #0a2e5c;
+            font-weight: bold;
+            margin-bottom: 1.2rem;
+        }
 
-    .time-display {
-        font-size: 0.9rem;
-        color: #666;
-        margin-bottom: 1.5rem;
-        background: #f5f7fa;
-        padding: 8px 15px;
-        border-radius: 20px;
-        display: inline-block;
-    }
+        h2 {
+            font-size: 1.5rem;
+            color: #0a2e5c;
+            font-weight: bold;
+            margin-bottom: 1.2rem;
+        }
 
-    .time-display i {
-        margin-right: 5px;
-        color: #0a2e5c;
-    }
+        .form-description {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 1.2rem;
+            line-height: 1.4;
+        }
 
-    .input-group {
-        margin-bottom: 1.8rem;
-        text-align: left;
-        position: relative;
-    }
+        .input-group {
+            position: relative;
+            margin-bottom: 1.2rem;
+        }
 
-    .input-group label {
-        display: block;
-        margin-bottom: 0.7rem;
-        font-size: 0.95rem;
-        color: #555;
-        font-weight: 500;
-    }
+        .input-group label {
+            display: block;
+            margin-bottom: 0.7rem;
+            font-size: 0.95rem;
+            color: #555;
+            font-weight: 500;
+            text-align: left;
+        }
 
-    .input-group input {
-        width: 100%;
-        padding: 12px 15px;
-        border: 2px solid #e2e8f0;
-        border-radius: 8px;
-        font-size: 1rem;
-        transition: all 0.3s ease;
-        background-color: #f8fafc;
-    }
+        .input-group i.icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #0a2e5c;
+        }
 
-    .input-group input:focus {
-        border-color: #0a2e5c;
-        outline: none;
-        box-shadow: 0 0 0 3px rgba(10, 46, 92, 0.1);
-        background-color: #fff;
-    }
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5ee;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+            appearance: none;
+        }
 
-    .password-toggle {
-        position: absolute;
-        right: 15px;
-        top: 43px;
-        color: #718096;
-        cursor: pointer;
-    }
+        input:focus {
+            border-color: #0a2e5c;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(10, 46, 92, 0.1);
+        }
 
-    button {
-        width: 100%;
-        padding: 14px;
-        background: linear-gradient(90deg, #0a2e5c, #3182ce);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 1.1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 6px rgba(10, 46, 92, 0.1);
-    }
+        .password-toggle {
+            position: absolute;
+            right: 15px;
+            top: 43px;
+            color: #718096;
+            cursor: pointer;
+        }
 
-    button:hover {
-        background: linear-gradient(90deg, #0a2e5c, #2c5282);
-        transform: translateY(-2px);
-        box-shadow: 0 7px 14px rgba(10, 46, 92, 0.15);
-    }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #0a2e5c;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-appearance: none;
+            appearance: none;
+        }
 
-    button:active {
-        transform: translateY(0);
-    }
+        button i {
+            margin-right: 8px;
+        }
 
-    .error-message {
-        background: #fff5f5;
-        color: #e53e3e;
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
-        font-size: 0.95rem;
-        border-left: 4px solid #e53e3e;
-        text-align: left;
-    }
+        button:hover, button:active {
+            background: #154785;
+        }
 
-    .success-message {
-        background: #f0fff4;
-        color: #38a169;
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1.5rem;
-        font-size: 0.95rem;
-        border-left: 4px solid #38a169;
-        text-align: left;
-    }
+        .error-message {
+            background: #ffe5e5;
+            color: #e74c3c;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
 
-    .back-to-login {
-        margin-top: 2rem;
-        font-size: 0.95rem;
-        color: #718096;
-    }
+        .error-message.fade-out {
+            opacity: 0;
+        }
 
-    .back-to-login a {
-        color: #0a2e5c;
-        text-decoration: none;
-        font-weight: 600;
-        transition: color 0.3s;
-    }
+        .success-message {
+            background: #e5ffe5;
+            color: #27ae60;
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            opacity: 1;
+            transition: opacity 0.5s ease-in-out;
+        }
 
-    .back-to-login a:hover {
-        color: #3182ce;
-    }
-</style>
+        .success-message.fade-out {
+            opacity: 0;
+        }
+
+        .back-to-login {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+
+        .back-to-login a {
+            color: #0a2e5c;
+            font-size: 0.9rem;
+            text-decoration: none;
+            transition: color 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .back-to-login a i {
+            margin-right: 5px;
+        }
+
+        .back-to-login a:hover {
+            color: #154785;
+            text-decoration: underline;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .login-container {
+                padding: 1.5rem;
+            }
+            
+            .logo {
+                width: 80px;
+            }
+            
+            .bank-name {
+                font-size: 1.2rem;
+            }
+            
+            input, button {
+                font-size: 16px;
+                padding: 10px 15px;
+            }
+            
+            button {
+                padding: 10px;
+            }
+        }
+
+        /* Fix for iOS zoom on input focus */
+        @media screen and (-webkit-min-device-pixel-ratio: 0) { 
+            select,
+            textarea,
+            input {
+                font-size: 16px;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="login-container">
-        <h2>Reset Password</h2>
-        <div class="time-display">
-            <i class="fas fa-clock"></i> <?= $current_time ?> WIB
+        <div class="logo-container">
+            <img src="/bankmini/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
+            <div class="bank-name">SCHOBANK</div>
         </div>
-        <?php if ($error_message): ?>
-            <div class="error-message">
-                <i class="fas fa-exclamation-circle"></i> <?= $error_message ?>
+        
+        <?php if (isset($error_message) && !empty($error_message)): ?>
+            <div class="error-message" id="error-alert">
+                <i class="fas fa-exclamation-circle"></i>
+                <?php echo $error_message; ?>
             </div>
         <?php endif; ?>
-        <?php if ($success_message): ?>
-            <div class="success-message">
-                <i class="fas fa-check-circle"></i> <?= $success_message ?>
+        
+        <?php if (isset($success_message) && !empty($success_message)): ?>
+            <div class="success-message" id="success-alert">
+                <i class="fas fa-check-circle"></i>
+                <?php echo $success_message; ?>
             </div>
             <div class="back-to-login">
-                <a href="login.php"><i class="fas fa-sign-in-alt"></i> Kembali ke halaman login</a>
+                <a href="login.php"><i class="fas fa-arrow-left"></i> Kembali ke halaman login</a>
             </div>
         <?php else: ?>
+            <div class="form-description">
+                Silahkan masukkan password baru untuk akun Anda.
+            </div>
+            
             <form method="POST">
                 <input type="hidden" name="token" value="<?= htmlspecialchars($token) ?>">
                 <div class="input-group">
@@ -267,8 +325,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <i class="fas fa-eye"></i>
                     </span>
                 </div>
-                <button type="submit"><i class="fas fa-key"></i> Reset Password</button>
+                <button type="submit">
+                    <i class="fas fa-key"></i> Reset Password
+                </button>
             </form>
+            
             <div class="back-to-login">
                 <a href="login.php"><i class="fas fa-arrow-left"></i> Kembali ke halaman login</a>
             </div>
@@ -276,20 +337,46 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     </div>
 
     <script>
-    function togglePassword(inputId) {
-        const input = document.getElementById(inputId);
-        const icon = input.nextElementSibling.querySelector('i');
-        
-        if (input.type === 'password') {
-            input.type = 'text';
-            icon.classList.remove('fa-eye');
-            icon.classList.add('fa-eye-slash');
-        } else {
-            input.type = 'password';
-            icon.classList.remove('fa-eye-slash');
-            icon.classList.add('fa-eye');
+        function togglePassword(inputId) {
+            const input = document.getElementById(inputId);
+            const icon = input.nextElementSibling.querySelector('i');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
         }
-    }
+        
+        // Auto-dismiss messages after 3 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            const errorAlert = document.getElementById('error-alert');
+            const successAlert = document.getElementById('success-alert');
+            
+            if (errorAlert) {
+                setTimeout(() => {
+                    errorAlert.classList.add('fade-out');
+                }, 3000);
+
+                setTimeout(() => {
+                    errorAlert.style.display = 'none';
+                }, 3500);
+            }
+            
+            if (successAlert) {
+                setTimeout(() => {
+                    successAlert.classList.add('fade-out');
+                }, 3000);
+
+                setTimeout(() => {
+                    successAlert.style.display = 'none';
+                }, 3500);
+            }
+        });
     </script>
 </body>
 </html>
