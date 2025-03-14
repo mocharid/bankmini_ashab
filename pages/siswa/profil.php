@@ -29,36 +29,41 @@ if (!$user) {
 }
 
 // Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['update_username'])) {
-        // Username update code
-        $new_username = trim($_POST['new_username']);
-        
-        if (empty($new_username)) {
-            $error = "Username tidak boleh kosong!";
+if (isset($_POST['update_username'])) {
+    $new_username = trim($_POST['new_username']); // Ambil username baru dari form
+
+    if (empty($new_username)) {
+        $error = "Username tidak boleh kosong!";
+    } else {
+        // Cek apakah username baru sama dengan username saat ini
+        if ($new_username === $user['username']) {
+            $error = "Username baru tidak boleh sama dengan username saat ini!";
         } else {
-            $check_query = "SELECT id FROM users WHERE username = ? AND id != ?";
+            // Cek apakah username sudah digunakan oleh pengguna lain
+            $check_query = "SELECT id FROM users WHERE username = ?";
             $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
+            $check_stmt->bind_param("s", $new_username);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
             
             if ($check_result->num_rows > 0) {
-                $error = "Username sudah digunakan!";
+                $error = "Username sudah digunakan oleh pengguna lain!";
             } else {
+                // Jika username tersedia, lakukan update
                 $update_query = "UPDATE users SET username = ? WHERE id = ?";
                 $update_stmt = $conn->prepare($update_query);
                 $update_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
                 
                 if ($update_stmt->execute()) {
                     $message = "Username berhasil diubah!";
-                    $user['username'] = $new_username;
-                    logout();
+                    $user['username'] = $new_username; // Update username di session atau tampilan
+                    logout(); // Logout setelah berhasil mengubah username
                 } else {
                     $error = "Gagal mengubah username!";
                 }
             }
         }
+    }
     } elseif (isset($_POST['update_password'])) {
         // Password update code
         $current_password = $_POST['current_password'];
@@ -243,7 +248,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
-}
 ?>
 
 <!DOCTYPE html>
@@ -874,6 +878,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <i class="fas fa-pen"></i>
                         </button>
                     </div>
+
+                    <div class="info-item">
+                        <i class="fas fa-lock"></i>
+                        <div>
+                            <div class="label">Password</div>
+                            <div class="value">••••••••</div>
+                        </div>
+                        <button class="edit-icon" data-target="password">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                    </div>
                     
                     <div class="info-item">
                         <i class="fas fa-envelope"></i>
@@ -904,17 +919,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="label">Bergabung Sejak</div>
                             <div class="value"><?= date('d F Y', strtotime($user['tanggal_bergabung'])) ?></div>
                         </div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <i class="fas fa-lock"></i>
-                        <div>
-                            <div class="label">Password</div>
-                            <div class="value">••••••••</div>
-                        </div>
-                        <button class="edit-icon" data-target="password">
-                            <i class="fas fa-pen"></i>
-                        </button>
                     </div>
                     
                     <div class="info-item">
@@ -1116,6 +1120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
+
         // Handle alerts
         function dismissAlert(alert) {
             alert.classList.add('hide');

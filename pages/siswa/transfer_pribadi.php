@@ -1,148 +1,226 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
-require_once '../../vendor/autoload.php'; // Pastikan path ke autoload Composer benar
+require_once '../../vendor/autoload.php'; 
 use TCPDF as TCPDF;
 
-// Fungsi untuk generate struk
 function generateStruk($data) {
-    // Set timezone to WIB
     date_default_timezone_set('Asia/Jakarta');
-    
-    // Ukuran custom untuk struk (80mm x 130mm) - reduced height to ensure single page
-    $pdf = new TCPDF('P', 'mm', array(80, 130), true, 'UTF-8', false);
 
-    // Remove default header/footer
+    // Create custom TCPDF class to add decorative elements
+    class ReceiptPDF extends TCPDF {
+        public function Header() {
+            // Empty header
+        }
+        
+        public function Footer() {
+            // Add decorative footer pattern (receipt-like)
+            $this->SetY(-5);
+            $pattern_width = 2;
+            $page_width = $this->getPageWidth();
+            $pattern_count = floor($page_width / $pattern_width);
+            
+            $this->SetDrawColor(200, 200, 200);
+            $this->SetLineWidth(0.1);
+            
+            for ($i = 0; $i < $pattern_count; $i++) {
+                $this->Line(
+                    $i * $pattern_width, 
+                    $this->GetY(), 
+                    $i * $pattern_width + $pattern_width/2, 
+                    $this->GetY() + 2
+                );
+            }
+        }
+    }
+
+    // Create new receipt-style PDF
+    $pdf = new ReceiptPDF('P', 'mm', array(80, 140), true, 'UTF-8', false);
+
     $pdf->setPrintHeader(false);
-    $pdf->setPrintFooter(false);
+    $pdf->setPrintFooter(true); // Enable our custom footer
 
-    // Set document information
     $pdf->SetCreator('SCHOBANK SYSTEM');
     $pdf->SetAuthor('SCHOBANK SYSTEM');
     $pdf->SetTitle('Bukti Transaksi');
 
-    // Set margins - balanced margins for better spacing
-    $pdf->SetMargins(7, 7, 7);
-    $pdf->SetAutoPageBreak(TRUE, 7);
+    // Set receipt-style margins (slightly narrower)
+    $pdf->SetMargins(5, 5, 5);
+    $pdf->SetAutoPageBreak(TRUE, 10);
+
+    // Add background pattern (subtle thermal paper texture)
+    $pdf->SetFillColor(252, 252, 250);
 
     // Add a page
     $pdf->AddPage();
+    $pdf->Rect(0, 0, $pdf->getPageWidth(), $pdf->getPageHeight(), 'F');
 
-    // --- HEADER SECTION ---
-    // Logo or bank name
-    $pdf->SetFont('helvetica', 'B', 12);
-    $pdf->Cell(0, 6, 'SCHOBANK', 0, 1, 'C');
-    $pdf->SetFont('helvetica', '', 8);
-    $pdf->Cell(0, 4, 'BUKTI TRANSFER', 0, 1, 'C');
+    // Add decorative top border
+    $pdf->SetDrawColor(100, 100, 100);
+    $pdf->SetLineWidth(0.2);
+    $width = $pdf->getPageWidth() - 10;
+    $startX = 5;
     
-    // Add horizontal line
-    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
-    $pdf->Ln(4);
+    // Decorative top pattern
+    $pdf->SetLineStyle(array('dash' => '1,1', 'color' => array(150, 150, 150)));
+    $pdf->Line($startX, 4, $startX + $width, 4);
+    
+    // --- HEADER SECTION ---
+    // Logo or bank name with more professional styling
+    $pdf->SetTextColor(20, 20, 20);
+    $pdf->SetFont('helvetica', 'B', 14);
+    $pdf->Cell(0, 8, 'SCHOBANK', 0, 1, 'C');
+    
+    // Add receipt subtitle with decorative elements
+    $pdf->SetFont('helvetica', '', 8);
+    $pdf->Cell(0, 4, '* * * BUKTI TRANSFER * * *', 0, 1, 'C');
+    
+    // Add store-like address (common in real receipts)
+    $pdf->SetFont('helvetica', '', 7);
+    $pdf->Cell(0, 3, 'Jl. K.H. Saleh No.57A', 0, 1, 'C');
+    $pdf->Cell(0, 3, 'Pabuaran Cianjur 43212 ', 0, 1, 'C');
+    $pdf->Cell(0, 3, 'Telp: (62) 263 267740', 0, 1, 'C');
+    
+    // Add separating dashed line (like real receipts)
+    $pdf->Ln(1);
+    $pdf->SetLineStyle(array('dash' => '0.5,0.5', 'color' => array(100, 100, 100)));
+    $pdf->Line($startX, $pdf->GetY(), $startX + $width, $pdf->GetY());
+    $pdf->Ln(3);
 
     // --- TRANSACTION DETAILS ---
+    $pdf->SetFillColor(240, 240, 240);
     $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->Cell(0, 4, 'DETAIL TRANSAKSI', 0, 1, 'C');
+    $pdf->Cell(0, 5, 'DETAIL TRANSAKSI', 0, 1, 'C', true);
     $pdf->Ln(2);
 
-    // Transaction details in table-like format with consistent alignment
-    $pdf->SetFont('helvetica', '', 8);
+    // Transaction details in table-like format with styling
+    $pdf->SetFont('courier', '', 8); // Courier for that authentic receipt look
+    $pdf->SetTextColor(40, 40, 40);
     
     // Define a consistent width for labels and position for colons
     $labelWidth = 28;
-    $colonWidth = 4;
-    $valueWidth = 34;
+    $colonWidth = 2;
+    $valueWidth = 40;
     
-    // Format each row with aligned colons
+    // Format each row with aligned colons - receipt style
     $pdf->Cell($labelWidth, 4, 'TANGGAL', 0, 0, 'L');
     $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, date('d/m/Y', strtotime($data['tanggal'])), 0, 1, 'R');
+    $pdf->Cell($valueWidth, 4, date('d/m/Y', strtotime($data['tanggal'])), 0, 1, 'L');
+    
     
     $pdf->Cell($labelWidth, 4, 'NO. TRANSAKSI', 0, 0, 'L');
     $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['no_transaksi'], 0, 1, 'R');
+    $pdf->Cell($valueWidth, 4, $data['no_transaksi'], 0, 1, 'L');
+    
+    $pdf->SetLineStyle(array('dash' => '0.2,0.2', 'color' => array(150, 150, 150)));
+    $pdf->Line($startX, $pdf->GetY() + 1, $startX + $width, $pdf->GetY() + 1);
+    $pdf->Ln(3);
     
     $pdf->Cell($labelWidth, 4, 'REKENING ASAL', 0, 0, 'L');
     $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['rekening_asal'], 0, 1, 'R');
+    $pdf->Cell($valueWidth, 4, $data['rekening_asal'], 0, 1, 'L');
     
     $pdf->Cell($labelWidth, 4, 'REKENING TUJUAN', 0, 0, 'L');
     $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['rekening_tujuan'], 0, 1, 'R');
+    $pdf->Cell($valueWidth, 4, $data['rekening_tujuan'], 0, 1, 'L');
     
     $pdf->Cell($labelWidth, 4, 'NAMA PENERIMA', 0, 0, 'L');
     $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['nama_penerima'], 0, 1, 'R');
+    $pdf->Cell($valueWidth, 4, $data['nama_penerima'], 0, 1, 'L');
     
-    // Add horizontal line
-    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
-    $pdf->Ln(4);
-    
-    // Jumlah transfer (bigger and bold) with aligned colon
-    $pdf->SetFont('helvetica', 'B', 9);
-    $pdf->Cell($labelWidth, 5, 'JUMLAH TRANSFER', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 5, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 5, 'Rp ' . number_format($data['jumlah'], 0, ',', '.'), 0, 1, 'R');
-    
-    // Add horizontal line
-    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
+    // Add horizontal line with receipt styling
+    $pdf->SetLineStyle(array('dash' => '0.2,0.2', 'color' => array(150, 150, 150)));
+    $pdf->Line($startX, $pdf->GetY() + 1, $startX + $width, $pdf->GetY() + 1);
     $pdf->Ln(3);
     
-    // --- FOOTER SECTION (moved up to ensure single page) ---
+    // Amount section with highlight box
+    $pdf->SetDrawColor(100, 100, 100);
+    $pdf->SetLineWidth(0.2);
+    $pdf->Rect($startX, $pdf->GetY(), $width, 8, 'D');
+    $pdf->SetFillColor(245, 245, 245);
+    $pdf->Rect($startX + 0.2, $pdf->GetY() + 0.2, $width - 0.4, 7.6, 'F');
+    
+    // Amount text with better formatting
+    $pdf->SetFont('helvetica', 'B', 9);
+    $pdf->SetTextColor(0, 0, 0);
+    $pdf->Cell($labelWidth, 7, ' JUMLAH', 0, 0, 'L');
+    $pdf->Cell($colonWidth, 7, ':', 0, 0, 'L');
+    $pdf->Cell($valueWidth, 7, 'Rp ' . number_format($data['jumlah'], 0, ',', '.'), 0, 1, 'L');
+    $pdf->Ln(2);
+    
+    // Add horizontal closing line
+    $pdf->SetLineStyle(array('width' => 0.3, 'color' => array(100, 100, 100)));
+    $pdf->Line($startX, $pdf->GetY(), $startX + $width, $pdf->GetY());
+    $pdf->Ln(3);
+    
+    // --- FOOTER SECTION ---
     $pdf->SetFont('helvetica', 'I', 7);
     $pdf->Cell(0, 3, 'Terima kasih telah menggunakan layanan', 0, 1, 'C');
     $pdf->SetFont('helvetica', 'BI', 8);
-    $pdf->Cell(0, 3, 'SCHOBANK SYSTEM', 0, 1, 'C');
+    $pdf->Cell(0, 4, 'SCHOBANK SYSTEM', 0, 1, 'C');
     
-    // --- QR CODE with only transaction number (smaller size) ---
+    // --- QR CODE with more professional design ---
     $style = array(
         'border' => false,
         'vpadding' => 'auto',
         'hpadding' => 'auto',
         'fgcolor' => array(0, 0, 0),
         'bgcolor' => false,
-        'module_width' => 1, // width of a single module in points
-        'module_height' => 1 // height of a single module in points
+        'module_width' => 1,
+        'module_height' => 1
     );
 
-    // MODIFIED: Only use transaction number for QR code
-    $qrContent = $data['no_transaksi'];
-
-    // Generate QR code - centered on the receipt (smaller size: 25x25)
-    $pdf->write2DBarcode($qrContent, 'QRCODE,L', 27.5, $pdf->GetY(), 25, 25, $style, 'N');
+    // QR code with verification text
+    $pdf->SetFont('helvetica', '', 6);
+    $pdf->Cell(0, 3, 'SCAN UNTUK VERIFIKASI', 0, 1, 'C');
     
-    // MODIFIED: Reduced line spacing after QR code to position text closer
+    // Generate centered QR code
+    $qrContent = $data['no_transaksi'];
+    $pdf->write2DBarcode($qrContent, 'QRCODE,L', 27.5, $pdf->GetY(), 25, 25, $style, 'N');
+    $pdf->Ln(0);
+    
+    // Add verification number below QR code
+    $pdf->SetFont('courier', 'B', 7);
+    $pdf->Cell(0, 3, $data['no_transaksi'], 0, 1, 'C');
     $pdf->Ln(1);
     
-    // Add current time with WIB time zone and note with reduced spacing
-    $pdf->SetFont('helvetica', '', 7);
-    $pdf->Cell(0, 3, 'Dicetak pada: ' . date('d/m/Y H:i:s') . ' WIB', 0, 1, 'C');
     
-    // Add note
-    $pdf->SetFont('helvetica', 'I', 7);
+    // Add legal note with authentic styling
+    $pdf->SetFont('helvetica', 'I', 6);
     $pdf->MultiCell(0, 3, 'Bukti transfer ini merupakan bukti yang sah dan tidak memerlukan tanda tangan.', 0, 'C');
     
-    // Simpan PDF ke folder yang dapat diakses oleh browser
-    $pdfFolder = __DIR__ . '/struk/'; // Path ke folder struk
-    if (!is_dir($pdfFolder)) {
-        if (mkdir($pdfFolder, 0755, true)) {
-            echo "Folder struk berhasil dibuat: " . $pdfFolder . "<br>";
-        } else {
-            echo "Gagal membuat folder struk!<br>";
+    // Add final decorative element
+    $pdf->Ln(1);
+    $pdf->SetFont('helvetica', '', 8);
+    $pdf->Cell(0, 4, '* * * * * * * * * * * * * *', 0, 1, 'C');
+    
+    // Path management for saving PDF
+    $doc_root = $_SERVER['DOCUMENT_ROOT'];
+    $app_path = '/bankmini';
+    $upload_dir = $doc_root . $app_path . '/uploads/struk/';
+    
+    // Create directory if it doesn't exist
+    if (!is_dir($upload_dir)) {
+        if (!mkdir($upload_dir, 0755, true)) {
+            error_log("Gagal membuat folder struk: $upload_dir");
+            $upload_dir = sys_get_temp_dir() . '/struk/';
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0755, true);
+            }
         }
     }
-
-    // Path lengkap ke file PDF
-    $pdfFilePath = $pdfFolder . 'struk_' . $data['no_transaksi'] . '.pdf';
-
-    // Simpan file PDF
-    $pdf->Output($pdfFilePath, 'F');
-
-    // URL untuk mengakses file PDF
-    $pdfUrl = '/bankmini/pages/siswa/struk/struk_' . $data['no_transaksi'] . '.pdf';
-
+    
+    // File path and URL
+    $filename = 'struk_' . $data['no_transaksi'] . '.pdf';
+    $filepath = $upload_dir . $filename;
+    
+    // Save the PDF file
+    $pdf->Output($filepath, 'F');
+    
+    // Return file information
     return [
-        'file_path' => $pdfFilePath,
-        'file_url' => $pdfUrl
+        'file_path' => $filepath,
+        'file_url' => $app_path . '/uploads/struk/' . $filename
     ];
 }
 
@@ -183,6 +261,7 @@ $transfer_rekening = null;
 $transfer_name = null;
 $error = null;
 $success = null;
+$pdfUrl = null;
 
 // Handle account number verification (Step 1)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'verify_account') {
@@ -207,6 +286,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 
         if ($tujuan_data) {
             $current_step = 2; // Move to step 2
+            // Store tujuan data in session for persistence between steps
+            $_SESSION['tujuan_data'] = $tujuan_data;
         } else {
             $error = "Nomor rekening tujuan tidak ditemukan!";
         }
@@ -216,25 +297,66 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 // Handle back button action
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'go_back') {
     $current_step = 1;
+    // Clear any stored tujuan data
+    if (isset($_SESSION['tujuan_data'])) {
+        unset($_SESSION['tujuan_data']);
+    }
+}
+
+// Restore tujuan data from session if we're on step 2 or 3
+if (($current_step == 2 || $current_step == 3) && isset($_SESSION['tujuan_data'])) {
+    $tujuan_data = $_SESSION['tujuan_data'];
 }
 
 // Handle transfer submission (Step 2)
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
-    if ($_POST['action'] == 'confirm_transfer') {
-        // Get data from form
-        $rekening_tujuan = trim($_POST['rekening_tujuan']);
-        $rekening_tujuan_nama = $_POST['rekening_tujuan_nama'];
-        $jumlah = floatval($_POST['jumlah']);
-        $input_jumlah = $jumlah;
-        $pin = trim($_POST['pin']);
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'confirm_transfer') {
+    // Check if tujuan_data is available either from form or session
+    if (isset($_POST['rekening_tujuan_id']) && !empty($_POST['rekening_tujuan_id'])) {
         $rekening_tujuan_id = $_POST['rekening_tujuan_id'];
+        $rekening_tujuan = $_POST['rekening_tujuan'];
+        $rekening_tujuan_nama = $_POST['rekening_tujuan_nama'];
+        
+        // Make sure we have user_id for recipient
+        if (isset($_POST['rekening_tujuan_user_id']) && !empty($_POST['rekening_tujuan_user_id'])) {
+            $rekening_tujuan_user_id = $_POST['rekening_tujuan_user_id'];
+        } elseif (isset($_SESSION['tujuan_data']['user_id'])) {
+            $rekening_tujuan_user_id = $_SESSION['tujuan_data']['user_id'];
+        } else {
+            // If still not available, query the database
+            $query = "SELECT user_id FROM rekening WHERE id = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("i", $rekening_tujuan_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $user_data = $result->fetch_assoc();
+            
+            if ($user_data && isset($user_data['user_id'])) {
+                $rekening_tujuan_user_id = $user_data['user_id'];
+            } else {
+                $error = "Tidak dapat menemukan data rekening tujuan!";
+                $current_step = 2;
+            }
+        }
+    } elseif (isset($_SESSION['tujuan_data'])) {
+        $rekening_tujuan_id = $_SESSION['tujuan_data']['id'];
+        $rekening_tujuan = $_SESSION['tujuan_data']['no_rekening'];
+        $rekening_tujuan_nama = $_SESSION['tujuan_data']['nama'];
+        $rekening_tujuan_user_id = $_SESSION['tujuan_data']['user_id'];
+    } else {
+        $error = "Data rekening tujuan tidak tersedia!";
+        $current_step = 1;
+    }
 
+    // Get data from form
+    $jumlah = floatval(str_replace(',', '.', $_POST['jumlah']));
+    $input_jumlah = $jumlah;
+    $pin = trim($_POST['pin']);
+
+    // Continue with validation if we have the required data
+    if (!isset($error)) {
         // Validate input
-        if (empty($rekening_tujuan) || empty($jumlah) || empty($pin)) {
-            $error = "Semua field harus diisi!";
-            $current_step = 2;
-        } elseif ($jumlah <= 0) {
-            $error = "Jumlah transfer harus lebih dari 0!";
+        if (empty($rekening_tujuan) || $jumlah <= 0 || empty($pin)) {
+            $error = "Semua field harus diisi dengan benar!";
             $current_step = 2;
         } elseif ($jumlah > $saldo) {
             $error = "Saldo tidak mencukupi!";
@@ -252,72 +374,131 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
                 $error = "PIN yang Anda masukkan salah!";
                 $current_step = 2;
             } else {
-                // Process transfer
-                try {
-                    $conn->begin_transaction();
-
-                    // Generate unique transaction number
-                    $no_transaksi = 'TF' . date('YmdHis') . rand(1000, 9999);
-
-                    // Insert transaction record
-                    $query = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, rekening_tujuan_id, status, created_at) 
-                              VALUES (?, ?, 'transfer', ?, ?, 'approved', NOW())";
-                    $stmt = $conn->prepare($query);
-                    $stmt->bind_param("sidi", $no_transaksi, $rekening_id, $jumlah, $rekening_tujuan_id);
-                    $stmt->execute();
-
-                    // Update sender's balance
-                    $query = "UPDATE rekening SET saldo = saldo - ? WHERE id = ? AND saldo >= ?";
-                    $stmt = $conn->prepare($query);
-                    $stmt->bind_param("did", $jumlah, $rekening_id, $jumlah);
-                    $stmt->execute();
-
-                    // Update recipient's balance
-                    $query = "UPDATE rekening SET saldo = saldo + ? WHERE id = ?";
-                    $stmt = $conn->prepare($query);
-                    $stmt->bind_param("di", $jumlah, $rekening_tujuan_id);
-                    $stmt->execute();
-
-                    // Commit transaction
-                    $conn->commit();
-
-                    // Get updated saldo
-                    $query = "SELECT saldo FROM rekening WHERE id = ?";
-                    $stmt = $conn->prepare($query);
-                    $stmt->bind_param("i", $rekening_id);
-                    $stmt->execute();
-                    $result = $stmt->get_result();
-                    $updated_rekening = $result->fetch_assoc();
-                    if ($updated_rekening) {
-                        $saldo = $updated_rekening['saldo'];
-                    }
-
-                    // Set success message
-                    $success = "Transfer berhasil!";
-                    $current_step = 1;
-
-                    // Generate struk with proper WIB time
-                    $strukData = [
-                        'no_transaksi' => $no_transaksi,
-                        'tanggal' => date('Y-m-d'), // Store as Y-m-d format for consistency
-                        'rekening_asal' => $no_rekening,
-                        'rekening_tujuan' => $rekening_tujuan,
-                        'nama_penerima' => $rekening_tujuan_nama,
-                        'jumlah' => $jumlah,
-                    ];
-                    $pdfData = generateStruk($strukData);
-                    $pdfFilePath = $pdfData['file_path'];
-                    $pdfUrl = $pdfData['file_url'];
-
-                    // Store transfer details for display
-                    $transfer_amount = $jumlah;
-                    $transfer_rekening = $rekening_tujuan;
-                    $transfer_name = $rekening_tujuan_nama;
-                } catch (Exception $e) {
-                    // Rollback transaction on error
-                    $conn->rollback();
-                    $error = "Terjadi kesalahan: " . $e->getMessage();
+                // Verify that rekening_tujuan_id exists in the rekening table
+                $check_query = "SELECT id FROM rekening WHERE id = ?";
+                $check_stmt = $conn->prepare($check_query);
+                $check_stmt->bind_param("i", $rekening_tujuan_id);
+                $check_stmt->execute();
+                $check_result = $check_stmt->get_result();
+                
+                if ($check_result->num_rows == 0) {
+                    $error = "Rekening tujuan tidak valid!";
                     $current_step = 2;
+                } else {
+                    // Process transfer
+                    try {
+                        $conn->begin_transaction();
+            
+                        // Generate unique transaction number
+                        $no_transaksi = 'TF' . date('YmdHis') . rand(1000, 9999);
+            
+                        // Insert transaction record
+                        $query = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, rekening_tujuan_id, status, created_at) 
+                                VALUES (?, ?, 'transfer', ?, ?, 'approved', NOW())";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("sidi", $no_transaksi, $rekening_id, $jumlah, $rekening_tujuan_id);
+                        
+                        if (!$stmt->execute()) {
+                            throw new Exception("Error inserting transaction: " . $stmt->error);
+                        }
+            
+                        // Update sender's balance
+                        $query = "UPDATE rekening SET saldo = saldo - ? WHERE id = ? AND saldo >= ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("did", $jumlah, $rekening_id, $jumlah);
+                        
+                        if (!$stmt->execute() || $stmt->affected_rows == 0) {
+                            throw new Exception("Error updating sender balance: " . $stmt->error);
+                        }
+            
+                        // Update recipient's balance
+                        $query = "UPDATE rekening SET saldo = saldo + ? WHERE id = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("di", $jumlah, $rekening_tujuan_id);
+                        
+                        if (!$stmt->execute() || $stmt->affected_rows == 0) {
+                            throw new Exception("Error updating recipient balance: " . $stmt->error);
+                        }
+            
+                        // Get sender's updated balance
+                        $query = "SELECT saldo FROM rekening WHERE id = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("i", $rekening_id);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        $updated_rekening = $result->fetch_assoc();
+                        
+                        if (!$updated_rekening) {
+                            throw new Exception("Error fetching updated sender balance");
+                        }
+                        
+                        $saldo_baru_pengirim = $updated_rekening['saldo'];
+            
+                        // Get recipient's updated balance
+                        $query = "SELECT saldo FROM rekening WHERE id = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("i", $rekening_tujuan_id);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        $updated_rekening_tujuan = $result->fetch_assoc();
+                        
+                        if (!$updated_rekening_tujuan) {
+                            throw new Exception("Error fetching updated recipient balance");
+                        }
+                        
+                        $saldo_baru_penerima = $updated_rekening_tujuan['saldo'];
+            
+                        // Kirim notifikasi ke pengirim
+                        $message_pengirim = "Transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " ke rekening " . $rekening_tujuan . " atas nama " . $rekening_tujuan_nama . " berhasil. Saldo baru: Rp " . number_format($saldo_baru_pengirim, 0, ',', '.');
+                        $query_notifikasi_pengirim = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+                        $stmt_notifikasi_pengirim = $conn->prepare($query_notifikasi_pengirim);
+                        $stmt_notifikasi_pengirim->bind_param('is', $user_id, $message_pengirim);
+                        
+                        if (!$stmt_notifikasi_pengirim->execute()) {
+                            throw new Exception("Error inserting sender notification: " . $stmt_notifikasi_pengirim->error);
+                        }
+            
+                        // Kirim notifikasi ke penerima
+                        $message_penerima = "Anda menerima transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " dari rekening " . $no_rekening . ". Saldo baru: Rp " . number_format($saldo_baru_penerima, 0, ',', '.');
+                        $query_notifikasi_penerima = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+                        $stmt_notifikasi_penerima = $conn->prepare($query_notifikasi_penerima);
+                        $stmt_notifikasi_penerima->bind_param('is', $rekening_tujuan_user_id, $message_penerima);
+                        
+                        if (!$stmt_notifikasi_penerima->execute()) {
+                            throw new Exception("Error inserting recipient notification: " . $stmt_notifikasi_penerima->error);
+                        }
+            
+                        // Commit transaction
+                        $conn->commit();
+            
+                        // Success message
+                        $success = "Transfer berhasil!";
+                        $current_step = 3; // Receipt display step
+            
+                        // Generate struk
+                        $strukData = [
+                            'no_transaksi' => $no_transaksi,
+                            'tanggal' => date('Y-m-d'),
+                            'rekening_asal' => $no_rekening,
+                            'rekening_tujuan' => $rekening_tujuan,
+                            'nama_penerima' => $rekening_tujuan_nama,
+                            'jumlah' => $jumlah,
+                        ];
+                        $pdfData = generateStruk($strukData);
+                        $pdfFilePath = $pdfData['file_path'];
+                        $pdfUrl = $pdfData['file_url'];
+            
+                        // Store transfer details for display
+                        $transfer_amount = $jumlah;
+                        $transfer_rekening = $rekening_tujuan;
+                        $transfer_name = $rekening_tujuan_nama;
+                        
+                    } catch (Exception $e) {
+                        // Rollback transaction on error
+                        $conn->rollback();
+                        $error = "Error: " . $e->getMessage();
+                        $current_step = 2; // Return to transfer form
+                    }
                 }
             }
         }
@@ -1052,6 +1233,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+        
             // Set durasi notifikasi menjadi 10 detik (10000 milidetik)
             const notificationDismissTime = 10000;
 

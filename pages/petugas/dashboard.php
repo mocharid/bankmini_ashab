@@ -1239,6 +1239,11 @@ function tanggal_indonesia($tanggal) {
                     <i class="fas fa-user-slash"></i> Tutup Rekening
                 </a>
             </div>
+            <div class="menu-item">
+                <a href="cetak_bukti_transaksi.php">
+                    <i class="fas fa-print"></i> Cetak Bukti Transaksi
+                </a>
+            </div>
             
             <div class="menu-item">
                 <a href="laporan.php">

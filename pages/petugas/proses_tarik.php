@@ -184,6 +184,16 @@ function processWithdrawal($conn) {
         $stmt->bind_param("iidd", $transaksi_id, $rekening_id, $jumlah, $saldo_akhir);
         $stmt->execute();
         
+        // Kirim notifikasi ke siswa
+        $message = "Penarikan tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " berhasil. Saldo baru: Rp " . number_format($saldo_akhir, 0, ',', '.');
+        $query_notifikasi = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+        $stmt_notifikasi = $conn->prepare($query_notifikasi);
+        $stmt_notifikasi->bind_param('is', $user_id, $message);
+        
+        if (!$stmt_notifikasi->execute()) {
+            throw new Exception('Gagal mengirim notifikasi.');
+        }
+
         // Commit transaction
         $conn->commit();
         

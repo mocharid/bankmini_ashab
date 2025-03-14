@@ -681,14 +681,17 @@ body {
 }
 
 .table-container {
-    padding: 0.5rem 1.5rem;
-    overflow-x: auto;
+    overflow-x: auto; /* Membuat tabel bisa di-scroll horizontal */
+    max-width: 100%; /* Membatasi lebar container */
+    border-radius: 8px; /* Sesuaikan dengan desain Anda */
+    border: 1px solid #eee; /* Garis tepi untuk container */
 }
 
 table {
-    width: 100%;
+    width: 100%; /* Tabel mengisi lebar container */
+    min-width: 600px; /* Lebar minimal tabel (sesuaikan dengan kebutuhan) */
     border-collapse: collapse;
-    margin: 1rem 0;
+    margin: 0; /* Hilangkan margin default */
 }
 
 thead th {
@@ -778,7 +781,6 @@ tbody tr:hover {
     font-weight: 500;
 }
 
-/* Pagination Styles */
 .pagination {
     display: flex;
     justify-content: center;
@@ -866,7 +868,7 @@ tbody tr:hover {
     }
 
     .transactions-container {
-        margin: 0 1rem 1rem;
+        overflow: hidden; /* Pastikan container tidak menimbulkan scroll horizontal */
     }
 
     .balance-box {
@@ -991,6 +993,38 @@ tbody tr:hover {
     background: linear-gradient(135deg, #1e3c72 0%, #4776c9 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+}
+.btn-lihat-struk {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    background-color: #1e3c72;
+    color: white;
+    border-radius: 20px; /* Increased roundness from 8px to 20px */
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: background-color 0.3s;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.btn-lihat-struk:hover {
+    background-color: #2a5298;
+}
+
+.btn-lihat-struk i {
+    margin-right: 0.5rem;
+}
+
+/* Mobile responsiveness */
+@media screen and (max-width: 768px) {
+    .btn-lihat-struk {
+        padding: 0.6rem 1.2rem;
+        font-size: 1rem;
+        width: 100%;
+        max-width: 250px;
+        margin: 0.5rem auto;
+        border-radius: 20px; /* Make sure to update here too */
+    }
 }
 </style>
 </head>
@@ -1135,23 +1169,24 @@ tbody tr:hover {
 
     <!-- Enhanced Transactions Container -->
     <div class="transactions-container">
-        <div class="transactions-header">
-            <h3 class="transactions-title">Riwayat Transaksi Terakhir</h3>
-        </div>
-        
-        <?php if ($transaksi_result->num_rows > 0): ?>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>No Transaksi</th>
-                            <th>Jenis</th>
-                            <th>Jumlah</th>
-                            <th>Status</th>
-                            <th>Tanggal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+    <div class="transactions-header">
+        <h3 class="transactions-title">Riwayat Transaksi Terakhir</h3>
+    </div>
+    
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>No Transaksi</th>
+                    <th>Jenis</th>
+                    <th>Jumlah</th>
+                    <th>Status</th>
+                    <th>Tanggal</th>
+                    <th>Bukti Transaksi</th> <!-- Kolom baru untuk tombol lihat struk -->
+                </tr>
+            </thead>
+            <tbody>
+                <?php if ($transaksi_result->num_rows > 0): ?>
                     <?php while ($row = $transaksi_result->fetch_assoc()): 
                         $jenis = strtolower($row['jenis_transaksi']);
                         $is_transfer_masuk = ($jenis == 'transfer' && $row['rekening_tujuan_id'] == $rekening_id);
@@ -1182,30 +1217,32 @@ tbody tr:hover {
                                 </span>
                             </td>
                             <td><?= date('d M Y H:i', strtotime($row['created_at'])) ?></td>
+                            <td>
+                                <!-- Tombol Lihat Struk -->
+                                <a href="lihat_struk.php?no_transaksi=<?= $row['no_transaksi'] ?>" class="btn-lihat-struk">
+                                    <i></i> Lihat Struk
+                                </a>
+                            </td>
                         </tr>
                     <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php else: ?>
-            <div class="empty-state">
-                <i class="fas fa-receipt"></i>
-                <p>Belum ada riwayat transaksi.</p>
-            </div>
-        <?php endif; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <i class="fas fa-receipt"></i>
+                            <p>Belum ada riwayat transaksi.</p>
+                        </td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
     </div>
+</div>
 
     <!-- Tampilkan navigasi pagination -->
     <div class="pagination">
         <?php if ($page > 1): ?>
             <a href="javascript:void(0);" onclick="loadPage(<?= $page - 1 ?>)" class="pagination-link">&laquo; Sebelumnya</a>
         <?php endif; ?>
-
-        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-            <a href="javascript:void(0);" onclick="loadPage(<?= $i ?>)" class="pagination-link <?= ($page == $i) ? 'active' : '' ?>">
-                <?= $i ?>
-            </a>
-        <?php endfor; ?>
 
         <?php if ($page < $total_pages): ?>
             <a href="javascript:void(0);" onclick="loadPage(<?= $page + 1 ?>)" class="pagination-link">Selanjutnya &raquo;</a>
@@ -1353,7 +1390,7 @@ window.addEventListener('scroll', function() {
 // Periksa notifikasi baru setiap 10 detik
 setInterval(checkNewNotifications, 10000);
         // Fungsi untuk memuat halaman dengan AJAX
-        function loadPage(page) {
+            function loadPage(page) {
             const xhr = new XMLHttpRequest();
             const url = `?page=${page}`;
 
