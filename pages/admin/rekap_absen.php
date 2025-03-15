@@ -336,274 +336,326 @@ function exportToPDF($result) {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #4caf50;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f8faff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
+:root {
+    --primary-color: #0c4da2;
+    --primary-dark: #0a2e5c;
+    --primary-light: #e0e9f5;
+    --secondary-color: #4caf50;
+    --accent-color: #ff9800;
+    --danger-color: #f44336;
+    --text-primary: #333;
+    --text-secondary: #666;
+    --bg-light: #f8faff;
+    --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
+    --transition: all 0.3s ease;
+}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-        }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
 
-        body {
-            background-color: var(--bg-light);
-            color: var(--text-primary);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
+body {
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.6;
+}
 
-        .main-content {
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+.main-content {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
 
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 15px;
-            margin-bottom: 20px;
-            text-align: center;
-            position: relative;
-            box-shadow: var(--shadow-md);
-            overflow: hidden;
-        }
+.welcome-banner {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+    color: white;
+    padding: 30px;
+    border-radius: 15px;
+    margin-bottom: 20px;
+    text-align: center;
+    position: relative;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+}
 
-        .cancel-btn {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            cursor: pointer;
-            transition: var(--transition);
-            text-decoration: none;
-        }
+.cancel-btn {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: var(--transition);
+    text-decoration: none;
+}
 
-        .cancel-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: rotate(90deg);
-        }
+.cancel-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: rotate(90deg);
+}
 
-        .transfer-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 20px;
-        }
+.transfer-card {
+    background: white;
+    border-radius: 15px;
+    padding: 25px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 20px;
+}
 
-        .form-group {
-            margin-bottom: 15px;
-        }
+.form-group {
+    margin-bottom: 15px;
+}
 
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
 
-        .form-control {
-            width: 100%;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
-        }
+.form-control {
+    width: 100%;
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+}
 
-        .filter-buttons {
-            display: flex;
-            gap: 10px;
-        }
+.filter-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
 
-        .btn-verify, .btn-back {
-            flex: 1;
-            padding: 10px 15px;
-            border: none;
-            border-radius: 8px;
-            color: white;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
+.btn-verify, .btn-back {
+    flex: 1;
+    max-width: 150px; /* Batasi lebar maksimum tombol */
+    padding: 8px 12px;
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
+    transition: var(--transition);
+}
 
-        .btn-verify {
-            background-color: var(--primary-color);
-        }
+.btn-verify {
+    background-color: var(--primary-color);
+}
 
-        .btn-back {
-            background-color: #6c757d;
-        }
+.btn-verify:hover {
+    background-color: var(--primary-dark);
+    transform: translateY(-2px);
+}
 
-        .actions-bar {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            gap: 10px;
-        }
+.btn-back {
+    background-color: #6c757d;
+}
 
-        .export-buttons {
-            display: flex;
-            gap: 10px;
-        }
+.btn-back:hover {
+    background-color: #5a6268;
+    transform: translateY(-2px);
+}
 
-        .table-responsive {
-            width: 100%;
-            overflow-x: auto;
-        }
+.actions-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    gap: 10px;
+}
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 15px;
-        }
+.count-info {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
 
-        table th, table td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            text-align: left;
-        }
+.export-buttons {
+    display: flex;
+    gap: 10px;
+}
 
-        table th {
-            background-color: var(--primary-light);
-            color: var(--primary-dark);
-        }
+.btn-export {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 15px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: var(--transition);
+}
 
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin-top: 15px;
-        }
+.btn-export-excel {
+    background-color: rgb(22, 9, 86);
+    color: white;
+}
 
-        .pagination a, .pagination span {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            text-decoration: none;
-            color: var(--text-primary);
-            border-radius: 4px;
-        }
+.btn-export-excel:hover {
+    background-color: rgb(22, 9, 86);
+    transform: translateY(-2px);
+}
 
-        .pagination .active {
-            background-color: var(--primary-color);
-            color: white;
-        }
+.btn-export-pdf {
+    background-color: rgb(22, 9, 86);
+    color: white;
+}
 
-        @media screen and (max-width: 768px) {
-            .main-content {
-                padding: 10px;
-            }
+.btn-export-pdf:hover {
+    background-color: rgb(22, 9, 86);
+    transform: translateY(-2px);
+}
 
-            .welcome-banner {
-                padding: 20px;
-            }
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-sm);
+}
 
-            .actions-bar {
-                flex-direction: column;
-                align-items: stretch;
-            }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: white;
+}
 
-            .export-buttons {
-                flex-direction: column;
-            }
+table th, table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
 
-            .filter-buttons {
-                flex-direction: column;
-            }
+table th {
+    background-color: var(--primary-light);
+    color: var(--primary-dark);
+    font-weight: 600;
+}
 
-            table {
-                font-size: 12px;
-            }
+table tr:hover {
+    background-color: var(--bg-light);
+}
 
-            table th, table td {
-                padding: 6px;
-            }
+table tr:last-child td {
+    border-bottom: none;
+}
 
-            .pagination {
-                flex-wrap: wrap;
-            }
-        }
-        .export-buttons {
-            display: flex;
-            gap: 10px;
-        }
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+}
 
-        .btn-export {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 10px 15px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 500;
-            transition: var(--transition);
-        }
+.pagination a, .pagination span {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    text-decoration: none;
+    color: var(--text-primary);
+    border-radius: 4px;
+    transition: var(--transition);
+}
 
-        .btn-export-excel {
-            background-color:rgb(22, 9, 86);
-            color: white;
-        }
+.pagination a:hover {
+    background-color: var(--primary-light);
+}
 
-        .btn-export-excel:hover {
-            background-color:rgb(22, 9, 86);
-            transform: translateY(-2px);
-        }
+.pagination .active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
 
-        .btn-export-pdf {
-            background-color:rgb(22, 9, 86);
-            color: white;
-        }
+/* Responsive Styles */
+@media screen and (max-width: 768px) {
+    .main-content {
+        padding: 10px;
+    }
 
-        .btn-export-pdf:hover {
-            background-color:rgb(22, 9, 86);
-            transform: translateY(-2px);
-        }
+    .welcome-banner {
+        padding: 20px;
+    }
 
-        /* Responsive adjustments for export buttons */
-        @media screen and (max-width: 768px) {
-            .export-buttons {
-                flex-direction: column;
-            }
+    .actions-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
 
-            .btn-export {
-                width: 100%;
-            }
-        }
+    .export-buttons {
+        flex-direction: column;
+    }
+
+    .filter-buttons {
+        flex-direction: column;
+    }
+
+    .btn-verify, .btn-back {
+        max-width: 100%; /* Pada layar kecil, tombol memenuhi lebar penuh */
+    }
+
+    table {
+        font-size: 12px;
+    }
+
+    table th, table td {
+        padding: 10px;
+    }
+
+    .pagination {
+        flex-wrap: wrap;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .btn-verify, .btn-back {
+        font-size: 12px;
+        padding: 6px 10px;
+    }
+
+    .btn-export {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+
+    .form-control {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+
+    .count-info {
+        font-size: 12px;
+    }
+
+    table th, table td {
+        padding: 8px;
+    }
+}
         </style>
 </head>
 <body>
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-calendar-alt"></i> Rekap Absensi Petugas</h2>
+            <h2><i class="fas fa-calendar-alt"></i> Rekap Absensi</h2>
             <p>Lihat dan kelola data absensi petugas dengan mudah</p>
             <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
                 <i class="fas fa-arrow-left"></i>

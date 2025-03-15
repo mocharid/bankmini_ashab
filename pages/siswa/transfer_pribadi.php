@@ -310,34 +310,8 @@ if (($current_step == 2 || $current_step == 3) && isset($_SESSION['tujuan_data']
 
 // Handle transfer submission (Step 2)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'confirm_transfer') {
-    // Check if tujuan_data is available either from form or session
-    if (isset($_POST['rekening_tujuan_id']) && !empty($_POST['rekening_tujuan_id'])) {
-        $rekening_tujuan_id = $_POST['rekening_tujuan_id'];
-        $rekening_tujuan = $_POST['rekening_tujuan'];
-        $rekening_tujuan_nama = $_POST['rekening_tujuan_nama'];
-        
-        // Make sure we have user_id for recipient
-        if (isset($_POST['rekening_tujuan_user_id']) && !empty($_POST['rekening_tujuan_user_id'])) {
-            $rekening_tujuan_user_id = $_POST['rekening_tujuan_user_id'];
-        } elseif (isset($_SESSION['tujuan_data']['user_id'])) {
-            $rekening_tujuan_user_id = $_SESSION['tujuan_data']['user_id'];
-        } else {
-            // If still not available, query the database
-            $query = "SELECT user_id FROM rekening WHERE id = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bind_param("i", $rekening_tujuan_id);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $user_data = $result->fetch_assoc();
-            
-            if ($user_data && isset($user_data['user_id'])) {
-                $rekening_tujuan_user_id = $user_data['user_id'];
-            } else {
-                $error = "Tidak dapat menemukan data rekening tujuan!";
-                $current_step = 2;
-            }
-        }
-    } elseif (isset($_SESSION['tujuan_data'])) {
+    // Check if tujuan_data is available in session
+    if (isset($_SESSION['tujuan_data'])) {
         $rekening_tujuan_id = $_SESSION['tujuan_data']['id'];
         $rekening_tujuan = $_SESSION['tujuan_data']['no_rekening'];
         $rekening_tujuan_nama = $_SESSION['tujuan_data']['nama'];
@@ -374,131 +348,119 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                 $error = "PIN yang Anda masukkan salah!";
                 $current_step = 2;
             } else {
-                // Verify that rekening_tujuan_id exists in the rekening table
-                $check_query = "SELECT id FROM rekening WHERE id = ?";
-                $check_stmt = $conn->prepare($check_query);
-                $check_stmt->bind_param("i", $rekening_tujuan_id);
-                $check_stmt->execute();
-                $check_result = $check_stmt->get_result();
-                
-                if ($check_result->num_rows == 0) {
-                    $error = "Rekening tujuan tidak valid!";
-                    $current_step = 2;
-                } else {
-                    // Process transfer
-                    try {
-                        $conn->begin_transaction();
-            
-                        // Generate unique transaction number
-                        $no_transaksi = 'TF' . date('YmdHis') . rand(1000, 9999);
-            
-                        // Insert transaction record
-                        $query = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, rekening_tujuan_id, status, created_at) 
-                                VALUES (?, ?, 'transfer', ?, ?, 'approved', NOW())";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("sidi", $no_transaksi, $rekening_id, $jumlah, $rekening_tujuan_id);
-                        
-                        if (!$stmt->execute()) {
-                            throw new Exception("Error inserting transaction: " . $stmt->error);
-                        }
-            
-                        // Update sender's balance
-                        $query = "UPDATE rekening SET saldo = saldo - ? WHERE id = ? AND saldo >= ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("did", $jumlah, $rekening_id, $jumlah);
-                        
-                        if (!$stmt->execute() || $stmt->affected_rows == 0) {
-                            throw new Exception("Error updating sender balance: " . $stmt->error);
-                        }
-            
-                        // Update recipient's balance
-                        $query = "UPDATE rekening SET saldo = saldo + ? WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("di", $jumlah, $rekening_tujuan_id);
-                        
-                        if (!$stmt->execute() || $stmt->affected_rows == 0) {
-                            throw new Exception("Error updating recipient balance: " . $stmt->error);
-                        }
-            
-                        // Get sender's updated balance
-                        $query = "SELECT saldo FROM rekening WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $rekening_id);
-                        $stmt->execute();
-                        $result = $stmt->get_result();
-                        $updated_rekening = $result->fetch_assoc();
-                        
-                        if (!$updated_rekening) {
-                            throw new Exception("Error fetching updated sender balance");
-                        }
-                        
-                        $saldo_baru_pengirim = $updated_rekening['saldo'];
-            
-                        // Get recipient's updated balance
-                        $query = "SELECT saldo FROM rekening WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $rekening_tujuan_id);
-                        $stmt->execute();
-                        $result = $stmt->get_result();
-                        $updated_rekening_tujuan = $result->fetch_assoc();
-                        
-                        if (!$updated_rekening_tujuan) {
-                            throw new Exception("Error fetching updated recipient balance");
-                        }
-                        
-                        $saldo_baru_penerima = $updated_rekening_tujuan['saldo'];
-            
-                        // Kirim notifikasi ke pengirim
-                        $message_pengirim = "Transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " ke rekening " . $rekening_tujuan . " atas nama " . $rekening_tujuan_nama . " berhasil. Saldo baru: Rp " . number_format($saldo_baru_pengirim, 0, ',', '.');
-                        $query_notifikasi_pengirim = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
-                        $stmt_notifikasi_pengirim = $conn->prepare($query_notifikasi_pengirim);
-                        $stmt_notifikasi_pengirim->bind_param('is', $user_id, $message_pengirim);
-                        
-                        if (!$stmt_notifikasi_pengirim->execute()) {
-                            throw new Exception("Error inserting sender notification: " . $stmt_notifikasi_pengirim->error);
-                        }
-            
-                        // Kirim notifikasi ke penerima
-                        $message_penerima = "Anda menerima transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " dari rekening " . $no_rekening . ". Saldo baru: Rp " . number_format($saldo_baru_penerima, 0, ',', '.');
-                        $query_notifikasi_penerima = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
-                        $stmt_notifikasi_penerima = $conn->prepare($query_notifikasi_penerima);
-                        $stmt_notifikasi_penerima->bind_param('is', $rekening_tujuan_user_id, $message_penerima);
-                        
-                        if (!$stmt_notifikasi_penerima->execute()) {
-                            throw new Exception("Error inserting recipient notification: " . $stmt_notifikasi_penerima->error);
-                        }
-            
-                        // Commit transaction
-                        $conn->commit();
-            
-                        // Success message
-                        $success = "Transfer berhasil!";
-                        $current_step = 3; // Receipt display step
-            
-                        // Generate struk
-                        $strukData = [
-                            'no_transaksi' => $no_transaksi,
-                            'tanggal' => date('Y-m-d'),
-                            'rekening_asal' => $no_rekening,
-                            'rekening_tujuan' => $rekening_tujuan,
-                            'nama_penerima' => $rekening_tujuan_nama,
-                            'jumlah' => $jumlah,
-                        ];
-                        $pdfData = generateStruk($strukData);
-                        $pdfFilePath = $pdfData['file_path'];
-                        $pdfUrl = $pdfData['file_url'];
-            
-                        // Store transfer details for display
-                        $transfer_amount = $jumlah;
-                        $transfer_rekening = $rekening_tujuan;
-                        $transfer_name = $rekening_tujuan_nama;
-                        
-                    } catch (Exception $e) {
-                        // Rollback transaction on error
-                        $conn->rollback();
-                        $error = "Error: " . $e->getMessage();
-                        $current_step = 2; // Return to transfer form
+                // Process transfer
+                try {
+                    $conn->begin_transaction();
+        
+                    // Generate unique transaction number
+                    $no_transaksi = 'TF' . date('YmdHis') . rand(1000, 9999);
+        
+                    // Insert transaction record
+                    $query = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, rekening_tujuan_id, status, created_at) 
+                            VALUES (?, ?, 'transfer', ?, ?, 'approved', NOW())";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("sidi", $no_transaksi, $rekening_id, $jumlah, $rekening_tujuan_id);
+                    
+                    if (!$stmt->execute()) {
+                        throw new Exception("Error inserting transaction: " . $stmt->error);
                     }
+        
+                    // Update sender's balance
+                    $query = "UPDATE rekening SET saldo = saldo - ? WHERE id = ? AND saldo >= ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("did", $jumlah, $rekening_id, $jumlah);
+                    
+                    if (!$stmt->execute() || $stmt->affected_rows == 0) {
+                        throw new Exception("Error updating sender balance: " . $stmt->error);
+                    }
+        
+                    // Update recipient's balance
+                    $query = "UPDATE rekening SET saldo = saldo + ? WHERE id = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("di", $jumlah, $rekening_tujuan_id);
+                    
+                    if (!$stmt->execute() || $stmt->affected_rows == 0) {
+                        throw new Exception("Error updating recipient balance: " . $stmt->error);
+                    }
+        
+                    // Get sender's updated balance
+                    $query = "SELECT saldo FROM rekening WHERE id = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("i", $rekening_id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $updated_rekening = $result->fetch_assoc();
+                    
+                    if (!$updated_rekening) {
+                        throw new Exception("Error fetching updated sender balance");
+                    }
+                    
+                    $saldo_baru_pengirim = $updated_rekening['saldo'];
+        
+                    // Get recipient's updated balance
+                    $query = "SELECT saldo FROM rekening WHERE id = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("i", $rekening_tujuan_id);
+                    $stmt->execute();
+                    $result = $stmt->get_result();
+                    $updated_rekening_tujuan = $result->fetch_assoc();
+                    
+                    if (!$updated_rekening_tujuan) {
+                        throw new Exception("Error fetching updated recipient balance");
+                    }
+                    
+                    $saldo_baru_penerima = $updated_rekening_tujuan['saldo'];
+        
+                    // Kirim notifikasi ke pengirim
+                    $message_pengirim = "Transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " ke rekening " . $rekening_tujuan . " atas nama " . $rekening_tujuan_nama . " berhasil. Saldo baru: Rp " . number_format($saldo_baru_pengirim, 0, ',', '.');
+                    $query_notifikasi_pengirim = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+                    $stmt_notifikasi_pengirim = $conn->prepare($query_notifikasi_pengirim);
+                    $stmt_notifikasi_pengirim->bind_param('is', $user_id, $message_pengirim);
+                    
+                    if (!$stmt_notifikasi_pengirim->execute()) {
+                        throw new Exception("Error inserting sender notification: " . $stmt_notifikasi_pengirim->error);
+                    }
+        
+                    // Kirim notifikasi ke penerima
+                    $message_penerima = "Anda menerima transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " dari rekening " . $no_rekening . ". Saldo baru: Rp " . number_format($saldo_baru_penerima, 0, ',', '.');
+                    $query_notifikasi_penerima = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+                    $stmt_notifikasi_penerima = $conn->prepare($query_notifikasi_penerima);
+                    $stmt_notifikasi_penerima->bind_param('is', $rekening_tujuan_user_id, $message_penerima);
+                    
+                    if (!$stmt_notifikasi_penerima->execute()) {
+                        throw new Exception("Error inserting recipient notification: " . $stmt_notifikasi_penerima->error);
+                    }
+        
+                    // Commit transaction
+                    $conn->commit();
+        
+                    // Success message
+                    $success = "Transfer berhasil!";
+                    $current_step = 3; // Receipt display step
+        
+                    // Generate struk
+                    $strukData = [
+                        'no_transaksi' => $no_transaksi,
+                        'tanggal' => date('Y-m-d'),
+                        'rekening_asal' => $no_rekening,
+                        'rekening_tujuan' => $rekening_tujuan,
+                        'nama_penerima' => $rekening_tujuan_nama,
+                        'jumlah' => $jumlah,
+                    ];
+                    $pdfData = generateStruk($strukData);
+                    $pdfFilePath = $pdfData['file_path'];
+                    $pdfUrl = $pdfData['file_url'];
+        
+                    // Store transfer details for display
+                    $transfer_amount = $jumlah;
+                    $transfer_rekening = $rekening_tujuan;
+                    $transfer_name = $rekening_tujuan_nama;
+                    
+                } catch (Exception $e) {
+                    // Rollback transaction on error
+                    $conn->rollback();
+                    $error = "Error: " . $e->getMessage();
+                    $current_step = 2; // Return to transfer form
                 }
             }
         }
@@ -1099,7 +1061,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             margin-right: 8px;
         }
 
-</style>
+        </style>
 </head>
 <body>
     <?php if (file_exists('../../includes/header.php')) {
@@ -1185,20 +1147,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                 </form>
             <?php elseif ($current_step == 2): ?>
                 <!-- Step 2: Enter amount and PIN -->
-                <?php if ($tujuan_data): ?>
+                <?php if (isset($_SESSION['tujuan_data'])): ?>
                     <div class="recipient-card">
                         <div class="recipient-title">Penerima</div>
-                        <div class="recipient-name"><?= htmlspecialchars($tujuan_data['nama']) ?></div>
-                        <div class="recipient-account">No. Rekening: <?= htmlspecialchars($tujuan_data['no_rekening']) ?></div>
+                        <div class="recipient-name"><?= htmlspecialchars($_SESSION['tujuan_data']['nama']) ?></div>
+                        <div class="recipient-account">No. Rekening: <?= htmlspecialchars($_SESSION['tujuan_data']['no_rekening']) ?></div>
                     </div>
                 <?php endif; ?>
 
                 <form method="POST" action="" id="transferForm">
                     <input type="hidden" name="action" value="confirm_transfer">
-                    <input type="hidden" name="rekening_tujuan" value="<?= htmlspecialchars($tujuan_data['no_rekening']) ?>">
-                    <input type="hidden" name="rekening_tujuan_nama" value="<?= htmlspecialchars($tujuan_data['nama']) ?>">
-                    <input type="hidden" name="rekening_tujuan_id" value="<?= htmlspecialchars($tujuan_data['id']) ?>">
-                    <input type="hidden" name="tujuan_user_id" value="<?= htmlspecialchars($tujuan_data['user_id']) ?>">
+                    <input type="hidden" name="rekening_tujuan" value="<?= htmlspecialchars($_SESSION['tujuan_data']['no_rekening']) ?>">
+                    <input type="hidden" name="rekening_tujuan_nama" value="<?= htmlspecialchars($_SESSION['tujuan_data']['nama']) ?>">
+                    <input type="hidden" name="rekening_tujuan_id" value="<?= htmlspecialchars($_SESSION['tujuan_data']['id']) ?>">
+                    <input type="hidden" name="tujuan_user_id" value="<?= htmlspecialchars($_SESSION['tujuan_data']['user_id']) ?>">
                     
                     <div class="form-group">
                         <label for="jumlah">

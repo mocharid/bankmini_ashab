@@ -44,51 +44,108 @@ $uang_keluar = $result->fetch_assoc()['uang_keluar'] ?? 0;
 
 $saldo_bersih = $uang_masuk - $uang_keluar;
 
-// Simpan informasi petugas yang bertugas
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['officer1_name'])) {
-    $petugas1_name = $_POST['officer1_name'];
-    $petugas1_class = $_POST['officer1_class'];
-    $petugas2_name = $_POST['officer2_name'];
-    $petugas2_class = $_POST['officer2_class'];
-    $tanggal = date('Y-m-d');
+// Check if user is logged in
+$petugas_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
+$user_name = isset($_SESSION['name']) ? $_SESSION['name'] : null;
 
-    $query = "INSERT INTO petugas_tugas (petugas1_name, petugas1_class, petugas2_name, petugas2_class, tanggal) 
-              VALUES (?, ?, ?, ?, ?)";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("sssss", $petugas1_name, $petugas1_class, $petugas2_name, $petugas2_class, $tanggal);
-    $stmt->execute();
-}
-// [1] Ambil jadwal petugas hari ini
+// Get current date for comparison
+$current_date = date('Y-m-d');
+
+// [1] Get today's officer schedule
 $query_schedule = "SELECT * FROM petugas_tugas WHERE tanggal = CURDATE()";
 $stmt_schedule = $conn->prepare($query_schedule);
 $stmt_schedule->execute();
 $result_schedule = $stmt_schedule->get_result();
 $schedule = $result_schedule->fetch_assoc();
 
-// [2] Cek absensi petugas
-$attendance = null;
-if ($petugas_id) {
-    $query_attendance = "SELECT * FROM absensi 
-                       WHERE user_id = ? AND tanggal = CURDATE()";
-    $stmt_attendance = $conn->prepare($query_attendance);
-    $stmt_attendance->bind_param("i", $petugas_id);
-    $stmt_attendance->execute();
-    $attendance = $stmt_attendance->get_result()->fetch_assoc();
+// Get the names of scheduled officers for today
+$petugas1_nama = $schedule ? $schedule['petugas1_nama'] : '';
+$petugas2_nama = $schedule ? $schedule['petugas2_nama'] : '';
+
+// [2] Check if we need to clean up old attendance records
+// This adds a check for unfinished attendance records from previous days
+$query_check_old = "SELECT * FROM absensi WHERE tanggal < CURDATE() AND waktu_keluar IS NULL";
+$stmt_check_old = $conn->prepare($query_check_old);
+$stmt_check_old->execute();
+$result_check_old = $stmt_check_old->get_result();
+
+// Auto-close any previous days' unclosed attendance records
+if ($result_check_old->num_rows > 0) {
+    $query_auto_close = "UPDATE absensi 
+                         SET waktu_keluar = CONCAT(tanggal, ' 23:59:59'), 
+                             keterangan = CONCAT(IFNULL(keterangan, ''), ' [Auto-closed system]')
+                         WHERE tanggal < CURDATE() AND waktu_keluar IS NULL";
+    $stmt_auto_close = $conn->prepare($query_auto_close);
+    $stmt_auto_close->execute();
 }
 
-// [3] Handle form absensi
+// [3] Get attendance records for both officers for today
+$attendance_petugas1 = null;
+$attendance_petugas2 = null;
+
+// Get petugas1 attendance
+$query_attendance1 = "SELECT * FROM absensi 
+                     WHERE petugas_type = 'petugas1' AND tanggal = CURDATE()";
+$stmt_attendance1 = $conn->prepare($query_attendance1);
+$stmt_attendance1->execute();
+$attendance_petugas1 = $stmt_attendance1->get_result()->fetch_assoc();
+
+// Get petugas2 attendance
+$query_attendance2 = "SELECT * FROM absensi 
+                     WHERE petugas_type = 'petugas2' AND tanggal = CURDATE()";
+$stmt_attendance2 = $conn->prepare($query_attendance2);
+$stmt_attendance2->execute();
+$attendance_petugas2 = $stmt_attendance2->get_result()->fetch_assoc();
+
+// [4] Handle attendance form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['check_in'])) {
-        $query = "INSERT INTO absensi (user_id, tanggal, waktu_masuk) 
-                 VALUES (?, CURDATE(), NOW())";
+    // Handle check-in for petugas1
+    if (isset($_POST['check_in_petugas1'])) {
+        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, waktu_masuk, petugas1_status) 
+                 VALUES (?, 'petugas1', CURDATE(), NOW(), 'hadir')";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $petugas_id);
         $stmt->execute();
         header("Refresh:0");
     } 
-    elseif (isset($_POST['check_out'])) {
+    // Handle check-out for petugas1
+    elseif (isset($_POST['check_out_petugas1'])) {
         $query = "UPDATE absensi SET waktu_keluar = NOW() 
-                 WHERE user_id = ? AND tanggal = CURDATE()";
+                 WHERE petugas_type = 'petugas1' AND tanggal = CURDATE()";
+        $stmt = $conn->prepare($query);
+        $stmt->execute();
+        header("Refresh:0");
+    }
+    // Handle check-in for petugas2
+    elseif (isset($_POST['check_in_petugas2'])) {
+        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, waktu_masuk, petugas2_status) 
+                 VALUES (?, 'petugas2', CURDATE(), NOW(), 'hadir')";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("i", $petugas_id);
+        $stmt->execute();
+        header("Refresh:0");
+    } 
+    // Handle check-out for petugas2
+    elseif (isset($_POST['check_out_petugas2'])) {
+        $query = "UPDATE absensi SET waktu_keluar = NOW() 
+                 WHERE petugas_type = 'petugas2' AND tanggal = CURDATE()";
+        $stmt = $conn->prepare($query);
+        $stmt->execute();
+        header("Refresh:0");
+    }
+    // Handle officer absence for petugas1
+    elseif (isset($_POST['absent_petugas1'])) {
+        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas1_status) 
+                 VALUES (?, 'petugas1', CURDATE(), 'tidak_hadir')";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("i", $petugas_id);
+        $stmt->execute();
+        header("Refresh:0");
+    }
+    // Handle officer absence for petugas2
+    elseif (isset($_POST['absent_petugas2'])) {
+        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas2_status) 
+                 VALUES (?, 'petugas2', CURDATE(), 'tidak_hadir')";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $petugas_id);
         $stmt->execute();
@@ -96,6 +153,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// [5] Store the last visited date in the session for daily refresh check
+$session_last_date = isset($_SESSION['last_attendance_date']) ? $_SESSION['last_attendance_date'] : '';
+
+// If the user is visiting on a new day, refresh the page once to ensure fresh data
+if ($session_last_date != $current_date) {
+    $_SESSION['last_attendance_date'] = $current_date;
+    // Only refresh if this wasn't a POST request (to avoid double refreshes)
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        echo "<script>window.location.reload();</script>";
+    }
+}
 
 // Fungsi untuk mengonversi tanggal ke bahasa Indonesia
 function tanggal_indonesia($tanggal) {
@@ -439,36 +507,38 @@ function tanggal_indonesia($tanggal) {
     margin-bottom: 35px;
         }
 
-        .stat-box {
-            background: white;
+/* Stat Box Styles */
+.stat-box {
+    background: white;
     border-radius: 16px;
     padding: 25px;
     position: relative;
     transition: all 0.3s ease;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.04);
     overflow: hidden;
     display: flex;
     flex-direction: column;
     border: 1px solid rgba(0, 0, 0, 0.1);
-        }
+}
 
-        .stat-box::before {
-            content: '';
+/* Warna biru tua untuk semua container */
+.stat-box::before {
+    content: '';
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 4px;
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.3));
-        }
+    background: linear-gradient(90deg, #0a2e5c, #154785); /* Warna biru tua */
+}
 
-        .stat-box:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 25px rgba(0,0,0,0.1);
-        }
+.stat-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.1);
+}
 
-        .stat-icon {
-            width: 54px;
+.stat-icon {
+    width: 54px;
     height: 54px;
     border-radius: 12px;
     display: flex;
@@ -478,101 +548,55 @@ function tanggal_indonesia($tanggal) {
     margin-bottom: 20px;
     transition: all 0.3s ease;
     color: white;
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-        }
+    background: linear-gradient(135deg, #0a2e5c, #154785); /* Warna biru tua */
+}
 
-        .stat-box:hover .stat-icon {
-            transform: scale(1.1);
-        }
+.stat-box:hover .stat-icon {
+    transform: scale(1.1);
+}
 
-        .stat-title {
-            font-size: 16px;
+.stat-title {
+    font-size: 16px;
     color: #64748b;
     margin-bottom: 10px;
     font-weight: 500;
-        }
+}
 
-        .stat-value {
-            font-size: 28px;
+.stat-value {
+    font-size: 28px;
     font-weight: 700;
     margin-bottom: 10px;
     color: #1a365d;
     letter-spacing: 0.5px;
-        }
+}
 
-        .stat-trend {
-            display: flex;
+.stat-trend {
+    display: flex;
     align-items: center;
     font-size: 14px;
     color: #64748b;
     margin-top: auto;
     padding-top: 10px;
-        }
-        
-        .stat-trend i {
-            margin-right: 8px;
-        }
+}
 
-        /* Specific styles for each stat box */
-        .stat-box.transactions::before {
-            background: linear-gradient(90deg, #9333ea, #d8b4fe);
-        }
+.stat-trend i {
+    margin-right: 8px;
+}
 
-        .stat-box.transactions .stat-icon {
-            background: linear-gradient(135deg, #9333ea, #d8b4fe);
-        }
+/* Hapus warna spesifik untuk setiap stat box */
+.stat-box.transactions::before,
+.stat-box.income::before,
+.stat-box.expense::before,
+.stat-box.balance::before {
+    background: linear-gradient(90deg, #0a2e5c, #154785); /* Warna biru tua */
+}
 
-        .stat-box.income::before {
-            background: linear-gradient(90deg, #22c55e, #86efac);
-        }
-
-        .stat-box.income .stat-icon {
-            background: linear-gradient(135deg, #22c55e, #86efac);
-        }
-
-        .stat-box.expense::before {
-            background: linear-gradient(90deg, #ef4444, #fca5a5);
-        }
-
-        .stat-box.expense .stat-icon {
-            background: linear-gradient(135deg, #ef4444, #fca5a5)
-        }
-
-        .stat-box.balance::before {
-            background: linear-gradient(90deg, #3b82f6, #93c5fd);
-        }
-
-        .stat-box.balance .stat-icon {
-            background: linear-gradient(135deg, #3b82f6, #93c5fd);
-        }
-
-        /* Animated background for stat boxes */
-        @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        .stat-box::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 200%;
-            height: 200%;
-            background: linear-gradient(
-                45deg,
-                rgba(255, 255, 255, 0) 0%,
-                rgba(255, 255, 255, 0.8) 50%,
-                rgba(255, 255, 255, 0) 100%
-            );
-            transform: translateX(-100%);
-            transition: transform 0.6s;
-        }
-
-        .stat-box:hover::after {
-            transform: translateX(50%);
-        }
+.stat-box.transactions .stat-icon,
+.stat-box.income .stat-icon,
+.stat-box.expense .stat-icon,
+.stat-box.balance .stat-icon {
+    background: linear-gradient(135deg, #0a2e5c, #154785); /* Warna biru tua */
+}
 
     /* Officer Section Styles */
     .officer-section {
@@ -1038,130 +1062,221 @@ function tanggal_indonesia($tanggal) {
     margin-right: 8px; /* Jarak antara ikon dan teks */
 }
 /* Attendance Container */
+/* Improved base styles */
 .attendance-container {
-    background: white;
-    border-radius: 16px;
-    padding: 25px;
-    margin-top: 30px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    border: 1px solid #e0e0e0;
-    transition: all 0.3s ease;
+    max-width: 100%;
+    padding: 15px;
+    font-family: 'Segoe UI', Arial, sans-serif;
 }
 
-.attendance-container:hover {
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
-}
-
-.attendance-container h2 {
-    font-size: 24px;
-    font-weight: 600;
-    color: #1a365d;
+.attendance-title {
+    text-align: center;
     margin-bottom: 25px;
-    position: relative;
-    padding-bottom: 10px;
-}
-
-.attendance-container h2::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 50px;
-    height: 3px;
-    background: #2563eb;
-    border-radius: 2px;
-}
-
-/* Attendance Grid */
-.attendance-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 25px;
-}
-
-/* Attendance Box */
-.attendance-box {
-    background: #f8fafc;
-    padding: 25px;
-    border-radius: 12px;
-    border-left: 4px solid #2563eb;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-}
-
-.attendance-box:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
-}
-
-.attendance-box h3 {
-    color: #1a365d;
-    margin-bottom: 20px;
-    font-size: 20px;
+    color: #2c3e50;
     font-weight: 600;
+    font-size: 1.8rem;
     position: relative;
-    padding-bottom: 10px;
+    padding-bottom: 15px;
 }
 
-.attendance-box h3::after {
+.attendance-title:after {
     content: '';
     position: absolute;
     bottom: 0;
-    left: 0;
-    width: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
     height: 3px;
-    background: #2563eb;
-    border-radius: 2px;
+    background-color:rgb(19, 11, 89);
 }
 
-.attendance-box p {
-    margin: 10px 0;
-    color: #4a5568;
-    font-size: 16px;
+/* Improved table styling */
+.attendance-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 20px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    overflow: hidden;
 }
 
-.attendance-box .btn {
-    background: linear-gradient(to right, #2563eb, #1d4ed8);
+.attendance-table th,
+.attendance-table td {
+    padding: 15px;
+    text-align: center;
+    border: none;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.attendance-table th {
+    background-color:rgb(8, 43, 108);
+    font-weight: 600;
+    color: white;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+}
+
+.attendance-table tr:last-child td {
+    border-bottom: none;
+}
+
+.attendance-table tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+
+.attendance-table tr:hover {
+    background-color: #ebf5ff;
+    transition: background-color 0.2s ease;
+}
+
+/* Status indicators */
+.present-status {
+    background-color: #e6f7ed;
+    color: #2ecc71;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+.absent-status {
+    background-color: #fdeaea;
+    color: #e74c3c;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 15px;
+    display: inline-block;
+}
+
+/* Improved buttons */
+.btn {
+    padding: 8px 15px;
     color: white;
     border: none;
-    padding: 12px 24px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
+    border-radius: 5px;
     cursor: pointer;
+    margin: 3px;
     transition: all 0.3s ease;
-    margin-top: 20px;
-    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.2);
+    font-weight: 500;
     display: inline-flex;
     align-items: center;
     justify-content: center;
 }
 
-.attendance-box .btn i {
-    margin-right: 8px;
+.btn i {
+    margin-right: 5px;
 }
 
-.attendance-box .btn:hover {
-    background: linear-gradient(to right, #1d4ed8, #1e40af);
+.btn {
+    background-color:rgb(24, 18, 84);
+}
+
+.btn:hover {
+    background-color:rgb(30, 17, 129);
     transform: translateY(-2px);
-    box-shadow: 0 6px 12px rgba(37, 99, 235, 0.25);
+    box-shadow: 0 3px 8px rgba(52, 152, 219, 0.3);
 }
 
-.attendance-box .btn:active {
-    transform: translateY(0);
+.btn-danger {
+    background-color: #e74c3c;
 }
 
-.attendance-status {
-    background: #f0f4f8;
-    padding: 15px;
+.btn-danger:hover {
+    background-color: #c0392b;
+    transform: translateY(-2px);
+    box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3);
+}
+
+.empty-message {
+    text-align: center;
+    padding: 30px;
+    background-color: #f5f7fa;
     border-radius: 8px;
-    border-left: 4px solid #28a745;
+    margin-top: 20px;
+    color: #7f8c8d;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+    font-weight: 500;
 }
 
-.attendance-status p {
-    margin: 5px 0;
-    color: #333;
-    font-size: 14px;
+.empty-message i {
+    font-size: 2.5rem;
+    color: #95a5a6;
+    margin-bottom: 15px;
+    display: block;
+}
+
+/* Responsive styles */
+@media screen and (max-width: 992px) {
+    .attendance-table th,
+    .attendance-table td {
+        padding: 12px 10px;
+    }
+    
+    .btn {
+        padding: 7px 12px;
+        font-size: 0.9rem;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    .attendance-table {
+        border: 0;
+        box-shadow: none;
+    }
+    
+    .attendance-table thead {
+        display: none;
+    }
+    
+    .attendance-table tr {
+        display: block;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+    }
+    
+    .attendance-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: right;
+        padding: 12px 15px;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .attendance-table td:before {
+        content: attr(data-label);
+        font-weight: 600;
+        text-align: left;
+        color: #34495e;
+    }
+    
+    .attendance-table td:last-child {
+        border-bottom: 0;
+    }
+    
+    .attendance-container {
+        padding: 10px;
+    }
+    
+    .attendance-title {
+        font-size: 1.5rem;
+    }
+}
+
+@media screen and (max-width: 576px) {
+    .btn {
+        width: 100%;
+        margin: 3px 0;
+    }
+    
+    form[style="display: inline;"] {
+        display: block !important;
+        margin-bottom: 5px;
+    }
 }
     </style>
 </head>
@@ -1203,42 +1318,60 @@ function tanggal_indonesia($tanggal) {
     </div>
     </div>
 
+    <div class="menu-item">
+                <button class="dropdown-btn" id="rekeningDropdown">
+                    <div class="menu-icon">
+                        <i class="fas fa-users-cog"></i> Rekening
+                    </div>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="rekeningDropdownContainer">
+                    <a href="data_siswa.php">
+                        <i class="fas fa-user-plus"></i> Buka Rekening
+                    </a>
+                    <a href="tutup_rek.php">
+                        <i class="fas fa-user-slash"></i> Tutup Rekening
+                    </a>
+                </div>
+            </div>
+
             <div class="menu-item">
                 <button class="dropdown-btn" id="searchDropdown">
                     <div class="menu-icon">
-                        <i class="fas fa-search"></i> Cek Info
+                        <i class="fas fa-search"></i> Cek Informasi
                     </div>
                     <i class="fas fa-chevron-down arrow"></i>
                 </button>
                 <div class="dropdown-container" id="searchDropdownContainer">
-                <a href="riwayat_transfer.php">
-                    <i class="fas fa-history"></i> Riwayat Transfer
-                </a>
                     <a href="cari_mutasi.php">
-                        <i class="fas fa-list-alt"></i> Mutasi Rekening
+                        <i class="fas fa-list-alt"></i> Cek Mutasi Rekening
                     </a>
                     <a href="cari_transaksi.php">
                         <i class="fas fa-receipt"></i> Cek Bukti Transaksi
                     </a>
                     <a href="cari_nasabah.php">
-                        <i class="fas fa-address-card"></i> Profil Nasabah
+                        <i class="fas fa-address-card"></i> Cek Profil Siswa
                     </a>
                     <a href="cek_saldo.php">
                         <i class="fas fa-wallet"></i> Cek Saldo
                     </a>
                 </div>
             </div>
-                        
+                  
+            <div class="menu-label">Menu Lainnya</div>
+
             <div class="menu-item">
-                <a href="data_siswa.php">
-                    <i class="fas fa-user-plus"></i> Buka Rekening
+                <a href="pulihkan_akun.php">
+                    <i class="fas fa-unlock-alt"></i></i> Pemulihan Akun
                 </a>
             </div>
+
             <div class="menu-item">
-                <a href="tutup_rek.php">
-                    <i class="fas fa-user-slash"></i> Tutup Rekening
+            <a href="riwayat_transfer.php">
+                    <i class="fas fa-history"></i> Riwayat Transfer
                 </a>
             </div>
+
             <div class="menu-item">
                 <a href="cetak_bukti_transaksi.php">
                     <i class="fas fa-print"></i> Cetak Bukti Transaksi
@@ -1247,7 +1380,7 @@ function tanggal_indonesia($tanggal) {
             
             <div class="menu-item">
                 <a href="laporan.php">
-                    <i class="fas fa-calendar-day"></i> Laporan 
+                    <i class="fas fa-calendar-day"></i> Cetak Laporan 
                 </a>
             </div>
             
@@ -1269,8 +1402,7 @@ function tanggal_indonesia($tanggal) {
     </div>
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
-            <h2>Hai, <?= htmlspecialchars($username) ?>!</h2>
-            <p>Akses semua layanan perbankan untuk siswa dengan mudah dan cepat.</p>
+            <h2>Assalamuaikum, <?= htmlspecialchars($username) ?>!</h2>
             <div class="date">
                 <i class="far fa-calendar-alt"></i> <?= tanggal_indonesia(date('Y-m-d')) ?>
             </div>
@@ -1335,53 +1467,137 @@ function tanggal_indonesia($tanggal) {
         </div>
     </div>
 </div>
-<!-- Tambahkan di bagian main-content setelah statistik -->
 <div class="attendance-container">
-    <h2>Jadwal & Absensi Petugas Hari Ini</h2>
-    <div class="attendance-grid">
-        <!-- Jadwal Petugas -->
-        <div class="attendance-box">
-            <h3>Jadwal Petugas</h3>
-            <?php if ($schedule): ?>
-                <div class="schedule-info">
-                    <p><strong>Petugas Utama:</strong> <?= htmlspecialchars($schedule['petugas1_nama']) ?></p>
-                    <p><strong>Petugas Pendamping:</strong> <?= htmlspecialchars($schedule['petugas2_nama']) ?></p>
-                </div>
-            <?php else: ?>
-                <p>Belum ada jadwal petugas untuk hari ini.</p>
-            <?php endif; ?>
+    <h1 class="attendance-title">Jadwal & Absensi Petugas Hari Ini</h1>
+    
+    <?php if ($schedule): ?>
+        <table class="attendance-table">
+            <thead>
+                <tr>
+                    <th>Petugas</th>
+                    <th>Nama Petugas</th>
+                    <th>Status</th>
+                    <th>Waktu Masuk</th>
+                    <th>Waktu Keluar</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Petugas 1 Row -->
+                <tr>
+                    <td>Petugas 1</td>
+                    <td><?= htmlspecialchars($petugas1_nama) ?></td>
+                    <td>
+                        <?php if ($attendance_petugas1): ?>
+                            <?php if ($attendance_petugas1['petugas1_status'] == 'hadir'): ?>
+                                <span class="present-status">Hadir</span>
+                            <?php else: ?>
+                                <span class="absent-status">Tidak Hadir</span>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span>-</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($attendance_petugas1 && $attendance_petugas1['waktu_masuk']): ?>
+                            <?= date('H:i', strtotime($attendance_petugas1['waktu_masuk'])) ?>
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($attendance_petugas1 && $attendance_petugas1['waktu_keluar']): ?>
+                            <?= date('H:i', strtotime($attendance_petugas1['waktu_keluar'])) ?>
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!$attendance_petugas1): ?>
+                            <form method="post" style="display: inline;">
+                                <button type="submit" name="check_in_petugas1" class="btn">
+                                    <i class="fas fa-fingerprint"></i> Hadir
+                                </button>
+                            </form>
+                            <form method="post" style="display: inline;">
+                                <button type="submit" name="absent_petugas1" class="btn btn-danger">
+                                    <i class="fas fa-times"></i> Tidak Hadir
+                                </button>
+                            </form>
+                        <?php elseif ($attendance_petugas1 && !$attendance_petugas1['waktu_keluar'] && 
+                                    $attendance_petugas1['petugas1_status'] == 'hadir'): ?>
+                            <form method="post">
+                                <button type="submit" name="check_out_petugas1" class="btn">
+                                    <i class="fas fa-sign-out-alt"></i> Absen Pulang
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <span>Selesai</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+                
+                <!-- Petugas 2 Row -->
+                <tr>
+                    <td>Petugas 2</td>
+                    <td><?= htmlspecialchars($petugas2_nama) ?></td>
+                    <td>
+                        <?php if ($attendance_petugas2): ?>
+                            <?php if ($attendance_petugas2['petugas2_status'] == 'hadir'): ?>
+                                <span class="present-status">Hadir</span>
+                            <?php else: ?>
+                                <span class="absent-status">Tidak Hadir</span>
+                            <?php endif; ?>
+                        <?php else: ?>
+                            <span>-</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($attendance_petugas2 && $attendance_petugas2['waktu_masuk']): ?>
+                            <?= date('H:i', strtotime($attendance_petugas2['waktu_masuk'])) ?>
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if ($attendance_petugas2 && $attendance_petugas2['waktu_keluar']): ?>
+                            <?= date('H:i', strtotime($attendance_petugas2['waktu_keluar'])) ?>
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!$attendance_petugas2): ?>
+                            <form method="post" style="display: inline;">
+                                <button type="submit" name="check_in_petugas2" class="btn">
+                                    <i class="fas fa-fingerprint"></i> Hadir
+                                </button>
+                            </form>
+                            <form method="post" style="display: inline;">
+                                <button type="submit" name="absent_petugas2" class="btn btn-danger">
+                                    <i class="fas fa-times"></i> Tidak Hadir
+                                </button>
+                            </form>
+                        <?php elseif ($attendance_petugas2 && !$attendance_petugas2['waktu_keluar'] && 
+                                    $attendance_petugas2['petugas2_status'] == 'hadir'): ?>
+                            <form method="post">
+                                <button type="submit" name="check_out_petugas2" class="btn">
+                                    <i class="fas fa-sign-out-alt"></i> Absen Pulang
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <span>Selesai</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    <?php else: ?>
+        <div class="empty-message">
+            <i class="fas fa-info-circle"></i> Belum ada jadwal petugas untuk hari ini.
         </div>
-
-        <!-- Absensi Harian -->
-        <div class="attendance-box">
-            <h3>Absensi Harian</h3>
-            <?php if ($schedule): ?>
-                <?php if (!$attendance): ?>
-                    <form method="post">
-                        <button type="submit" name="check_in" class="btn">
-                            <i class="fas fa-fingerprint"></i> Check In
-                        </button>
-                    </form>
-                <?php elseif ($attendance && !$attendance['waktu_keluar']): ?>
-                    <form method="post">
-                        <button type="submit" name="check_out" class="btn">
-                            <i class="fas fa-sign-out-alt"></i> Check Out
-                        </button>
-                    </form>
-                <?php else: ?>
-                    <div class="attendance-status">
-                        <p>✅ Anda telah absen hari ini</p>
-                        <p><strong>Check In:</strong> <?= date('H:i', strtotime($attendance['waktu_masuk'])) ?></p>
-                        <p><strong>Check Out:</strong> <?= date('H:i', strtotime($attendance['waktu_keluar'])) ?></p>
-                    </div>
-                <?php endif; ?>
-            <?php else: ?>
-                <p>Tidak ada jadwal absen hari ini.</p>
-            <?php endif; ?>
-        </div>
-    </div>
+    <?php endif; ?>
 </div>
-
     <script>
 document.addEventListener('DOMContentLoaded', function() {
     // Toggle menu for mobile view

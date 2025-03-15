@@ -27,8 +27,8 @@ $stmt_total->bind_param("ss", $start_date, $end_date);
 $stmt_total->execute();
 $result_total = $stmt_total->get_result();
 $row_total = $result_total->fetch_assoc();
-$total_records = $row_total['total'];
-$total_pages = ceil($total_records / $limit);
+$total_records = $row_total['total']; // Total data yang ada
+$total_pages = ceil($total_records / $limit); // Total halaman
 
 // Query untuk mengambil data dengan pagination
 $query = "SELECT t.*, 
@@ -44,24 +44,6 @@ $query = "SELECT t.*,
           JOIN rekening r ON t.rekening_id = r.id
           JOIN users u ON r.user_id = u.id
           WHERE DATE(t.created_at) BETWEEN ? AND ?
-          AND (
-              t.jenis_transaksi != 'transfer' -- Izinkan semua transaksi selain transfer
-              OR (
-                  t.jenis_transaksi = 'transfer' 
-                  AND (
-                      t.no_transaksi LIKE 'TRF%' -- Izinkan transfer yang dilakukan oleh petugas (kode TRF)
-                      OR (
-                          t.no_transaksi LIKE 'TF%' -- Izinkan transfer siswa (kode TF) hanya jika bukan transfer antar siswa
-                          AND NOT EXISTS (
-                              SELECT 1 FROM users u2 
-                              JOIN rekening r2 ON u2.id = r2.user_id 
-                              WHERE r2.id = t.rekening_tujuan_id 
-                              AND u2.role = 'siswa'
-                          )
-                      )
-                  )
-              )
-          )
           ORDER BY t.created_at DESC
           LIMIT ? OFFSET ?";
 $stmt = $conn->prepare($query);
@@ -71,11 +53,6 @@ if (!$stmt) {
 $stmt->bind_param("ssii", $start_date, $end_date, $limit, $offset);
 $stmt->execute();
 $result = $stmt->get_result();
-
-// Cek jika query berhasil dieksekusi
-if (!$result) {
-    die("Error executing query: " . $conn->error);
-}
 ?>
 
 <!DOCTYPE html>
@@ -496,45 +473,49 @@ if (!$result) {
         }
         /* Pagination Styles */
         .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 0.5rem;
-            margin-top: 2rem;
-            flex-wrap: wrap;
-        }
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
 
-        .page-link {
-            padding: 0.5rem 1rem;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            text-decoration: none;
-            color: var(--primary-color);
-            transition: var(--transition);
-        }
+.page-link {
+    padding: 0.5rem 1rem;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--primary-color);
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
 
-        .page-link:hover {
-            background: var(--primary-light);
-            border-color: var(--primary-color);
-        }
+.page-link:hover {
+    background: var(--primary-light);
+    border-color: var(--primary-color);
+}
 
-        .page-link.active {
-            background: var(--primary-color);
-            color: white;
-            border-color: var(--primary-color);
-        }
+.page-link.active {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+    pointer-events: none; /* Non-clickable */
+}
 
-        /* Responsive Pagination */
-        @media (max-width: 768px) {
-            .pagination {
-                gap: 0.25rem;
-            }
+/* Responsive Pagination */
+@media (max-width: 768px) {
+    .pagination {
+        gap: 0.5rem;
+    }
 
-            .page-link {
-                padding: 0.5rem;
-                font-size: 0.9rem;
-            }
-        }
+    .page-link {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
+}
         </style>
 </head>
 <body>
@@ -643,20 +624,22 @@ if (!$result) {
                     </tbody>
                 </table>
 
-                <!-- Pagination -->
-                <div class="pagination">
-                    <?php if ($page > 1): ?>
-                        <a href="?start_date=<?= $start_date ?>&end_date=<?= $end_date ?>&page=<?= $page - 1 ?>" class="page-link">Sebelumnya</a>
-                    <?php endif; ?>
+            <!-- Pagination -->
+            <div class="pagination">
+                <?php if ($page > 1): ?>
+                    <a href="?start_date=<?= $start_date ?>&end_date=<?= $end_date ?>&page=<?= $page - 1 ?>#pagination-anchor" class="page-link">
+                        <i class="fas fa-chevron-left"></i>Back
+                    </a>
+                <?php endif; ?>
 
-                    <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                        <a href="?start_date=<?= $start_date ?>&end_date=<?= $end_date ?>&page=<?= $i ?>" class="page-link <?= $i == $page ? 'active' : '' ?>"><?= $i ?></a>
-                    <?php endfor; ?>
+                <span class="page-link active"><?= $page ?></span>
 
-                    <?php if ($page < $total_pages): ?>
-                        <a href="?start_date=<?= $start_date ?>&end_date=<?= $end_date ?>&page=<?= $page + 1 ?>" class="page-link">Selanjutnya</a>
-                    <?php endif; ?>
-                </div>
+                <?php if ($page < $total_pages): ?>
+                    <a href="?start_date=<?= $start_date ?>&end_date=<?= $end_date ?>&page=<?= $page + 1 ?>#pagination-anchor" class="page-link">
+                        Next<i class="fas fa-chevron-right"></i>
+                    </a>
+                <?php endif; ?>
+            </div>
             <?php else: ?>
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle"></i>
@@ -667,6 +650,7 @@ if (!$result) {
     </div>
 
     <!-- JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script>
         $(document).ready(function() {
@@ -742,6 +726,31 @@ if (!$result) {
                 }, 500);
             });
         });
+        $(document).ready(function() {
+        // Tangani klik pagination
+        $('.page-link').on('click', function(e) {
+            e.preventDefault(); // Mencegah refresh
+            const url = $(this).attr('href'); // Ambil URL dari tombol
+
+            // Tampilkan loading spinner
+            $('.loading').css('display', 'flex');
+
+            // Ambil data pagination via AJAX
+            $.ajax({
+                url: url,
+                method: 'GET',
+                success: function(response) {
+                    // Ganti konten dengan data baru
+                    $('#pagination-anchor').html($(response).find('#pagination-anchor').html());
+                    $('.loading').hide(); // Sembunyikan loading spinner
+                },
+                error: function() {
+                    alert('Gagal memuat data.');
+                    $('.loading').hide();
+                }
+            });
+        });
+    });
     </script>
 </body>
 </html>

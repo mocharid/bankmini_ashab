@@ -15,7 +15,7 @@ $petugas1_nama = '';
 $petugas2_nama = '';
 $id = null;
 
-// Gunakan token CSRF untuk mencegah multiple submission saat refresh
+// Use CSRF token to prevent multiple submissions during refresh
 if (!isset($_SESSION['form_token'])) {
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
 }
@@ -40,13 +40,30 @@ if (isset($_GET['edit'])) {
 // Handle Delete Request
 if (isset($_GET['delete'])) {
     $id = $_GET['delete'];
-    $query = "DELETE FROM petugas_tugas WHERE id = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $id);
-    if ($stmt->execute()) {
+    
+    // Start transaction to ensure data consistency
+    $conn->begin_transaction();
+    
+    try {
+        // First, delete related absensi records
+        $query_absensi = "DELETE FROM absensi WHERE tanggal = (SELECT tanggal FROM petugas_tugas WHERE id = ?)";
+        $stmt_absensi = $conn->prepare($query_absensi);
+        $stmt_absensi->bind_param("i", $id);
+        $stmt_absensi->execute();
+        
+        // Then, delete the petugas_tugas record
+        $query_petugas = "DELETE FROM petugas_tugas WHERE id = ?";
+        $stmt_petugas = $conn->prepare($query_petugas);
+        $stmt_petugas->bind_param("i", $id);
+        $stmt_petugas->execute();
+        
+        // Commit the transaction
+        $conn->commit();
         $success = 'Jadwal berhasil dihapus!';
-    } else {
-        $error = 'Gagal menghapus jadwal. Silakan coba lagi.';
+    } catch (Exception $e) {
+        // Rollback in case of error
+        $conn->rollback();
+        $error = 'Gagal menghapus jadwal: ' . $e->getMessage();
     }
 }
 
@@ -56,16 +73,30 @@ if (isset($_GET['export']) && !empty($_GET['export'])) {
     $start_date = $_GET['start_date'] ?? '';
     $end_date = $_GET['end_date'] ?? '';
 
-    // Query untuk mendapatkan data jadwal berdasarkan filter tanggal
+    // Query to get schedule data based on date filter
     $query = "SELECT * FROM petugas_tugas WHERE 1=1";
     if (!empty($start_date)) {
-        $query .= " AND tanggal >= '$start_date'";
+        $query .= " AND tanggal >= ?";
     }
     if (!empty($end_date)) {
-        $query .= " AND tanggal <= '$end_date'";
+        $query .= " AND tanggal <= ?";
     }
     $query .= " ORDER BY tanggal DESC";
-    $result = $conn->query($query);
+    
+    // Prepare statement with dynamic parameters
+    $stmt = $conn->prepare($query);
+    
+    // Bind parameters
+    if (!empty($start_date) && !empty($end_date)) {
+        $stmt->bind_param("ss", $start_date, $end_date);
+    } elseif (!empty($start_date)) {
+        $stmt->bind_param("s", $start_date);
+    } elseif (!empty($end_date)) {
+        $stmt->bind_param("s", $end_date);
+    }
+    
+    $stmt->execute();
+    $result = $stmt->get_result();
 
     if ($result && $result->num_rows > 0) {
         $data = [];
@@ -73,7 +104,7 @@ if (isset($_GET['export']) && !empty($_GET['export'])) {
             $data[] = $row;
         }
 
-        // Set header berdasarkan tipe export
+        // Set header based on export type
         if ($export_type === 'pdf') {
             require_once '../../tcpdf/tcpdf.php';
 
@@ -142,9 +173,11 @@ if (isset($_GET['export']) && !empty($_GET['export'])) {
     }
 }
 
+// Handle form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (!isset($_POST['token']) || $_POST['token'] !== $_SESSION['form_token']) {
-        // Token tidak valid atau tidak ada, abaikan submission
+        // Invalid or missing token, ignore submission
+        $error = 'Token tidak valid. Silakan coba lagi.';
     } else {
         $id = $_POST['id'] ?? null;
         $tanggal = $_POST['tanggal'];
@@ -154,65 +187,87 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (empty($tanggal) || empty($petugas1_nama) || empty($petugas2_nama)) {
             $error = 'Semua field harus diisi!';
         } else {
-            if ($id) {
-                // Update existing record - FIX: Untuk edit, kita tidak perlu cek duplikat tanggal
-                // atau tanggal sama dengan database tapi ID yang berbeda
-                $query = "UPDATE petugas_tugas SET tanggal = ?, petugas1_nama = ?, petugas2_nama = ? WHERE id = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bind_param("sssi", $tanggal, $petugas1_nama, $petugas2_nama, $id);
-                
-                if ($stmt->execute()) {
-                    $success = 'Jadwal berhasil diperbarui!';
-                    $tanggal = '';
-                    $petugas1_nama = '';
-                    $petugas2_nama = '';
-                    $id = null;
-                    $_SESSION['form_token'] = bin2hex(random_bytes(32));
-                    $token = $_SESSION['form_token'];
-
-                    header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
-                    exit;
-                } else {
-                    $error = 'Terjadi kesalahan saat menyimpan jadwal. Silakan coba lagi.';
-                }
-            } else {
-                // Insert new record - Check for duplicate date
-                $query = "SELECT id FROM petugas_tugas WHERE tanggal = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bind_param("s", $tanggal);
-                $stmt->execute();
-                $result = $stmt->get_result();
-
-                if ($result->num_rows > 0) {
-                    $error = 'Tanggal sudah ada dalam database!';
-                } else {
-                    $query = "INSERT INTO petugas_tugas (tanggal, petugas1_nama, petugas2_nama) VALUES (?, ?, ?)";
-                    $stmt = $conn->prepare($query);
-                    $stmt->bind_param("sss", $tanggal, $petugas1_nama, $petugas2_nama);
+            // Start transaction
+            $conn->begin_transaction();
+            
+            try {
+                if ($id) {
+                    // Get original date before updating
+                    $query_original = "SELECT tanggal FROM petugas_tugas WHERE id = ?";
+                    $stmt_original = $conn->prepare($query_original);
+                    $stmt_original->bind_param("i", $id);
+                    $stmt_original->execute();
+                    $result_original = $stmt_original->get_result();
+                    $original_date = $result_original->fetch_assoc()['tanggal'];
                     
-                    if ($stmt->execute()) {
-                        $success = 'Jadwal berhasil dibuat!';
-                        $tanggal = '';
-                        $petugas1_nama = '';
-                        $petugas2_nama = '';
-                        $_SESSION['form_token'] = bin2hex(random_bytes(32));
-                        $token = $_SESSION['form_token'];
+                    // Update existing record
+                    $query = "UPDATE petugas_tugas SET tanggal = ?, petugas1_nama = ?, petugas2_nama = ? WHERE id = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("sssi", $tanggal, $petugas1_nama, $petugas2_nama, $id);
+                    $stmt->execute();
+                    
+                    // Update related absensi records if date has changed
+                    if ($original_date != $tanggal) {
+                        $query_absensi = "UPDATE absensi SET tanggal = ? WHERE tanggal = ?";
+                        $stmt_absensi = $conn->prepare($query_absensi);
+                        $stmt_absensi->bind_param("ss", $tanggal, $original_date);
+                        $stmt_absensi->execute();
+                    }
+                    
+                    $success = 'Jadwal berhasil diperbarui!';
+                } else {
+                    // Check for duplicate date
+                    $query_check = "SELECT id FROM petugas_tugas WHERE tanggal = ?";
+                    $stmt_check = $conn->prepare($query_check);
+                    $stmt_check->bind_param("s", $tanggal);
+                    $stmt_check->execute();
+                    $result_check = $stmt_check->get_result();
 
-                        header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
-                        exit;
+                    if ($result_check->num_rows > 0) {
+                        throw new Exception('Tanggal sudah ada dalam database!');
                     } else {
-                        $error = 'Terjadi kesalahan saat menyimpan jadwal. Silakan coba lagi.';
+                        // Insert new record
+                        $query = "INSERT INTO petugas_tugas (tanggal, petugas1_nama, petugas2_nama) VALUES (?, ?, ?)";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("sss", $tanggal, $petugas1_nama, $petugas2_nama);
+                        $stmt->execute();
+                        
+                        $success = 'Jadwal berhasil dibuat!';
                     }
                 }
+                
+                // Commit transaction
+                $conn->commit();
+                
+                // Reset form
+                $tanggal = '';
+                $petugas1_nama = '';
+                $petugas2_nama = '';
+                $id = null;
+                
+                // Generate new token
+                $_SESSION['form_token'] = bin2hex(random_bytes(32));
+                $token = $_SESSION['form_token'];
+                
+                // Redirect to avoid form resubmission
+                header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
+                exit;
+                
+            } catch (Exception $e) {
+                // Rollback in case of error
+                $conn->rollback();
+                $error = $e->getMessage();
             }
         }
     }
 }
 
+// Success message from redirect
 if (isset($_GET['success']) && $_GET['success'] == 1) {
     $success = 'Jadwal berhasil disimpan!';
 }
 
+// Error message from redirect
 if (isset($_GET['error']) && $_GET['error'] == 'nodata') {
     $error = 'Tidak ada data jadwal untuk diekspor!';
 }
@@ -221,41 +276,78 @@ if (isset($_GET['error']) && $_GET['error'] == 'nodata') {
 $filter_start = $_GET['filter_start'] ?? '';
 $filter_end = $_GET['filter_end'] ?? '';
 
-// Prepare query with filters
-$jadwal_query = "SELECT * FROM petugas_tugas WHERE 1=1";
+// Pagination Logic
+$limit = 10; // Number of records per page
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1; // Current page
+$offset = ($page - 1) * $limit; // Calculate offset
+
+// Query to count total data with filters
+$total_query = "SELECT COUNT(*) as total FROM petugas_tugas WHERE 1=1";
+$total_params = [];
+$total_types = "";
+
 if (!empty($filter_start)) {
-    $jadwal_query .= " AND tanggal >= '$filter_start'";
+    $total_query .= " AND tanggal >= ?";
+    $total_params[] = $filter_start;
+    $total_types .= "s";
 }
 if (!empty($filter_end)) {
-    $jadwal_query .= " AND tanggal <= '$filter_end'";
+    $total_query .= " AND tanggal <= ?";
+    $total_params[] = $filter_end;
+    $total_types .= "s";
 }
-$jadwal_query .= " ORDER BY tanggal DESC";
-$jadwal_result = $conn->query($jadwal_query);
 
-date_default_timezone_set('Asia/Jakarta');
-
-// Pagination Logic
-$limit = 10; // Jumlah data per halaman
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1; // Halaman aktif
-$offset = ($page - 1) * $limit; // Hitung offset
-
-// Query untuk menghitung total data
-$total_query = "SELECT COUNT(*) as total FROM petugas_tugas";
-$total_result = $conn->query($total_query);
+$total_stmt = $conn->prepare($total_query);
+if (!empty($total_params)) {
+    $total_stmt->bind_param($total_types, ...$total_params);
+}
+$total_stmt->execute();
+$total_result = $total_stmt->get_result();
 $total_row = $total_result->fetch_assoc();
 $total_data = $total_row['total'];
-$total_pages = ceil($total_data / $limit); // Hitung total halaman
+$total_pages = ceil($total_data / $limit); // Calculate total pages
 
-// Query dengan pagination
+// Query with pagination and filters
 $jadwal_query = "SELECT * FROM petugas_tugas WHERE 1=1";
+$jadwal_params = [];
+$jadwal_types = "";
+
 if (!empty($filter_start)) {
-    $jadwal_query .= " AND tanggal >= '$filter_start'";
+    $jadwal_query .= " AND tanggal >= ?";
+    $jadwal_params[] = $filter_start;
+    $jadwal_types .= "s";
 }
 if (!empty($filter_end)) {
-    $jadwal_query .= " AND tanggal <= '$filter_end'";
+    $jadwal_query .= " AND tanggal <= ?";
+    $jadwal_params[] = $filter_end;
+    $jadwal_types .= "s";
 }
-$jadwal_query .= " ORDER BY tanggal DESC LIMIT $limit OFFSET $offset";
-$jadwal_result = $conn->query($jadwal_query);
+
+$jadwal_query .= " ORDER BY tanggal DESC LIMIT ? OFFSET ?";
+$jadwal_params[] = $limit;
+$jadwal_params[] = $offset;
+$jadwal_types .= "ii";
+
+$jadwal_stmt = $conn->prepare($jadwal_query);
+if (!empty($jadwal_types)) {
+    $jadwal_stmt->bind_param($jadwal_types, ...$jadwal_params);
+}
+$jadwal_stmt->execute();
+$jadwal_result = $jadwal_stmt->get_result();
+
+// Update the page URL with current filters for pagination links
+$current_url = strtok($_SERVER["REQUEST_URI"], '?');
+$filter_params = [];
+if (!empty($filter_start)) {
+    $filter_params[] = "filter_start=$filter_start";
+}
+if (!empty($filter_end)) {
+    $filter_params[] = "filter_end=$filter_end";
+}
+$filter_url = $current_url . (empty($filter_params) ? '' : '?' . implode('&', $filter_params));
+
+// Set timezone
+date_default_timezone_set('Asia/Jakarta');
 ?>
 
 <!DOCTYPE html>
@@ -1118,144 +1210,144 @@ form > .btn i {
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Original alert handling code
-        function closeAlert(id) {
-            const alert = document.getElementById(id);
-            if (alert) {
+document.addEventListener('DOMContentLoaded', function() {
+    // Original alert handling code
+    function closeAlert(id) {
+        const alert = document.getElementById(id);
+        if (alert) {
+            alert.classList.add('fade-out');
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 500);
+        }
+    }
+
+    const alerts = document.querySelectorAll('.alert');
+    
+    if (alerts.length > 0) {
+        alerts.forEach(alert => {
+            setTimeout(() => {
                 alert.classList.add('fade-out');
                 setTimeout(() => {
                     alert.style.display = 'none';
                 }, 500);
-            }
+            }, 5000);
+        });
+    }
+    
+    // Modal functionality
+    const modal = document.getElementById("editModal");
+    const closeBtn = document.querySelector(".close");
+    
+    // Close modal when clicking X
+    if (closeBtn) {
+        closeBtn.onclick = function() {
+            modal.style.display = "none";
         }
-
-        const alerts = document.querySelectorAll('.alert');
-        
-        if (alerts.length > 0) {
-            alerts.forEach(alert => {
-                setTimeout(() => {
-                    alert.classList.add('fade-out');
-                    setTimeout(() => {
-                        alert.style.display = 'none';
-                    }, 500);
-                }, 5000);
-            });
+    }
+    
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        if (event.target == modal) {
+            modal.style.display = "none";
         }
-        
-        // Modal functionality
-        const modal = document.getElementById("editModal");
-        const closeBtn = document.querySelector(".close");
-        
-        // Close modal when clicking X
-        if (closeBtn) {
-            closeBtn.onclick = function() {
-                modal.style.display = "none";
-            }
-        }
-        
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-        
-        // Initialize edit buttons functionality
-        initEditButtons();
-        
-        // Initialize AJAX pagination
-        initAjaxPagination();
-        
+    }
+    
+    // Initialize edit buttons functionality
+    initEditButtons();
+    
+    // Initialize AJAX pagination
+    initAjaxPagination();
+    
+    if (window.history.replaceState) {
+        window.history.replaceState(null, null, window.location.href);
+    }
+    
+    window.addEventListener('beforeunload', function() {
         if (window.history.replaceState) {
             window.history.replaceState(null, null, window.location.href);
         }
-        
-        window.addEventListener('beforeunload', function() {
-            if (window.history.replaceState) {
-                window.history.replaceState(null, null, window.location.href);
-            }
-        });
-
-        // Function to handle edit buttons
-        function initEditButtons() {
-            const editButtons = document.querySelectorAll('.edit-btn');
-            editButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const id = this.getAttribute('data-id');
-                    const tanggal = this.getAttribute('data-tanggal');
-                    const petugas1 = this.getAttribute('data-petugas1');
-                    const petugas2 = this.getAttribute('data-petugas2');
-                    
-                    document.getElementById('edit_id').value = id;
-                    document.getElementById('edit_tanggal').value = tanggal;
-                    document.getElementById('edit_petugas1_nama').value = petugas1;
-                    document.getElementById('edit_petugas2_nama').value = petugas2;
-                    
-                    modal.style.display = "block";
-                });
-            });
-        }
-
-        // Function to initialize AJAX pagination
-        function initAjaxPagination() {
-            const paginationLinks = document.querySelectorAll('.pagination a');
-            
-            paginationLinks.forEach(link => {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    
-                    const url = this.getAttribute('href');
-                    const tableContainer = document.querySelector('.table-container');
-                    
-                    // Store current scroll position
-                    const scrollPosition = window.scrollY;
-                    
-                    // Show loading indicator
-                    tableContainer.innerHTML = '<div class="empty-message"><i class="fas fa-spinner fa-spin"></i> Loading data...</div>';
-                    
-                    // Update URL in browser without refreshing
-                    window.history.pushState({path: url}, '', url);
-                    
-                    // Fetch the data with AJAX
-                    fetch(url)
-                        .then(response => response.text())
-                        .then(html => {
-                            // Create a temporary element to parse the HTML
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(html, 'text/html');
-                            
-                            // Extract the table container content
-                            const newTableContainer = doc.querySelector('.table-container');
-                            
-                            if (newTableContainer) {
-                                tableContainer.innerHTML = newTableContainer.innerHTML;
-                                
-                                // Reinitialize edit buttons for the new content
-                                initEditButtons();
-                                
-                                // Reinitialize pagination for the new content
-                                initAjaxPagination();
-                                
-                                // Restore scroll position
-                                window.scrollTo(0, scrollPosition);
-                            } else {
-                                tableContainer.innerHTML = '<div class="empty-message"><i class="fas fa-exclamation-circle"></i> Error loading data.</div>';
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            tableContainer.innerHTML = '<div class="empty-message"><i class="fas fa-exclamation-circle"></i> Error loading data.</div>';
-                        });
-                });
-            });
-        }
-        
-        // Expose functions to window for use in other scripts if needed
-        window.closeAlert = closeAlert;
-        window.initEditButtons = initEditButtons;
-        window.initAjaxPagination = initAjaxPagination;
     });
+
+    // Function to handle edit buttons
+    function initEditButtons() {
+        const editButtons = document.querySelectorAll('.edit-btn');
+        editButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const id = this.getAttribute('data-id');
+                const tanggal = this.getAttribute('data-tanggal');
+                const petugas1 = this.getAttribute('data-petugas1');
+                const petugas2 = this.getAttribute('data-petugas2');
+                
+                document.getElementById('edit_id').value = id;
+                document.getElementById('edit_tanggal').value = tanggal;
+                document.getElementById('edit_petugas1_nama').value = petugas1;
+                document.getElementById('edit_petugas2_nama').value = petugas2;
+                
+                modal.style.display = "block";
+            });
+        });
+    }
+
+    // Function to initialize AJAX pagination
+    function initAjaxPagination() {
+        const paginationLinks = document.querySelectorAll('.pagination a');
+        
+        paginationLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                
+                const url = this.getAttribute('href');
+                const tableContainer = document.querySelector('.table-container');
+                
+                // Store current scroll position
+                const scrollPosition = window.scrollY;
+                
+                // Show loading indicator
+                tableContainer.innerHTML = '<div class="empty-message"><i class="fas fa-spinner fa-spin"></i> Loading data...</div>';
+                
+                // Update URL in browser without refreshing
+                window.history.pushState({path: url}, '', url);
+                
+                // Fetch the data with AJAX
+                fetch(url)
+                    .then(response => response.text())
+                    .then(html => {
+                        // Create a temporary element to parse the HTML
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        
+                        // Extract the table container content
+                        const newTableContainer = doc.querySelector('.table-container');
+                        
+                        if (newTableContainer) {
+                            tableContainer.innerHTML = newTableContainer.innerHTML;
+                            
+                            // Reinitialize edit buttons for the new content
+                            initEditButtons();
+                            
+                            // Reinitialize pagination for the new content
+                            initAjaxPagination();
+                            
+                            // Restore scroll position
+                            window.scrollTo(0, scrollPosition);
+                        } else {
+                            tableContainer.innerHTML = '<div class="empty-message"><i class="fas fa-exclamation-circle"></i> Error loading data.</div>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        tableContainer.innerHTML = '<div class="empty-message"><i class="fas fa-exclamation-circle"></i> Error loading data.</div>';
+                    });
+            });
+        });
+    }
+    
+    // Expose functions to window for use in other scripts if needed
+    window.closeAlert = closeAlert;
+    window.initEditButtons = initEditButtons;
+    window.initAjaxPagination = initAjaxPagination;
+});
 </script>
 </body>
 </html>

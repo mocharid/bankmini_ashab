@@ -423,6 +423,49 @@ if (!$rekening_data) {
         transform: none; /* Hilangkan efek naik di mobile */
     }
 }
+/* Pagination container (sama untuk semua layar) */
+.pagination-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+    padding: 10px;
+    background-color: var(--primary-light);
+    border-radius: 8px;
+    box-shadow: var(--shadow-sm);
+}
+
+/* Tombol pagination */
+.pagination-button {
+    padding: 8px 16px;
+    font-size: 14px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.pagination-button:hover {
+    background-color: var(--primary-dark);
+}
+
+.pagination-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+/* Info halaman */
+.page-info {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 10px;
+}
     </style>
 </head>
 <body>
@@ -478,173 +521,256 @@ if (!$rekening_data) {
                 <div id="filteredResults">
                     <!-- Hasil filter akan ditampilkan di sini -->
                 </div>
+                
+                <!-- Pagination container -->
+                <div class="pagination-container">
+                    <button id="prevPage" class="pagination-button prev" disabled>
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                    <div class="page-info">
+                        <span id="currentPage">1</span> dari <span id="totalPages">1</span>
+                    </div>
+                    <button id="nextPage" class="pagination-button next">
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
             </div>
         <?php endif; ?>
     </div>
 
     <script>
-        const transactions = <?= isset($transactions) ? json_encode($transactions) : '[]' ?>;
-        const userRekeningId = <?= isset($rekening_id) ? $rekening_id : 'null' ?>;
-        const userNoRekening = "<?= isset($no_rekening) ? $no_rekening : '' ?>";
-        let currentTab = 'all';
+const transactions = <?= isset($transactions) ? json_encode($transactions) : '[]' ?>;
+const userRekeningId = <?= isset($rekening_id) ? $rekening_id : 'null' ?>;
+const userNoRekening = "<?= isset($no_rekening) ? $no_rekening : '' ?>";
+let currentTab = 'all';
 
-        // Fungsi untuk memfilter transaksi berdasarkan tanggal dan tab
-        function filterTransactions(startDate, endDate, tabType) {
-            const filtered = transactions.filter(transaction => {
-                const transactionDate = new Date(transaction.created_at);
-                const isInDateRange = transactionDate >= new Date(startDate) && 
-                                      transactionDate <= new Date(endDate + 'T23:59:59');
-                
-                if (!isInDateRange) return false;
-                
-                if (tabType === 'all') return true;
-                
-                if (tabType === 'transfer') {
-                    return transaction.jenis_transaksi === 'transfer' && 
-                           transaction.rekening_id === userRekeningId;
-                }
-                
-                if (tabType === 'masuk') {
-                    return (transaction.jenis_transaksi === 'setor') || 
-                           (transaction.jenis_transaksi === 'transfer' && 
-                            transaction.rekening_tujuan_id === userRekeningId);
-                }
-                
-                if (tabType === 'keluar') {
-                    return (transaction.jenis_transaksi === 'tarik') || 
-                           (transaction.jenis_transaksi === 'transfer' && 
-                            transaction.rekening_id === userRekeningId);
-                }
-                
-                return true;
-            });
+// Pagination variables
+let currentPage = 1;
+let recordsPerPage = 10;
+let filteredData = [];
+
+// Pagination element references
+const prevPageBtn = document.getElementById('prevPage');
+const nextPageBtn = document.getElementById('nextPage');
+const currentPageSpan = document.getElementById('currentPage');
+const totalPagesSpan = document.getElementById('totalPages');
+
+// Fungsi untuk memfilter transaksi berdasarkan tanggal dan tab
+function filterTransactions(startDate, endDate, tabType) {
+    const filtered = transactions.filter(transaction => {
+        const transactionDate = new Date(transaction.created_at);
+        const isInDateRange = transactionDate >= new Date(startDate) && 
+                              transactionDate <= new Date(endDate + 'T23:59:59');
+        
+        if (!isInDateRange) return false;
+        
+        if (tabType === 'all') return true;
+        
+        if (tabType === 'transfer') {
+            return transaction.jenis_transaksi === 'transfer' && 
+                   transaction.rekening_id === userRekeningId;
+        }
+        
+        if (tabType === 'masuk') {
+            return (transaction.jenis_transaksi === 'setor') || 
+                   (transaction.jenis_transaksi === 'transfer' && 
+                    transaction.rekening_tujuan_id === userRekeningId);
+        }
+        
+        if (tabType === 'keluar') {
+            return (transaction.jenis_transaksi === 'tarik') || 
+                   (transaction.jenis_transaksi === 'transfer' && 
+                    transaction.rekening_id === userRekeningId);
+        }
+        
+        return true;
+    });
+    
+    return filtered;
+}
+
+// Fungsi untuk menampilkan hasil filter dengan pagination
+function displayFilteredResults(filteredTransactions) {
+    // Update filteredData global variable
+    filteredData = filteredTransactions;
+    
+    // Reset pagination to first page
+    currentPage = 1;
+    updatePaginationUI();
+    
+    // Get current page data
+    const paginatedData = getPaginatedData();
+    
+    // Display data
+    displayTransactions(paginatedData);
+}
+
+// Function to get paginated subset of data
+function getPaginatedData() {
+    const startIndex = (currentPage - 1) * recordsPerPage;
+    const endIndex = startIndex + recordsPerPage;
+    return filteredData.slice(startIndex, endIndex);
+}
+
+// Function to display transactions
+function displayTransactions(transactions) {
+    const resultsContainer = document.getElementById('filteredResults');
+    if (transactions.length > 0) {
+        let html = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tanggal</th>
+                        <th>No Transaksi</th>
+                        <th>Jenis</th>
+                        <th>Jumlah</th>
+                        <th>Detail</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        transactions.forEach(transaction => {
+            // Determine transaction type display
+            let typeClass = 'type-transfer';
+            let typeIcon = 'exchange-alt';
+            let typeText = 'Transfer';
             
-            return filtered;
-        }
-
-        // Fungsi untuk menampilkan hasil filter
-        function displayFilteredResults(filteredTransactions) {
-            const resultsContainer = document.getElementById('filteredResults');
-            if (filteredTransactions.length > 0) {
-                let html = `
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Tanggal</th>
-                                <th>No Transaksi</th>
-                                <th>Jenis</th>
-                                <th>Jumlah</th>
-                                <th>Detail</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                `;
-
-                filteredTransactions.forEach(transaction => {
-                    // Determine transaction type display
-                    let typeClass = 'type-transfer';
-                    let typeIcon = 'exchange-alt';
-                    let typeText = 'Transfer';
-                    
-                    if (transaction.jenis_transaksi === 'setor') {
-                        typeClass = 'type-setor';
-                        typeIcon = 'arrow-up';
-                        typeText = 'Setor';
-                    } else if (transaction.jenis_transaksi === 'tarik') {
-                        typeClass = 'type-tarik';
-                        typeIcon = 'arrow-down';
-                        typeText = 'Tarik';
-                    } else if (transaction.jenis_transaksi === 'transfer') {
-                        if (transaction.rekening_id === userRekeningId) {
-                            typeClass = 'type-keluar';
-                            typeIcon = 'paper-plane';
-                            typeText = 'TF Keluar';
-                        } else {
-                            typeClass = 'type-masuk';
-                            typeIcon = 'download';
-                            typeText = 'TF Masuk';
-                        }
-                    }
-
-                    // Build transfer details content
-                    let transferDetails = '';
-                    if (transaction.jenis_transaksi === 'transfer') {
-                        if (transaction.rekening_id === userRekeningId) {
-                            transferDetails = `<div class="transfer-details">Ke: ${transaction.rekening_penerima}</div>`;
-                        } else {
-                            transferDetails = `<div class="transfer-details">Dari: ${transaction.rekening_pengirim}</div>`;
-                        }
-                    } else if (transaction.petugas_nama) {
-                        transferDetails = `<div class="transfer-details">Petugas: ${transaction.petugas_nama}</div>`;
-                    }
-
-                    html += `
-                        <tr>
-                            <td>${new Date(transaction.created_at).toLocaleString()}</td>
-                            <td>${transaction.no_transaksi}</td>
-                            <td>
-                                <div class="transaction-type ${typeClass}">
-                                    <i class="fas fa-${typeIcon}"></i>
-                                    ${typeText}
-                                </div>
-                            </td>
-                            <td>Rp ${parseFloat(transaction.jumlah).toLocaleString()}</td>
-                            <td>${transferDetails}</td>
-                            <td>
-                                <span class="status-badge status-${transaction.status}">
-                                    ${transaction.status}
-                                </span>
-                            </td>
-                        </tr>
-                    `;
-                });
-
-                html += `
-                        </tbody>
-                    </table>
-                `;
-                resultsContainer.innerHTML = html;
-            } else {
-                resultsContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-inbox"></i>
-                        <p>Tidak ada transaksi pada rentang tanggal yang dipilih</p>
-                    </div>
-                `;
+            if (transaction.jenis_transaksi === 'setor') {
+                typeClass = 'type-setor';
+                typeIcon = 'arrow-up';
+                typeText = 'Setor';
+            } else if (transaction.jenis_transaksi === 'tarik') {
+                typeClass = 'type-tarik';
+                typeIcon = 'arrow-down';
+                typeText = 'Tarik';
+            } else if (transaction.jenis_transaksi === 'transfer') {
+                if (transaction.rekening_id === userRekeningId) {
+                    typeClass = 'type-keluar';
+                    typeIcon = 'paper-plane';
+                    typeText = 'TF Keluar';
+                } else {
+                    typeClass = 'type-masuk';
+                    typeIcon = 'download';
+                    typeText = 'TF Masuk';
+                }
             }
-        }
 
-        // Function to apply filter based on current tab and date range
-        function applyFilters() {
-            const startDate = document.getElementById('start_date').value;
-            const endDate = document.getElementById('end_date').value;
-            const filtered = filterTransactions(startDate, endDate, currentTab);
-            displayFilteredResults(filtered);
-        }
+            // Build transfer details content
+            let transferDetails = '';
+            if (transaction.jenis_transaksi === 'transfer') {
+                if (transaction.rekening_id === userRekeningId) {
+                    transferDetails = `<div class="transfer-details">Ke: ${transaction.rekening_penerima}</div>`;
+                } else {
+                    transferDetails = `<div class="transfer-details">Dari: ${transaction.rekening_pengirim}</div>`;
+                }
+            } else if (transaction.petugas_nama) {
+                transferDetails = `<div class="transfer-details">Petugas: ${transaction.petugas_nama}</div>`;
+            }
 
-        // Set up tab switching
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                currentTab = tab.dataset.tab;
-                applyFilters();
-            });
+            html += `
+                <tr>
+                    <td>${new Date(transaction.created_at).toLocaleString()}</td>
+                    <td>${transaction.no_transaksi}</td>
+                    <td>
+                        <div class="transaction-type ${typeClass}">
+                            <i class="fas fa-${typeIcon}"></i>
+                            ${typeText}
+                        </div>
+                    </td>
+                    <td>Rp ${parseFloat(transaction.jumlah).toLocaleString()}</td>
+                    <td>${transferDetails}</td>
+                    <td>
+                        <span class="status-badge status-${transaction.status}">
+                            ${transaction.status}
+                        </span>
+                    </td>
+                </tr>
+            `;
         });
 
-        // Event listener for filter button
-        document.getElementById('filterButton').addEventListener('click', applyFilters);
+        html += `
+                </tbody>
+            </table>
+        `;
+        resultsContainer.innerHTML = html;
+    } else {
+        resultsContainer.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <p>Tidak ada transaksi pada rentang tanggal yang dipilih</p>
+            </div>
+        `;
+    }
+}
 
-        // Event listener for print button
-        document.getElementById('printButton').addEventListener('click', () => {
-            const startDate = document.getElementById('start_date').value;
-            const endDate = document.getElementById('end_date').value;
-            window.open(`cetak_mutasi.php?start_date=${startDate}&end_date=${endDate}&tab=${currentTab}`, '_blank');
-        });
+// Update pagination UI elements
+function updatePaginationUI() {
+    const totalPages = Math.ceil(filteredData.length / recordsPerPage) || 1;
+    
+    currentPageSpan.textContent = currentPage;
+    totalPagesSpan.textContent = totalPages;
+    
+    // Enable/disable pagination buttons
+    prevPageBtn.disabled = currentPage <= 1;
+    nextPageBtn.disabled = currentPage >= totalPages;
+    
+    // Update visibility of pagination container
+    document.querySelector('.pagination-container').style.display = 
+        filteredData.length > 0 ? 'flex' : 'none';
+}
 
-        // Initial load
-        window.addEventListener('DOMContentLoaded', applyFilters);
+// Function to apply filter based on current tab and date range
+function applyFilters() {
+    const startDate = document.getElementById('start_date').value;
+    const endDate = document.getElementById('end_date').value;
+    const filtered = filterTransactions(startDate, endDate, currentTab);
+    displayFilteredResults(filtered);
+}
+
+// Function to handle page changes
+function changePage(direction) {
+    if (direction === 'prev' && currentPage > 1) {
+        currentPage--;
+    } else if (direction === 'next' && currentPage < Math.ceil(filteredData.length / recordsPerPage)) {
+        currentPage++;
+    }
+    
+    updatePaginationUI();
+    displayTransactions(getPaginatedData());
+}
+
+// Set up pagination event listeners
+prevPageBtn.addEventListener('click', () => changePage('prev'));
+nextPageBtn.addEventListener('click', () => changePage('next'));
+
+// Set up tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentTab = tab.dataset.tab;
+        applyFilters();
+    });
+});
+
+// Event listener for filter button
+document.getElementById('filterButton').addEventListener('click', applyFilters);
+
+// Event listener for print button
+// Event listener for print button
+document.getElementById('printButton').addEventListener('click', () => {
+    const startDate = document.getElementById('start_date').value;
+    const endDate = document.getElementById('end_date').value;
+    const tabType = currentTab; // currentTab adalah variabel yang menyimpan tab yang aktif
+
+    // Buka jendela baru dengan parameter filter
+    window.open(`cetak_mutasi.php?start_date=${startDate}&end_date=${endDate}&tab=${tabType}`, '_blank');
+});
+
+// Initial load
+window.addEventListener('DOMContentLoaded', applyFilters);
     </script>
 </body>
 </html>

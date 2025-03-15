@@ -48,7 +48,7 @@ function generateStruk($data) {
     // Logo/judul
     $pdf->Cell(0, 10, 'SCHOBANK', 0, 1, 'C');
     $pdf->SetFont('courier', '', 8);
-    $pdf->Cell(0, 5, 'Sistem Bank Sekolah', 0, 1, 'C');
+    $pdf->Cell(0, 5, 'Tabungan Cerdas untuk Generasi Gemilang', 0, 1, 'C');
     $pdf->Ln(2);
     
     // Tambahkan garis pemisah dengan gaya putus-putus (bergerigi)
