@@ -1,7 +1,7 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
-require_once '../../vendor/autoload.php'; // Pastikan TCPDF sudah diinstal
+require_once '../../vendor/autoload.php'; 
 use TCPDF as TCPDF;
 
 if (!isset($_SESSION['user_id'])) {
@@ -35,139 +35,179 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['no_transaksi'])) {
     }
 }
 
-// Function to generate struk
+// Fungsi generateStruk yang dimodifikasi
 function generateStruk($data) {
-    date_default_timezone_set('Asia/Jakarta');
-
-    $pdf = new TCPDF('P', 'mm', array(80, 130), true, 'UTF-8', false);
-
-    $pdf->setPrintHeader(false);
-    $pdf->setPrintFooter(false);
-
-    $pdf->SetCreator('SCHOBANK SYSTEM');
-    $pdf->SetAuthor('SCHOBANK SYSTEM');
-    $pdf->SetTitle('Bukti Transaksi');
-
-    $pdf->SetMargins(7, 7, 7);
-    $pdf->SetAutoPageBreak(TRUE, 7);
-
-    // Add a page
-    $pdf->AddPage();
-
-    // --- HEADER SECTION ---
-    $pdf->SetFont('helvetica', 'B', 12);
-    $pdf->Cell(0, 6, 'SCHOBANK', 0, 1, 'C');
-    $pdf->SetFont('helvetica', '', 8);
-    $pdf->Cell(0, 4, 'BUKTI TRANSAKSI', 0, 1, 'C');
-    
-    // Add horizontal line
-    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
-    $pdf->Ln(4);
-
-    // --- TRANSACTION DETAILS ---
-    $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->Cell(0, 4, 'DETAIL TRANSAKSI', 0, 1, 'C');
-    $pdf->Ln(2);
-
-    // Transaction details in table-like format with consistent alignment
-    $pdf->SetFont('helvetica', '', 8);
-    
-    // Define a consistent width for labels and position for colons
-    $labelWidth = 28;
-    $colonWidth = 4;
-    $valueWidth = 34;
-    
-    // Format each row with aligned colons
-    $pdf->Cell($labelWidth, 4, 'TANGGAL', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, date('d/m/Y', strtotime($data['created_at'])), 0, 1, 'R');
-    
-    $pdf->Cell($labelWidth, 4, 'NO. TRANSAKSI', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['no_transaksi'], 0, 1, 'R');
-    
-    $pdf->Cell($labelWidth, 4, 'REKENING', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['no_rekening'], 0, 1, 'R');
-    
-    $pdf->Cell($labelWidth, 4, 'NAMA', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['nama'], 0, 1, 'R');
-    
-    $pdf->Cell($labelWidth, 4, 'JENIS TRANSAKSI', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, ucfirst($data['jenis_transaksi']), 0, 1, 'R');
-    
-    // Add horizontal line
-    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
-    $pdf->Ln(4);
-    
-    // Jumlah transfer (bigger and bold) with aligned colon
-    $pdf->SetFont('helvetica', 'B', 9);
-    $pdf->Cell($labelWidth, 5, 'JUMLAH', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 5, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 5, 'Rp ' . number_format($data['jumlah'], 0, ',', '.'), 0, 1, 'R');
-    
-    // Add horizontal line
-    $pdf->Line(7, $pdf->GetY() + 2, 73, $pdf->GetY() + 2);
-    $pdf->Ln(3);
-    
-    // --- FOOTER SECTION (moved up to ensure single page) ---
-    $pdf->SetFont('helvetica', 'I', 7);
-    $pdf->Cell(0, 3, 'Terima kasih telah menggunakan layanan', 0, 1, 'C');
-    $pdf->SetFont('helvetica', 'BI', 8);
-    $pdf->Cell(0, 3, 'SCHOBANK SYSTEM', 0, 1, 'C');
-    
-    // --- QR CODE with only transaction number (smaller size) ---
-    $style = array(
-        'border' => false,
-        'vpadding' => 'auto',
-        'hpadding' => 'auto',
-        'fgcolor' => array(0, 0, 0),
-        'bgcolor' => false,
-        'module_width' => 1, // width of a single module in points
-        'module_height' => 1 // height of a single module in points
-    );
-
-    // MODIFIED: Only use transaction number for QR code
-    $qrContent = $data['no_transaksi'];
-
-    // Generate QR code - centered on the receipt (smaller size: 25x25)
-    $pdf->write2DBarcode($qrContent, 'QRCODE,L', 27.5, $pdf->GetY(), 25, 25, $style, 'N');
-    
-    // MODIFIED: Reduced line spacing after QR code to position text closer
-    $pdf->Ln(1);
-    
-    // Add current time with WIB time zone and note with reduced spacing
-    $pdf->SetFont('helvetica', '', 7);
-    $pdf->Cell(0, 3, 'Dicetak pada: ' . date('d/m/Y H:i:s') . ' WIB', 0, 1, 'C');
-    
-    // Add note
-    $pdf->SetFont('helvetica', 'I', 7);
-    $pdf->MultiCell(0, 3, 'Bukti transaksi ini merupakan bukti yang sah dan tidak memerlukan tanda tangan.', 0, 'C');
-    
-    // Simpan PDF ke folder yang dapat diakses oleh browser
-    $pdfFolder = __DIR__ . '/struk/'; // Path ke folder struk
-    if (!is_dir($pdfFolder)) {
-        if (mkdir($pdfFolder, 0755, true)) {
-            echo "Folder struk berhasil dibuat: " . $pdfFolder . "<br>";
-        } else {
-            echo "Gagal membuat folder struk!<br>";
+    // Buat kelas turunan TCPDF untuk perforasi tepi
+    class MYPDF extends TCPDF {
+        public function Footer() {
+            // Posisi di 15 mm dari bawah
+            $this->SetY(-15);
+            // Set gaya garis untuk perforasi
+            $this->SetLineStyle(array('dash' => '1,1', 'color' => array(160, 160, 160)));
+            // Gambar garis bergerigi/perforasi horizontal
+            $this->Line(0, $this->GetY(), $this->getPageWidth(), $this->GetY());
         }
     }
-
-    // Path lengkap ke file PDF
-    $pdfFilePath = $pdfFolder . 'struk_' . $data['no_transaksi'] . '.pdf';
-
-    // Simpan file PDF
-    $pdf->Output($pdfFilePath, 'F');
-
-    // URL untuk mengakses file PDF
-    $pdfUrl = '/bankmini/pages/petugas/struk/struk_' . $data['no_transaksi'] . '.pdf';
-
+    
+    // Buat dokumen PDF baru dengan ukuran khusus untuk thermal printer (80mm width)
+    $pdf = new MYPDF('P', 'mm', array(80, 150), true, 'UTF-8', false);
+    
+    // Informasi dokumen
+    $pdf->SetCreator('SCHOBANK SYSTEM');
+    $pdf->SetAuthor('SCHOBANK');
+    $pdf->SetTitle('Struk Transaksi');
+    
+    // Hilangkan header dan footer default
+    $pdf->setPrintHeader(false);
+    $pdf->setPrintFooter(true); // Kita gunakan footer untuk perforasi
+    
+    // Atur margin
+    $pdf->SetMargins(5, 5, 5);
+    $pdf->SetAutoPageBreak(true, 15); // Margin bawah untuk perforasi
+    
+    // Tambah halaman
+    $pdf->AddPage();
+    
+    // Set background warna broken white (thermal receipt style)
+    $pdf->SetFillColor(252, 252, 250);
+    $pdf->Rect(0, 0, $pdf->getPageWidth(), $pdf->getPageHeight(), 'F');
+    
+    // Set font
+    $pdf->SetFont('courier', 'B', 12); // Gunakan font courier untuk thermal printer look
+    $pdf->SetTextColor(0, 0, 0); // Teks hitam
+    
+    // Logo/judul
+    $pdf->Cell(0, 10, 'SCHOBANK', 0, 1, 'C');
+    $pdf->SetFont('courier', '', 8);
+    $pdf->Cell(0, 5, 'Tabungan Cerdas untuk Generasi Gemilang', 0, 1, 'C');
+    $pdf->Ln(2);
+    
+    // Tambahkan garis pemisah dengan gaya putus-putus (bergerigi)
+    $pdf->SetLineStyle(array('dash' => '1,1', 'color' => array(0, 0, 0)));
+    $pdf->Line(5, $pdf->GetY(), 75, $pdf->GetY());
+    $pdf->Ln(2);
+    
+    // Detail transaksi
+    $pdf->SetFont('courier', 'B', 8);
+    
+    // Tampilkan label transaksi yang berbeda
+    $transaksi_label = 'BUKTI TRANSAKSI';
+    if (isset($data['jenis_transaksi'])) {
+        if ($data['jenis_transaksi'] == 'setor') {
+            $transaksi_label = 'BUKTI SETORAN';
+        } else if ($data['jenis_transaksi'] == 'tarik') {
+            $transaksi_label = 'BUKTI PENARIKAN';
+        } else if ($data['jenis_transaksi'] == 'transfer') {
+            $transaksi_label = 'BUKTI TRANSFER';
+        }
+    }
+    
+    $pdf->Cell(0, 5, $transaksi_label, 0, 1, 'C');
+    $pdf->Ln(2);
+    
+    $pdf->SetFont('courier', '', 8);
+    
+    // Lebar kolom
+    $w1 = 25; // Lebar label
+    $w2 = 45; // Lebar nilai
+    
+    // No Transaksi
+    $pdf->Cell($w1, 5, 'No. Transaksi:', 0, 0);
+    $pdf->Cell($w2, 5, $data['no_transaksi'], 0, 1);
+    
+    // Tanggal
+    $pdf->Cell($w1, 5, 'Tanggal:', 0, 0);
+    $pdf->Cell($w2, 5, date('d-m-Y H:i:s', strtotime($data['created_at'])), 0, 1);
+    
+    // Rekening
+    $pdf->Cell($w1, 5, 'Rekening:', 0, 0);
+    $pdf->Cell($w2, 5, $data['no_rekening'], 0, 1);
+    
+    // Nama
+    $pdf->Cell($w1, 5, 'Nama:', 0, 0);
+    $pdf->Cell($w2, 5, $data['nama'], 0, 1);
+    
+    // Jenis Transaksi
+    $pdf->Cell($w1, 5, 'Jenis:', 0, 0);
+    $pdf->Cell($w2, 5, ucfirst($data['jenis_transaksi']), 0, 1);
+    
+    // Jumlah dengan gaya thermal printer
+    $pdf->Ln(1);
+    $pdf->SetLineStyle(array('dash' => '0.5,0.5', 'color' => array(150, 150, 150)));
+    $pdf->Line(5, $pdf->GetY(), 75, $pdf->GetY());
+    $pdf->Ln(2);
+    
+    $pdf->SetFont('courier', 'B', 9);
+    $pdf->Cell($w1, 5, 'Jumlah:', 0, 0);
+    $pdf->Cell($w2, 5, 'Rp ' . number_format($data['jumlah'], 0, ',', '.'), 0, 1);
+    
+    $pdf->Ln(1);
+    $pdf->SetLineStyle(array('dash' => '0.5,0.5', 'color' => array(150, 150, 150)));
+    $pdf->Line(5, $pdf->GetY(), 75, $pdf->GetY());
+    $pdf->Ln(2);
+    
+    // Tambahkan tanda * pada nomor transaksi untuk gaya struk thermal
+    $pdf->SetFont('courier', '', 8);
+    $pdf->Cell(0, 5, '* ' . $data['no_transaksi'] . ' *', 0, 1, 'C');
+    
+    // Tambahkan catatan kaki
+    $pdf->SetFont('courier', 'I', 7);
+    $pdf->Cell(0, 4, 'Struk ini merupakan bukti transaksi yang sah', 0, 1, 'C');
+    $pdf->Cell(0, 4, 'Simpan sebagai bukti pembayaran Anda', 0, 1, 'C');
+    $pdf->Cell(0, 4, 'Terima kasih telah menggunakan SCHOBANK', 0, 1, 'C');
+    
+    // Tambahkan garis perforasi kecil di bagian bawah
+    $pdf->SetLineStyle(array('dash' => '0.5,0.5', 'color' => array(0, 0, 0)));
+    $pdf->Line(5, $pdf->GetY() + 2, 75, $pdf->GetY() + 2);
+    $pdf->Ln(3);
+    
+    // Tambahkan QR code dengan nomor transaksi di bagian bawah, UKURAN LEBIH KECIL
+    $style = array(
+        'border' => false,
+        'padding' => 0,
+        'fgcolor' => array(0, 0, 0),
+        'bgcolor' => false
+    );
+    
+    // Posisikan QR code di bagian bawah dengan ukuran lebih kecil (15x15 mm)
+    $pdf->Ln(2);
+    $qr_size = 15; // Ukuran QR code dikecilkan dari 25mm menjadi 15mm
+    $qr_x = ($pdf->getPageWidth() - $qr_size) / 2;
+    $pdf->write2DBarcode($data['no_transaksi'], 'QRCODE,L', $qr_x, $pdf->GetY(), $qr_size, $qr_size, $style);
+    $pdf->Ln($qr_size + 5);
+    
+    // Tambahkan dotted line di bawah QR code
+    $pdf->SetLineStyle(array('dash' => '1,1', 'color' => array(0, 0, 0)));
+    $pdf->Line(5, $pdf->GetY(), 75, $pdf->GetY());
+    
+    // Tambahkan teks "Potong di Sini" dengan gaya dashed line
+    $pdf->SetY($pdf->GetY() + 2);
+    $pdf->SetFont('courier', '', 6);
+    $pdf->Cell(0, 4, '- - - - - - - - POTONG DI SINI - - - - - - - -', 0, 1, 'C');
+    
+    // Dapatkan direktori root dokumen
+    $doc_root = $_SERVER['DOCUMENT_ROOT'];
+    $app_path = '/bankmini'; // Ubah ini sesuai dengan path aplikasi Anda jika berbeda
+    
+    // Tentukan direktori upload relatif terhadap root dokumen
+    $upload_dir = $doc_root . $app_path . '/uploads/struk/';
+    
+    // Buat direktori jika tidak ada
+    if (!file_exists($upload_dir)) {
+        mkdir($upload_dir, 0777, true);
+    }
+    
+    // Buat nama file
+    $filename = 'struk_' . $data['no_transaksi'] . '.pdf';
+    $filepath = $upload_dir . $filename;
+    
+    // Simpan PDF ke file
+    $pdf->Output($filepath, 'F');
+    
+    // Kembalikan informasi file dengan URL yang dapat diakses web
     return [
-        'file_path' => $pdfFilePath,
-        'file_url' => $pdfUrl
+        'file_url' => $app_path . '/uploads/struk/' . $filename,
+        'filename' => $filename
     ];
 }
 
@@ -1939,6 +1979,10 @@ body {
 
     <div class="main-content">
         <div class="welcome-banner">
+            <!-- Tombol Kembali dengan Ikon X -->
+            <a href="../petugas/dashboard.php" class="cancel-btn">
+                <i class="fas fa-times"></i>
+            </a>
             <h2><i class="fas fa-print"></i> Cetak Bukti Transaksi</h2>
             <p>Cetak bukti transaksi berdasarkan nomor transaksi</p>
         </div>
@@ -1979,42 +2023,43 @@ body {
             </form>
         </div>
     </div>
+
     <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Auto-dismiss alerts setelah waktu tertentu
-    const errorAlert = document.getElementById('error-alert');
-    const successAlert = document.getElementById('success-alert');
-    const notifBadge = document.querySelector('.notif-badge');
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-dismiss alerts setelah waktu tertentu
+            const errorAlert = document.getElementById('error-alert');
+            const successAlert = document.getElementById('success-alert');
+            const notifBadge = document.querySelector('.notif-badge');
 
-    if (errorAlert) {
-        setTimeout(function() {
-            errorAlert.style.opacity = '0';
-            errorAlert.style.transform = 'translateY(-20px)';
-            setTimeout(() => {
-                errorAlert.style.display = 'none';
-            }, 500);
-        }, 5000);
-    }
+            if (errorAlert) {
+                setTimeout(function() {
+                    errorAlert.style.opacity = '0';
+                    errorAlert.style.transform = 'translateY(-20px)';
+                    setTimeout(() => {
+                        errorAlert.style.display = 'none';
+                    }, 500);
+                }, 5000);
+            }
 
-    if (successAlert) {
-        setTimeout(function() {
-            successAlert.style.opacity = '0';
-            successAlert.style.transform = 'translateY(-20px)';
-            setTimeout(() => {
-                successAlert.style.display = 'none';
-            }, 500);
-        }, 5000);
-    }
+            if (successAlert) {
+                setTimeout(function() {
+                    successAlert.style.opacity = '0';
+                    successAlert.style.transform = 'translateY(-20px)';
+                    setTimeout(() => {
+                        successAlert.style.display = 'none';
+                    }, 500);
+                }, 5000);
+            }
 
-    if (notifBadge) {
-        setTimeout(function() {
-            notifBadge.style.opacity = '0';
-            setTimeout(() => {
-                notifBadge.style.display = 'none';
-            }, 500);
-        }, 5000);
-    }
-});
-</script>
+            if (notifBadge) {
+                setTimeout(function() {
+                    notifBadge.style.opacity = '0';
+                    setTimeout(() => {
+                        notifBadge.style.display = 'none';
+                    }, 500);
+                }, 5000);
+            }
+        });
+    </script>
 </body>
 </html>

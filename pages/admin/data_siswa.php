@@ -1,153 +1,177 @@
 <?php
+// Output buffering to prevent early output
+ob_start();
+
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
+require_once '../../tcpdf/tcpdf.php';
 
-// Ambil parameter dari URL
-$jurusan_id = $_GET['jurusan'] ?? '';
-$kelas_id = $_GET['kelas'] ?? '';
-$format = $_GET['format'] ?? '';
-$edit_id = $_GET['edit'] ?? '';
+if (!isLoggedIn() || $_SESSION['role'] !== 'admin') {
+    header('Location: ../../index.php');
+    exit();
+}
 
-// Pagination
-$limit = 10; // Jumlah data per halaman
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$jurusan_id = isset($_GET['jurusan_id']) ? intval($_GET['jurusan_id']) : 0;
+$kelas_id = isset($_GET['kelas_id']) ? intval($_GET['kelas_id']) : 0;
+$page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+$limit = 10;
 $offset = ($page - 1) * $limit;
 
-$query_total = "SELECT COUNT(*) as total 
-                FROM users u
-                LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                LEFT JOIN kelas k ON u.kelas_id = k.id
-                LEFT JOIN rekening r ON u.id = r.user_id
-                WHERE u.role = 'siswa'";
+$jurusan_options = $conn->query("SELECT * FROM jurusan")->fetch_all(MYSQLI_ASSOC);
 
-if (!empty($jurusan_id)) {
-    $query_total .= " AND u.jurusan_id = $jurusan_id";
+// Modified query to include saldo from rekening table
+$query = "SELECT u.id, u.nama, r.no_rekening, j.nama_jurusan, k.nama_kelas, r.saldo 
+          FROM users u
+          LEFT JOIN rekening r ON u.id = r.user_id
+          LEFT JOIN jurusan j ON u.jurusan_id = j.id
+          LEFT JOIN kelas k ON u.kelas_id = k.id
+          WHERE u.role = 'siswa'";
+
+if ($jurusan_id > 0) {
+    $query .= " AND u.jurusan_id = $jurusan_id";
+}
+if ($kelas_id > 0) {
+    $query .= " AND u.kelas_id = $kelas_id";
 }
 
-if (!empty($kelas_id)) {
-    $query_total .= " AND u.kelas_id = $kelas_id";
+// Add pagination for normal view
+$query_with_limit = $query . " LIMIT $limit OFFSET $offset";
+$siswa = $conn->query($query_with_limit)->fetch_all(MYSQLI_ASSOC);
+
+$count_query = "SELECT COUNT(*) as total FROM users u WHERE u.role = 'siswa'";
+if ($jurusan_id > 0) {
+    $count_query .= " AND u.jurusan_id = $jurusan_id";
+}
+if ($kelas_id > 0) {
+    $count_query .= " AND u.kelas_id = $kelas_id";
 }
 
-$result_total = $conn->query($query_total);
-$row_total = $result_total->fetch_assoc();
-$total_records = $row_total['total'];
+$total_records = $conn->query($count_query)->fetch_assoc()['total'];
 $total_pages = ceil($total_records / $limit);
 
-// Query data jurusan untuk filter
-$query_jurusan = "SELECT id, nama_jurusan FROM jurusan";
-$result_jurusan = $conn->query($query_jurusan);
+// Ambil nama jurusan dan kelas yang difilter
+$filter_jurusan = $conn->query("SELECT nama_jurusan FROM jurusan WHERE id = $jurusan_id")->fetch_assoc()['nama_jurusan'] ?? 'Semua Jurusan';
+$filter_kelas = $conn->query("SELECT nama_kelas FROM kelas WHERE id = $kelas_id")->fetch_assoc()['nama_kelas'] ?? 'Semua Kelas';
 
-// Query data siswa dengan filter dan nomor rekening
-$query_siswa = "SELECT u.id, u.nama, j.nama_jurusan AS jurusan, k.nama_kelas AS kelas, r.no_rekening 
-                FROM users u
-                LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                LEFT JOIN kelas k ON u.kelas_id = k.id
-                LEFT JOIN rekening r ON u.id = r.user_id
-                WHERE u.role = 'siswa'";
-
-if (!empty($jurusan_id)) {
-    $query_siswa .= " AND u.jurusan_id = $jurusan_id";
-}
-
-if (!empty($kelas_id)) {
-    $query_siswa .= " AND u.kelas_id = $kelas_id";
-}
-
-$query_siswa .= " LIMIT $limit OFFSET $offset";
-$result_siswa = $conn->query($query_siswa);
-
-$result_siswa = $conn->query($query_siswa);
-
-// Jika format PDF atau Excel dipilih
-if ($format === 'pdf' || $format === 'excel') {
-    // Data untuk PDF/Excel
-    $data_siswa = [];
-    while ($row = $result_siswa->fetch_assoc()) {
-        $data_siswa[] = $row;
-    }
-
-    if ($format === 'pdf') {
-        require_once '../../tcpdf/tcpdf.php';
-
+if (isset($_GET['export'])) {
+    // Clear any buffered output before setting headers
+    ob_end_clean();
+    
+    if ($_GET['export'] == 'pdf') {
         class MYPDF extends TCPDF {
-            public function Header() {
-                // Logo
-                $image_file = '../../assets/images/logo.png';
-                if (file_exists($image_file)) {
-                    $this->Image($image_file, 15, 5, 20, '', 'PNG');
+            // Fungsi untuk memotong teks agar sesuai dengan lebar kolom
+            public function trimText($text, $maxLength) {
+                if (strlen($text) > $maxLength) {
+                    return substr($text, 0, $maxLength - 3) . '...';
                 }
-                
+                return $text;
+            }
+            
+            // Format number to currency
+            public function formatCurrency($amount) {
+                return 'Rp ' . number_format($amount, 2, ',', '.');
+            }
+
+            public function Header() {
                 $this->SetFont('helvetica', 'B', 16);
                 $this->Cell(0, 10, 'SCHOBANK', 0, false, 'C', 0);
                 $this->Ln(6);
                 $this->SetFont('helvetica', '', 10);
-                $this->Cell(0, 10, 'Sistem Mini Bank Sekolah', 0, false, 'C', 0);
-                $this->Line(15, 25, 195, 25);
+                $this->Cell(0, 10, 'Sistem Bank Mini SMK Plus Ashabulyamin', 0, false, 'C', 0);
+                $this->Ln(6);
+                $this->SetFont('helvetica', '', 8);
+                $this->Cell(0, 10, 'Jl. K.H. Saleh No.57A, Sayang, Kec. Cianjur, Kabupaten Cianjur, Jawa Barat', 0, false, 'C', 0);
+                $this->Line(15, 35, 195, 35);
             }
 
             public function Footer() {
                 $this->SetY(-15);
                 $this->SetFont('helvetica', 'I', 8);
                 $this->Cell(100, 10, 'Dicetak pada: ' . date('d/m/Y H:i'), 0, 0, 'L');
-                $this->Cell(90, 10, 'Halaman '.$this->getAliasNumPage().'/'.$this->getAliasNbPages(), 0, 0, 'R');
+                $this->Cell(90, 10, 'Halaman ' . $this->getAliasNumPage() . '/' . $this->getAliasNbPages(), 0, 0, 'R');
             }
         }
 
         $pdf = new MYPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
         $pdf->SetCreator(PDF_CREATOR);
         $pdf->SetAuthor('SCHOBANK');
-        $pdf->SetTitle('Data Nasabah');
-        
-        $pdf->SetMargins(15, 30, 15);
+        $pdf->SetTitle('Data Siswa');
+
+        $pdf->SetMargins(15, 40, 15);
         $pdf->SetHeaderMargin(PDF_MARGIN_HEADER);
         $pdf->SetFooterMargin(PDF_MARGIN_FOOTER);
         $pdf->SetAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
         $pdf->AddPage();
 
-        // Judul
         $pdf->Ln(5);
         $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 7, 'DATA NASABAH', 0, 1, 'C');
+        $pdf->Cell(0, 7, 'DATA SISWA', 0, 1, 'C');
+        $pdf->SetFont('helvetica', '', 10);
+        $pdf->Cell(0, 7, 'Tanggal: ' . date('d/m/Y'), 0, 1, 'C');
 
-        $totalWidth = 180;
-        
-        // Tabel
+        // Tampilkan filter jurusan dan kelas dalam kotak
         $pdf->Ln(3);
         $pdf->SetFont('helvetica', 'B', 10);
         $pdf->SetFillColor(220, 220, 220);
-        $pdf->Cell($totalWidth, 7, 'DETAIL NASABAH', 1, 1, 'C', true);
-        
-        $col_width = array(15, 50, 35, 30, 50);
-        
+        $pdf->Cell(180, 7, 'KETERANGAN', 1, 1, 'C', true);
+
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->Cell(90, 6, 'Jurusan: ' . $filter_jurusan, 1, 0, 'L');
+        $pdf->Cell(90, 6, 'Kelas: ' . $filter_kelas, 1, 1, 'L');
+
+        $pdf->Ln(5);
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetFillColor(220, 220, 220);
+        $pdf->Cell(180, 7, 'DAFTAR SISWA', 1, 1, 'C', true);
+
         $pdf->SetFont('helvetica', 'B', 8);
-        $header_heights = 6;
-        $pdf->Cell($col_width[0], $header_heights, 'No', 1, 0, 'C', true);
-        $pdf->Cell($col_width[1], $header_heights, 'Nama', 1, 0, 'C', true);
-        $pdf->Cell($col_width[2], $header_heights, 'Jurusan', 1, 0, 'C', true);
-        $pdf->Cell($col_width[3], $header_heights, 'Kelas', 1, 0, 'C', true);
-        $pdf->Cell($col_width[4], $header_heights, 'No Rekening', 1, 1, 'C', true);
+        $pdf->Cell(10, 6, 'No', 1, 0, 'C');
+        $pdf->Cell(50, 6, 'Nama', 1, 0, 'C');
+        $pdf->Cell(30, 6, 'No Rekening', 1, 0, 'C');
+        $pdf->Cell(35, 6, 'Jurusan', 1, 0, 'C');
+        $pdf->Cell(25, 6, 'Kelas', 1, 0, 'C');
+        $pdf->Cell(30, 6, 'Saldo', 1, 1, 'C');  // Added Saldo column
+
+        // Get all students data without pagination limit for PDF
+        $export_query = $query;  // Use the filter query without LIMIT
+        $all_siswa = $conn->query($export_query)->fetch_all(MYSQLI_ASSOC);
 
         $pdf->SetFont('helvetica', '', 8);
-        $row_height = 5;
         $no = 1;
-        foreach ($data_siswa as $row) {
-            $pdf->Cell($col_width[0], $row_height, $no++, 1, 0, 'C');
+        foreach ($all_siswa as $row) {
+            // Check if we need a new page (every 30 rows)
+            if (($no - 1) % 30 == 0 && $no > 1) {
+                $pdf->AddPage();
+                
+                $pdf->SetFont('helvetica', 'B', 8);
+                $pdf->Cell(10, 6, 'No', 1, 0, 'C');
+                $pdf->Cell(50, 6, 'Nama', 1, 0, 'C');
+                $pdf->Cell(30, 6, 'No Rekening', 1, 0, 'C');
+                $pdf->Cell(35, 6, 'Jurusan', 1, 0, 'C');
+                $pdf->Cell(25, 6, 'Kelas', 1, 0, 'C');
+                $pdf->Cell(30, 6, 'Saldo', 1, 1, 'C');
+                
+                $pdf->SetFont('helvetica', '', 8);
+            }
             
-            $nama = mb_strlen($row['nama']) > 25 ? mb_substr($row['nama'], 0, 23) . '...' : $row['nama'];
-            $pdf->Cell($col_width[1], $row_height, $nama, 1, 0, 'L');
-            $pdf->Cell($col_width[2], $row_height, $row['jurusan'], 1, 0, 'L');
-            $pdf->Cell($col_width[3], $row_height, $row['kelas'], 1, 0, 'C');
-            $pdf->Cell($col_width[4], $row_height, $row['no_rekening'], 1, 1, 'C');
+            $pdf->Cell(10, 6, $no++, 1, 0, 'C');
+            $pdf->Cell(50, 6, $pdf->trimText($row['nama'], 25), 1, 0, 'L');
+            $pdf->Cell(30, 6, $pdf->trimText($row['no_rekening'] ?? '-', 15), 1, 0, 'L');
+            $pdf->Cell(35, 6, $pdf->trimText($row['nama_jurusan'], 20), 1, 0, 'L');
+            $pdf->Cell(25, 6, $pdf->trimText($row['nama_kelas'], 15), 1, 0, 'L');
+            $pdf->Cell(30, 6, $pdf->formatCurrency($row['saldo'] ?? 0), 1, 1, 'R');  // Added Saldo value
         }
 
-        // Output PDF
-        $pdf->Output('data_nasabah.pdf', 'D');
-    }
-
-    elseif ($format === 'excel') {
+        $pdf->Output('data_siswa.pdf', 'D');
+        exit();
+    } elseif ($_GET['export'] == 'excel') {
         header('Content-Type: application/vnd.ms-excel');
-        header('Content-Disposition: attachment; filename="data_nasabah.xls"');
-        
+        header('Content-Disposition: attachment; filename="data_siswa.xls"');
+
+        // Get all data without pagination for Excel export
+        $export_query = $query;  // Use the filter query without LIMIT
+        $all_siswa = $conn->query($export_query)->fetch_all(MYSQLI_ASSOC);
+
         echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
         echo '<head>';
         echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
@@ -160,120 +184,82 @@ if ($format === 'pdf' || $format === 'excel') {
                 .title { font-size: 14pt; font-weight: bold; text-align: center; }
                 .subtitle { font-size: 10pt; text-align: center; }
                 .section-header { background-color: #f0f0f0; font-weight: bold; text-align: center; }
-                
-                /* Make sure all tables have the same width */
-                table.main-table { 
-                    width: 100%; 
-                    table-layout: fixed; 
-                    border-collapse: collapse; 
-                    margin-top: 5px;
-                }
-                
-                /* Column widths for detail table */
-                th.no { width: 5%; }
-                th.nama { width: 30%; }
-                th.jurusan { width: 20%; }
-                th.kelas { width: 15%; }
-                th.no-rekening { width: 30%; }
               </style>';
         echo '</head>';
         echo '<body>';
-        
-        // Judul
-        echo '<table class="main-table" border="0" cellpadding="3">';
-        echo '<tr><td colspan="5" class="title">DATA NASABAH</td></tr>';
+
+        echo '<table border="0" cellpadding="3">';
+        echo '<tr><td colspan="6" class="title">DATA SISWA</td></tr>';
+        echo '<tr><td colspan="6" class="subtitle">Tanggal: ' . date('d/m/Y') . '</td></tr>';
         echo '</table>';
-        
-        // Tabel
-        echo '<table class="main-table" border="1" cellpadding="3">';
-        echo '<tr><th colspan="5" class="section-header">DETAIL NASABAH</th></tr>';
-        
-        echo '<tr class="section-header">';
-        echo '<th class="no">No</th>';
-        echo '<th class="nama">Nama</th>';
-        echo '<th class="jurusan">Jurusan</th>';
-        echo '<th class="kelas">Kelas</th>';
-        echo '<th class="no-rekening">No Rekening</th>';
+
+        // Tampilkan filter jurusan dan kelas dalam tabel
+        echo '<table border="1" cellpadding="3">';
+        echo '<tr><th colspan="2" class="section-header">FILTER YANG DIPILIH</th></tr>';
+        echo '<tr>';
+        echo '<td class="text-left">Jurusan</td>';
+        echo '<td class="text-left">' . $filter_jurusan . '</td>';
         echo '</tr>';
-        
+        echo '<tr>';
+        echo '<td class="text-left">Kelas</td>';
+        echo '<td class="text-left">' . $filter_kelas . '</td>';
+        echo '</tr>';
+        echo '</table>';
+
+        echo '<table border="1" cellpadding="3">';
+        echo '<tr><th colspan="6" class="section-header">DAFTAR SISWA</th></tr>';
+        echo '<tr>';
+        echo '<th>No</th>';
+        echo '<th>Nama</th>';
+        echo '<th>No Rekening</th>';
+        echo '<th>Jurusan</th>';
+        echo '<th>Kelas</th>';
+        echo '<th>Saldo</th>';  // Added Saldo column
+        echo '</tr>';
+
         $no = 1;
-        foreach ($data_siswa as $row) {
+        foreach ($all_siswa as $row) {
             echo '<tr>';
             echo '<td class="text-center">' . $no++ . '</td>';
             echo '<td class="text-left">' . $row['nama'] . '</td>';
-            echo '<td class="text-left">' . $row['jurusan'] . '</td>';
-            echo '<td class="text-center">' . $row['kelas'] . '</td>';
-            echo '<td class="text-center">' . $row['no_rekening'] . '</td>';
+            echo '<td class="text-left">' . ($row['no_rekening'] ?? '-') . '</td>';
+            echo '<td class="text-left">' . $row['nama_jurusan'] . '</td>';
+            echo '<td class="text-left">' . $row['nama_kelas'] . '</td>';
+            echo '<td class="text-right">Rp ' . number_format($row['saldo'] ?? 0, 2, ',', '.') . '</td>';  // Added Saldo value
             echo '</tr>';
         }
         echo '</table>';
-        
+
         echo '</body></html>';
+        exit();
     }
-    exit();
 }
 
-// Proses edit data siswa
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_siswa'])) {
-    $id = $_POST['id'];
-    $nama = $_POST['nama'];
-    $jurusan_id = $_POST['jurusan'];
-    $kelas_id = $_POST['kelas'];
-    $no_rekening = $_POST['no_rekening'];
-
-    // Update data siswa
-    $query_update_siswa = "UPDATE users SET nama = '$nama', jurusan_id = $jurusan_id, kelas_id = $kelas_id WHERE id = $id";
-    $conn->query($query_update_siswa);
-
-    // Check if rekening record exists
-    $query_check_rekening = "SELECT user_id FROM rekening WHERE user_id = $id";
-    $result_check_rekening = $conn->query($query_check_rekening);
-
-    if ($result_check_rekening->num_rows > 0) {
-        // Update existing rekening record
-        $query_update_rekening = "UPDATE rekening SET no_rekening = '$no_rekening' WHERE user_id = $id";
-        $conn->query($query_update_rekening);
-    } else {
-        // Insert new rekening record
-        $query_insert_rekening = "INSERT INTO rekening (user_id, no_rekening) VALUES ($id, '$no_rekening')";
-        $conn->query($query_insert_rekening);
-    }
-
-    // Redirect kembali ke halaman data siswa
-    header('Location: data_siswa.php');
-    exit();
-}
-
-// Ambil data siswa yang akan diedit
-if (!empty($edit_id)) {
-    $query_edit_siswa = "SELECT u.id, u.nama, u.jurusan_id, u.kelas_id, r.no_rekening 
-                         FROM users u
-                         LEFT JOIN rekening r ON u.id = r.user_id
-                         WHERE u.id = $edit_id";
-    $result_edit_siswa = $conn->query($query_edit_siswa);
-    $row_edit_siswa = $result_edit_siswa->fetch_assoc();
-}
+// HTML content starts here
 ?>
+
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
-    <title>Data Nasabah - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Siswa</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #4361ee;
-            --secondary-color: #3f37c9;
-            --success-color: #4cc9f0;
-            --danger-color: #f72585;
-            --warning-color: #f8961e;
-            --info-color: #4895ef;
-            --light-color: #f8f9fa;
-            --dark-color: #212529;
-            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --border-radius: 8px;
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --primary-light: #e0e9f5;
+            --secondary-color: #4caf50;
+            --accent-color: #ff9800;
+            --danger-color: #f44336;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f8faff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
 
@@ -281,70 +267,123 @@ if (!empty($edit_id)) {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
         }
 
         body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #f5f7fd;
-            color: #333;
-            line-height: 1.6;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
-        .container {
+        .main-content {
+            flex: 1;
+            padding: 20px;
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
         }
 
-        /* Header styles */
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            padding: 20px;
-            border-radius: var(--border-radius);
+        .welcome-banner {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
-            box-shadow: var(--shadow);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
         }
 
-        .header h1 {
+        .welcome-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+            animation: shimmer 8s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .welcome-banner h2 {
+            margin-bottom: 10px;
             font-size: 24px;
-            font-weight: 600;
-            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
         }
 
         .back-btn {
-            display: inline-flex;
-            align-items: center;
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: transparent;
+            border: none;
             color: white;
+            font-size: 24px;
+            cursor: pointer;
             text-decoration: none;
-            font-weight: 500;
-            font-size: 14px;
-            transition: var(--transition);
-            background-color: rgba(255, 255, 255, 0.2);
-            padding: 8px 15px;
-            border-radius: 6px;
-        }
-
-        .back-btn:hover {
-            background-color: rgba(255, 255, 255, 0.3);
+            display: inline-block; /* Hanya seukuran ikon */
+            padding: 0; /* Hilangkan padding */
+            margin: 0; /* Hilangkan margin */
+            line-height: 1; /* Pastikan tidak ada ruang tambahan */
         }
 
         .back-btn i {
-            margin-right: 8px;
+            display: block; /* Ikon sebagai block element */
         }
 
-        /* Actions bar */
-        .actions {
+        .form-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
+            width: 100%;
+            transition: var(--transition);
+        }
+
+        .form-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-5px);
+        }
+
+        .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 20px;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .card-header h3 {
+            color: var(--primary-dark);
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .export-buttons {
@@ -352,778 +391,599 @@ if (!empty($edit_id)) {
             gap: 10px;
         }
 
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            padding: 10px 16px;
-            border-radius: var(--border-radius);
-            font-weight: 500;
-            text-decoration: none;
-            color: white;
-            transition: var(--transition);
-            border: none;
-            cursor: pointer;
+        .filter-info {
+            background-color: var(--primary-light);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .filter-info-item {
+            background-color: white;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: var(--shadow-sm);
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .filter-info-item h4 {
             font-size: 14px;
-            box-shadow: var(--shadow);
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .filter-info-item p {
+            font-size: 16px;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        label i {
+            margin-right: 5px;
+            color: var(--primary-color);
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: var(--transition);
+            letter-spacing: 0.5px;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+        }
+
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: var(--transition);
+            text-decoration: none;
+            display: inline-flex;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
         }
 
         .btn i {
-            margin-right: 8px;
+            font-size: 13px;
         }
 
-        .btn-pdf {
+        form > .btn {
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            gap: 8px;
+        }
+
+        form > .btn i {
+            font-size: 14px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .btn-secondary {
+            background-color: #7b7b7b;
+        }
+
+        .btn-secondary:hover {
+            background-color: #5a5a5a;
+        }
+
+        .btn-danger {
             background-color: var(--danger-color);
         }
 
-        .btn-excel {
-            background-color: #2e7d32;
+        .btn-danger:hover {
+            background-color: #d32f2f;
         }
 
-        .btn-pdf:hover {
-            background-color: #e5105e;
+        .data-table td .btn {
+            margin-right: 2px;
         }
 
-        .btn-excel:hover {
-            background-color: #1b5e20;
+        .data-table td .btn:last-child {
+            margin-right: 0;
         }
 
-        .btn-edit {
-            background-color: var(--info-color);
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-
-        .btn-edit:hover {
-            background-color: #3a7fc9;
-        }
-
-        /* Filters */
-        .filters {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            background-color: white;
+        .alert {
             padding: 15px;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
+            border-radius: 10px;
             margin-bottom: 20px;
-        }
-
-        .filters select {
-            flex: 1;
-            min-width: 150px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: var(--border-radius);
-            font-family: 'Poppins', sans-serif;
-            font-size: 14px;
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: calc(100% - 10px) center;
-            background-size: 12px;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        .filters select:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
-        }
-
-        .filters button {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            font-family: 'Poppins', sans-serif;
-            font-weight: 500;
-            transition: var(--transition);
-        }
-
-        .filters button:hover {
-            background-color: var(--secondary-color);
-        }
-
-        /* Table styles */
-        .table-container {
-            overflow-x: auto;
-            background-color: white;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            margin-bottom: 20px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            min-width: 600px;
-        }
-
-        thead {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-        }
-
-        th {
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            font-size: 14px;
-        }
-
-        tbody tr {
-            border-bottom: 1px solid #eee;
-            transition: var(--transition);
-        }
-
-        tbody tr:last-child {
-            border-bottom: none;
-        }
-
-        tbody tr:hover {
-            background-color: #f5f7fd;
-        }
-
-        /* Pagination */
-        .pagination {
             display: flex;
-            justify-content: center;
-            gap: 5px;
-            margin-top: 20px;
-        }
-
-        .page-link {
-            padding: 8px 12px;
-            border-radius: var(--border-radius);
-            text-decoration: none;
-            color: var(--primary-color);
-            background-color: white;
-            transition: var(--transition);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .page-link:hover {
-            background-color: #f0f4ff;
-        }
-
-        .page-link.active {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        /* Modal styles */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            overflow-y: auto;
-            justify-content: center;
             align-items: center;
-            padding: 20px;
-        }
-
-        .modal {
-            background-color: white;
-            border-radius: var(--border-radius);
-            width: 100%;
-            max-width: 500px;
+            gap: 15px;
+            animation: slideIn 0.5s ease-out;
             position: relative;
-            animation: modalOpen 0.3s ease;
         }
 
-        @keyframes modalOpen {
+        @keyframes slideIn {
             from {
-                opacity: 0;
                 transform: translateY(-20px);
+                opacity: 0;
             }
             to {
-                opacity: 1;
                 transform: translateY(0);
+                opacity: 1;
             }
         }
 
-        .modal-close {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            font-size: 24px;
-            cursor: pointer;
-            color: #777;
-            transition: var(--transition);
-        }
-
-        .modal-close:hover {
-            color: var(--danger-color);
-        }
-
-        .edit-form {
-            padding: 20px;
-        }
-
-        .edit-form h2 {
-            margin-bottom: 20px;
-            color: var(--primary-color);
+        .alert-icon {
             font-size: 20px;
-            font-weight: 600;
         }
 
-        .edit-form label {
-            display: block;
-            margin-bottom: 6px;
-            font-weight: 500;
-            font-size: 14px;
+        .alert-message {
+            flex: 1;
         }
 
-        .edit-form input, .edit-form select {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 15px;
-            border: 1px solid #ddd;
-            border-radius: var(--border-radius);
-            font-family: 'Poppins', sans-serif;
-            font-size: 14px;
-        }
-
-        .edit-form input[readonly] {
-            background-color: #f5f5f5;
-            cursor: not-allowed;
-        }
-
-        .edit-form input:focus, .edit-form select:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
-        }
-
-        .edit-form button {
-            width: 100%;
-            padding: 12px;
-            background-color: var(--primary-color);
-            color: white;
+        .alert-close {
+            background: none;
             border: none;
-            border-radius: var(--border-radius);
-            font-family: 'Poppins', sans-serif;
-            font-weight: 500;
+            font-size: 16px;
             cursor: pointer;
+            opacity: 0.7;
             transition: var(--transition);
         }
 
-        .edit-form button:hover {
-            background-color: var(--secondary-color);
-        }
-
-        /* Loading indicator */
-        .loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(255, 255, 255, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            display: none;
-        }
-
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 4px solid rgba(67, 97, 238, 0.2);
-            border-radius: 50%;
-            border-top-color: var(--primary-color);
-            animation: spin 1s infinite linear;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* Empty state */
-        .empty-state {
-            padding: 30px;
-            text-align: center;
-            color: #777;
-        }
-
-        .empty-state i {
-            font-size: 48px;
-            margin-bottom: 15px;
-            color: #ddd;
-        }
-
-        /* Responsive styles */
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                text-align: center;
-                gap: 15px;
-            }
-
-            .btn {
-                font-size: 13px;
-                padding: 8px 12px;
-            }
-
-            .actions {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .export-buttons {
-                justify-content: space-between;
-            }
-
-            th, td {
-                padding: 10px;
-                font-size: 13px;
-            }
-        }
-
-        /* Toast notifications */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background-color: white;
-            color: #333;
-            padding: 15px 20px;
-            border-radius: var(--border-radius);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            display: flex;
-            align-items: center;
-            transform: translateY(100px);
-            opacity: 0;
-            transition: all 0.3s ease;
-            z-index: 9999;
-        }
-
-        .toast.show {
-            transform: translateY(0);
+        .alert-close:hover {
             opacity: 1;
         }
 
-        .toast.success {
-            border-left: 4px solid var(--success-color);
+        .alert-success {
+            background-color: #dcfce7;
+            color: #166534;
+            border-left: 5px solid #bbf7d0;
         }
 
-        .toast.error {
-            border-left: 4px solid var(--danger-color);
+        .alert-error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border-left: 5px solid #fecaca;
         }
 
-        .toast i {
-            margin-right: 10px;
-            font-size: 20px;
+        .filter-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: var(--primary-light);
+            border-radius: 10px;
         }
 
-        .toast.success i {
-            color: var(--success-color);
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
         }
 
-        .toast.error i {
-            color: var(--danger-color);
+        .filter-group label {
+            margin-bottom: 0;
+            white-space: nowrap;
         }
-    </style>
+
+        .filter-btn, .reset-btn {
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .filter-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+        }
+
+        .filter-btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .reset-btn {
+            background-color: #f1f1f1;
+            color: var(--text-secondary);
+            border: 1px solid #ddd;
+        }
+
+        .reset-btn:hover {
+            background-color: #e0e0e0;
+            transform: translateY(-2px);
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .data-table th {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 500;
+        }
+
+        .data-table td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .data-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: var(--primary-light);
+        }
+
+        .data-table tr:hover {
+            background-color: rgba(12, 77, 162, 0.05);
+        }
+
+        .data-table th:last-child,
+        .data-table td:last-child {
+            width: 150px;
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        .empty-message {
+            padding: 30px;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 16px;
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .empty-message i {
+            font-size: 30px;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .pagination {
+            margin-top: 25px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .pagination ul {
+            display: flex;
+            list-style: none;
+            gap: 5px;
+        }
+
+        .pagination li {
+            margin: 0 2px;
+        }
+
+        .pagination li a {
+            display: block;
+            padding: 8px 15px;
+            border-radius: 8px;
+            background-color: white;
+            color: var(--text-primary);
+            text-decoration: none;
+            border: 1px solid #eee;
+            transition: var(--transition);
+        }
+
+        .pagination li a:hover {
+            background-color: var(--primary-light);
+        }
+
+        .pagination li.active a {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        /* Dropdown styling */
+        .form-select {
+            width: 100%;
+            padding: 14px 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: var(--transition);
+            letter-spacing: 0.5px;
+            appearance: none;
+            background-color: white;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%230c4da2%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 15px center;
+            background-size: 12px;
+        }
+
+        .form-select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+        }
+
+        /* Dropdown animation */
+        .form-select {
+            transition: all 0.3s ease;
+        }
+
+        .form-select:hover {
+            border-color: var(--primary-color);
+        }
+
+        /* Dropdown scrollable */
+        .form-select option {
+            padding: 10px;
+        }
+
+        /* Dropdown max height */
+        .form-select {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        /* Responsive layout for filter form */
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 15px;
+            }
+
+            .welcome-banner h2 {
+                font-size: 20px;
+            }
+
+            .welcome-banner p {
+                font-size: 14px;
+            }
+
+            .form-card {
+                padding: 15px;
+            }
+
+            .card-header h3 {
+                font-size: 18px;
+            }
+
+            .filter-info {
+                flex-direction: column;
+            }
+
+            .filter-info-item {
+                min-width: 100%;
+            }
+
+            .form-control {
+                font-size: 14px;
+            }
+
+            .btn {
+                font-size: 12px;
+                padding: 6px 10px;
+            }
+
+            .data-table th, .data-table td {
+                padding: 10px;
+                font-size: 12px;
+            }
+
+            .data-table th:last-child,
+            .data-table td:last-child {
+                width: auto;
+            }
+
+            .pagination li a {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+
+            /* Responsive filter form */
+            .filter-form .col-md-4 {
+                margin-bottom: 15px;
+            }
+
+            .filter-form .col-md-4:last-child {
+                margin-bottom: 0;
+            }
+
+            .filter-form .btn {
+                width: 100%;
+            }
+        }
+        </style>
 </head>
 <body>
-    <!-- Loading Indicator -->
-    <div class="loading">
-        <div class="spinner"></div>
-    </div>
+    <?php if (file_exists('../../includes/header.php')) {
+        include '../../includes/header.php';
+    } ?>
 
-    <!-- Toast Notifications -->
-    <div id="toast" class="toast">
-        <i class="fas fa-check-circle"></i>
-        <span id="toast-message">Operation successful!</span>
-    </div>
-
-    <div class="container">
-        <!-- Header with Title and Back Button -->
-        <div class="header">
-            <h1><i class="fas fa-users"></i> Data Siswa</h1>
-            <a href="dashboard.php" class="back-btn">
-                <i class="fas fa-sign-out-alt"></i>
+    <div class="main-content">
+        <div class="welcome-banner">
+            <h2><i class="fas fa-users"></i> Data Nasabah</h2>
+            <p>Kelola Data Nasabah dengan Mudah</p>
+            <a href="../admin/dashboard.php" class="back-btn">
+                <i class="fas fa-times"></i> <!-- Hanya ikon "x" -->
             </a>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="actions">
-            <div class="export-buttons">
-                <a href="data_siswa.php?jurusan=<?= $jurusan_id ?>&kelas=<?= $kelas_id ?>&format=pdf" class="btn btn-pdf">
-                    <i class="fas fa-file-pdf"></i> Cetak PDF
-                </a>
-                <a href="data_siswa.php?jurusan=<?= $jurusan_id ?>&kelas=<?= $kelas_id ?>&format=excel" class="btn btn-excel">
-                    <i class="fas fa-file-excel"></i> Cetak Excel
-                </a>
+        <div class="form-card">
+            <div class="card-header">
+                <h3>Filter Data Siswa</h3>
             </div>
 
-            <!-- Filter Form -->
-            <form method="GET" action="data_siswa.php" class="filters">
-                <select name="jurusan" id="jurusan">
-                    <option value="">Semua Jurusan</option>
-                    <?php 
-                    $result_jurusan->data_seek(0);
-                    while ($row = $result_jurusan->fetch_assoc()): 
-                    ?>
-                        <option value="<?= $row['id'] ?>" <?= $jurusan_id == $row['id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($row['nama_jurusan']) ?>
-                        </option>
-                    <?php endwhile; ?>
-                </select>
-
-                <select name="kelas" id="kelas">
-                    <option value="">Semua Kelas</option>
-                    <?php
-                    if (!empty($jurusan_id)) {
-                        $query_kelas = "SELECT id, nama_kelas FROM kelas WHERE jurusan_id = $jurusan_id";
-                        $result_kelas = $conn->query($query_kelas);
-                        while ($row = $result_kelas->fetch_assoc()) {
-                            $selected = ($kelas_id == $row['id']) ? 'selected' : '';
-                            echo "<option value='" . $row['id'] . "' $selected>" . htmlspecialchars($row['nama_kelas']) . "</option>";
-                        }
-                    }
-                    ?>
-                </select>
-
-                <button type="submit"><i class="fas fa-filter"></i> Filter</button>
+            <form method="GET" action="" class="filter-form">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="jurusan_id" class="form-label">Jurusan</label>
+                        <select class="form-select" id="jurusan_id" name="jurusan_id" onchange="getKelasByJurusan(this.value)">
+                            <option value="0">Semua Jurusan</option>
+                            <?php foreach ($jurusan_options as $jurusan): ?>
+                                <option value="<?php echo $jurusan['id']; ?>" <?php echo $jurusan_id == $jurusan['id'] ? 'selected' : ''; ?>>
+                                    <?php echo $jurusan['nama_jurusan']; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="kelas_id" class="form-label">Kelas</label>
+                        <select class="form-select" id="kelas_id" name="kelas_id">
+                            <option value="0">Semua Kelas</option>
+                            <?php if ($jurusan_id > 0): ?>
+                                <?php
+                                $kelas_options = $conn->query("SELECT id, nama_kelas FROM kelas WHERE jurusan_id = $jurusan_id")->fetch_all(MYSQLI_ASSOC);
+                                foreach ($kelas_options as $kelas): ?>
+                                    <option value="<?php echo $kelas['id']; ?>" <?php echo $kelas_id == $kelas['id'] ? 'selected' : ''; ?>>
+                                        <?php echo $kelas['nama_kelas']; ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Filter</button>
+                    </div>
+                </div>
             </form>
         </div>
 
-        <!-- Student Data Table -->
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th width="5%">No</th>
-                        <th width="25%">Nama</th>
-                        <th width="25%">Jurusan</th>
-                        <th width="15%">Kelas</th>
-                        <th width="20%">No Rekening</th>
-                        <th width="10%">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php
-                    if ($result_siswa->num_rows > 0) {
-                        $no = ($page - 1) * $limit + 1;
-                        while ($row = $result_siswa->fetch_assoc()): ?>
-                        <tr>
-                            <td><?= $no++ ?></td>
-                            <td><?= htmlspecialchars($row['nama']) ?></td>
-                            <td><?= htmlspecialchars($row['jurusan']) ?></td>
-                            <td><?= htmlspecialchars($row['kelas']) ?></td>
-                            <td><?= htmlspecialchars($row['no_rekening']) ?></td>
-                            <td>
-                                <a href="javascript:void(0);" class="btn btn-edit" onclick="openEditModal(<?= $row['id'] ?>)">
-                                    <i class="fas fa-edit"></i> Edit
-                                </a>
-                            </td>
-                        </tr>
-                        <?php endwhile;
-                    } else { ?>
-                        <tr>
-                            <td colspan="6" class="empty-state">
-                                <i class="fas fa-search"></i>
-                                <p>Tidak ada data siswa yang ditemukan</p>
-                                <p>Coba ubah filter atau tambahkan data baru</p>
-                            </td>
-                        </tr>
-                    <?php } ?>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Pagination -->
-        <?php if ($total_pages > 1): ?>
-        <div class="pagination">
-            <?php if ($page > 1): ?>
-                <a href="?jurusan=<?= $jurusan_id ?>&kelas=<?= $kelas_id ?>&page=<?= $page - 1 ?>" class="page-link">
-                    <i class="fas fa-chevron-left"></i>
-                </a>
-            <?php endif; ?>
-
-            <?php 
-            // Show limited page numbers with ellipsis
-            $startPage = max(1, min($page - 1, $total_pages - 4));
-            $endPage = min($total_pages, max(5, $page + 2));
-            
-            if ($startPage > 1) {
-                echo '<a href="?jurusan=' . $jurusan_id . '&kelas=' . $kelas_id . '&page=1" class="page-link">1</a>';
-                if ($startPage > 2) {
-                    echo '<span class="page-link">...</span>';
-                }
-            }
-            
-            for ($i = $startPage; $i <= $endPage; $i++) {
-                echo '<a href="?jurusan=' . $jurusan_id . '&kelas=' . $kelas_id . '&page=' . $i . '" class="page-link ' . ($i == $page ? 'active' : '') . '">' . $i . '</a>';
-            }
-            
-            if ($endPage < $total_pages) {
-                if ($endPage < $total_pages - 1) {
-                    echo '<span class="page-link">...</span>';
-                }
-                echo '<a href="?jurusan=' . $jurusan_id . '&kelas=' . $kelas_id . '&page=' . $total_pages . '" class="page-link">' . $total_pages . '</a>';
-            }
-            ?>
-
-            <?php if ($page < $total_pages): ?>
-                <a href="?jurusan=<?= $jurusan_id ?>&kelas=<?= $kelas_id ?>&page=<?= $page + 1 ?>" class="page-link">
-                    <i class="fas fa-chevron-right"></i>
-                </a>
-            <?php endif; ?>
-        </div>
-        <?php endif; ?>
-
-        <!-- Edit Modal -->
-        <div id="editModal" class="modal-overlay">
-            <div class="modal">
-                <span class="modal-close" onclick="closeEditModal()">&times;</span>
-                <div class="edit-form">
-                    <h2><i class="fas fa-user-edit"></i> Edit Data Siswa</h2>
-                    <form method="POST" action="data_siswa.php" id="editForm">
-                        <input type="hidden" name="id" id="edit_id">
-                        
-                        <label for="nama">Nama:</label>
-                        <input type="text" id="nama" name="nama" required>
-                        
-                        <label for="jurusan">Jurusan:</label>
-                        <select id="jurusan_edit" name="jurusan" required>
-                            <option value="">Pilih Jurusan</option>
-                            <?php
-                            $result_jurusan->data_seek(0);
-                            while ($row = $result_jurusan->fetch_assoc()): ?>
-                                <option value="<?= $row['id'] ?>">
-                                    <?= htmlspecialchars($row['nama_jurusan']) ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
-                        
-                        <label for="kelas">Kelas:</label>
-                        <select id="kelas_edit" name="kelas" required>
-                            <option value="">Pilih Kelas</option>
-                        </select>
-                        
-                        <label for="no_rekening">No Rekening:</label>
-                        <input type="text" id="no_rekening" name="no_rekening" readonly required>
-                        
-                        <button type="submit" name="edit_siswa">
-                            <i class="fas fa-save"></i> Simpan Perubahan
-                        </button>
-                    </form>
+        <!-- Tampilkan filter yang dipilih dalam kotak -->
+        <div class="form-card">
+            <div class="card-header">
+                <h3>Daftar Siswa</h3>
+                <div class="export-buttons">
+                    <a href="?export=pdf&jurusan_id=<?php echo $jurusan_id; ?>&kelas_id=<?php echo $kelas_id; ?>" class="btn btn-secondary">
+                        <i class="fas fa-file-pdf"></i> Ekspor PDF
+                    </a>
+                    <a href="?export=excel&jurusan_id=<?php echo $jurusan_id; ?>&kelas_id=<?php echo $kelas_id; ?>" class="btn btn-secondary">
+                        <i class="fas fa-file-excel"></i> Ekspor Excel
+                    </a>
                 </div>
+            </div>
+
+            <div class="table-container">
+                <?php if (count($siswa) > 0): ?>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Nama</th>
+                                <th>No Rekening</th>
+                                <th>Jurusan</th>
+                                <th>Kelas</th>
+                                <th>Saldo</th>  <!-- Added Saldo column -->
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php $no = $offset + 1; ?>
+                            <?php foreach ($siswa as $row): ?>
+                                <tr>
+                                    <td><?php echo $no++; ?></td>
+                                    <td><?php echo $row['nama']; ?></td>
+                                    <td><?php echo $row['no_rekening'] ?? '-'; ?></td>
+                                    <td><?php echo $row['nama_jurusan']; ?></td>
+                                    <td><?php echo $row['nama_kelas']; ?></td>
+                                    <td class="text-end">Rp <?php echo number_format($row['saldo'] ?? 0, 2, ',', '.'); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+
+                    <div class="pagination">
+                        <?php if ($total_pages > 1): ?>
+                            <ul>
+                                <?php if ($page > 1): ?>
+                                    <li><a href="?jurusan_id=<?php echo $jurusan_id; ?>&kelas_id=<?php echo $kelas_id; ?>&page=<?php echo $page - 1; ?>">&laquo; Previous</a></li>
+                                <?php endif; ?>
+
+                                <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                                    <li class="<?php echo ($page == $i) ? 'active' : ''; ?>">
+                                        <a href="?jurusan_id=<?php echo $jurusan_id; ?>&kelas_id=<?php echo $kelas_id; ?>&page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    </li>
+                                <?php endfor; ?>
+
+                                <?php if ($page < $total_pages): ?>
+                                    <li><a href="?jurusan_id=<?php echo $jurusan_id; ?>&kelas_id=<?php echo $kelas_id; ?>&page=<?php echo $page + 1; ?>">Next &raquo;</a></li>
+                                <?php endif; ?>
+                            </ul>
+                        <?php endif; ?>
+                    </div>
+                <?php else: ?>
+                    <div class="empty-message">
+                        <i class="fas fa-info-circle"></i> Tidak ada data siswa yang ditemukan.
+                    </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 
-    <!-- Script for AJAX and Interactivity -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script>
-        $(document).ready(function() {
-            // Function to update kelas dropdown
-            function updateKelasDropdown(jurusanId, targetSelect) {
-                // Show loading spinner
-                $('.loading').css('display', 'flex');
-                
-                $.ajax({
-                    url: 'get_kelas_by_jurusan.php',
-                    type: 'GET',
-                    data: { jurusan_id: jurusanId },
-                    success: function(response) {
-                        targetSelect.html(response);
-                        $('.loading').css('display', 'none');
-                    },
-                    error: function() {
-                        showToast('Gagal memuat data kelas', 'error');
-                        $('.loading').css('display', 'none');
-                    }
-                });
-            }
-
-            // Event handler for main filter
-            $('#jurusan').change(function() {
-                updateKelasDropdown($(this).val(), $('#kelas'));
-            });
-
-            // Event handler for edit form
-            $('#jurusan_edit').change(function() {
-                updateKelasDropdown($(this).val(), $('#kelas_edit'));
-            });
-            
-            <?php if (!empty($edit_id)): ?>
-            // Auto open edit modal if edit parameter exists
-            openEditModal(<?= $edit_id ?>);
-            <?php endif; ?>
-            
-            // Form submission with AJAX
-            $('#editForm').submit(function(e) {
-                e.preventDefault();
-                
-                // Show loading spinner
-                $('.loading').css('display', 'flex');
-                
-                $.ajax({
-                    url: 'data_siswa.php',
-                    type: 'POST',
-                    data: $(this).serialize(),
-                    success: function(response) {
-                        closeEditModal();
-                        showToast('Data berhasil disimpan', 'success');
-                        
-                        // Redirect after a short delay
-                        setTimeout(function() {
-                            window.location.reload();
-                        }, 1500);
-                    },
-                    error: function() {
-                        showToast('Gagal menyimpan data', 'error');
-                        $('.loading').css('display', 'none');
-                    }
-                });
-            });
-            
-            // Pagination loading effect
-            $('.page-link').on('click', function(e) {
-                e.preventDefault();
-                const url = $(this).attr('href');
-                
-                // Skip loading for ellipsis
-                if ($(this).text() === '...') {
-                    return;
-                }
-                
-                // Show loading effects
-                $('.loading').css('display', 'flex');
-                
-                // Redirect after a short delay
-                setTimeout(function() {
-                    window.location.href = url;
-                }, 500);
-            });
-            
-            // Filter submission loading
-            $('.filters').submit(function() {
-                $('.loading').css('display', 'flex');
-            });
-            
-            // Export buttons loading
-            $('.btn-pdf, .btn-excel').click(function() {
-                showToast('Menyiapkan dokumen...', 'success');
-            });
-            
-            // Add initial animation for page load
-            $('body').css('opacity', '0').animate({opacity: 1}, 300);
-        });
-        
-        // Function to open edit modal
-        function openEditModal(studentId) {
-            // Show loading spinner
-            $('.loading').css('display', 'flex');
-            
-            // Fetch student data with AJAX
-            $.ajax({
-                url: 'get_student_data.php',
-                type: 'GET',
-                data: { id: studentId },
-                dataType: 'json',
-                success: function(data) {
-                    // Fill form fields with student data
-                    $('#edit_id').val(data.id);
-                    $('#nama').val(data.nama);
-                    $('#jurusan_edit').val(data.jurusan_id);
-                    $('#no_rekening').val(data.no_rekening);
-                    
-                    // Update kelas dropdown first, then set the selected value
-                    $.ajax({
-                        url: 'get_kelas_by_jurusan.php',
-                        type: 'GET',
-                        data: { jurusan_id: data.jurusan_id },
-                        success: function(response) {
-                            $('#kelas_edit').html(response);
-                            $('#kelas_edit').val(data.kelas_id);
-                            
-                            // Show the modal
-                            $('#editModal').fadeIn(300);
-                            $('.loading').css('display', 'none');
-                        },
-                        error: function() {
-                            showToast('Gagal memuat data kelas', 'error');
-                            $('.loading').css('display', 'none');
-                        }
+        function getKelasByJurusan(jurusan_id) {
+            if (jurusan_id) {
+                fetch(`get_kelas_by_jurusan.php?jurusan_id=${jurusan_id}`)
+                    .then(response => response.text())
+                    .then(data => {
+                        document.getElementById('kelas_id').innerHTML = data;
                     });
-                },
-                error: function() {
-                    showToast('Gagal memuat data siswa', 'error');
-                    $('.loading').css('display', 'none');
-                }
-            });
-        }
-        
-        // Function to close edit modal
-        function closeEditModal() {
-            $('#editModal').fadeOut(300);
-            
-            // Reset form fields
-            setTimeout(function() {
-                $('#editForm')[0].reset();
-            }, 300);
-        }
-        
-        // Function to show toast notifications
-        function showToast(message, type) {
-            const toast = $('#toast');
-            const icon = toast.find('i');
-            
-            // Set message
-            $('#toast-message').text(message);
-            
-            // Set type
-            toast.removeClass('success error').addClass(type);
-            
-            // Set icon
-            if (type === 'success') {
-                icon.removeClass().addClass('fas fa-check-circle');
             } else {
-                icon.removeClass().addClass('fas fa-exclamation-circle');
+                document.getElementById('kelas_id').innerHTML = '<option value="0">Semua Kelas</option>';
             }
-            
-            // Show toast
-            toast.addClass('show');
-            
-            // Hide after 3 seconds
-            setTimeout(function() {
-                toast.removeClass('show');
-            }, 3000);
         }
-        
-        // Close modal when clicking outside of it
-        $(window).click(function(event) {
-            if ($(event.target).is('.modal-overlay')) {
-                closeEditModal();
-            }
-        });
-        
-        // Escape key to close modal
-        $(document).keydown(function(e) {
-            if (e.key === "Escape") {
-                closeEditModal();
-            }
-        });
     </script>
 </body>
 </html>
+<?php
+// End the output buffer and flush it
+ob_end_flush();
+?>

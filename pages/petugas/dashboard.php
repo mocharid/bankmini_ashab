@@ -6,6 +6,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 $petugas_id = $_SESSION['user_id'] ?? 0;
 
 date_default_timezone_set('Asia/Jakarta');
+
 // Query untuk mengambil total transaksi, uang masuk, dan uang keluar
 $query = "SELECT COUNT(id) as total_transaksi 
           FROM transaksi 
@@ -63,7 +64,6 @@ $petugas1_nama = $schedule ? $schedule['petugas1_nama'] : '';
 $petugas2_nama = $schedule ? $schedule['petugas2_nama'] : '';
 
 // [2] Check if we need to clean up old attendance records
-// This adds a check for unfinished attendance records from previous days
 $query_check_old = "SELECT * FROM absensi WHERE tanggal < CURDATE() AND waktu_keluar IS NULL";
 $stmt_check_old = $conn->prepare($query_check_old);
 $stmt_check_old->execute();
@@ -72,8 +72,7 @@ $result_check_old = $stmt_check_old->get_result();
 // Auto-close any previous days' unclosed attendance records
 if ($result_check_old->num_rows > 0) {
     $query_auto_close = "UPDATE absensi 
-                         SET waktu_keluar = CONCAT(tanggal, ' 23:59:59'), 
-                             keterangan = CONCAT(IFNULL(keterangan, ''), ' [Auto-closed system]')
+                         SET waktu_keluar = CONCAT(tanggal, ' 23:59:59')
                          WHERE tanggal < CURDATE() AND waktu_keluar IS NULL";
     $stmt_auto_close = $conn->prepare($query_auto_close);
     $stmt_auto_close->execute();
@@ -223,22 +222,6 @@ function tanggal_indonesia($tanggal) {
             min-height: 100vh;
         }
         
-        /* Sidebar Styles */
-        .sidebar {
-            width: 280px;
-            background: linear-gradient(180deg, #0a2e5c 0%, #154785 100%);
-            color: white;
-            padding: 0;
-            position: fixed;
-            height: 100%;
-            overflow-y: auto;
-            transition: all 0.3s ease;
-            z-index: 100;
-            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.1);
-        }
-        .logout-btn {
-            color: red !important; /* Warna teks merah */
-        }
         .attendance-section {
             background: white;
             border-radius: 15px;
@@ -270,16 +253,6 @@ function tanggal_indonesia($tanggal) {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
-        
-        .sidebar-header {
-            display: flex;
-            align-items: center; 
-            justify-content: center;
-            padding: 25px 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            margin-bottom: 10px;
-            background: rgba(0, 0, 0, 0.1);
-        }
 
         .bank-icon {
             font-size: 32px; 
@@ -288,78 +261,231 @@ function tanggal_indonesia($tanggal) {
             text-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
 
+/* Sidebar Utama */
+.sidebar {
+    width: 280px;
+    background: linear-gradient(180deg, #0a2e5c 0%, #154785 100%);
+    color: white;
+    position: fixed;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    box-shadow: 5px 0 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Sidebar Header (Fixed) */
+.sidebar-header {
+    padding: 25px 20px;
+    background: #0a2e5c;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 101;
+    text-align: center;
+}
+
+.sidebar-header .bank-title {
+    font-size: 26px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin: 0;
+    color: white;
+}
+
+/* Sidebar Content (Scrollable) */
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+/* Sidebar Footer (Fixed) */
+.sidebar-footer {
+    background: #0a2e5c;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    position: sticky;
+    bottom: 0;
+    z-index: 101;
+    padding: 5px 0;
+}
+
+/* Scrollbar Styling */
+.sidebar-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+    background: #0a2e5c;
+    border-radius: 4px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+    background: #4a5568;
+    border-radius: 4px;
+    border: 2px solid #0a2e5c;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+    background: #718096;
+}
+
+/* Menu Items */
+.sidebar-menu {
+    padding: 10px 0;
+}
+
+.menu-label {
+    padding: 15px 25px 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.menu-item {
+    position: relative;
+    margin: 5px 0;
+}
+
+.menu-item a {
+    display: flex;
+    align-items: center;
+    padding: 14px 25px;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+    font-weight: 500;
+}
+
+.menu-item a:hover, .menu-item a.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: #38bdf8;
+    color: white;
+}
+
+.menu-item i {
+    margin-right: 12px;
+    width: 20px;
+    text-align: center;
+    font-size: 18px;
+}
+
+/* Dropdown Menu */
+.dropdown-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 25px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    color: rgba(255, 255, 255, 0.85);
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+    font-weight: 500;
+}
+
+.dropdown-btn:hover, .dropdown-btn.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: #38bdf8;
+    color: white;
+}
+
+.dropdown-container {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.dropdown-container.show {
+    max-height: 300px;
+}
+
+.dropdown-container a {
+    padding: 12px 20px 12px 60px;
+    display: flex;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.75);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    border-left: 4px solid transparent;
+}
+
+.dropdown-container a:hover, .dropdown-container a.active {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-left-color: #38bdf8;
+    color: white;
+}
+
+/* Tombol Logout (Warna Merah) */
+.logout-btn {
+    color: #ff3b3b;
+    font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sidebar.active {
+        transform: translateX(0);
+    }
+
+    body.sidebar-active .main-content {
+        opacity: 0.3;
+        pointer-events: none;
+    }
+
+    .welcome-banner h2 {
+        font-size: 24px;
+    }
+
+    .welcome-banner p {
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .officer-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .officer-box {
+        margin-bottom: 15px;
+    }
+
+    .officer-section {
+        padding: 25px;
+    }
+}
+
         .bank-title {
             color: #fff; 
             font-size: 26px; 
             font-weight: bold;
             letter-spacing: 1px;
-        }
-        
-        .sidebar-menu {
-            padding: 10px 0;
-        }
-        
-        .menu-label {
-            padding: 15px 25px 10px;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255, 255, 255, 0.6);
-            font-weight: 600;
-            margin-top: 10px;
-        }
-        
-        .menu-item {
-            position: relative;
-            margin: 5px 0;
-        }
-        
-        .menu-item a {
-            display: flex;
-            align-items: center;
-            padding: 14px 25px;
-            color: rgba(255, 255, 255, 0.85);
-            text-decoration: none;
-            transition: all 0.3s ease;
-            border-left: 4px solid transparent;
-            font-weight: 500;
-        }
-        
-        .menu-item a:hover, .menu-item a.active {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
-            color: white;
-        }
-        
-        .menu-item i {
-            margin-right: 12px;
-            width: 20px;
-            text-align: center;
-            font-size: 18px;
-        }
-
-        /* Dropdown Menu */
-        .dropdown-btn {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 25px;
-            width: 100%;
-            text-align: left;
-            background: none;
-            color: rgba(255, 255, 255, 0.85);
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            border-left: 4px solid transparent;
-            font-weight: 500;
-        }
-        
-        .dropdown-btn:hover, .dropdown-btn.active {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
-            color: white;
         }
         
         .dropdown-btn .menu-icon {
@@ -382,34 +508,7 @@ function tanggal_indonesia($tanggal) {
         .dropdown-btn.active .arrow {
             transform: rotate(180deg);
         }
-        
-        .dropdown-container {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            background-color: rgba(0, 0, 0, 0.15);
-        }
-        
-        .dropdown-container.show {
-            max-height: 300px;
-        }
-        
-        .dropdown-container a {
-            padding: 12px 20px 12px 60px;
-            display: flex;
-            align-items: center;
-            color: rgba(255, 255, 255, 0.75);
-            text-decoration: none;
-            transition: all 0.3s ease;
-            font-size: 14px;
-            border-left: 4px solid transparent;
-        }
-        
-        .dropdown-container a:hover, .dropdown-container a.active {
-            background-color: rgba(255, 255, 255, 0.08);
-            border-left-color: #38bdf8;
-            color: white;
-        }
+
 
         /* Main Content */
         .main-content {
@@ -1286,10 +1385,13 @@ function tanggal_indonesia($tanggal) {
     </button>
 
     <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <h2 class="bank-title">SCHOBANK</h2>
-        </div>
+    <!-- Fixed Header -->
+    <div class="sidebar-header">
+        <h2 class="bank-title">SCHOBANK</h2>
+    </div>
 
+    <!-- Scrollable Content -->
+    <div class="sidebar-content">
         <div class="sidebar-menu">
             <div class="menu-label">Menu Utama</div>
             <div class="menu-item">
@@ -1300,25 +1402,25 @@ function tanggal_indonesia($tanggal) {
 
             <div class="menu-item">
                 <button class="dropdown-btn" id="transaksiDropdown">
-            <div class="menu-icon">
-                <i class="fas fa-exchange-alt"></i> Transaksi
+                    <div class="menu-icon">
+                        <i class="fas fa-exchange-alt"></i> Transaksi
+                    </div>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="transaksiDropdownContainer">
+                    <a href="setor_tunai.php">
+                        <i class="fas fa-arrow-circle-down"></i> Setor Tunai
+                    </a>
+                    <a href="tarik_tunai.php">
+                        <i class="fas fa-arrow-circle-up"></i> Tarik Tunai
+                    </a>
+                    <a href="transfer.php">
+                        <i class="fas fa-paper-plane"></i> Transfer
+                    </a>
+                </div>
             </div>
-            <i class="fas fa-chevron-down arrow"></i>
-            </button>
-            <div class="dropdown-container" id="transaksiDropdownContainer">
-        <a href="setor_tunai.php">
-            <i class="fas fa-arrow-circle-down"></i> Setor Tunai
-        </a>
-        <a href="tarik_tunai.php">
-            <i class="fas fa-arrow-circle-up"></i> Tarik Tunai
-        </a>
-        <a href="transfer.php">
-            <i class="fas fa-paper-plane"></i> Transfer
-        </a>
-    </div>
-    </div>
 
-    <div class="menu-item">
+            <div class="menu-item">
                 <button class="dropdown-btn" id="rekeningDropdown">
                     <div class="menu-icon">
                         <i class="fas fa-users-cog"></i> Rekening
@@ -1357,52 +1459,43 @@ function tanggal_indonesia($tanggal) {
                     </a>
                 </div>
             </div>
-                  
+
             <div class="menu-label">Menu Lainnya</div>
 
             <div class="menu-item">
-                <a href="pulihkan_akun.php">
-                    <i class="fas fa-unlock-alt"></i></i> Pemulihan Akun
-                </a>
-            </div>
-
-            <div class="menu-item">
-            <a href="riwayat_transfer.php">
+                <a href="riwayat_transfer.php">
                     <i class="fas fa-history"></i> Riwayat Transfer
                 </a>
             </div>
 
             <div class="menu-item">
-                <a href="cetak_bukti_transaksi.php">
-                    <i class="fas fa-print"></i> Cetak Bukti Transaksi
-                </a>
-            </div>
-            
-            <div class="menu-item">
                 <a href="laporan.php">
-                    <i class="fas fa-calendar-day"></i> Cetak Laporan 
+                    <i class="fas fa-calendar-day"></i> Cetak Laporan
                 </a>
             </div>
-            
+
             <div class="menu-label">Pengaturan</div>
-            
+
             <div class="menu-item">
                 <a href="profil.php">
                     <i class="fas fa-user-cog"></i> Pengaturan Akun
                 </a>
             </div>
-        
-            <div class="menu-item">
-                <a href="../../logout.php" class="logout-btn">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
-            </div>
-
         </div>
     </div>
-    <div class="main-content" id="mainContent">
+    
+    <!-- Fixed Footer with Logout -->
+    <div class="sidebar-footer">
+        <div class="menu-item">
+            <a href="../../logout.php" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+</div>
+<div class="main-content" id="mainContent">
         <div class="welcome-banner">
-            <h2>Assalamuaikum, <?= htmlspecialchars($username) ?>!</h2>
+            <h2>Hai, <?= htmlspecialchars($petugas1_nama) ?> & <?= htmlspecialchars($petugas2_nama) ?>!</h2>
             <div class="date">
                 <i class="far fa-calendar-alt"></i> <?= tanggal_indonesia(date('Y-m-d')) ?>
             </div>
@@ -1477,9 +1570,9 @@ function tanggal_indonesia($tanggal) {
                     <th>Petugas</th>
                     <th>Nama Petugas</th>
                     <th>Status</th>
-                    <th>Waktu Masuk</th>
-                    <th>Waktu Keluar</th>
-                    <th>Aksi</th>
+                    <th>Jam Masuk</th>
+                    <th>Jam Keluar</th>
+                    <th>Absensi</th>
                 </tr>
             </thead>
             <tbody>

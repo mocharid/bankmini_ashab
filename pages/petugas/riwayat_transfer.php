@@ -8,8 +8,7 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
     exit;
 }
 
-
-// Connection handling (same as before)
+// Connection handling
 if (!isset($conn) && isset($koneksi)) {
     $conn = $koneksi;
 } else if (!isset($conn) && !isset($koneksi)) {
@@ -28,71 +27,54 @@ if (!isset($conn) && isset($koneksi)) {
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
 
-// Set timezone to WIB (Western Indonesian Time)
+// Set timezone to WIB
 date_default_timezone_set('Asia/Jakarta');
 
-// Get today's date
-$today = date('Y-m-d');
+// Get filter parameter - default to today's date
+$filter_date = isset($_GET['filter_date']) ? $_GET['filter_date'] : date('Y-m-d');
 
-// Search parameter
-$search_rekening = isset($_GET['search_rekening']) ? $_GET['search_rekening'] : '';
+// Prepare the base query - Only show transfers processed by staff
+$sql = "SELECT t.*, 
+        r_asal.no_rekening as rekening_asal, u_asal.nama as nama_asal,
+        r_tujuan.no_rekening as rekening_tujuan, u_tujuan.nama as nama_tujuan
+        FROM transaksi t
+        JOIN rekening r_asal ON t.rekening_id = r_asal.id
+        JOIN users u_asal ON r_asal.user_id = u_asal.id
+        JOIN rekening r_tujuan ON t.rekening_tujuan_id = r_tujuan.id
+        JOIN users u_tujuan ON r_tujuan.user_id = u_tujuan.id
+        WHERE t.jenis_transaksi = 'transfer'
+        AND t.petugas_id IS NOT NULL"; // Only show transfers processed by staff
 
-// Prepare the query based on user role with today's date filter and optional search
+// Add conditions based on role
 if ($role == 'siswa') {
-    $sql = "SELECT t.*, 
-            r_asal.no_rekening as rekening_asal, u_asal.nama as nama_asal,
-            r_tujuan.no_rekening as rekening_tujuan, u_tujuan.nama as nama_tujuan,
-            u_petugas.nama as nama_petugas
-            FROM transaksi t
-            JOIN rekening r_asal ON t.rekening_id = r_asal.id
-            JOIN users u_asal ON r_asal.user_id = u_asal.id
-            JOIN rekening r_tujuan ON t.rekening_tujuan_id = r_tujuan.id
-            JOIN users u_tujuan ON r_tujuan.user_id = u_tujuan.id
-            JOIN users u_petugas ON t.petugas_id = u_petugas.id
-            WHERE t.jenis_transaksi = 'transfer'
-            AND DATE(t.created_at) = ?
-            AND (r_asal.user_id = ? OR r_tujuan.user_id = ?)
-            " . ($search_rekening ? "AND r_asal.no_rekening LIKE ?" : "") . "
-            ORDER BY t.created_at DESC";
-    
-    $stmt = $conn->prepare($sql);
-    if ($search_rekening) {
-        $search_param = "%$search_rekening%";
-        $stmt->bind_param("siis", $today, $user_id, $user_id, $search_param);
-    } else {
-        $stmt->bind_param("sii", $today, $user_id, $user_id);
-    }
-} else {
-    $sql = "SELECT t.*, 
-            r_asal.no_rekening as rekening_asal, u_asal.nama as nama_asal,
-            r_tujuan.no_rekening as rekening_tujuan, u_tujuan.nama as nama_tujuan,
-            u_petugas.nama as nama_petugas
-            FROM transaksi t
-            JOIN rekening r_asal ON t.rekening_id = r_asal.id
-            JOIN users u_asal ON r_asal.user_id = u_asal.id
-            JOIN rekening r_tujuan ON t.rekening_tujuan_id = r_tujuan.id
-            JOIN users u_tujuan ON r_tujuan.user_id = u_tujuan.id
-            JOIN users u_petugas ON t.petugas_id = u_petugas.id
-            WHERE t.jenis_transaksi = 'transfer'
-            AND DATE(t.created_at) = ?
-            " . ($search_rekening ? "AND r_asal.no_rekening LIKE ?" : "") . "
-            ORDER BY t.created_at DESC";
-    
-    $stmt = $conn->prepare($sql);
-    if ($search_rekening) {
-        $search_param = "%$search_rekening%";
-        $stmt->bind_param("ss", $today, $search_param);
-    } else {
-        $stmt->bind_param("s", $today);
-    }
+    $sql .= " AND (r_asal.user_id = ? OR r_tujuan.user_id = ?)";
+}
+
+// Add date condition
+$sql .= " AND DATE(t.created_at) = ?";
+$params = [];
+$types = '';
+
+if ($role == 'siswa') {
+    array_push($params, $user_id, $user_id);
+    $types = 'ii';
+}
+
+array_push($params, $filter_date);
+$types .= 's';
+
+$sql .= " ORDER BY t.created_at DESC";
+
+// Prepare and execute the query
+$stmt = $conn->prepare($sql);
+
+if ($params) {
+    $stmt->bind_param($types, ...$params);
 }
 
 $stmt->execute();
 $result = $stmt->get_result();
-$transfers = [];
-while ($row = $result->fetch_assoc()) {
-    $transfers[] = $row;
-}
+$transfers = $result->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 ?>
 
@@ -101,387 +83,404 @@ $stmt->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Riwayat Transfer Harian - SCHOBANK SYSTEM</title>
+    <title>Riwayat Transfer oleh Petugas - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #4caf50;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f8faff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
+:root {
+  --primary-color: #0c4da2;
+  --primary-dark: #0a2e5c;
+  --primary-light: #e0e9f5;
+  --secondary-color: #4caf50;
+  --accent-color: #ff9800;
+  --danger-color: #f44336;
+  --text-primary: #333;
+  --text-secondary: #666;
+  --bg-light: #f8faff;
+  --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
+  --transition: all 0.3s ease;
+}
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-        }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Poppins', sans-serif;
+}
 
-        body {
-            background-color: var(--bg-light);
-            color: var(--text-primary);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
+body {
+  background-color: var(--bg-light);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-        .main-content {
-            flex: 1;
-            padding: 20px;
-            width: 100%;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+.main-content {
+  flex: 1;
+  padding: 20px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
 
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            text-align: center;
-            position: relative;
-            box-shadow: var(--shadow-md);
-            overflow: hidden;
-        }
+/* Header Banner Styles */
+.welcome-banner {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+  color: white;
+  padding: 30px;
+  border-radius: 15px;
+  margin-bottom: 30px;
+  text-align: center;
+  position: relative;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
 
-        .welcome-banner::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
-            transform: rotate(30deg);
-            animation: shimmer 8s infinite linear;
-        }
+.welcome-banner::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+  transform: rotate(30deg);
+  animation: shimmer 8s infinite linear;
+}
 
-        @keyframes shimmer {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(360deg);
-            }
-        }
+@keyframes shimmer {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 
-        .welcome-banner h2 {
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            position: relative;
-            z-index: 1;
-        }
+.welcome-banner h2 {
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  position: relative;
+  z-index: 1;
+}
 
-        .welcome-banner p {
-            font-size: 16px;
-            opacity: 0.9;
-            position: relative;
-            z-index: 1;
-        }
+.welcome-banner p {
+  font-size: 16px;
+  opacity: 0.9;
+  position: relative;
+  z-index: 1;
+}
 
-        .cancel-btn {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 16px;
-            transition: var(--transition);
-            text-decoration: none;
-            z-index: 2;
-        }
+.cancel-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border: none;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  transition: var(--transition);
+  text-decoration: none;
+  z-index: 2;
+}
 
-        .cancel-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: rotate(-90deg);
-        }
+.cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(-90deg);
+}
 
-        .transaction-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            transition: var(--transition);
-            margin-bottom: 30px;
-        }
+/* Search Form Styles */
+.search-container {
+  margin-bottom: 25px;
+  width: 100%;
+}
 
-        .transaction-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-5px);
-        }
+.search-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
 
-        .table-container {
-            position: relative;
-            width: 100%;
-            overflow: hidden;
-        }
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: white;
+  padding: 8px 15px;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  flex: 1 0 auto;
+}
 
-        .table-scroll-container {
-            width: 100%;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-        }
+.filter-group label {
+  font-weight: 500;
+  color: var(--primary-dark);
+  white-space: nowrap;
+  font-size: 14px;
+}
 
-        .scroll-hint {
-            display: none;
-            position: absolute;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            background-color: var(--primary-color);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            opacity: 0.8;
-            animation: fadeInOut 2s infinite;
-            z-index: 10;
-        }
+.filter-group input[type="date"] {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: white;
+  font-family: 'Poppins', sans-serif;
+  transition: var(--transition);
+  min-width: 160px;
+}
 
-        @keyframes fadeInOut {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 0.8; }
-        }
+.filter-group input[type="date"]:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+}
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
+.search-form button {
+  padding: 10px 20px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
+}
 
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
+.search-form button:hover {
+  background-color: var(--primary-dark);
+  transform: translateY(-2px);
+}
 
-        th {
-            background-color: var(--primary-light);
-            font-weight: 600;
-            color: var(--primary-dark);
-            position: sticky;
-            top: 0;
-            z-index: 1;
-        }
+.search-form button i {
+  font-size: 14px;
+}
 
-        tr:hover {
-            background-color: var(--primary-light);
-        }
+.reset-btn {
+  padding: 10px;
+  background-color: #f5f5f5;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
-        .status-badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-            display: inline-block;
-        }
+.reset-btn:hover {
+  background-color: #eee;
+  color: var(--primary-dark);
+}
 
-        .status-approved {
-            background-color: #dcfce7;
-            color: #166534;
-        }
+/* Table Container Styles */
+.transaction-card {
+  background: white;
+  border-radius: 15px;
+  padding: 25px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+  margin-bottom: 30px;
+}
 
-        .status-pending {
-            background-color: #fef3c7;
-            color: #92400e;
-        }
+.table-container {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
 
-        .status-rejected {
-            background-color: #fee2e2;
-            color: #b91c1c;
-        }
+.table-scroll-container {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 
-        .detail-btn {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            transition: var(--transition);
-            text-decoration: none;
-            white-space: nowrap;
-        }
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  min-width: 800px;
+}
 
-        .detail-btn:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-        }
+th, td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
 
-        .account-info {
-            font-weight: 500;
-            color: var(--primary-dark);
-        }
+th {
+  background-color: var(--primary-light);
+  font-weight: 600;
+  color: var(--primary-dark);
+  position: sticky;
+  top: 0;
+}
 
-        .account-name {
-            font-size: 13px;
-            color: var(--text-secondary);
-        }
+tr:hover {
+  background-color: rgba(12, 77, 162, 0.03);
+}
 
-        .amount {
-            font-weight: 500;
-            color: var(--text-primary);
-            white-space: nowrap;
-        }
+/* Status Badges */
+.status-badge {
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-block;
+}
 
-        .empty-state {
-            text-align: center;
-            padding: 40px;
-            color: var(--text-secondary);
-        }
+.status-approved {
+  background-color: #dcfce7;
+  color: #166534;
+}
 
-        .empty-state i {
-            font-size: 48px;
-            color: #ccc;
-            margin-bottom: 15px;
-        }
+.status-pending {
+  background-color: #fef3c7;
+  color: #92400e;
+}
 
-        /* Custom scrollbar for Webkit browsers */
-        .table-scroll-container::-webkit-scrollbar {
-            height: 8px;
-        }
+.status-rejected {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
 
-        .table-scroll-container::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 10px;
-        }
+/* Action Buttons */
+.detail-btn {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: var(--transition);
+  text-decoration: none;
+}
 
-        .table-scroll-container::-webkit-scrollbar-thumb {
-            background: var(--primary-color);
-            border-radius: 10px;
-        }
+.detail-btn:hover {
+  background-color: var(--primary-dark);
+  transform: translateY(-2px);
+}
 
-        .table-scroll-container::-webkit-scrollbar-thumb:hover {
-            background: var(--primary-dark);
-        }
+/* Account Info Styles */
+.account-info {
+  font-weight: 500;
+  color: var(--primary-dark);
+}
 
-        .grab-scroll {
-            cursor: grab;
-        }
+.account-name {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
 
-        .grabbing-scroll {
-            cursor: grabbing;
-        }
+.amount {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
 
-        @media (max-width: 768px) {
-            .welcome-banner {
-                padding: 25px 15px;
-            }
-            
-            .welcome-banner h2 {
-                font-size: 22px;
-            }
-            
-            .transaction-card {
-                padding: 15px;
-            }
-            
-            .scroll-hint {
-                display: block;
-            }
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-secondary);
+}
 
-            th, td {
-                padding: 10px 12px;
-            }
-        }
-        .search-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .search-form {
-            display: flex;
-            align-items: center;
-            width: 100%;
-        }
-        .search-form input {
-            flex-grow: 1;
-            max-width: 250px; /* Limit input width */
-            padding: 10px 15px;
-            margin-right: 10px;
-            border: 1px solid #4a90e2;
-            border-radius: 25px;
-            background-color: #f0f4f8;
-            transition: all 0.3s ease;
-        }
-        .search-form input:focus {
-            outline: none;
-            border-color: #2c7be5;
-            box-shadow: 0 0 0 3px rgba(44, 123, 229, 0.2);
-        }
-        .search-form button {
-            padding: 10px 20px;
-            background-color: #4a90e2;
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .search-form button:hover {
-            background-color: #2c7be5;
-        }
-        .search-form a.cancel-btn {
-            margin-left: 10px;
-            color: #4a90e2;
-            border-radius: 50%;
-            padding: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #f0f4f8;
-            transition: background-color 0.3s ease;
-        }
-        .search-form a.cancel-btn:hover {
-            background-color: #e0e8f0;
-        }
-        .today-info {
-            font-weight: bold;
-            color: #4a90e2;  /* Changed text color to match the theme */
-            background-color: #f0f4f8;
-            padding: 8px 15px;
-            border-radius: 20px;
-            display: inline-block;
-        }
-    </style>
+.empty-state i {
+  font-size: 48px;
+  color: #ccc;
+  margin-bottom: 15px;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  .main-content {
+    padding: 15px;
+  }
+  
+  .welcome-banner {
+    padding: 25px 15px;
+  }
+  
+  .welcome-banner h2 {
+    font-size: 22px;
+  }
+  
+  .search-form {
+    flex-direction: column;
+    gap: 10px;
+  align-items: stretch;
+  }
+  
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 15px;
+  }
+  
+  .filter-group label {
+    margin-bottom: 5px;
+  }
+  
+  .search-form button,
+  .reset-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .transaction-card {
+    padding: 15px;
+  }
+  
+  th, td {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome-banner h2 {
+    font-size: 20px;
+    padding-top: 10px;
+  }
+  
+  .filter-group input[type="date"] {
+    width: 100%;
+  }
+  
+  .account-info, .account-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+    display: block;
+  }
+}
+        </style>
 </head>
 <body>
-    <?php if (file_exists('../../includes/header.php')) {
-        include '../../includes/header.php';
-    } ?>
+    <?php if (file_exists('../../includes/header.php')) include '../../includes/header.php'; ?>
 
-<div class="main-content">
+    <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-history"></i> Riwayat Transfer Harian</h2>
-            <p class="today-info">Transaksi Transfer per <?= date('d F Y') ?></p>
+            <h2><i class="fas fa-history"></i> Riwayat Transfer oleh Petugas</h2>
+            <p>Transaksi Transfer yang diproses oleh petugas</p>
             <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
                 <i class="fas fa-arrow-left"></i>
             </a>
@@ -490,30 +489,27 @@ $stmt->close();
         <div class="transaction-card">
             <div class="search-container">
                 <form method="GET" class="search-form">
-                    <input type="text" name="search_rekening" placeholder="Cari No. Rekening Pengirim" 
-                           value="<?= htmlspecialchars($search_rekening) ?>">
-                    <button type="submit"><i class="fas fa-search"></i> Cari</button>
-                    <?php if (!empty($search_rekening)): ?>
-                        <a href="riwayat_transfer.php" class="cancel-btn" style="margin-left: 10px;" title="Hapus Filter">
-                            <i class="fas fa-times"></i>
-                        </a>
-                    <?php endif; ?>
+                    <div class="filter-group">
+                        <label for="filter_date">Tanggal:</label>
+                        <input type="date" name="filter_date" id="filter_date" 
+                               value="<?= htmlspecialchars($filter_date) ?>">
+                        <button type="submit"><i class="fas fa-search"></i> Cari</button>
+                        <?php if ($filter_date != date('Y-m-d')): ?>
+                            <a href="riwayat_transfer.php" class="cancel-btn" style="margin-left: 10px;" title="Reset Filter">
+                                <i class="fas fa-undo"></i>
+                            </a>
+                        <?php endif; ?>
+                    </div>
                 </form>
             </div>
 
             <?php if (empty($transfers)): ?>
                 <div class="empty-state">
                     <i class="fas fa-inbox"></i>
-                    <p>Tidak ada transaksi transfer hari ini.</p>
-                    <?php if (!empty($search_rekening)): ?>
-                        <p>Tidak ditemukan transfer dengan nomor rekening "<?= htmlspecialchars($search_rekening) ?>".</p>
-                    <?php endif; ?>
+                    <p>Tidak ada transaksi transfer yang diproses petugas pada tanggal <?= date('d/m/Y', strtotime($filter_date)) ?>.</p>
                 </div>
             <?php else: ?>
                 <div class="table-container">
-                    <div class="scroll-hint">
-                        <i class="fas fa-arrows-left-right"></i> Geser
-                    </div>
                     <div class="table-scroll-container" id="tableScrollContainer">
                         <table>
                             <thead>
@@ -523,7 +519,6 @@ $stmt->close();
                                     <th>Dari</th>
                                     <th>Ke</th>
                                     <th>Jumlah</th>
-                                    <th>Petugas</th>
                                     <th>Status</th>
                                     <?php if ($role != 'siswa'): ?>
                                         <th>Aksi</th>
@@ -533,18 +528,17 @@ $stmt->close();
                             <tbody>
                                 <?php foreach ($transfers as $transfer): ?>
                                     <tr>
-                                        <td><?= $transfer['no_transaksi'] ?></td>
+                                        <td><?= htmlspecialchars($transfer['no_transaksi']) ?></td>
                                         <td><?= date('d/m/Y H:i', strtotime($transfer['created_at'])) ?> WIB</td>
                                         <td>
-                                            <div class="account-info"><?= $transfer['rekening_asal'] ?></div>
-                                            <div class="account-name"><?= $transfer['nama_asal'] ?></div>
+                                            <div class="account-info"><?= htmlspecialchars($transfer['rekening_asal']) ?></div>
+                                            <div class="account-name"><?= htmlspecialchars($transfer['nama_asal']) ?></div>
                                         </td>
                                         <td>
-                                            <div class="account-info"><?= $transfer['rekening_tujuan'] ?></div>
-                                            <div class="account-name"><?= $transfer['nama_tujuan'] ?></div>
+                                            <div class="account-info"><?= htmlspecialchars($transfer['rekening_tujuan']) ?></div>
+                                            <div class="account-name"><?= htmlspecialchars($transfer['nama_tujuan']) ?></div>
                                         </td>
                                         <td class="amount">Rp <?= number_format($transfer['jumlah'], 2, ',', '.') ?></td>
-                                        <td><?= $transfer['nama_petugas'] ?></td>
                                         <td>
                                             <?php if ($transfer['status'] == 'approved'): ?>
                                                 <span class="status-badge status-approved">Berhasil</span>
@@ -656,6 +650,32 @@ $stmt->close();
                     }, 500);
                 }
             });
+            function adjustTableLayout() {
+            const tableContainer = document.querySelector('.table-container');
+            const table = document.querySelector('table');
+            
+            if (window.innerWidth < 768) {
+                tableContainer.style.overflowX = 'auto';
+                table.style.minWidth = '600px';
+            } else {
+                tableContainer.style.overflowX = 'hidden';
+                table.style.minWidth = '100%';
+            }
+        }
+
+        // Initial adjustment
+        adjustTableLayout();
+        
+        // Adjust on window resize
+        window.addEventListener('resize', adjustTableLayout);
+
+        // Set today's date as default if no date is selected
+        document.addEventListener('DOMContentLoaded', function() {
+            const dateInput = document.getElementById('filter_date');
+            if (dateInput && !dateInput.value) {
+                dateInput.valueAsDate = new Date();
+            }
+        });
         });
     </script>
 </body>

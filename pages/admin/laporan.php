@@ -516,23 +516,30 @@ $result = $stmt->get_result();
         font-size: 0.9rem;
     }
 }
-        </style>
+        /* Tambahan CSS untuk tombol close */
+        .close-btn {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: white;
+            cursor: pointer;
+            transition: var(--transition);
+            z-index: 10; /* Pastikan tombol berada di atas elemen lain */
+        }
+
+        .close-btn:hover {
+            color: var(--primary-light);
+        }
+    </style>
 </head>
 <body>
     <!-- Loading Spinner -->
     <div class="loading">
         <div class="spinner"></div>
     </div>
-
-    <!-- Navigation -->
-    <nav class="top-nav">
-        <div class="nav-brand">SCHOBANK</div>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
-    </nav>
 
     <!-- Main Content -->
     <div class="main-content">
@@ -541,6 +548,10 @@ $result = $stmt->get_result();
                 <i class="fas fa-chart-line"></i>
                 <span>Laporan Transaksi</span>
             </h2>
+            <!-- Tombol Close -->
+            <button class="close-btn" id="closeBtn">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
 
         <div class="filter-card">
@@ -651,9 +662,13 @@ $result = $stmt->get_result();
 
     <!-- JavaScript -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script>
         $(document).ready(function() {
+            // Fungsi untuk tombol close
+            $('#closeBtn').on('click', function() {
+                window.location.href = 'dashboard.php'; // Redirect ke dashboard
+            });
+
             // Form validation and loading effects
             $('#filterForm').on('submit', function(e) {
                 const startDate = $('#start_date');
@@ -726,31 +741,6 @@ $result = $stmt->get_result();
                 }, 500);
             });
         });
-        $(document).ready(function() {
-        // Tangani klik pagination
-        $('.page-link').on('click', function(e) {
-            e.preventDefault(); // Mencegah refresh
-            const url = $(this).attr('href'); // Ambil URL dari tombol
-
-            // Tampilkan loading spinner
-            $('.loading').css('display', 'flex');
-
-            // Ambil data pagination via AJAX
-            $.ajax({
-                url: url,
-                method: 'GET',
-                success: function(response) {
-                    // Ganti konten dengan data baru
-                    $('#pagination-anchor').html($(response).find('#pagination-anchor').html());
-                    $('.loading').hide(); // Sembunyikan loading spinner
-                },
-                error: function() {
-                    alert('Gagal memuat data.');
-                    $('.loading').hide();
-                }
-            });
-        });
-    });
     </script>
 </body>
 </html>

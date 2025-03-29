@@ -666,7 +666,7 @@ function displayTransactions(transactions) {
                     transferDetails = `<div class="transfer-details">Dari: ${transaction.rekening_pengirim}</div>`;
                 }
             } else if (transaction.petugas_nama) {
-                transferDetails = `<div class="transfer-details">Petugas: ${transaction.petugas_nama}</div>`;
+                transferDetails = `<div class="transfer-details">Oleh: ${transaction.petugas_nama}</div>`;
             }
 
             html += `

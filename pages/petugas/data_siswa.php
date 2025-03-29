@@ -1,6 +1,11 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
+require '../../vendor/autoload.php'; // Sesuaikan path ke autoload PHPMailer
+// Include PHPMailer classes
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
@@ -21,15 +26,87 @@ function generateUsername($nama) {
     return $username;
 }
 
+// Function to send email notification
+function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password) {
+    try {
+        $mail = new PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'mocharid.ip@gmail.com'; // Email pengirim
+        $mail->Password = 'spjs plkg ktuu lcxh'; // Password email pengirim
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = 587;
+        $mail->CharSet = 'UTF-8';
+        
+        // Recipient
+        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+        $mail->addAddress($email, $nama);
+        
+        // Content
+        $mail->isHTML(true);
+        $mail->Subject = 'Pembukaan Rekening Berhasil - SCHOBANK SYSTEM';
+        
+        // Email template
+        $emailBody = "
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px;'>
+            <div style='text-align: center; padding: 10px; background-color: #f5f5f5; margin-bottom: 20px;'>
+                <h2 style='color: #2e7eed;'>SCHOBANK SYSTEM</h2>
+                <p style='font-size: 18px; font-weight: bold;'>Pembukaan Rekening Berhasil</p>
+            </div>
+            
+            <p>Halo <strong>{$nama}</strong>,</p>
+            
+            <p>Selamat! Rekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah detail akun Anda:</p>
+            
+            <div style='background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;'>
+                <p><strong>Nomor Rekening:</strong> {$no_rekening}</p>
+                <p><strong>Username:</strong> {$username}</p>
+                <p><strong>Password:</strong> {$password}</p>
+                <p><strong>Saldo Awal:</strong> Rp 0</p>
+            </div>
+            
+            <p style='color: #d35400;'><strong>Catatan Penting:</strong> Segera ubah password Anda setelah login pertama untuk keamanan akun Anda.</p>
+            
+            <p>Jika Anda memiliki pertanyaan lebih lanjut, silakan hubungi petugas kami.</p>
+            
+            <div style='text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #777; font-size: 12px;'>
+                <p>Email ini dibuat secara otomatis. Mohon tidak membalas email ini.</p>
+                <p>&copy; " . date('Y') . " SCHOBANK SYSTEM. All rights reserved.</p>
+            </div>
+        </div>
+        ";
+        
+        $mail->Body = $emailBody;
+        $mail->AltBody = "Pembukaan Rekening Berhasil\n\n"
+                       . "Halo {$nama},\n\n"
+                       . "Selamat! Rekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah detail akun Anda:\n\n"
+                       . "Nomor Rekening: {$no_rekening}\n"
+                       . "Username: {$username}\n"
+                       . "Password: {$password}\n"
+                       . "Saldo Awal: Rp 0\n\n"
+                       . "Catatan Penting: Segera ubah password Anda setelah login pertama untuk keamanan akun Anda.\n\n"
+                       . "Jika Anda memiliki pertanyaan lebih lanjut, silakan hubungi petugas kami.";
+        
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Email sending failed: " . $mail->ErrorInfo);
+        return false;
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['confirm'])) {
         // Proses penyimpanan data setelah konfirmasi
         $nama = trim($_POST['nama']);
         $username = $_POST['username']; // Ambil username dari form yang sudah di-generate sebelumnya
-        $password = hash('sha256', '12345'); // Password default: 12345
+        $password = '12345'; // Password default
+        $password_hash = hash('sha256', $password); // Password default hashed
         $jurusan_id = $_POST['jurusan_id'];
         $kelas_id = $_POST['kelas_id'];
         $no_rekening = $_POST['no_rekening']; // Ambil nomor rekening dari form hidden
+        $email = isset($_POST['email']) ? trim($_POST['email']) : null; // Email opsional
         
         // Cek username sudah ada atau belum
         $check_query = "SELECT id FROM users WHERE username = ?";
@@ -43,10 +120,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         // Tambahkan user baru
-        $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id) 
-                VALUES (?, ?, 'siswa', ?, ?, ?)";
+        $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id, email) 
+                VALUES (?, ?, 'siswa', ?, ?, ?, ?)";
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("sssii", $username, $password, $nama, $jurusan_id, $kelas_id);
+        $stmt->bind_param("ssssis", $username, $password_hash, $nama, $jurusan_id, $kelas_id, $email);
         
         if ($stmt->execute()) {
             $user_id = $conn->insert_id;
@@ -58,7 +135,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt_rekening->bind_param("si", $no_rekening, $user_id);
             
             if ($stmt_rekening->execute()) {
+                // Email notification if email is provided
+                $email_sent = false;
+                if (!empty($email)) {
+                    $email_sent = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password);
+                }
+                
                 $_SESSION['success_message'] = "Pembukaan rekening berhasil!<br>Username: $username<br>Password default: 12345";
+                
+                if ($email_sent) {
+                    $_SESSION['success_message'] .= "<br><br>Informasi detail rekening telah dikirim ke email: $email";
+                }
+                
                 header('Location: dashboard.php');
                 exit();
             } else {
@@ -75,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $showConfirmation = true;
         $nama = trim($_POST['nama']);
         $username = generateUsername($nama);
+        $email = isset($_POST['email']) ? trim($_POST['email']) : null;
         
         // Cek jika username sudah ada
         $check_query = "SELECT id FROM users WHERE username = ?";
@@ -95,7 +184,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             'password' => '12345', // Password default
             'jurusan_id' => $_POST['jurusan_id'],
             'kelas_id' => $_POST['kelas_id'],
-            'no_rekening' => $no_rekening
+            'no_rekening' => $no_rekening,
+            'email' => $email
         ];
         
         // Dapatkan nama jurusan dan kelas untuk ditampilkan
@@ -160,51 +250,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             flex-direction: column;
         }
         
-        .top-nav {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            color: white;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: var(--shadow-md);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        
-        .top-nav h1 {
-            font-size: 22px;
-            font-weight: 700;
-            margin: 0;
-            letter-spacing: 0.5px;
-        }
-        
-        .nav-buttons {
-            display: flex;
-            gap: 12px;
-        }
-        
-        .nav-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.15);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: var(--radius-sm);
-            font-size: 14px;
-            font-weight: 500;
-            text-decoration: none;
-            transition: var(--transition);
-        }
-        
-        .nav-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
-        }
-        
         .main-content {
             width: 90%;
             max-width: 800px;
@@ -214,6 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-md);
             animation: fadeIn 0.5s ease;
+            position: relative;
         }
         
         @keyframes fadeIn {
@@ -231,6 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             display: flex;
             align-items: center;
             gap: 15px;
+            position: relative;
         }
         
         .welcome-banner h2 {
@@ -251,6 +298,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-radius: 50%;
         }
         
+        .close-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 0%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 16px;
+            text-decoration: none; /* Removes underline if it's a link */
+        }
+
         form {
             display: flex;
             flex-direction: column;
@@ -540,6 +605,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: var(--primary);
         }
         
+        /* Optional field styling */
+        .optional-field {
+            position: relative;
+        }
+        
+        .optional-badge {
+            position: absolute;
+            right: 10px;
+            top: -10px;
+            background-color: var(--accent);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            z-index: 2;
+        }
+        
         /* Responsive design improvements */
         @media (max-width: 768px) {
             .main-content {
@@ -551,7 +635,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             .welcome-banner {
                 padding: 15px;
-                flex-direction: column;
                 text-align: center;
                 gap: 10px;
             }
@@ -570,19 +653,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             .confirmation-label {
                 width: 100%;
                 margin-bottom: 5px;
-            }
-            
-            .top-nav {
-                padding: 12px 15px;
-            }
-            
-            .top-nav h1 {
-                font-size: 18px;
-            }
-            
-            .nav-btn {
-                padding: 6px 12px;
-                font-size: 13px;
             }
             
             .buttons-container {
@@ -651,24 +721,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             .input-with-icon {
                 padding-left: 40px;
             }
+            
         }
         </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <nav class="top-nav">
-        <h1><i class="fas fa-university"></i> SCHOBANK</h1>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
-    </nav>
-
     <div class="main-content">
         <div class="welcome-banner">
             <i class="<?php echo $showConfirmation ? 'fas fa-check-circle' : 'fas fa-user-plus'; ?>"></i>
             <h2><?php echo $showConfirmation ? 'Konfirmasi Data Nasabah' : 'Tambah Nasabah Baru'; ?></h2>
+            <a href="dashboard.php" class="close-btn">
+                <i class="fas fa-times"></i>
+            </a>
         </div>
 
         <?php if (isset($error)): ?>
@@ -706,6 +771,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="confirmation-value"><?php echo htmlspecialchars($formData['password']); ?></div>
                 </div>
                 
+                <?php if (!empty($formData['email'])): ?>
+                <div class="confirmation-item">
+                    <div class="confirmation-label"><i class="fas fa-envelope"></i> Email:</div>
+                    <div class="confirmation-value"><?php echo htmlspecialchars($formData['email']); ?></div>
+                </div>
+                <div class="confirmation-item">
+                    <div class="email-notification-info">
+                        <i class="fas fa-info-circle"></i> Informasi detail rekening akan dikirim ke email ini
+                    </div>
+                </div>
+                <?php endif; ?>
+                
                 <div class="confirmation-item">
                     <div class="confirmation-label"><i class="fas fa-graduation-cap"></i> Jurusan:</div>
                     <div class="confirmation-value"><?php echo htmlspecialchars($jurusan_name); ?></div>
@@ -733,6 +810,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <input type="hidden" name="jurusan_id" value="<?php echo htmlspecialchars($formData['jurusan_id']); ?>">
                 <input type="hidden" name="kelas_id" value="<?php echo htmlspecialchars($formData['kelas_id']); ?>">
                 <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($formData['no_rekening']); ?>">
+                <?php if (!empty($formData['email'])): ?>
+                <input type="hidden" name="email" value="<?php echo htmlspecialchars($formData['email']); ?>">
+                <?php endif; ?>
                 
                 <div class="buttons-container">
                     <button type="submit" name="confirm" value="1">
@@ -760,10 +840,22 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                 </div>
                 
+                <div class="floating-label">
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope input-icon"></i>
+                        <input type="email" id="email" name="email" class="input-with-icon" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" placeholder=" ">
+                        <label for="email">Email</label>
+                    </div>
+                    <div class="info-text">
+                        <i class="fas fa-info-circle"></i> Jika diisi, detail rekening akan dikirim ke email ini
+                    </div>
+                </div>
+                
                 <div class="form-divider"></div>
                 
                 <div class="floating-label">
                     <div class="input-wrapper">
+                        <i class="fas fa-graduation-cap input-icon"></i>
                         <select id="jurusan_id" name="jurusan_id" class="input-with-icon" required onchange="getKelasByJurusan(this.value)">
                             <option value=""></option>
                             <?php 
@@ -783,6 +875,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 <div class="floating-label">
                     <div class="input-wrapper">
+                        <i class="fas fa-chalkboard input-icon"></i>
                         <select id="kelas_id" name="kelas_id" class="input-with-icon" required>
                             <option value=""></option>
                         </select>
@@ -847,6 +940,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     e.preventDefault();
                     alert('Nama harus memiliki minimal 3 karakter');
                     $('#nama').focus();
+                }
+                
+                // Email validation if entered
+                const email = $('#email').val().trim();
+                if (email !== '') {
+                    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailPattern.test(email)) {
+                        e.preventDefault();
+                        alert('Format email tidak valid');
+                        $('#email').focus();
+                    }
                 }
             });
             

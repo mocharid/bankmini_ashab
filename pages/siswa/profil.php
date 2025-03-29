@@ -12,7 +12,7 @@ $error = '';
 
 // Ambil data user lengkap dan rekening
 $query = "SELECT u.username, u.nama, u.role, u.email, k.nama_kelas, j.nama_jurusan, 
-          r.no_rekening, r.saldo, u.created_at as tanggal_bergabung, u.pin
+          r.no_rekening, r.saldo, u.created_at as tanggal_bergabung, u.pin, u.jurusan_id, u.kelas_id
           FROM users u 
           LEFT JOIN rekening r ON u.id = r.user_id 
           LEFT JOIN kelas k ON u.kelas_id = k.id
@@ -28,226 +28,472 @@ if (!$user) {
     die("Data pengguna tidak ditemukan.");
 }
 
+// Fungsi untuk mengirim email
+function sendEmail($email, $subject, $body) {
+    $mail = new PHPMailer(true);
+    try {
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com'; // Ganti dengan SMTP host Anda
+        $mail->SMTPAuth = true;
+        $mail->Username = 'mocharid.ip@gmail.com'; // Ganti dengan email pengirim
+        $mail->Password = 'spjs plkg ktuu lcxh'; // Ganti dengan password email pengirim
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = 587;
+        $mail->CharSet = 'UTF-8';
+
+        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+        $mail->addAddress($email);
+
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = $body;
+        $mail->AltBody = strip_tags($body);
+
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Mail error: " . $mail->ErrorInfo);
+        return false;
+    }
+}
+
 // Handle form submission
 if (isset($_POST['update_username'])) {
-    $new_username = trim($_POST['new_username']); // Ambil username baru dari form
+    $new_username = trim($_POST['new_username']);
 
     if (empty($new_username)) {
         $error = "Username tidak boleh kosong!";
+    } elseif ($new_username === $user['username']) {
+        $error = "Username baru tidak boleh sama dengan username saat ini!";
     } else {
-        // Cek apakah username baru sama dengan username saat ini
-        if ($new_username === $user['username']) {
-            $error = "Username baru tidak boleh sama dengan username saat ini!";
+        // Cek apakah username sudah digunakan oleh pengguna lain
+        $check_query = "SELECT id FROM users WHERE username = ?";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->bind_param("s", $new_username);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        
+        if ($check_result->num_rows > 0) {
+            $error = "Username sudah digunakan oleh pengguna lain!";
         } else {
-            // Cek apakah username sudah digunakan oleh pengguna lain
-            $check_query = "SELECT id FROM users WHERE username = ?";
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("s", $new_username);
-            $check_stmt->execute();
-            $check_result = $check_stmt->get_result();
+            // Jika username tersedia, lakukan update
+            $update_query = "UPDATE users SET username = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
             
-            if ($check_result->num_rows > 0) {
-                $error = "Username sudah digunakan oleh pengguna lain!";
-            } else {
-                // Jika username tersedia, lakukan update
-                $update_query = "UPDATE users SET username = ? WHERE id = ?";
-                $update_stmt = $conn->prepare($update_query);
-                $update_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
-                
-                if ($update_stmt->execute()) {
-                    $message = "Username berhasil diubah!";
-                    $user['username'] = $new_username; // Update username di session atau tampilan
-                    logout(); // Logout setelah berhasil mengubah username
+            if ($update_stmt->execute()) {
+                $message = "Username berhasil diubah!";
+
+                // Template email untuk perubahan username
+                $subject = "Username Berhasil Diubah - SCHOBANK SYSTEM";
+                $email_body = "
+                <!DOCTYPE html>
+                <html lang='id'>
+                <head>
+                    <meta charset='UTF-8'>
+                    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+                    <title>Username Berhasil Diubah</title>
+                    <style>
+                        body { font-family: 'Poppins', sans-serif; background-color: #f8faff; color: #333; margin: 0; padding: 0; }
+                        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1); }
+                        .email-header { background: linear-gradient(135deg, #0c4da2 0%, #0a2e5c 100%); color: white; padding: 30px; text-align: center; }
+                        .email-header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+                        .email-body { padding: 30px; color: #666; }
+                        .email-body h2 { font-size: 20px; color: #0c4da2; margin-top: 0; }
+                        .email-body p { font-size: 16px; line-height: 1.6; }
+                        .email-footer { background-color: #f1f5f9; padding: 20px; text-align: center; font-size: 14px; color: #666; }
+                        .email-footer a { color: #0c4da2; text-decoration: none; }
+                        .btn { display: inline-block; padding: 12px 25px; background-color: #0c4da2; color: white; text-decoration: none; border-radius: 10px; font-size: 16px; margin-top: 20px; transition: background-color 0.3s ease; }
+                        .btn:hover { background-color: #0a2e5c; }
+                        .highlight { background-color: #e0e9f5; padding: 10px; border-radius: 10px; font-weight: 500; color: #0c4da2; margin: 20px 0; }
+                    </style>
+                </head>
+                <body>
+                    <div class='email-container'>
+                        <div class='email-header'>
+                            <h1>SCHOBANK SYSTEM</h1>
+                        </div>
+                        <div class='email-body'>
+                            <h2>Username Berhasil Diubah</h2>
+                            <p>Halo, <strong>{$user['nama']}</strong>!</p>
+                            <p>Username akun SCHOBANK Anda telah berhasil diubah menjadi:</p>
+                            <div class='highlight'>{$new_username}</div>
+                            <p>Perubahan ini dilakukan pada <strong>" . date('d M Y H:i:s') . " WIB</strong>.</p>
+                            <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator kami.</p>
+                        </div>
+                        <div class='email-footer'>
+                            <p>&copy; " . date('Y') . " SCHOBANK. Semua hak dilindungi undang-undang.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                ";
+
+                // Kirim email
+                if (sendEmail($user['email'], $subject, $email_body)) {
+                    logout();
                 } else {
-                    $error = "Gagal mengubah username!";
+                    $error = "Gagal mengirim email notifikasi!";
                 }
+            } else {
+                $error = "Gagal mengubah username!";
             }
         }
     }
-    } elseif (isset($_POST['update_password'])) {
-        // Password update code
-        $current_password = $_POST['current_password'];
-        $new_password = $_POST['new_password'];
-        $confirm_password = $_POST['confirm_password'];
+} elseif (isset($_POST['update_password'])) {
+    // Password update code
+    $current_password = $_POST['current_password'];
+    $new_password = $_POST['new_password'];
+    $confirm_password = $_POST['confirm_password'];
+    
+    if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
+        $error = "Semua field password harus diisi!";
+    } elseif ($new_password !== $confirm_password) {
+        $error = "Password baru tidak cocok!";
+    } elseif (strlen($new_password) < 6) {
+        $error = "Password baru minimal 6 karakter!";
+    } else {
+        // Get current password from database
+        $verify_query = "SELECT password FROM users WHERE id = ?";
+        $verify_stmt = $conn->prepare($verify_query);
+        $verify_stmt->bind_param("i", $_SESSION['user_id']);
+        $verify_stmt->execute();
+        $verify_result = $verify_stmt->get_result();
+        $user_data = $verify_result->fetch_assoc();
         
-        if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
-            $error = "Semua field password harus diisi!";
-        } elseif ($new_password !== $confirm_password) {
-            $error = "Password baru tidak cocok!";
-        } elseif (strlen($new_password) < 6) {
-            $error = "Password baru minimal 6 karakter!";
+        if (!$user_data || !isset($user_data['password'])) {
+            $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
         } else {
-            // Get current password from database
-            $verify_query = "SELECT password FROM users WHERE id = ?";
-            $verify_stmt = $conn->prepare($verify_query);
-            $verify_stmt->bind_param("i", $_SESSION['user_id']);
-            $verify_stmt->execute();
-            $verify_result = $verify_stmt->get_result();
-            $user_data = $verify_result->fetch_assoc();
+            $stored_hash = $user_data['password'];
             
-            if (!$user_data || !isset($user_data['password'])) {
-                $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
+            // Check if the hash is a SHA-256 hash (64 characters in length)
+            $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
+            
+            // Verify the password based on hash type
+            $password_verified = false;
+            
+            if ($is_sha256) {
+                // For SHA-256 hashed passwords
+                $password_verified = (hash('sha256', $current_password) === $stored_hash);
             } else {
-                $stored_hash = $user_data['password'];
-                
-                // Check if the hash is a SHA-256 hash (64 characters in length)
-                $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
-                
-                // Verify the password based on hash type
-                $password_verified = false;
-                
+                // For passwords hashed with password_hash()
+                $password_verified = password_verify($current_password, $stored_hash);
+            }
+            
+            if ($password_verified) {
+                // Use consistent hashing method - if original was SHA-256, use SHA-256 for new password too
                 if ($is_sha256) {
-                    // For SHA-256 hashed passwords
-                    $password_verified = (hash('sha256', $current_password) === $stored_hash);
+                    $hashed_password = hash('sha256', $new_password);
                 } else {
-                    // For passwords hashed with password_hash()
-                    $password_verified = password_verify($current_password, $stored_hash);
+                    $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
                 }
                 
-                if ($password_verified) {
-                    // Use consistent hashing method - if original was SHA-256, use SHA-256 for new password too
-                    if ($is_sha256) {
-                        $hashed_password = hash('sha256', $new_password);
-                    } else {
-                        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+                $update_query = "UPDATE users SET password = ? WHERE id = ?";
+                $update_stmt = $conn->prepare($update_query);
+                $update_stmt->bind_param("si", $hashed_password, $_SESSION['user_id']);
+                
+                if ($update_stmt->execute()) {
+                    $message = "Password berhasil diubah! Anda dapat menggunakan password baru untuk login selanjutnya.";
+
+                    // Kirim email notifikasi
+                    $subject = "Password Berhasil Diubah - SCHOBANK SYSTEM";
+                    $message_email = "
+                    <html>
+                    <body>
+                        <h2>Password Berhasil Diubah</h2>
+                        <p>Halo, <strong>{$user['nama']}</strong>!</p>
+                        <p>Password akun SCHOBANK Anda telah berhasil diubah pada " . date('d M Y H:i:s') . " WIB.</p>
+                        <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
+                        <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
+                    </body>
+                    </html>
+                    ";
+
+                    try {
+                        $mail = new PHPMailer(true);
+                        $mail->isSMTP();
+                        $mail->Host = 'smtp.gmail.com';
+                        $mail->SMTPAuth = true;
+                        $mail->Username = 'mocharid.ip@gmail.com';
+                        $mail->Password = 'spjs plkg ktuu lcxh';
+                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                        $mail->Port = 587;
+                        $mail->CharSet = 'UTF-8';
+
+                        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+                        $mail->addAddress($user['email'], $user['nama']);
+
+                        $mail->isHTML(true);
+                        $mail->Subject = $subject;
+                        $mail->Body = $message_email;
+                        $mail->AltBody = strip_tags($message_email);
+
+                        $mail->send();
+                    } catch (Exception $e) {
+                        error_log("Mail error: " . $mail->ErrorInfo);
                     }
-                    
-                    $update_query = "UPDATE users SET password = ? WHERE id = ?";
-                    $update_stmt = $conn->prepare($update_query);
-                    $update_stmt->bind_param("si", $hashed_password, $_SESSION['user_id']);
-                    
-                    if ($update_stmt->execute()) {
-                        $message = "Password berhasil diubah! Anda dapat menggunakan password baru untuk login selanjutnya.";
-                        logout();
-                    } else {
-                        $error = "Gagal mengubah password!";
-                    }
+
+                    logout();
                 } else {
-                    $error = "Password saat ini tidak valid!";
+                    $error = "Gagal mengubah password!";
                 }
+            } else {
+                $error = "Password saat ini tidak valid!";
             }
         }
-    } elseif (isset($_POST['update_pin'])) {
-        // PIN update code
-        $new_pin = $_POST['new_pin'];
-        $confirm_pin = $_POST['confirm_pin'];
+    }
+} elseif (isset($_POST['update_pin'])) {
+    // PIN update code
+    $new_pin = $_POST['new_pin'];
+    $confirm_pin = $_POST['confirm_pin'];
 
-        if (empty($new_pin) || empty($confirm_pin)) {
-            $error = "Semua field PIN harus diisi!";
-        } elseif ($new_pin !== $confirm_pin) {
-            $error = "PIN baru tidak cocok!";
-        } elseif (strlen($new_pin) !== 6 || !ctype_digit($new_pin)) {
-            $error = "PIN harus terdiri dari 6 digit angka!";
-        } else {
-            // Verify current PIN first if user already has a PIN
-            if (!empty($user['pin'])) {
-                // Check if current_pin exists in POST
-                if (!isset($_POST['current_pin']) || empty($_POST['current_pin'])) {
-                    $error = "PIN saat ini harus diisi!";
-                } elseif ($_POST['current_pin'] !== $user['pin']) {
-                    $error = "PIN saat ini tidak valid!";
-                } else {
-                    // Current PIN is correct, proceed with update
-                    $update_query = "UPDATE users SET pin = ? WHERE id = ?";
-                    $update_stmt = $conn->prepare($update_query);
-                    $update_stmt->bind_param("si", $new_pin, $_SESSION['user_id']);
-
-                    if ($update_stmt->execute()) {
-                        $message = "PIN berhasil diubah!";
-                        $user['pin'] = $new_pin;
-                    } else {
-                        $error = "Gagal mengubah PIN!";
-                    }
-                }
+    if (empty($new_pin) || empty($confirm_pin)) {
+        $error = "Semua field PIN harus diisi!";
+    } elseif ($new_pin !== $confirm_pin) {
+        $error = "PIN baru tidak cocok!";
+    } elseif (strlen($new_pin) !== 6 || !ctype_digit($new_pin)) {
+        $error = "PIN harus terdiri dari 6 digit angka!";
+    } else {
+        // Verify current PIN first if user already has a PIN
+        if (!empty($user['pin'])) {
+            // Check if current_pin exists in POST
+            if (!isset($_POST['current_pin']) || empty($_POST['current_pin'])) {
+                $error = "PIN saat ini harus diisi!";
+            } elseif ($_POST['current_pin'] !== $user['pin']) {
+                $error = "PIN saat ini tidak valid!";
             } else {
-                // User doesn't have a PIN yet, allow creating new PIN without verification
+                // Current PIN is correct, proceed with update
                 $update_query = "UPDATE users SET pin = ? WHERE id = ?";
                 $update_stmt = $conn->prepare($update_query);
                 $update_stmt->bind_param("si", $new_pin, $_SESSION['user_id']);
 
                 if ($update_stmt->execute()) {
-                    $message = "PIN berhasil dibuat!";
-                    $user['pin'] = $new_pin;
-                } else {
-                    $error = "Gagal membuat PIN!";
-                }
-            }
-        }
-    } elseif (isset($_POST['update_email'])) {
-        $email = trim($_POST['email']);
+                    $message = "PIN berhasil diubah!";
 
-        if (empty($email)) {
-            $error = "Email tidak boleh kosong!";
-        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $error = "Format email tidak valid!";
-        } else {
-            // Cek apakah email sudah digunakan oleh pengguna lain
-            $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
-            $check_stmt->execute();
-            $check_result = $check_stmt->get_result();
+                    // Kirim email notifikasi
+                    $subject = "PIN Berhasil Diubah - SCHOBANK SYSTEM";
+                    $message_email = "
+                    <html>
+                    <body>
+                        <h2>PIN Berhasil Diubah</h2>
+                        <p>Halo, <strong>{$user['nama']}</strong>!</p>
+                        <p>PIN akun SCHOBANK Anda telah berhasil diubah pada " . date('d M Y H:i:s') . " WIB.</p>
+                        <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
+                        <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
+                    </body>
+                    </html>
+                    ";
 
-            if ($check_result->num_rows > 0) {
-                $error = "Email sudah digunakan oleh pengguna lain!";
-            } else {
-                // Generate OTP
-                $otp = rand(100000, 999999);
-                $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes')); // OTP berlaku 5 menit
-
-                // Simpan OTP ke database
-                $update_query = "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?";
-                $update_stmt = $conn->prepare($update_query);
-                $update_stmt->bind_param("ssi", $otp, $expiry, $_SESSION['user_id']);
-
-                if ($update_stmt->execute()) {
-                    // Kirim OTP ke email
                     try {
                         $mail = new PHPMailer(true);
                         $mail->isSMTP();
-                        $mail->Host = 'smtp.gmail.com'; // Ganti dengan SMTP host Anda
+                        $mail->Host = 'smtp.gmail.com';
                         $mail->SMTPAuth = true;
-                        $mail->Username = 'mocharid.ip@gmail.com'; // Ganti dengan email pengirim
-                        $mail->Password = 'spjs plkg ktuu lcxh'; // Ganti dengan password email pengirim
+                        $mail->Username = 'mocharid.ip@gmail.com';
+                        $mail->Password = 'spjs plkg ktuu lcxh';
                         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                         $mail->Port = 587;
                         $mail->CharSet = 'UTF-8';
 
-                        // Pengirim dan penerima
                         $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
-                        $mail->addAddress($email, $user['nama']);
+                        $mail->addAddress($user['email'], $user['nama']);
 
-                        // Konten email
                         $mail->isHTML(true);
-                        $mail->Subject = "Verifikasi Email - SCHOBANK SYSTEM";
-                        $mail->Body = "
-                            <html>
-                            <body>
-                                <h2>Verifikasi Email</h2>
-                                <p>Halo, <strong>{$user['nama']}</strong>!</p>
-                                <p>Kode OTP Anda adalah: <strong>{$otp}</strong>.</p>
-                                <p>Kode ini berlaku hingga " . date('d M Y H:i:s', strtotime($expiry)) . " WIB.</p>
-                                <p>Jika Anda tidak melakukan permintaan ini, abaikan email ini.</p>
-                                <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
-                            </body>
-                            </html>
-                        ";
+                        $mail->Subject = $subject;
+                        $mail->Body = $message_email;
+                        $mail->AltBody = strip_tags($message_email);
 
-                        // Kirim email
                         $mail->send();
-                        $_SESSION['new_email'] = $email; // Simpan email baru di session
-                        header("Location: verify_otp.php"); // Redirect ke halaman verifikasi OTP
-                        exit();
                     } catch (Exception $e) {
-                        error_log("Mail error: " . $mail->ErrorInfo); // Log error
-                        $error = "Gagal mengirim OTP. Silakan coba lagi nanti.";
+                        error_log("Mail error: " . $mail->ErrorInfo);
                     }
+
+                    $user['pin'] = $new_pin;
                 } else {
-                    $error = "Gagal menyimpan OTP. Silakan coba lagi.";
+                    $error = "Gagal mengubah PIN!";
                 }
+            }
+        } else {
+            // User doesn't have a PIN yet, allow creating new PIN without verification
+            $update_query = "UPDATE users SET pin = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("si", $new_pin, $_SESSION['user_id']);
+
+            if ($update_stmt->execute()) {
+                $message = "PIN berhasil dibuat!";
+
+                // Kirim email notifikasi
+                $subject = "PIN Berhasil Dibuat - SCHOBANK SYSTEM";
+                $message_email = "
+                <html>
+                <body>
+                    <h2>PIN Berhasil Dibuat</h2>
+                    <p>Halo, <strong>{$user['nama']}</strong>!</p>
+                    <p>PIN akun SCHOBANK Anda telah berhasil dibuat pada " . date('d M Y H:i:s') . " WIB.</p>
+                    <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
+                    <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
+                </body>
+                </html>
+                ";
+
+                try {
+                    $mail = new PHPMailer(true);
+                    $mail->isSMTP();
+                    $mail->Host = 'smtp.gmail.com';
+                    $mail->SMTPAuth = true;
+                    $mail->Username = 'mocharid.ip@gmail.com';
+                    $mail->Password = 'spjs plkg ktuu lcxh';
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    $mail->Port = 587;
+                    $mail->CharSet = 'UTF-8';
+
+                    $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+                    $mail->addAddress($user['email'], $user['nama']);
+
+                    $mail->isHTML(true);
+                    $mail->Subject = $subject;
+                    $mail->Body = $message_email;
+                    $mail->AltBody = strip_tags($message_email);
+
+                    $mail->send();
+                } catch (Exception $e) {
+                    error_log("Mail error: " . $mail->ErrorInfo);
+                }
+
+                $user['pin'] = $new_pin;
+            } else {
+                $error = "Gagal membuat PIN!";
             }
         }
     }
+} elseif (isset($_POST['update_email'])) {
+    $email = trim($_POST['email']);
+
+    if (empty($email)) {
+        $error = "Email tidak boleh kosong!";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Format email tidak valid!";
+    } else {
+        // Cek apakah email sudah digunakan oleh pengguna lain
+        $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+
+        if ($check_result->num_rows > 0) {
+            $error = "Email sudah digunakan oleh pengguna lain!";
+        } else {
+            // Generate OTP
+            $otp = rand(100000, 999999);
+            $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes')); // OTP berlaku 5 menit
+
+            // Simpan OTP ke database
+            $update_query = "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("ssi", $otp, $expiry, $_SESSION['user_id']);
+
+            if ($update_stmt->execute()) {
+                // Kirim OTP ke email
+                try {
+                    $mail = new PHPMailer(true);
+                    $mail->isSMTP();
+                    $mail->Host = 'smtp.gmail.com'; // Ganti dengan SMTP host Anda
+                    $mail->SMTPAuth = true;
+                    $mail->Username = 'mocharid.ip@gmail.com'; // Ganti dengan email pengirim
+                    $mail->Password = 'spjs plkg ktuu lcxh'; // Ganti dengan password email pengirim
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                    $mail->Port = 587;
+                    $mail->CharSet = 'UTF-8';
+
+                    // Pengirim dan penerima
+                    $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+                    $mail->addAddress($email, $user['nama']);
+
+                    // Konten email
+                    $mail->isHTML(true);
+                    $mail->Subject = "Verifikasi Email - SCHOBANK SYSTEM";
+                    $mail->Body = "
+                        <html>
+                        <body>
+                            <h2>Verifikasi Email</h2>
+                            <p>Halo, <strong>{$user['nama']}</strong>!</p>
+                            <p>Kode OTP Anda adalah: <strong>{$otp}</strong>.</p>
+                            <p>Kode ini berlaku hingga " . date('d M Y H:i:s', strtotime($expiry)) . " WIB.</p>
+                            <p>Jika Anda tidak melakukan permintaan ini, abaikan email ini.</p>
+                            <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
+                        </body>
+                        </html>
+                    ";
+
+                    // Kirim email
+                    $mail->send();
+                    $_SESSION['new_email'] = $email; // Simpan email baru di session
+                    header("Location: verify_otp.php"); // Redirect ke halaman verifikasi OTP
+                    exit();
+                } catch (Exception $e) {
+                    error_log("Mail error: " . $mail->ErrorInfo); // Log error
+                    $error = "Gagal mengirim OTP. Silakan coba lagi nanti.";
+                }
+            } else {
+                $error = "Gagal menyimpan OTP. Silakan coba lagi.";
+            }
+        }
+    }
+} elseif (isset($_POST['update_kelas'])) {
+    $new_kelas_id = $_POST['new_kelas_id'];
+    
+    if (empty($new_kelas_id)) {
+        $error = "Kelas harus dipilih!";
+    } elseif ($new_kelas_id == $user['kelas_id']) {
+        $error = "Kelas baru tidak boleh sama dengan kelas saat ini!";
+    } else {
+        // Update kelas
+        $update_query = "UPDATE users SET kelas_id = ? WHERE id = ?";
+        $update_stmt = $conn->prepare($update_query);
+        $update_stmt->bind_param("ii", $new_kelas_id, $_SESSION['user_id']);
+        
+        if ($update_stmt->execute()) {
+            $message = "Kelas berhasil diubah!";
+            
+            // Update user data
+            $user['kelas_id'] = $new_kelas_id;
+            
+            // Get new class name
+            $kelas_query = "SELECT nama_kelas FROM kelas WHERE id = ?";
+            $kelas_stmt = $conn->prepare($kelas_query);
+            $kelas_stmt->bind_param("i", $new_kelas_id);
+            $kelas_stmt->execute();
+            $kelas_result = $kelas_stmt->get_result();
+            $kelas_data = $kelas_result->fetch_assoc();
+            $user['nama_kelas'] = $kelas_data['nama_kelas'];
+            
+            // Kirim email notifikasi
+            $subject = "Perubahan Kelas - SCHOBANK SYSTEM";
+            $message_email = "
+            <html>
+            <body>
+                <h2>Kelas Berhasil Diubah</h2>
+                <p>Halo, <strong>{$user['nama']}</strong>!</p>
+                <p>Kelas Anda telah berhasil diubah menjadi:</p>
+                <p><strong>{$user['nama_kelas']}</strong></p>
+                <p>Perubahan ini dilakukan pada " . date('d M Y H:i:s') . " WIB.</p>
+                <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
+                <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
+            </body>
+            </html>
+            ";
+            
+            if (sendEmail($user['email'], $subject, $message_email)) {
+                $message .= " Notifikasi telah dikirim ke email Anda.";
+            } else {
+                $error = "Gagal mengirim email notifikasi!";
+            }
+        } else {
+            $error = "Gagal mengubah kelas!";
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -810,6 +1056,71 @@ if (isset($_POST['update_username'])) {
                 transform: translateY(0);
             }
         }
+                /* CSS untuk dropdown kelas */
+        .form-control {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            font-family: 'Poppins', sans-serif;
+            background-color: white;
+            color: #333;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 15px;
+            transition: border-color 0.3s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #0c4da2;
+            box-shadow: 0 0 0 2px rgba(12, 77, 162, 0.2);
+        }
+
+        /* Style untuk opsi dropdown */
+        .form-control option {
+            padding: 10px;
+            background-color: white;
+            color: #333;
+        }
+
+        /* Style untuk hover option */
+        .form-control option:hover {
+            background-color: #f0f5ff;
+        }
+
+        /* Style untuk selected option */
+        .form-control option:checked {
+            background-color: #e0e9f5;
+            color: #0c4da2;
+            font-weight: 500;
+        }
+
+        /* Style untuk disabled option */
+        .form-control option:disabled {
+            color: #999;
+            background-color: #f5f5f5;
+        }
+
+        /* Style untuk grup optgroup */
+        .form-control optgroup {
+            font-weight: 600;
+            color: #0c4da2;
+            background-color: #f0f5ff;
+            padding: 5px;
+        }
+
+        /* Style untuk option dalam optgroup */
+        .form-control optgroup option {
+            padding-left: 20px;
+            font-weight: normal;
+            color: #333;
+        }
         </style>
 </head>
 <body>
@@ -904,9 +1215,28 @@ if (isset($_POST['update_username'])) {
                     </div>
                     
                     <div class="info-item">
+                        <i class="fas fa-graduation-cap"></i>
+                        <div>
+                            <div class="label">Jurusan</div>
+                            <div class="value"><?= htmlspecialchars($user['nama_jurusan']) ?></div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <i class="fas fa-users"></i>
+                        <div>
+                            <div class="label">Kelas</div>
+                            <div class="value"><?= htmlspecialchars($user['nama_kelas']) ?></div>
+                        </div>
+                        <button class="edit-icon" data-target="kelas">
+                            <i class="fas fa-pen"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="info-item">
                         <i class="fas fa-user-shield"></i>
                         <div>
-                            <div class="label">Role</div>
+                            <div class="label">Status</div>
                             <div class="value">
                                 <span class="badge"><?= htmlspecialchars(ucfirst($user['role'])) ?></span>
                             </div>
@@ -1119,8 +1449,53 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <script>
+    <!-- Modal for Edit Kelas -->
+    <div id="kelasModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-users-class"></i> Ubah Kelas</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" id="kelasForm">
+                    <div class="form-group">
+                        <label for="new_kelas_id">Kelas Baru</label>
+                        <div class="input-wrapper">
+                            <i class="fas fa-users-class input-icon"></i>
+                            <select id="new_kelas_id" name="new_kelas_id" required class="form-control">
+                                <option value="">Pilih Kelas</option>
+                                <?php
+                                // Get classes for the current major
+                                $kelas_query = "SELECT k.id, k.nama_kelas FROM kelas k 
+                                               WHERE k.jurusan_id = ? 
+                                               ORDER BY k.nama_kelas";
+                                $kelas_stmt = $conn->prepare($kelas_query);
+                                $kelas_stmt->bind_param("i", $user['jurusan_id']);
+                                $kelas_stmt->execute();
+                                $kelas_result = $kelas_stmt->get_result();
+                                
+                                while ($kelas = $kelas_result->fetch_assoc()) {
+                                    $selected = ($kelas['id'] == $user['kelas_id']) ? 'selected' : '';
+                                    echo '<option value="' . $kelas['id'] . '" ' . $selected . '>' . htmlspecialchars($kelas['nama_kelas']) . '</option>';
+                                }
+                                ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" name="update_kelas" class="btn btn-primary" id="kelasBtn">
+                            <i class="fas fa-save"></i> <span>Simpan</span>
+                        </button>
+                        <button type="button" class="btn btn-outline close-modal">
+                            <i class="fas fa-times"></i> <span>Batal</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
+    <script>
         // Handle alerts
         function dismissAlert(alert) {
             alert.classList.add('hide');
@@ -1222,6 +1597,11 @@ if (isset($_POST['update_username'])) {
 
             document.getElementById('otpForm').addEventListener('submit', function() {
                 const button = document.getElementById('otpBtn');
+                button.classList.add('btn-loading');
+            });
+
+            document.getElementById('kelasForm').addEventListener('submit', function() {
+                const button = document.getElementById('kelasBtn');
                 button.classList.add('btn-loading');
             });
         });

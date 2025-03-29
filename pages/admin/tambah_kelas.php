@@ -101,14 +101,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
 $query_jurusan = "SELECT * FROM jurusan ORDER BY nama_jurusan ASC";
 $result_jurusan = $conn->query($query_jurusan);
 
-// Fetch existing kelas with jurusan info and total students
-$query_list = "SELECT k.*, j.nama_jurusan, COUNT(u.id) as total_siswa 
+// Fetch existing kelas with jurusan info and total students, grouped by jurusan
+$query_list = "SELECT j.nama_jurusan, k.id as kelas_id, k.nama_kelas, k.jurusan_id, COUNT(u.id) as total_siswa 
                FROM kelas k 
                LEFT JOIN jurusan j ON k.jurusan_id = j.id
                LEFT JOIN users u ON k.id = u.kelas_id 
-               GROUP BY k.id 
+               GROUP BY j.nama_jurusan, k.id 
                ORDER BY j.nama_jurusan ASC, k.nama_kelas ASC";
 $result = $conn->query($query_list);
+
+// Organize data by jurusan
+$kelas_by_jurusan = [];
+if ($result && $result->num_rows > 0) {
+    while ($row = $result->fetch_assoc()) {
+        $jurusan = $row['nama_jurusan'];
+        if (!isset($kelas_by_jurusan[$jurusan])) {
+            $kelas_by_jurusan[$jurusan] = [];
+        }
+        $kelas_by_jurusan[$jurusan][] = $row;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -154,47 +166,6 @@ $result = $conn->query($query_list);
             flex-direction: column;
         }
 
-        /* Navigation Styles */
-        .top-nav {
-            background: var(--primary-dark);
-            padding: 1rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .nav-brand {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-
-        .nav-buttons {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .nav-btn {
-            background: rgba(255,255,255,0.1);
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 10px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: var(--transition);
-        }
-
-        .nav-btn:hover {
-            background: rgba(255,255,255,0.2);
-            transform: translateY(-2px);
-        }
-
         /* Main Content */
         .main-content {
             flex: 1;
@@ -214,6 +185,9 @@ $result = $conn->query($query_list);
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .welcome-banner::before {
@@ -244,6 +218,27 @@ $result = $conn->query($query_list);
             font-size: 1.5rem;
             position: relative;
             z-index: 1;
+        }
+
+        .back-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            z-index: 1;
+        }
+
+        .back-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
         }
 
         /* Form Card */
@@ -553,18 +548,6 @@ $result = $conn->query($query_list);
 
         /* Responsive Design */
         @media (max-width: 768px) {
-            .top-nav {
-                padding: 1rem;
-                flex-direction: column;
-                gap: 1rem;
-                text-align: center;
-            }
-
-            .nav-buttons {
-                width: 100%;
-                justify-content: center;
-            }
-
             .main-content {
                 padding: 1rem;
             }
@@ -602,23 +585,13 @@ $result = $conn->query($query_list);
                 padding: 1.5rem;
             }
         }
-    </style>
+        </style>
 </head>
 <body>
     <!-- Loading Spinner -->
     <div class="loading">
         <div class="spinner"></div>
     </div>
-
-    <!-- Navigation -->
-    <nav class="top-nav">
-        <div class="nav-brand">SCHOBANK</div>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
-    </nav>
 
     <!-- Main Content -->
     <div class="main-content">
@@ -627,6 +600,9 @@ $result = $conn->query($query_list);
                 <i class="fas fa-plus-circle"></i>
                 <span>Tambah Kelas</span>
             </h2>
+            <a href="dashboard.php" class="back-btn">
+                <i class="fas fa-times"></i>
+            </a>
         </div>
 
         <div class="form-card">
@@ -659,7 +635,7 @@ $result = $conn->query($query_list);
             <?php endif; ?>
 
             <form action="" method="POST">
-            <div class="form-group">
+                <div class="form-group">
                     <label for="jurusan_id">Jurusan:</label>
                     <select id="jurusan_id" name="jurusan_id" required>
                         <option value="">Pilih Jurusan</option>
@@ -694,54 +670,51 @@ $result = $conn->query($query_list);
                 <span>Daftar Kelas</span>
             </h3>
             
-            <?php if ($result && $result->num_rows > 0): ?>
+            <?php if (!empty($kelas_by_jurusan)): ?>
                 <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Nama Kelas</th>
-                                <th>Jurusan</th>
-                                <th>Jumlah Siswa</th>
-                                <th>Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php 
-                            $no = 1;
-                            while ($row = $result->fetch_assoc()): 
-                            ?>
+                    <?php foreach ($kelas_by_jurusan as $jurusan => $kelas): ?>
+                        <h4><?php echo htmlspecialchars($jurusan); ?></h4>
+                        <table>
+                            <thead>
                                 <tr>
-                                    <td><?php echo $no++; ?></td>
-                                    <td><?php echo htmlspecialchars($row['nama_kelas']); ?></td>
-                                    <td>
-                                        <span class="jurusan-badge">
-                                            <?php echo htmlspecialchars($row['nama_jurusan']); ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="total-siswa">
-                                            <?php echo $row['total_siswa']; ?> Siswa
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button type="button" class="btn-edit" 
-                                                    onclick="showEditModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_kelas'], ENT_QUOTES); ?>', <?php echo $row['jurusan_id']; ?>)">
-                                                <i class="fas fa-edit"></i>
-                                                <span>Edit</span>
-                                            </button>
-                                            <button type="button" class="btn-delete" 
-                                                    onclick="showDeleteModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_kelas'], ENT_QUOTES); ?>')">
-                                                <i class="fas fa-trash"></i>
-                                                <span>Hapus</span>
-                                            </button>
-                                        </div>
-                                    </td>
+                                    <th>No</th>
+                                    <th>Nama Kelas</th>
+                                    <th>Jumlah Siswa</th>
+                                    <th>Aksi</th>
                                 </tr>
-                            <?php endwhile; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php 
+                                $no = 1;
+                                foreach ($kelas as $row): 
+                                ?>
+                                    <tr>
+                                        <td><?php echo $no++; ?></td>
+                                        <td><?php echo htmlspecialchars($row['nama_kelas']); ?></td>
+                                        <td>
+                                            <span class="total-siswa">
+                                                <?php echo $row['total_siswa']; ?> Siswa
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <button type="button" class="btn-edit" 
+                                                        onclick="showEditModal(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars($row['nama_kelas'], ENT_QUOTES); ?>', <?php echo $row['jurusan_id']; ?>)">
+                                                    <i class="fas fa-edit"></i>
+                                                    <span>Edit</span>
+                                                </button>
+                                                <button type="button" class="btn-delete" 
+                                                        onclick="showDeleteModal(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars($row['nama_kelas'], ENT_QUOTES); ?>')">
+                                                    <i class="fas fa-trash"></i>
+                                                    <span>Hapus</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endforeach; ?>
                 </div>
             <?php else: ?>
                 <div class="no-data">

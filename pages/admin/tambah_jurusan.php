@@ -122,41 +122,6 @@ $result = $conn->query($query_list);
             display: flex;
             flex-direction: column;
         }
-
-        .top-nav {
-            background: #0a2e5c;
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .nav-buttons {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .nav-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-1px);
-        }
         
         .main-content {
             flex: 1;
@@ -173,6 +138,9 @@ $result = $conn->query($query_list);
             border-radius: 15px;
             margin-bottom: 30px;
             box-shadow: 0 5px 15px rgba(10, 46, 92, 0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         
         .welcome-banner h2 {
@@ -180,6 +148,28 @@ $result = $conn->query($query_list);
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+        
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            width: 36px;
+            height: 36px;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
         }
 
         .form-card {
@@ -409,14 +399,15 @@ $result = $conn->query($query_list);
             font-size: 14px;
         }
 
-        @media (max-width: 768px) {
-            .top-nav {
-                padding: 15px;
-                flex-direction: column;
-                gap: 10px;
-                text-align: center;
-            }
+        .no-data {
+            color: #666;
+            padding: 15px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
+        @media (max-width: 768px) {
             .main-content {
                 padding: 15px;
             }
@@ -446,18 +437,12 @@ $result = $conn->query($query_list);
     </style>
 </head>
 <body>
-    <nav class="top-nav">
-        <h1>SCHOBANK</h1>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
-    </nav>
-
     <div class="main-content">
         <div class="welcome-banner">
             <h2><i class="fas fa-plus-circle"></i> Tambah Jurusan</h2>
+            <a href="dashboard.php" class="back-btn">
+                <i class="fas fa-times"></i>
+            </a>
         </div>
 
         <div class="form-card">

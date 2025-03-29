@@ -1004,7 +1004,7 @@ form > .btn i {
             <h2><i class="fas fa-calendar-alt"></i> Buat Jadwal Petugas</h2>
             <p>Input jadwal petugas secara manual</p>
             <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
-                <i class="fas fa-sign-out-alt"></i>
+                <i class="fas fa-xmark"></i>
             </a>
         </div>
 

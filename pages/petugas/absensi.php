@@ -61,8 +61,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['absen_masuk']) && !$ch
         $checkInTime = $currentTime;
         $message = "Absen masuk berhasil dicatat pada " . date('H:i:s');
         
-        // Refresh halaman untuk menampilkan status terbaru
-        header("Refresh:2");
+        // Set session absensi_status
+        $_SESSION['absensi_status'] = 'hadir';
+        
+        // Redirect ke dashboard setelah absen
+        header("Location: dashboard.php");
+        exit();
     } else {
         $message = "Error: " . $stmt->error;
     }

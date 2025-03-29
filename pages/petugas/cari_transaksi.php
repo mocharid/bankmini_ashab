@@ -3,6 +3,7 @@ require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
 $username = $_SESSION['username'] ?? 'Petugas';
+
 ?>
 
 <!DOCTYPE html>
@@ -522,7 +523,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         t.*, 
                         r1.no_rekening AS rekening_asal, 
                         u1.nama AS nama_nasabah, 
-                        p.nama AS nama_petugas,
                         r2.no_rekening AS rekening_tujuan,
                         u2.nama AS nama_penerima
                       FROM 
@@ -535,8 +535,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         rekening r2 ON t.rekening_tujuan_id = r2.id
                       LEFT JOIN 
                         users u2 ON r2.user_id = u2.id
-                      LEFT JOIN 
-                        users p ON t.petugas_id = p.id
                       WHERE 
                         t.no_transaksi = '$no_transaksi'";
                       
@@ -545,6 +543,22 @@ $username = $_SESSION['username'] ?? 'Petugas';
             echo '<div class="results-card">';
             if ($result->num_rows > 0) {
                 $row = $result->fetch_assoc();
+                
+                // Mendapatkan tanggal transaksi untuk mencari petugas yang bertugas pada hari itu
+                $transaksi_date = date('Y-m-d', strtotime($row['created_at']));
+                
+                // Query untuk mencari petugas yang bertugas pada tanggal transaksi
+                $query_petugas = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = '$transaksi_date'";
+                $result_petugas = $conn->query($query_petugas);
+                
+                if ($result_petugas && $result_petugas->num_rows > 0) {
+                    $row_petugas = $result_petugas->fetch_assoc();
+                    $petugas1 = $row_petugas['petugas1_nama'];
+                    $petugas2 = $row_petugas['petugas2_nama'];
+                    $petugas_info = $petugas1 . ' dan ' . $petugas2;
+                } else {
+                    $petugas_info = 'Tidak ada data petugas';
+                }
                 
                 // Set badge class berdasarkan jenis transaksi
                 $badgeClass = '';
@@ -571,7 +585,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     <p><strong>Jenis Transaksi:</strong> <span><span class="badge ' . $badgeClass . '">' . strtoupper($row['jenis_transaksi']) . '</span></span></p>
                     <p><strong>Jumlah:</strong> <span>Rp ' . number_format($row['jumlah'], 0, ',', '.') . '</span></p>
                     <p><strong>Tanggal:</strong> <span>' . date('d/m/Y H:i', strtotime($row['created_at'])) . '</span></p>
-                    <p><strong>Petugas:</strong> <span>' . ($row['nama_petugas'] ?? '-') . '</span></p>
+                    <p><strong>Petugas:</strong> <span>' . $petugas_info . '</span></p>
                     <p><strong>Status:</strong> <span>' . strtoupper($row['status']) . '</span></p>
                 </div>';
                 

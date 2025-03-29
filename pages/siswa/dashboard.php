@@ -160,6 +160,8 @@ function tanggal_indonesia($tanggal) {
     font-family: 'Outfit', 'DM Sans', sans-serif;
 }
 
+
+
 body {
     background-color: #f5f7fa;
     color: #333;
@@ -659,57 +661,54 @@ body {
 
 /* Transactions Container Styles */
 .transactions-container {
-    background-color: white;
-    border-radius: 20px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.03);
-    margin: 0 1.5rem 1.5rem;
+    width: 95%;
+    max-width: 1200px;
+    margin: 20px auto;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    background-color: #fff;
     overflow: hidden;
-    border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .transactions-header {
-    padding: 1.2rem 1.8rem;
-    border-bottom: 1px solid #eee;
+    background-color: #f5f5f5;
+    padding: 15px 20px;
+    border-bottom: 1px solid #eaeaea;
 }
 
 .transactions-title {
-    font-size: 1.3rem;
-    font-weight: 600;
+    margin: 0;
+    font-size: 18px;
     color: #333;
-    font-family: 'DM Sans', sans-serif;
-    letter-spacing: -0.5px;
+    font-weight: 600;
 }
 
+/* Table styling */
 .table-container {
-    overflow-x: auto; /* Membuat tabel bisa di-scroll horizontal */
-    max-width: 100%; /* Membatasi lebar container */
-    border-radius: 8px; /* Sesuaikan dengan desain Anda */
-    border: 1px solid #eee; /* Garis tepi untuk container */
+    width: 100%;
+    overflow-x: auto;
+    padding: 0 15px;
 }
 
 table {
-    width: 100%; /* Tabel mengisi lebar container */
-    min-width: 600px; /* Lebar minimal tabel (sesuaikan dengan kebutuhan) */
+    width: 100%;
     border-collapse: collapse;
-    margin: 0; /* Hilangkan margin default */
+    margin: 15px 0;
 }
 
 thead th {
-    background-color: #f5f7fa;
-    color: #444;
-    font-weight: 600;
+    background-color: #f9f9f9;
+    padding: 12px 15px;
     text-align: left;
-    padding: 1.2rem 1rem;
-    font-size: 0.95rem;
-    letter-spacing: 0.3px;
-    font-family: 'DM Sans', sans-serif;
-    border-radius: 8px;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 2px solid #eaeaea;
 }
 
 tbody td {
-    padding: 1.2rem 1rem;
-    border-bottom: 1px solid #eee;
-    font-size: 0.95rem;
+    padding: 12px 15px;
+    border-bottom: 1px solid #eaeaea;
+    color: #333;
 }
 
 tbody tr:last-child td {
@@ -721,64 +720,124 @@ tbody tr:hover {
 }
 
 .amount-positive {
-    color: #4caf50;
+    color: #10b981;
     font-weight: 600;
-    letter-spacing: 0.3px;
-    font-family: 'DM Sans', sans-serif;
 }
 
 .amount-negative {
-    color: #f44336;
+    color: #ef4444;
     font-weight: 600;
-    letter-spacing: 0.3px;
-    font-family: 'DM Sans', sans-serif;
 }
 
+/* Status badges */
 .status-badge {
-    display: inline-block;
-    padding: 0.4rem 0.8rem;
-    border-radius: 50px;
-    font-size: 0.8rem;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.3px;
-    font-family: 'DM Sans', sans-serif;
 }
 
 .status-sukses {
-    background-color: #e8f5e9;
-    color: #2e7d32;
+    background-color: #d1fae5;
+    color: #065f46;
 }
 
 .status-pending {
-    background-color: #fff8e1;
-    color: #ff8f00;
+    background-color: #fef3c7;
+    color: #92400e;
 }
 
 .status-gagal {
-    background-color: #ffebee;
-    color: #c62828;
+    background-color: #fee2e2;
+    color: #b91c1c;
 }
 
 /* Empty State Styles */
 .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 1.5rem;
-    color: #888;
+    text-align: center;
+    padding: 40px 20px;
 }
 
 .empty-state i {
-    font-size: 3.5rem;
-    margin-bottom: 1.2rem;
-    opacity: 0.5;
-    color: #1e3c72;
+    display: block;
+    font-size: 48px;
+    color: #d1d5db;
+    margin-bottom: 16px;
 }
 
 .empty-state p {
-    font-size: 1.1rem;
-    font-weight: 500;
+    margin: 0;
+    color: #6b7280;
+    font-size: 16px;
+}
+
+@media (max-width: 768px) {
+    .transactions-container {
+        width: 92%;
+        margin: 15px auto;
+    }
+    
+    thead th, tbody td {
+        padding: 10px;
+    }
+    
+    .btn-lihat-struk {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    
+    .status-badge {
+        padding: 3px 6px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 576px) {
+    .transactions-container {
+        width: 90%;
+        margin: 10px auto;
+    }
+    
+    .transactions-title {
+        font-size: 16px;
+    }
+    
+    thead th, tbody td {
+        padding: 8px 6px;
+        font-size: 14px;
+    }
+    
+    .table-container {
+        padding: 0 10px;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    thead th, tbody td {
+        padding: 10px;
+    }
+    
+    .btn-lihat-struk {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    
+    .status-badge {
+        padding: 3px 6px;
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 576px) {
+    .transactions-title {
+        font-size: 16px;
+    }
+    
+    thead th, tbody td {
+        padding: 8px 6px;
+        font-size: 14px;
+    }
 }
 
 .pagination {
@@ -813,15 +872,15 @@ tbody tr:hover {
 
 /* Specific Transaction Row Styles */
 .transaksi-setor {
-    background-color: rgba(76, 175, 80, 0.05);
+    background-color: rgba(236, 253, 245, 0.4);
 }
 
 .transaksi-tarik {
-    background-color: rgba(244, 67, 54, 0.05);
+    background-color: rgba(254, 242, 242, 0.4);
 }
 
 .transaksi-transfer {
-    background-color: rgba(33, 150, 243, 0.05);
+    background-color: rgba(239, 246, 255, 0.4);
 }
 
 /* Responsive Styles */
@@ -996,21 +1055,18 @@ tbody tr:hover {
 }
 .btn-lihat-struk {
     display: inline-block;
-    padding: 0.5rem 1rem;
-    background-color: #1e3c72;
+    padding: 6px 12px;
+    background-color:rgb(8, 35, 77);
     color: white;
-    border-radius: 20px; /* Increased roundness from 8px to 20px */
+    border-radius: 4px;
     text-decoration: none;
-    font-size: 0.9rem;
-    transition: background-color 0.3s;
-    text-align: center;
-    white-space: nowrap;
+    font-size: 14px;
+    transition: background-color 0.2s;
 }
 
 .btn-lihat-struk:hover {
-    background-color: #2a5298;
+    background-color: #2563eb;
 }
-
 .btn-lihat-struk i {
     margin-right: 0.5rem;
 }
@@ -1169,75 +1225,69 @@ tbody tr:hover {
 
     <!-- Enhanced Transactions Container -->
     <div class="transactions-container">
-    <div class="transactions-header">
-        <h3 class="transactions-title">Riwayat Transaksi Terakhir</h3>
-    </div>
-    
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>No Transaksi</th>
-                    <th>Jenis</th>
-                    <th>Jumlah</th>
-                    <th>Status</th>
-                    <th>Tanggal</th>
-                    <th>Bukti Transaksi</th> <!-- Kolom baru untuk tombol lihat struk -->
-                </tr>
-            </thead>
-            <tbody>
-                <?php if ($transaksi_result->num_rows > 0): ?>
-                    <?php while ($row = $transaksi_result->fetch_assoc()): 
-                        $jenis = strtolower($row['jenis_transaksi']);
-                        $is_transfer_masuk = ($jenis == 'transfer' && $row['rekening_tujuan_id'] == $rekening_id);
-                        $amount_class = ($jenis == 'setor' || $is_transfer_masuk) ? 'amount-positive' : 'amount-negative';
-                        $row_class = 'transaksi-' . $jenis;
-                    ?>
-                        <tr class="<?= $row_class ?>">
-                            <td><?= htmlspecialchars($row['no_transaksi']) ?></td>
-                            <td>
-                                <?php if ($jenis == 'setor'): ?>
-                                    <i class="fas fa-arrow-down text-green-600 mr-2"></i> Setor
-                                <?php elseif ($jenis == 'tarik'): ?>
-                                    <i class="fas fa-arrow-up text-red-600 mr-2"></i> Tarik
-                                <?php elseif ($jenis == 'transfer'): ?>
-                                    <?php if ($is_transfer_masuk): ?>
-                                        <i class="fas fa-arrow-down text-green-600 mr-2"></i> Transfer Masuk
-                                    <?php else: ?>
-                                        <i class="fas fa-arrow-up text-red-600 mr-2"></i> Transfer Keluar
+        <div class="transactions-header">
+            <h3 class="transactions-title">Riwayat Transaksi Terakhir</h3>
+        </div>
+        
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>No Transaksi</th>
+                        <th>Jenis</th>
+                        <th>Jumlah</th>
+                        <th>Status</th>
+                        <th>Tanggal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if ($transaksi_result->num_rows > 0): ?>
+                        <?php while ($row = $transaksi_result->fetch_assoc()): 
+                            $jenis = strtolower($row['jenis_transaksi']);
+                            $is_transfer_masuk = ($jenis == 'transfer' && $row['rekening_tujuan_id'] == $rekening_id);
+                            $amount_class = ($jenis == 'setor' || $is_transfer_masuk) ? 'amount-positive' : 'amount-negative';
+                            $row_class = 'transaksi-' . $jenis;
+                        ?>
+                            <tr class="<?= $row_class ?>">
+                                <td><?= htmlspecialchars($row['no_transaksi']) ?></td>
+                                <td>
+                                    <?php if ($jenis == 'setor'): ?>
+                                        <i class="fas fa-arrow-down text-green-600 mr-2"></i> Setor
+                                    <?php elseif ($jenis == 'tarik'): ?>
+                                        <i class="fas fa-arrow-up text-red-600 mr-2"></i> Tarik
+                                    <?php elseif ($jenis == 'transfer'): ?>
+                                        <?php if ($is_transfer_masuk): ?>
+                                            <i class="fas fa-arrow-down text-green-600 mr-2"></i> Transfer Masuk
+                                        <?php else: ?>
+                                            <i class="fas fa-arrow-up text-red-600 mr-2"></i> Transfer Keluar
+                                        <?php endif; ?>
                                     <?php endif; ?>
-                                <?php endif; ?>
-                            </td>
-                            <td class="<?= $amount_class ?>">
-                                <?= ($jenis == 'setor' || $is_transfer_masuk) ? '+' : '-' ?> Rp <?= number_format($row['jumlah'], 0, ',', '.') ?>
-                            </td>
-                            <td>
-                                <span class="status-badge status-<?= strtolower($row['status']) ?>">
-                                    <?= ucfirst($row['status']) ?>
-                                </span>
-                            </td>
-                            <td><?= date('d M Y H:i', strtotime($row['created_at'])) ?></td>
-                            <td>
-                                <!-- Tombol Lihat Struk -->
-                                <a href="lihat_struk.php?no_transaksi=<?= $row['no_transaksi'] ?>" class="btn-lihat-struk">
-                                    <i></i> Lihat Struk
-                                </a>
+                                </td>
+                                <td class="<?= $amount_class ?>">
+                                    <?= ($jenis == 'setor' || $is_transfer_masuk) ? '+' : '-' ?> Rp <?= number_format($row['jumlah'], 0, ',', '.') ?>
+                                </td>
+                                <td>
+                                    <span class="status-badge status-<?= strtolower($row['status']) ?>">
+                                        <?= ucfirst($row['status']) ?>
+                                    </span>
+                                </td>
+                                <td><?= date('d M Y H:i', strtotime($row['created_at'])) ?></td>
+                            </tr>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <tr>
+                            <td colspan="5" class="empty-state">
+                                <i class="fas fa-receipt"></i>
+                                <p>Belum ada riwayat transaksi.</p>
                             </td>
                         </tr>
-                    <?php endwhile; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="6" class="empty-state">
-                            <i class="fas fa-receipt"></i>
-                            <p>Belum ada riwayat transaksi.</p>
-                        </td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
-
+</body>
+</html>
     <!-- Tampilkan navigasi pagination -->
     <div class="pagination">
         <?php if ($page > 1): ?>

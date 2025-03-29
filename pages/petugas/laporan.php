@@ -10,22 +10,33 @@ $username = $_SESSION['username'] ?? 'Petugas';
 // Get today's date
 $today = date('Y-m-d');
 
-// Calculate summary statistics for today only - Exclude private transfers by students
+// Pagination settings
+$limit = 10; // Number of records per page
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $limit;
+
+// Calculate summary statistics for today only - Exclude transfers
 $total_query = "SELECT 
     COUNT(id) as total_transactions,
     SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) as total_setoran,
-    SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as total_penarikan,
-    SUM(CASE WHEN jenis_transaksi = 'transfer' AND petugas_id IS NOT NULL THEN jumlah ELSE 0 END) as total_transfer
+    SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as total_penarikan
     FROM transaksi 
     WHERE DATE(created_at) = ? 
-    AND (jenis_transaksi != 'transfer' OR (jenis_transaksi = 'transfer' AND petugas_id IS NOT NULL))";
+    AND jenis_transaksi != 'transfer'"; // Hapus transfer dari query
 
 $stmt = $conn->prepare($total_query);
 $stmt->bind_param("s", $today);
 $stmt->execute();
 $totals = $stmt->get_result()->fetch_assoc();
-?>
 
+// Get total number of records for pagination
+$total_records_query = "SELECT COUNT(*) as total FROM transaksi WHERE DATE(created_at) = ? AND jenis_transaksi != 'transfer'";
+$stmt_total = $conn->prepare($total_records_query);
+$stmt_total->bind_param("s", $today);
+$stmt_total->execute();
+$total_records = $stmt_total->get_result()->fetch_assoc()['total'];
+$total_pages = ceil($total_records / $limit);
+?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -37,7 +48,7 @@ $totals = $stmt->get_result()->fetch_assoc();
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Consolas', 'Courier New', monospace;
         }
         
         body {
@@ -46,39 +57,6 @@ $totals = $stmt->get_result()->fetch_assoc();
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-        }
-
-        .top-nav {
-            background: #0a2e5c;
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-        }
-
-        .nav-buttons {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            font-size: 14px;
-            transition: background-color 0.3s ease;
-        }
-
-        .nav-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
         }
         
         .main-content {
@@ -96,6 +74,7 @@ $totals = $stmt->get_result()->fetch_assoc();
             border-radius: 15px;
             margin-bottom: 30px;
             box-shadow: 0 5px 15px rgba(10, 46, 92, 0.15);
+            position: relative;
         }
         
         .welcome-banner h2 {
@@ -104,6 +83,29 @@ $totals = $stmt->get_result()->fetch_assoc();
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        .back-btn {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
 
         .report-card {
@@ -219,34 +221,67 @@ $totals = $stmt->get_result()->fetch_assoc();
             background: #fee2e2;
             color: #991b1b;
         }
-        
-        .type-transfer {
-            background: #e0f2fe;
-            color: #0369a1;
-        }
 
         .alert {
-            padding: 15px;
+            text-align: center;
+            padding: 40px 15px;
             border-radius: 8px;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
             background-color: #e0f2fe;
             color: #0369a1;
             border: 1px solid #bae6fd;
+            font-family: 'Consolas', 'Courier New', monospace;
+            letter-spacing: 0.5px;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination-btn {
+            background: #0a2e5c;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .pagination-btn:hover {
+            background: #154785;
+        }
+
+        .no-data-container {
+            width: 100%;
+            text-align: center;
         }
 
         @media (max-width: 768px) {
-            .top-nav {
-                padding: 15px;
-            }
-
-            .nav-buttons {
-                gap: 10px;
-            }
-
             .main-content {
                 padding: 15px;
+            }
+
+            .welcome-banner {
+                padding: 20px;
+            }
+
+            .welcome-banner h2 {
+                font-size: 20px;
+                margin-right: 40px;
+            }
+
+            .back-btn {
+                top: 20px;
+                right: 20px;
             }
 
             .action-buttons {
@@ -270,18 +305,13 @@ $totals = $stmt->get_result()->fetch_assoc();
     </style>
 </head>
 <body>
-    <nav class="top-nav">
-        <h1>SCHOBANK</h1>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
-    </nav>
     <div class="main-content">
         <div class="welcome-banner">
             <h2><i class="fas fa-chart-bar"></i> Laporan Harian</h2>
             <p>Transaksi pada <?= date('d/m/Y') ?></p>
+            <a href="dashboard.php" class="back-btn">
+                <i class="fas fa-times"></i>
+            </a>
         </div>
 
         <div class="report-card">
@@ -298,10 +328,6 @@ $totals = $stmt->get_result()->fetch_assoc();
                     <h3>Total Penarikan</h3>
                     <div class="amount">Rp <?= number_format($totals['total_penarikan'] ?? 0, 0, ',', '.') ?></div>
                 </div>
-                <div class="summary-box">
-                    <h3>Total Transfer</h3>
-                    <div class="amount">Rp <?= number_format($totals['total_transfer'] ?? 0, 0, ',', '.') ?></div>
-                </div>
             </div>
 
             <div class="action-buttons">
@@ -315,28 +341,41 @@ $totals = $stmt->get_result()->fetch_assoc();
                 </a>
             </div>
 
-            <?php
-            // Get today's transactions with proper user information but exclude private transfers (where petugas_id IS NULL)
-            $query = "SELECT t.*, 
-                      u1.nama as nama_siswa,
-                      u2.nama as nama_penerima,
-                      r2.no_rekening as rekening_tujuan 
-                      FROM transaksi t 
-                      JOIN rekening r1 ON t.rekening_id = r1.id
-                      JOIN users u1 ON r1.user_id = u1.id
-                      LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
-                      LEFT JOIN users u2 ON r2.user_id = u2.id
-                      WHERE DATE(t.created_at) = ?
-                      AND (t.jenis_transaksi != 'transfer' OR (t.jenis_transaksi = 'transfer' AND t.petugas_id IS NOT NULL))
-                      ORDER BY t.created_at DESC";
-            
-            $stmt = $conn->prepare($query);
-            $stmt->bind_param("s", $today);
-            $stmt->execute();
-            $result = $stmt->get_result();
+            <!-- Table Container -->
+            <div class="table-responsive" id="transaction-table">
+                <!-- Data akan diisi oleh JavaScript -->
+            </div>
 
-            if ($result->num_rows > 0) {
-                echo '<div class="table-responsive">
+            <!-- Pagination -->
+            <div class="pagination">
+                <button id="prev-page" class="pagination-btn" style="display: none;">Back</button>
+                <button id="next-page" class="pagination-btn" style="display: none;">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        const totalPages = <?= $total_pages ?>;
+
+        // Function to fetch transactions via AJAX
+        async function fetchTransactions(page) {
+            try {
+                const response = await fetch(`fetch_transactions.php?page=${page}`);
+                const transactions = await response.json();
+                updateTable(transactions);
+                updatePagination(page);
+            } catch (error) {
+                console.error('Error fetching transactions:', error);
+            }
+        }
+
+        // Function to update the table with new data
+        function updateTable(transactions) {
+            const tableContainer = document.getElementById('transaction-table');
+            
+            if (transactions.length > 0) {
+                let tableHTML = `
                     <table>
                         <thead>
                             <tr>
@@ -345,43 +384,71 @@ $totals = $stmt->get_result()->fetch_assoc();
                                 <th>Jenis</th>
                                 <th>Jumlah</th>
                                 <th>Waktu</th>
-                                <th>Penerima</th>
                             </tr>
                         </thead>
-                        <tbody>';
-                
-                while ($row = $result->fetch_assoc()) {
-                    // Determine transaction type class and display text
-                    if ($row['jenis_transaksi'] == 'setor') {
-                        $typeClass = 'type-setoran';
-                        $displayType = 'setoran';
-                    } elseif ($row['jenis_transaksi'] == 'tarik') {
-                        $typeClass = 'type-penarikan';
-                        $displayType = 'penarikan';
-                    } else {
-                        $typeClass = 'type-transfer';
-                        $displayType = 'transfer';
-                    }
-                    
-                    echo "<tr>
-                        <td>{$row['no_transaksi']}</td>
-                        <td>{$row['nama_siswa']}</td>
-                        <td><span class='transaction-type {$typeClass}'>{$displayType}</span></td>
-                        <td class='amount-total'>Rp " . number_format($row['jumlah'], 0, ',', '.') . "</td>
-                        <td>" . date('H:i', strtotime($row['created_at'])) . "</td>
-                        <td>" . ($row['jenis_transaksi'] == 'transfer' ? $row['nama_penerima'] . " (" . $row['rekening_tujuan'] . ")" : "-") . "</td>
-                    </tr>";
-                }
-                echo '</tbody></table>
-                </div>';
+                        <tbody>`;
+
+                transactions.forEach(transaction => {
+                    const typeClass = transaction.jenis_transaksi === 'setor' ? 'type-setoran' : 'type-penarikan';
+                    const displayType = transaction.jenis_transaksi === 'setor' ? 'setoran' : 'penarikan';
+                    tableHTML += `
+                        <tr>
+                            <td>${transaction.no_transaksi}</td>
+                            <td>${transaction.nama_siswa}</td>
+                            <td><span class="transaction-type ${typeClass}">${displayType}</span></td>
+                            <td class="amount-total">Rp ${new Intl.NumberFormat('id-ID').format(transaction.jumlah)}</td>
+                            <td>${new Date(transaction.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</td>
+                        </tr>`;
+                });
+
+                tableHTML += `</tbody></table>`;
+                tableContainer.innerHTML = tableHTML;
             } else {
-                echo '<div class="alert">
-                    <i class="fas fa-info-circle"></i>
-                    Tidak ada transaksi hari ini.
-                </div>';
+                tableContainer.innerHTML = `
+                    <div class="alert">
+                        <i class="fas fa-info-circle"></i>
+                        [ TIDAK ADA TRANSAKSI HARI INI ]
+                    </div>`;
             }
-            ?>
-        </div>
-    </div>
+        }
+
+        // Function to update pagination buttons
+        function updatePagination(page) {
+            const prevButton = document.getElementById('prev-page');
+            const nextButton = document.getElementById('next-page');
+
+            // Show/hide "Back" button
+            if (page > 1) {
+                prevButton.style.display = 'inline-block';
+            } else {
+                prevButton.style.display = 'none';
+            }
+
+            // Show/hide "Next" button
+            if (page < totalPages) {
+                nextButton.style.display = 'inline-block';
+            } else {
+                nextButton.style.display = 'none';
+            }
+        }
+
+        // Event listeners for pagination buttons
+        document.getElementById('prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchTransactions(currentPage);
+            }
+        });
+
+        document.getElementById('next-page').addEventListener('click', () => {
+            if (currentPage < totalPages) {
+                currentPage++;
+                fetchTransactions(currentPage);
+            }
+        });
+
+        // Load initial data
+        fetchTransactions(currentPage);
+    </script>
 </body>
 </html>

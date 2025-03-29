@@ -158,51 +158,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-        }
-        
-        .top-nav {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
-            color: white;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
-            box-shadow: var(--shadow-md);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        
-        .top-nav h1 {
-            font-size: 22px;
-            font-weight: 700;
-            margin: 0;
-            letter-spacing: 0.5px;
-        }
-        
-        .nav-buttons {
-            display: flex;
-            gap: 12px;
-        }
-        
-        .nav-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(255, 255, 255, 0.15);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: var(--radius-sm);
-            font-size: 14px;
-            font-weight: 500;
-            text-decoration: none;
-            transition: var(--transition);
-        }
-        
-        .nav-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-2px);
+            padding: 20px;
         }
         
         .main-content {
@@ -214,11 +172,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-md);
             animation: fadeIn 0.5s ease;
+            position: relative;
         }
         
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .back-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.1);
+            color: var(--text-dark);
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+            z-index: 10;
+            text-decoration: none; /* Removes underline */
+        }
+
+        
+        .back-button:hover {
+            background: rgba(0, 0, 0, 0.2);
+            transform: scale(1.05);
         }
         
         .welcome-banner {
@@ -540,6 +524,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             color: var(--primary);
         }
         
+        /* Brand logo */
+        .brand-logo {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .brand-logo h1 {
+            font-size: 24px;
+            color: var(--primary);
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .brand-logo p {
+            color: var(--text-light);
+            font-size: 14px;
+        }
+        
         /* Responsive design improvements */
         @media (max-width: 768px) {
             .main-content {
@@ -572,19 +577,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 margin-bottom: 5px;
             }
             
-            .top-nav {
-                padding: 12px 15px;
-            }
-            
-            .top-nav h1 {
-                font-size: 18px;
-            }
-            
-            .nav-btn {
-                padding: 6px 12px;
-                font-size: 13px;
-            }
-            
             .buttons-container {
                 flex-direction: column;
             }
@@ -598,6 +590,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 height: 50px;
                 font-size: 14px;
             }
+            
+            .back-button {
+                top: 15px;
+                right: 15px;
+                width: 32px;
+                height: 32px;
+            }
         }
         
         @media (max-width: 480px) {
@@ -605,8 +604,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 padding: 15px;
                 width: 100%;
                 margin: 10px auto;
-                border-radius: 0;
-                box-shadow: none;
+                border-radius: var(--radius-sm);
             }
             
             .welcome-banner h2 {
@@ -652,20 +650,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 padding-left: 40px;
             }
         }
-        </style>
+    </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <nav class="top-nav">
-        <h1><i class="fas fa-university"></i> SCHOBANK</h1>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
-    </nav>
-
     <div class="main-content">
+        <a href="dashboard.php" class="back-button">
+            <i class="fas fa-times"></i>
+        </a>
+        
+        <div class="brand-logo">
+            <h1><i></i> SCHOBANK</h1>
+            <p>Sistem Bank Mini</p>
+        </div>
+        
         <div class="welcome-banner">
             <i class="<?php echo $showConfirmation ? 'fas fa-check-circle' : 'fas fa-user-plus'; ?>"></i>
             <h2><?php echo $showConfirmation ? 'Konfirmasi Data Nasabah' : 'Tambah Nasabah Baru'; ?></h2>
@@ -764,6 +762,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 <div class="floating-label">
                     <div class="input-wrapper">
+                        <i class="fas fa-graduation-cap input-icon"></i>
                         <select id="jurusan_id" name="jurusan_id" class="input-with-icon" required onchange="getKelasByJurusan(this.value)">
                             <option value=""></option>
                             <?php 
@@ -783,6 +782,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 
                 <div class="floating-label">
                     <div class="input-wrapper">
+                        <i class="fas fa-chalkboard input-icon"></i>
                         <select id="kelas_id" name="kelas_id" class="input-with-icon" required>
                             <option value=""></option>
                         </select>

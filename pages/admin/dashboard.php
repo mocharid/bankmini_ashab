@@ -118,30 +118,6 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
             min-height: 100vh;
             overflow-x: hidden; /* Mencegah scroll horizontal */
         }
-        
-        /* Sidebar Styles */
-        .sidebar {
-            width: 280px;
-            background: linear-gradient(180deg, #0a2e5c 0%, #154785 100%);
-            color: white;
-            padding: 0;
-            position: fixed;
-            height: 100%;
-            overflow-y: auto;
-            transition: all 0.3s ease;
-            z-index: 100;
-            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.1);
-        }
-        
-        .sidebar-header {
-            display: flex;
-            align-items: center; 
-            justify-content: center;
-            padding: 25px 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            margin-bottom: 10px;
-            background: rgba(0, 0, 0, 0.1);
-        }
 
         .bank-icon {
             font-size: 32px; 
@@ -156,73 +132,6 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
             font-size: 26px; 
             font-weight: bold;
             letter-spacing: 1px;
-        }
-        
-        .sidebar-menu {
-            padding: 10px 0;
-        }
-        
-        .menu-label {
-            padding: 15px 25px 10px;
-            font-size: 13px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255, 255, 255, 0.6);
-            font-weight: 600;
-            margin-top: 10px;
-        }
-        
-        .menu-item {
-            position: relative;
-            margin: 5px 0;
-        }
-        
-        .menu-item a {
-            display: flex;
-            align-items: center;
-            padding: 14px 25px;
-            color: rgba(255, 255, 255, 0.85);
-            text-decoration: none;
-            transition: all 0.3s ease;
-            border-left: 4px solid transparent;
-            font-weight: 500;
-        }
-        
-        .menu-item a:hover, .menu-item a.active {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
-            color: white;
-        }
-        
-        .menu-item i {
-            margin-right: 12px;
-            width: 20px;
-            text-align: center;
-            font-size: 18px;
-        }
-
-        /* Dropdown Menu */
-        .dropdown-btn {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 25px;
-            width: 100%;
-            text-align: left;
-            background: none;
-            color: rgba(255, 255, 255, 0.85);
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s ease;
-            border-left: 4px solid transparent;
-            font-weight: 500;
-        }
-        
-        .dropdown-btn:hover, .dropdown-btn.active {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
-            color: white;
         }
         
         .dropdown-btn .menu-icon {
@@ -244,34 +153,6 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
         
         .dropdown-btn.active .arrow {
             transform: rotate(180deg);
-        }
-        
-        .dropdown-container {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            background-color: rgba(0, 0, 0, 0.15);
-        }
-        
-        .dropdown-container.show {
-            max-height: 300px;
-        }
-        
-        .dropdown-container a {
-            padding: 12px 20px 12px 60px;
-            display: flex;
-            align-items: center;
-            color: rgba(255, 255, 255, 0.75);
-            text-decoration: none;
-            transition: all 0.3s ease;
-            font-size: 14px;
-            border-left: 4px solid transparent;
-        }
-        
-        .dropdown-container a:hover, .dropdown-container a.active {
-            background-color: rgba(255, 255, 255, 0.08);
-            border-left-color: #38bdf8;
-            color: white;
         }
 
         /* Main Content */
@@ -691,6 +572,213 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
     height: auto; /* Menjaga aspek rasio */
     margin-right: 12px; /* Jarak antara logo dan teks */
 }
+/* Sidebar Utama */
+.sidebar {
+    width: 280px;
+    background: linear-gradient(180deg, #0a2e5c 0%, #154785 100%);
+    color: white;
+    position: fixed;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    box-shadow: 5px 0 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Sidebar Header (Fixed) */
+.sidebar-header {
+    padding: 25px 20px;
+    background: #0a2e5c;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 101;
+    text-align: center;
+}
+
+.sidebar-header .bank-name {
+    font-size: 26px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    margin: 0;
+    color: white;
+}
+
+/* Sidebar Content (Scrollable) */
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+/* Sidebar Footer (Fixed) */
+.sidebar-footer {
+    background: #0a2e5c;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    position: sticky;
+    bottom: 0;
+    z-index: 101;
+    padding: 5px 0;
+}
+
+/* Scrollbar Styling */
+.sidebar-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+    background: #0a2e5c;
+    border-radius: 4px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+    background: #4a5568;
+    border-radius: 4px;
+    border: 2px solid #0a2e5c;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+    background: #718096;
+}
+
+/* Menu Items */
+.sidebar-menu {
+    padding: 10px 0;
+}
+
+.menu-label {
+    padding: 15px 25px 10px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 600;
+    margin-top: 10px;
+}
+
+.menu-item {
+    position: relative;
+    margin: 5px 0;
+}
+
+.menu-item a {
+    display: flex;
+    align-items: center;
+    padding: 14px 25px;
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+    font-weight: 500;
+}
+
+.menu-item a:hover, .menu-item a.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: #38bdf8;
+    color: white;
+}
+
+.menu-item i {
+    margin-right: 12px;
+    width: 20px;
+    text-align: center;
+    font-size: 18px;
+}
+
+/* Dropdown Menu */
+.dropdown-btn {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 25px;
+    width: 100%;
+    text-align: left;
+    background: none;
+    color: rgba(255, 255, 255, 0.85);
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+    font-weight: 500;
+}
+
+.dropdown-btn:hover, .dropdown-btn.active {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-left-color: #38bdf8;
+    color: white;
+}
+
+.dropdown-container {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.dropdown-container.show {
+    max-height: 300px;
+}
+
+.dropdown-container a {
+    padding: 12px 20px 12px 60px;
+    display: flex;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.75);
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-size: 14px;
+    border-left: 4px solid transparent;
+}
+
+.dropdown-container a:hover, .dropdown-container a.active {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-left-color: #38bdf8;
+    color: white;
+}
+
+/* Tombol Logout (Warna Merah) */
+.logout-btn {
+    color: #ff3b3b;
+    font-weight: 600;
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+    .sidebar {
+        transform: translateX(-100%);
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .sidebar.active {
+        transform: translateX(0);
+    }
+
+    body.sidebar-active .main-content {
+        opacity: 0.3;
+        pointer-events: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        width: 260px;
+    }
+    
+    .sidebar-header .bank-name {
+        font-size: 22px;
+    }
+}
     </style>
 </head>
 <body>
@@ -699,9 +787,13 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
     </button>
 
     <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
+    <!-- Fixed Header -->
+    <div class="sidebar-header">
         <h1 class="bank-name">SCHOBANK</h1>
-        </div>
+    </div>
+    
+    <!-- Scrollable Content -->
+    <div class="sidebar-content">
         <div class="sidebar-menu">
             <div class="menu-label">Menu Utama</div>
             <div class="menu-item">
@@ -749,7 +841,7 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
             </div>
             <div class="menu-item">
                 <a href="data_siswa.php">
-                    <i class="fas fa-id-card"></i> Data Nasabah
+                    <i class="fas fa-id-card"></i> Rekap Data Nasabah
                 </a>
             </div>
 
@@ -760,14 +852,18 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
                     <i class="fas fa-cog"></i> Pengaturan
                 </a>
             </div>
-            
-            <div class="menu-item">
-                <a href="../../logout.php" class="logout-btn" style="color: red;">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
-            </div>
         </div>
     </div>
+    
+    <!-- Fixed Footer with Logout -->
+    <div class="sidebar-footer">
+        <div class="menu-item">
+            <a href="../../logout.php" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </div>
+</div>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">

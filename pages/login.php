@@ -14,11 +14,54 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     if ($result->num_rows > 0) {
         $user = $result->fetch_assoc();
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['role'] = $user['role'];
-        $_SESSION['nama'] = $user['nama']; // Add this line to store the name
-        header("Location: ../index.php");
-        exit();
+
+        // Cek role petugas
+        if ($user['role'] == 'petugas') {
+            // Cek apakah petugas sudah login di tempat lain
+            $query = "SELECT * FROM active_sessions WHERE user_id = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("i", $user['id']);
+            $stmt->execute();
+            $session_result = $stmt->get_result();
+
+            if ($session_result->num_rows > 0) {
+                $error_message = "Petugas sudah login di tempat lain!";
+            } else {
+                // Set timezone ke WIB
+                date_default_timezone_set('Asia/Jakarta');
+                
+                // Cek waktu login
+                $current_time = date('H:i');
+                $start_time = '01:30';
+                $end_time = '18:00';
+
+                if ($current_time >= $start_time && $current_time <= $end_time) {
+                    // Simpan sesi
+                    $_SESSION['user_id'] = $user['id'];
+                    $_SESSION['role'] = $user['role'];
+                    $_SESSION['nama'] = $user['nama'];
+
+                    // Simpan sesi aktif ke database
+                    $session_id = session_id();
+                    $query = "INSERT INTO active_sessions (user_id, session_id, role) VALUES (?, ?, ?)";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("iss", $user['id'], $session_id, $user['role']);
+                    $stmt->execute();
+
+                    header("Location: ../index.php");
+                    exit();
+                } else {
+                    $error_message = "Login hanya bisa dilakukan saat jam tugas 7:30 sampai 15:00 WIB!";
+                }
+            }
+        } else {
+            // Untuk role selain petugas, langsung login
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['role'] = $user['role'];
+            $_SESSION['nama'] = $user['nama'];
+            header("Location: ../index.php");
+            exit();
+        }
     } else {
         $error_message = "Username atau password salah!";
     }

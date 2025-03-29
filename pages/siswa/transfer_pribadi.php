@@ -1,228 +1,11 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
-require_once '../../vendor/autoload.php'; 
-use TCPDF as TCPDF;
+require_once '../../vendor/autoload.php';
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
-function generateStruk($data) {
-    date_default_timezone_set('Asia/Jakarta');
-
-    // Create custom TCPDF class to add decorative elements
-    class ReceiptPDF extends TCPDF {
-        public function Header() {
-            // Empty header
-        }
-        
-        public function Footer() {
-            // Add decorative footer pattern (receipt-like)
-            $this->SetY(-5);
-            $pattern_width = 2;
-            $page_width = $this->getPageWidth();
-            $pattern_count = floor($page_width / $pattern_width);
-            
-            $this->SetDrawColor(200, 200, 200);
-            $this->SetLineWidth(0.1);
-            
-            for ($i = 0; $i < $pattern_count; $i++) {
-                $this->Line(
-                    $i * $pattern_width, 
-                    $this->GetY(), 
-                    $i * $pattern_width + $pattern_width/2, 
-                    $this->GetY() + 2
-                );
-            }
-        }
-    }
-
-    // Create new receipt-style PDF
-    $pdf = new ReceiptPDF('P', 'mm', array(80, 140), true, 'UTF-8', false);
-
-    $pdf->setPrintHeader(false);
-    $pdf->setPrintFooter(true); // Enable our custom footer
-
-    $pdf->SetCreator('SCHOBANK SYSTEM');
-    $pdf->SetAuthor('SCHOBANK SYSTEM');
-    $pdf->SetTitle('Bukti Transaksi');
-
-    // Set receipt-style margins (slightly narrower)
-    $pdf->SetMargins(5, 5, 5);
-    $pdf->SetAutoPageBreak(TRUE, 10);
-
-    // Add background pattern (subtle thermal paper texture)
-    $pdf->SetFillColor(252, 252, 250);
-
-    // Add a page
-    $pdf->AddPage();
-    $pdf->Rect(0, 0, $pdf->getPageWidth(), $pdf->getPageHeight(), 'F');
-
-    // Add decorative top border
-    $pdf->SetDrawColor(100, 100, 100);
-    $pdf->SetLineWidth(0.2);
-    $width = $pdf->getPageWidth() - 10;
-    $startX = 5;
-    
-    // Decorative top pattern
-    $pdf->SetLineStyle(array('dash' => '1,1', 'color' => array(150, 150, 150)));
-    $pdf->Line($startX, 4, $startX + $width, 4);
-    
-    // --- HEADER SECTION ---
-    // Logo or bank name with more professional styling
-    $pdf->SetTextColor(20, 20, 20);
-    $pdf->SetFont('helvetica', 'B', 14);
-    $pdf->Cell(0, 8, 'SCHOBANK', 0, 1, 'C');
-    
-    // Add receipt subtitle with decorative elements
-    $pdf->SetFont('helvetica', '', 8);
-    $pdf->Cell(0, 4, '* * * BUKTI TRANSFER * * *', 0, 1, 'C');
-    
-    // Add store-like address (common in real receipts)
-    $pdf->SetFont('helvetica', '', 7);
-    $pdf->Cell(0, 3, 'Jl. K.H. Saleh No.57A', 0, 1, 'C');
-    $pdf->Cell(0, 3, 'Pabuaran Cianjur 43212 ', 0, 1, 'C');
-    $pdf->Cell(0, 3, 'Telp: (62) 263 267740', 0, 1, 'C');
-    
-    // Add separating dashed line (like real receipts)
-    $pdf->Ln(1);
-    $pdf->SetLineStyle(array('dash' => '0.5,0.5', 'color' => array(100, 100, 100)));
-    $pdf->Line($startX, $pdf->GetY(), $startX + $width, $pdf->GetY());
-    $pdf->Ln(3);
-
-    // --- TRANSACTION DETAILS ---
-    $pdf->SetFillColor(240, 240, 240);
-    $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->Cell(0, 5, 'DETAIL TRANSAKSI', 0, 1, 'C', true);
-    $pdf->Ln(2);
-
-    // Transaction details in table-like format with styling
-    $pdf->SetFont('courier', '', 8); // Courier for that authentic receipt look
-    $pdf->SetTextColor(40, 40, 40);
-    
-    // Define a consistent width for labels and position for colons
-    $labelWidth = 28;
-    $colonWidth = 2;
-    $valueWidth = 40;
-    
-    // Format each row with aligned colons - receipt style
-    $pdf->Cell($labelWidth, 4, 'TANGGAL', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, date('d/m/Y', strtotime($data['tanggal'])), 0, 1, 'L');
-    
-    
-    $pdf->Cell($labelWidth, 4, 'NO. TRANSAKSI', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['no_transaksi'], 0, 1, 'L');
-    
-    $pdf->SetLineStyle(array('dash' => '0.2,0.2', 'color' => array(150, 150, 150)));
-    $pdf->Line($startX, $pdf->GetY() + 1, $startX + $width, $pdf->GetY() + 1);
-    $pdf->Ln(3);
-    
-    $pdf->Cell($labelWidth, 4, 'REKENING ASAL', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['rekening_asal'], 0, 1, 'L');
-    
-    $pdf->Cell($labelWidth, 4, 'REKENING TUJUAN', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['rekening_tujuan'], 0, 1, 'L');
-    
-    $pdf->Cell($labelWidth, 4, 'NAMA PENERIMA', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 4, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 4, $data['nama_penerima'], 0, 1, 'L');
-    
-    // Add horizontal line with receipt styling
-    $pdf->SetLineStyle(array('dash' => '0.2,0.2', 'color' => array(150, 150, 150)));
-    $pdf->Line($startX, $pdf->GetY() + 1, $startX + $width, $pdf->GetY() + 1);
-    $pdf->Ln(3);
-    
-    // Amount section with highlight box
-    $pdf->SetDrawColor(100, 100, 100);
-    $pdf->SetLineWidth(0.2);
-    $pdf->Rect($startX, $pdf->GetY(), $width, 8, 'D');
-    $pdf->SetFillColor(245, 245, 245);
-    $pdf->Rect($startX + 0.2, $pdf->GetY() + 0.2, $width - 0.4, 7.6, 'F');
-    
-    // Amount text with better formatting
-    $pdf->SetFont('helvetica', 'B', 9);
-    $pdf->SetTextColor(0, 0, 0);
-    $pdf->Cell($labelWidth, 7, ' JUMLAH', 0, 0, 'L');
-    $pdf->Cell($colonWidth, 7, ':', 0, 0, 'L');
-    $pdf->Cell($valueWidth, 7, 'Rp ' . number_format($data['jumlah'], 0, ',', '.'), 0, 1, 'L');
-    $pdf->Ln(2);
-    
-    // Add horizontal closing line
-    $pdf->SetLineStyle(array('width' => 0.3, 'color' => array(100, 100, 100)));
-    $pdf->Line($startX, $pdf->GetY(), $startX + $width, $pdf->GetY());
-    $pdf->Ln(3);
-    
-    // --- FOOTER SECTION ---
-    $pdf->SetFont('helvetica', 'I', 7);
-    $pdf->Cell(0, 3, 'Terima kasih telah menggunakan layanan', 0, 1, 'C');
-    $pdf->SetFont('helvetica', 'BI', 8);
-    $pdf->Cell(0, 4, 'SCHOBANK SYSTEM', 0, 1, 'C');
-    
-    // --- QR CODE with more professional design ---
-    $style = array(
-        'border' => false,
-        'vpadding' => 'auto',
-        'hpadding' => 'auto',
-        'fgcolor' => array(0, 0, 0),
-        'bgcolor' => false,
-        'module_width' => 1,
-        'module_height' => 1
-    );
-
-    // QR code with verification text
-    $pdf->SetFont('helvetica', '', 6);
-    $pdf->Cell(0, 3, 'SCAN UNTUK VERIFIKASI', 0, 1, 'C');
-    
-    // Generate centered QR code
-    $qrContent = $data['no_transaksi'];
-    $pdf->write2DBarcode($qrContent, 'QRCODE,L', 27.5, $pdf->GetY(), 25, 25, $style, 'N');
-    $pdf->Ln(0);
-    
-    // Add verification number below QR code
-    $pdf->SetFont('courier', 'B', 7);
-    $pdf->Cell(0, 3, $data['no_transaksi'], 0, 1, 'C');
-    $pdf->Ln(1);
-    
-    
-    // Add legal note with authentic styling
-    $pdf->SetFont('helvetica', 'I', 6);
-    $pdf->MultiCell(0, 3, 'Bukti transfer ini merupakan bukti yang sah dan tidak memerlukan tanda tangan.', 0, 'C');
-    
-    // Add final decorative element
-    $pdf->Ln(1);
-    $pdf->SetFont('helvetica', '', 8);
-    $pdf->Cell(0, 4, '* * * * * * * * * * * * * *', 0, 1, 'C');
-    
-    // Path management for saving PDF
-    $doc_root = $_SERVER['DOCUMENT_ROOT'];
-    $app_path = '/bankmini';
-    $upload_dir = $doc_root . $app_path . '/uploads/struk/';
-    
-    // Create directory if it doesn't exist
-    if (!is_dir($upload_dir)) {
-        if (!mkdir($upload_dir, 0755, true)) {
-            error_log("Gagal membuat folder struk: $upload_dir");
-            $upload_dir = sys_get_temp_dir() . '/struk/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-        }
-    }
-    
-    // File path and URL
-    $filename = 'struk_' . $data['no_transaksi'] . '.pdf';
-    $filepath = $upload_dir . $filename;
-    
-    // Save the PDF file
-    $pdf->Output($filepath, 'F');
-    
-    // Return file information
-    return [
-        'file_path' => $filepath,
-        'file_url' => $app_path . '/uploads/struk/' . $filename
-    ];
-}
+date_default_timezone_set('Asia/Jakarta');
 
 // Pastikan user sudah login
 if (!isset($_SESSION['user_id'])) {
@@ -261,7 +44,6 @@ $transfer_rekening = null;
 $transfer_name = null;
 $error = null;
 $success = null;
-$pdfUrl = null;
 
 // Handle account number verification (Step 1)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'verify_account') {
@@ -274,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         $error = "Tidak dapat transfer ke rekening sendiri!";
     } else {
         // Check if tujuan rekening exists and get user details
-        $query = "SELECT r.id, r.user_id, r.no_rekening, u.nama 
+        $query = "SELECT r.id, r.user_id, r.no_rekening, u.nama, u.email 
                  FROM rekening r 
                  JOIN users u ON r.user_id = u.id 
                  WHERE r.no_rekening = ?";
@@ -316,6 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         $rekening_tujuan = $_SESSION['tujuan_data']['no_rekening'];
         $rekening_tujuan_nama = $_SESSION['tujuan_data']['nama'];
         $rekening_tujuan_user_id = $_SESSION['tujuan_data']['user_id'];
+        $rekening_tujuan_email = $_SESSION['tujuan_data']['email'];
     } else {
         $error = "Data rekening tujuan tidak tersedia!";
         $current_step = 1;
@@ -337,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
             $current_step = 2;
         } else {
             // Verify PIN
-            $query = "SELECT pin FROM users WHERE id = ?";
+            $query = "SELECT pin, email, nama FROM users WHERE id = ?";
             $stmt = $conn->prepare($query);
             $stmt->bind_param("i", $user_id);
             $stmt->execute();
@@ -433,23 +216,609 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         
                     // Commit transaction
                     $conn->commit();
+                    
+                    // Kirim email bukti transfer ke pengirim
+                    try {
+                        // Konfigurasi PHPMailer
+                        $mail = new PHPMailer(true);
+                        $mail->isSMTP();
+                        $mail->Host = 'smtp.gmail.com';
+                        $mail->SMTPAuth = true;
+                        $mail->Username = 'mocharid.ip@gmail.com';
+                        $mail->Password = 'spjs plkg ktuu lcxh';
+                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+                        $mail->Port = 587;
+                        $mail->CharSet = 'UTF-8';
+                        
+                        // Pengaturan email pengirim
+                        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+                        $mail->addAddress($user_data['email'], $user_data['nama']);
+                        
+                        // Subject email
+                        $mail->isHTML(true);
+                        $mail->Subject = 'Bukti Transfer SCHOBANK - ' . $no_transaksi;
+                        
+                        // Isi email dengan bukti transfer - Desain baru yang lebih modern
+                        $mail->Body = '
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <title>Bukti Transfer - SCHOBANK</title>
+                            <style>
+                                /* Reset styles */
+                                body, html {
+                                    margin: 0;
+                                    padding: 0;
+                                    font-family: "Courier New", monospace;
+                                    line-height: 1.5;
+                                    color: #333333;
+                                    background-color: #f5f5f5;
+                                }
+                                * {
+                                    box-sizing: border-box;
+                                }
+                                /* Container styles */
+                                .receipt-container {
+                                    max-width: 600px;
+                                    margin: 20px auto;
+                                    background-color: #ffffff;
+                                    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+                                    border-radius: 8px;
+                                    overflow: hidden;
+                                }
+                                /* Header styles */
+                                .receipt-header {
+                                    background-color: #0047AB;
+                                    color: white;
+                                    padding: 15px;
+                                    text-align: center;
+                                    border-bottom: 3px dashed #ffffff;
+                                }
+                                .receipt-header h1 {
+                                    margin: 0;
+                                    font-size: 24px;
+                                    font-weight: bold;
+                                }
+                                .receipt-header p {
+                                    margin: 5px 0 0;
+                                    font-size: 14px;
+                                }
+                                /* Content styles */
+                                .receipt-content {
+                                    padding: 20px;
+                                    background-image: url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' viewBox=\'0 0 40 40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%23f0f0f0\' fill-opacity=\'0.4\' fill-rule=\'evenodd\'%3E%3Cpath d=\'M0 40L40 0H20L0 20M40 40V20L20 40\'/%3E%3C/g%3E%3C/svg%3E");
+                                    background-repeat: repeat;
+                                }
+                                .receipt-paper {
+                                    background-color: white;
+                                    padding: 20px;
+                                    border-radius: 5px;
+                                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                                }
+                                .receipt-title {
+                                    text-align: center;
+                                    margin-bottom: 10px;
+                                    font-weight: bold;
+                                    font-size: 18px;
+                                    border-bottom: 1px solid #ddd;
+                                    padding-bottom: 10px;
+                                }
+                                .receipt-date {
+                                    text-align: center;
+                                    font-size: 14px;
+                                    margin-bottom: 20px;
+                                    color: #666;
+                                }
+                                .transaction-status {
+                                    text-align: center;
+                                    padding: 8px;
+                                    margin: 15px 0;
+                                    background-color: #e7f3eb;
+                                    border: 1px solid #28a745;
+                                    border-radius: 4px;
+                                    font-weight: bold;
+                                    color: #28a745;
+                                }
+                                .transaction-id {
+                                    text-align: center;
+                                    font-family: "Courier New", monospace;
+                                    font-size: 14px;
+                                    background-color: #f8f9fa;
+                                    padding: 8px;
+                                    border-radius: 4px;
+                                    margin-bottom: 20px;
+                                    border: 1px dashed #ccc;
+                                }
+                                .amount-section {
+                                    text-align: center;
+                                    margin: 20px 0;
+                                    padding: 15px;
+                                    background-color: #f0f7ff;
+                                    border: 2px solid #0047AB;
+                                    border-radius: 5px;
+                                }
+                                .amount-label {
+                                    font-size: 14px;
+                                    color: #555;
+                                    margin-bottom: 5px;
+                                }
+                                .amount-value {
+                                    font-size: 24px;
+                                    font-weight: bold;
+                                    color: #0047AB;
+                                    font-family: "Courier New", monospace;
+                                }
+                                .details-table {
+                                    width: 100%;
+                                    border-collapse: collapse;
+                                    margin: 20px 0;
+                                    font-family: "Courier New", monospace;
+                                    font-size: 14px;
+                                }
+                                .details-table th {
+                                    background-color: #f5f5f5;
+                                    border-bottom: 2px solid #ddd;
+                                    padding: 8px;
+                                    text-align: left;
+                                    font-weight: bold;
+                                }
+                                .details-table td {
+                                    padding: 10px 8px;
+                                    border-bottom: 1px solid #eee;
+                                }
+                                .detail-label {
+                                    font-weight: bold;
+                                    color: #555;
+                                }
+                                .detail-value {
+                                    text-align: right;
+                                }
+                                /* Footer styles */
+                                .receipt-footer {
+                                    padding: 15px;
+                                    text-align: center;
+                                    border-top: 3px dashed #ddd;
+                                    color: #777;
+                                    font-size: 12px;
+                                    background-color: #f9f9f9;
+                                }
+                                .receipt-barcode {
+                                    text-align: center;
+                                    margin: 20px 0;
+                                    padding: 10px;
+                                    background-color: #ffffff;
+                                }
+                                .barcode-img {
+                                    width: 80%;
+                                    max-width: 300px;
+                                    height: 60px;
+                                    background-color: #333;
+                                    color: white;
+                                    margin: 0 auto;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    font-family: "Courier New", monospace;
+                                    font-size: 12px;
+                                    letter-spacing: 1px;
+                                }
+                                .security-notice {
+                                    margin-top: 20px;
+                                    padding: 12px;
+                                    background-color: #fff8e1;
+                                    border-left: 4px solid #ffc107;
+                                    font-size: 12px;
+                                }
+                                .receipt-divider {
+                                    height: 1px;
+                                    background: repeating-linear-gradient(to right, #ddd 0, #ddd 5px, transparent 5px, transparent 10px);
+                                    margin: 15px 0;
+                                }
+                                .thank-you {
+                                    text-align: center;
+                                    margin: 20px 0 10px;
+                                    font-weight: bold;
+                                    font-size: 16px;
+                                    color: #0047AB;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <div class="receipt-container">
+                                <div class="receipt-header">
+                                    <h1>SCHOBANK</h1>
+                                    <p>Bukti Transaksi Transfer</p>
+                                </div>
+                                
+                                <div class="receipt-content">
+                                    <div class="receipt-paper">
+                                        <div class="receipt-title">BUKTI TRANSFER ELEKTRONIK</div>
+                                        <div class="receipt-date">Tanggal: ' . date('d/m/Y') . ' - Waktu: ' . date('H:i:s') . ' WIB</div>
+                                        
+                                        <div class="transaction-id">
+                                            No. Transaksi: <strong>' . $no_transaksi . '</strong>
+                                        </div>
+                                        
+                                        <div class="transaction-status">
+                                            ✓ TRANSAKSI BERHASIL
+                                        </div>
+                                        
+                                        <div class="amount-section">
+                                            <div class="amount-label">TOTAL TRANSFER</div>
+                                            <div class="amount-value">Rp ' . number_format($jumlah, 0, ',', '.') . '</div>
+                                        </div>
+                                        
+                                        <div class="receipt-divider"></div>
+                                        
+                                        <table class="details-table">
+                                            <tr>
+                                                <td class="detail-label">Waktu Transaksi</td>
+                                                <td class="detail-value">' . date('d/m/Y H:i:s') . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Rekening Sumber</td>
+                                                <td class="detail-value">' . $no_rekening . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Nama Pengirim</td>
+                                                <td class="detail-value">' . $user_data['nama'] . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Rekening Tujuan</td>
+                                                <td class="detail-value">' . $rekening_tujuan . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Nama Penerima</td>
+                                                <td class="detail-value">' . $rekening_tujuan_nama . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Jumlah Transfer</td>
+                                                <td class="detail-value">Rp ' . number_format($jumlah, 0, ',', '.') . '</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Biaya</td>
+                                                <td class="detail-value">Rp 0,-</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Status</td>
+                                                <td class="detail-value">BERHASIL</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="detail-label">Saldo Akhir</td>
+                                                <td class="detail-value">Rp ' . number_format($saldo_baru_pengirim, 0, ',', '.') . '</td>
+                                            </tr>
+                                        </table>
+                                        
+                                        <div class="receipt-divider"></div>
+                                        
+                                        <div class="receipt-barcode">
+                                            <div class="barcode-img">' . $no_transaksi . '</div>
+                                        </div>
+                                        
+                                        <div class="security-notice">
+                                            <strong>Pemberitahuan Keamanan:</strong> Bukti transfer ini sah tanpa tanda tangan. 
+                                            Jangan membagikan informasi rekening dan PIN Anda kepada siapapun. SCHOBANK tidak pernah meminta
+                                            informasi rahasia melalui email atau telepon.
+                                        </div>
+                                        
+                                        <div class="thank-you">
+                                            TERIMA KASIH
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="receipt-footer">
+                                    <p>Dokumen ini diterbitkan secara elektronik oleh SCHOBANK</p>
+                                    <p>Jika Anda tidak melakukan transaksi ini, hubungi layanan pelanggan kami di (021) 12345678</p>
+                                    <p>&copy; ' . date('Y') . ' SCHOBANK. All rights reserved.</p>
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                        ';
+                        
+                        // Versi teks alternatif untuk klien email yang tidak mendukung HTML
+                        $mail->AltBody = 'BUKTI TRANSFER SCHOBANK' . PHP_EOL . 
+                                        'No. Transaksi: ' . $no_transaksi . PHP_EOL .
+                                        'Tanggal: ' . date('d/m/Y H:i:s') . PHP_EOL .
+                                        'Rekening Asal: ' . $no_rekening . PHP_EOL .
+                                        'Rekening Tujuan: ' . $rekening_tujuan . PHP_EOL .
+                                        'Nama Penerima: ' . $rekening_tujuan_nama . PHP_EOL .
+                                        'Jumlah: Rp ' . number_format($jumlah, 0, ',', '.') . PHP_EOL . PHP_EOL .
+                                        'Terima kasih telah menggunakan layanan SCHOBANK SYSTEM';
+                        
+                        // Kirim email
+                        $mail->send();
+                        
+                        // Juga kirim notifikasi ke penerima jika email tersedia
+                        if (!empty($rekening_tujuan_email)) {
+                            $mail->clearAddresses();
+                            $mail->addAddress($rekening_tujuan_email, $rekening_tujuan_nama);
+                            $mail->Subject = 'Pemberitahuan Transfer Masuk - SCHOBANK';
+                            
+                            $mail->Body = '
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta charset="UTF-8">
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                <title>Notifikasi Transfer Masuk - SCHOBANK</title>
+                                <style>
+                                    /* Reset styles */
+                                    body, html {
+                                        margin: 0;
+                                        padding: 0;
+                                        font-family: "Courier New", monospace;
+                                        line-height: 1.5;
+                                        color: #333333;
+                                        background-color: #f5f5f5;
+                                    }
+                                    * {
+                                        box-sizing: border-box;
+                                    }
+                                    /* Container styles */
+                                    .receipt-container {
+                                        max-width: 600px;
+                                        margin: 20px auto;
+                                        background-color: #ffffff;
+                                        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+                                        border-radius: 8px;
+                                        overflow: hidden;
+                                    }
+                                    /* Header styles */
+                                    .receipt-header {
+                                        background-color: #28a745;
+                                        color: white;
+                                        padding: 15px;
+                                        text-align: center;
+                                        border-bottom: 3px dashed #ffffff;
+                                    }
+                                    .receipt-header h1 {
+                                        margin: 0;
+                                        font-size: 24px;
+                                        font-weight: bold;
+                                    }
+                                    .receipt-header p {
+                                        margin: 5px 0 0;
+                                        font-size: 14px;
+                                    }
+                                    /* Content styles */
+                                    .receipt-content {
+                                        padding: 20px;
+                                        background-image: url("data:image/svg+xml,%3Csvg width=\'40\' height=\'40\' viewBox=\'0 0 40 40\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%23f0f0f0\' fill-opacity=\'0.4\' fill-rule=\'evenodd\'%3E%3Cpath d=\'M0 40L40 0H20L0 20M40 40V20L20 40\'/%3E%3C/g%3E%3C/svg%3E");
+                                        background-repeat: repeat;
+                                    }
+                                    .receipt-paper {
+                                        background-color: white;
+                                        padding: 20px;
+                                        border-radius: 5px;
+                                        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                                    }
+                                    .receipt-title {
+                                        text-align: center;
+                                        margin-bottom: 10px;
+                                        font-weight: bold;
+                                        font-size: 18px;
+                                        border-bottom: 1px solid #ddd;
+                                        padding-bottom: 10px;
+                                    }
+                                    .receipt-date {
+                                        text-align: center;
+                                        font-size: 14px;
+                                        margin-bottom: 20px;
+                                        color: #666;
+                                    }
+                                    .transaction-status {
+                                        text-align: center;
+                                        padding: 8px;
+                                        margin: 15px 0;
+                                        background-color: #e7f3eb;
+                                        border: 1px solid #28a745;
+                                        border-radius: 4px;
+                                        font-weight: bold;
+                                        color: #28a745;
+                                    }
+                                    .transaction-id {
+                                        text-align: center;
+                                        font-family: "Courier New", monospace;
+                                        font-size: 14px;
+                                        background-color: #f8f9fa;
+                                        padding: 8px;
+                                        border-radius: 4px;
+                                        margin-bottom: 20px;
+                                        border: 1px dashed #ccc;
+                                    }
+                                    .amount-section {
+                                        text-align: center;
+                                        margin: 20px 0;
+                                        padding: 15px;
+                                        background-color: #f0fff5;
+                                        border: 2px solid #28a745;
+                                        border-radius: 5px;
+                                    }
+                                    .amount-label {
+                                        font-size: 14px;
+                                        color: #555;
+                                        margin-bottom: 5px;
+                                    }
+                                    .amount-value {
+                                        font-size: 24px;
+                                        font-weight: bold;
+                                        color: #28a745;
+                                        font-family: "Courier New", monospace;
+                                    }
+                                    .details-table {
+                                        width: 100%;
+                                        border-collapse: collapse;
+                                        margin: 20px 0;
+                                        font-family: "Courier New", monospace;
+                                        font-size: 14px;
+                                    }
+                                    .details-table th {
+                                        background-color: #f5f5f5;
+                                        border-bottom: 2px solid #ddd;
+                                        padding: 8px;
+                                        text-align: left;
+                                        font-weight: bold;
+                                    }
+                                    .details-table td {
+                                        padding: 10px 8px;
+                                        border-bottom: 1px solid #eee;
+                                    }
+                                    .detail-label {
+                                        font-weight: bold;
+                                        color: #555;
+                                    }
+                                    .detail-value {
+                                        text-align: right;
+                                    }
+                                    /* Footer styles */
+                                    .receipt-footer {
+                                        padding: 15px;
+                                        text-align: center;
+                                        border-top: 3px dashed #ddd;
+                                        color: #777;
+                                        font-size: 12px;
+                                        background-color: #f9f9f9;
+                                    }
+                                    .balance-info {
+                                        text-align: center;
+                                        margin: 20px 0;
+                                        padding: 12px;
+                                        background-color: #f8f9fa;
+                                        border: 1px solid #ddd;
+                                        border-radius: 5px;
+                                    }
+                                    .balance-label {
+                                        font-size: 14px;
+                                        color: #555;
+                                    }
+                                    .balance-value {
+                                        font-size: 18px;
+                                        font-weight: bold;
+                                        color: #333;
+                                        font-family: "Courier New", monospace;
+                                    }
+                                    .receipt-divider {
+                                        height: 1px;
+                                        background: repeating-linear-gradient(to right, #ddd 0, #ddd 5px, transparent 5px, transparent 10px);
+                                        margin: 15px 0;
+                                    }
+                                    .security-notice {
+                                        margin-top: 20px;
+                                        padding: 12px;
+                                        background-color: #fff8e1;
+                                        border-left: 4px solid #ffc107;
+                                        font-size: 12px;
+                                    }
+                                    .thank-you {
+                                        text-align: center;
+                                        margin: 20px 0 10px;
+                                        font-weight: bold;
+                                        font-size: 16px;
+                                        color: #28a745;
+                                    }
+                                </style>
+                            </head>
+                            <body>
+                                <div class="receipt-container">
+                                    <div class="receipt-header">
+                                        <h1>SCHOBANK</h1>
+                                        <p>Notifikasi Transfer Masuk</p>
+                                    </div>
+                                    
+                                    <div class="receipt-content">
+                                        <div class="receipt-paper">
+                                            <div class="receipt-title">BUKTI PENERIMAAN DANA</div>
+                                            <div class="receipt-date">Tanggal: ' . date('d/m/Y') . ' - Waktu: ' . date('H:i:s') . ' WIB</div>
+                                            
+                                            <div class="transaction-id">
+                                                No. Transaksi: <strong>' . $no_transaksi . '</strong>
+                                            </div>
+                                            
+                                            <div class="transaction-status">
+                                                ✓ DANA DITERIMA
+                                            </div>
+                                            
+                                            <div class="amount-section">
+                                                <div class="amount-label">TOTAL DITERIMA</div>
+                                                <div class="amount-value">Rp ' . number_format($jumlah, 0, ',', '.') . '</div>
+                                            </div>
+                                            
+                                            <div class="receipt-divider"></div>
+                                            
+                                            <table class="details-table">
+                                                <tr>
+                                                    <td class="detail-label">Waktu Diterima</td>
+                                                    <td class="detail-value">' . date('d/m/Y H:i:s') . '</td>
+                                                </tr>
+                                                <tr>
+                                                    <td class="detail-label">Dari Rekening</td>
+                                                    <td class="detail-value">' . $no_rekening . '</td>
+                                                </tr>
+                                                <tr>
+                                                    <td class="detail-label">Nama Pengirim</td>
+                                                    <td class="detail-value">' . $user_data['nama'] . '</td>
+                                                </tr>
+                                                <tr>
+                                                    <td class="detail-label">Rekening Tujuan</td>
+                                                    <td class="detail-value">' . $rekening_tujuan . '</td>
+                                                </tr>
+                                                <tr>
+                                                    <td class="detail-label">Jumlah Diterima</td>
+                                                    <td class="detail-value">Rp ' . number_format($jumlah, 0, ',', '.') . '</td>
+                                                </tr>
+                                            </table>
+                                            
+                                            <div class="receipt-divider"></div>
+                                            
+                                            <div class="balance-info">
+                                                <div class="balance-label">SALDO AKHIR ANDA</div>
+                                                <div class="balance-value">Rp ' . number_format($saldo_baru_penerima, 0, ',', '.') . '</div>
+                                            </div>
+                                            
+                                            <div class="security-notice">
+                                                <strong>Pemberitahuan Keamanan:</strong> Bukti transfer ini sah tanpa tanda tangan.
+                                                Jika Anda tidak mengenali transaksi ini, silakan hubungi layanan pelanggan kami segera
+                                                di (021) 12345678.
+                                            </div>
+                                            
+                                            <div class="thank-you">
+                                                TERIMA KASIH
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="receipt-footer">
+                                        <p>Dokumen ini diterbitkan secara elektronik oleh SCHOBANK</p>
+                                        <p>&copy; ' . date('Y') . ' SCHOBANK. All rights reserved.</p>
+                                    </div>
+                                </div>
+                            </body>
+                            </html>
+                            ';
+                            
+                            $mail->AltBody = 'PEMBERITAHUAN TRANSFER MASUK' . PHP_EOL . 
+                                            'Tanggal: ' . date('d/m/Y H:i:s') . PHP_EOL .
+                                            'No. Transaksi: ' . $no_transaksi . PHP_EOL .
+                                            'Dari Rekening: ' . $no_rekening . PHP_EOL .
+                                            'Nama Pengirim: ' . $user_data['nama'] . PHP_EOL .
+                                            'Jumlah: Rp ' . number_format($jumlah, 0, ',', '.') . PHP_EOL .
+                                            'Saldo Anda saat ini: Rp ' . number_format($saldo_baru_penerima, 0, ',', '.') . PHP_EOL . PHP_EOL .
+                                            'Terima kasih telah menggunakan layanan SCHOBANK SYSTEM';
+                            
+                            $mail->send();
+                        }
+                    } catch (Exception $e) {
+                        // Catat error pengiriman email, tapi jangan batalkan transaksi
+                        error_log('Email tidak dapat dikirim. Mailer Error: ' . $mail->ErrorInfo);
+                    }
         
                     // Success message
                     $success = "Transfer berhasil!";
                     $current_step = 3; // Receipt display step
-        
-                    // Generate struk
-                    $strukData = [
-                        'no_transaksi' => $no_transaksi,
-                        'tanggal' => date('Y-m-d'),
-                        'rekening_asal' => $no_rekening,
-                        'rekening_tujuan' => $rekening_tujuan,
-                        'nama_penerima' => $rekening_tujuan_nama,
-                        'jumlah' => $jumlah,
-                    ];
-                    $pdfData = generateStruk($strukData);
-                    $pdfFilePath = $pdfData['file_path'];
-                    $pdfUrl = $pdfData['file_url'];
         
                     // Store transfer details for display
                     $transfer_amount = $jumlah;
@@ -1107,13 +1476,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                     <div class="waves"><span class="checkmark"></span></div>
                     <div class="success-title"><?= $success ?></div>
                     <div class="success-details">Rp <?= number_format($transfer_amount, 0, ',', '.') ?> telah ditransfer ke rekening <?= $transfer_rekening ?> atas nama <?= $transfer_name ?></div>
-                    <?php if (file_exists($pdfFilePath)): ?>
-                    <a href="<?= $pdfUrl ?>" target="_blank" class="btn-view">
-                        <i class="fas fa-eye"></i> Lihat Bukti Transfer
-                    </a>
-                    <?php else: ?>
-                        <div class="alert alert-danger">File bukti transfer tidak ditemukan.</div>
-                    <?php endif; ?>
+                    <div class="email-notification">
+                        <i class="fas fa-envelope"></i> Bukti transfer telah dikirim ke email Anda.
+                    </div>
                 </div>
             </div>
             <div class="notif-badge">
@@ -1190,84 +1555,124 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
                         <span class="transfer-loading" style="display:none;"><i class="fas fa-spinner fa-spin"></i></span>
                     </button>
                 </form>
-            <?php endif; ?>
-        </div>
-    </div>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-        
-            // Set durasi notifikasi menjadi 10 detik (10000 milidetik)
-            const notificationDismissTime = 10000;
+            <?php elseif ($current_step == 3): ?>
+</div>
+<?php endif; ?>
+</div>
 
-            // Auto-dismiss alerts setelah waktu tertentu
-            const errorAlert = document.getElementById('error-alert');
-            const successAlert = document.getElementById('success-alert');
-            const notifBadge = document.querySelector('.notif-badge');
+<!-- Back button form for Step 2 -->
+<form id="backForm" method="POST" style="display: none;">
+    <input type="hidden" name="action" value="go_back">
+</form>
 
-            if (errorAlert) {
-                setTimeout(function() {
-                    errorAlert.style.opacity = '0';
-                    errorAlert.style.transform = 'translateY(-20px)';
-                    setTimeout(() => {
-                        errorAlert.style.display = 'none';
-                    }, 500);
-                }, notificationDismissTime);
-            }
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+    
+        // Set durasi notifikasi menjadi 10 detik (10000 milidetik)
+        const notificationDismissTime = 10000;
 
-            if (successAlert) {
-                setTimeout(function() {
-                    successAlert.style.opacity = '0';
-                    successAlert.style.transform = 'translateY(-20px)';
-                    setTimeout(() => {
-                        successAlert.style.display = 'none';
-                    }, 500);
-                }, notificationDismissTime);
-            }
+        // Auto-dismiss alerts setelah waktu tertentu
+        const errorAlert = document.getElementById('error-alert');
+        const successAlert = document.getElementById('success-alert');
+        const notifBadge = document.querySelector('.notif-badge');
 
-            if (notifBadge) {
-                setTimeout(function() {
-                    notifBadge.style.opacity = '0';
-                    setTimeout(() => {
-                        notifBadge.style.display = 'none';
-                    }, 500);
-                }, notificationDismissTime);
-            }
+        if (errorAlert) {
+            setTimeout(function() {
+                errorAlert.style.opacity = '0';
+                errorAlert.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    errorAlert.style.display = 'none';
+                }, 500);
+            }, notificationDismissTime);
+        }
 
-            // Handle toggle password visibility
-            const togglePasswordButtons = document.querySelectorAll('.password-toggle');
-            togglePasswordButtons.forEach(function(button) {
-                button.addEventListener('click', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const passwordInput = document.getElementById(targetId);
-                    if (passwordInput.type === 'password') {
-                        passwordInput.type = 'text';
-                        this.classList.remove('fa-eye');
-                        this.classList.add('fa-eye-slash');
-                    } else {
-                        passwordInput.type = 'password';
-                        this.classList.remove('fa-eye-slash');
-                        this.classList.add('fa-eye');
-                    }
-                });
+        if (successAlert) {
+            setTimeout(function() {
+                successAlert.style.opacity = '0';
+                successAlert.style.transform = 'translateY(-20px)';
+                setTimeout(() => {
+                    successAlert.style.display = 'none';
+                }, 500);
+            }, notificationDismissTime);
+        }
+
+        if (notifBadge) {
+            setTimeout(function() {
+                notifBadge.style.opacity = '0';
+                setTimeout(() => {
+                    notifBadge.style.display = 'none';
+                }, 500);
+            }, notificationDismissTime);
+        }
+
+        // Handle toggle password visibility
+        const togglePasswordButtons = document.querySelectorAll('.password-toggle');
+        togglePasswordButtons.forEach(function(button) {
+            button.addEventListener('click', function() {
+                const targetId = this.getAttribute('data-target');
+                const passwordInput = document.getElementById(targetId);
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    this.classList.remove('fa-eye');
+                    this.classList.add('fa-eye-slash');
+                } else {
+                    passwordInput.type = 'password';
+                    this.classList.remove('fa-eye-slash');
+                    this.classList.add('fa-eye');
+                }
             });
-
-            // Handle back button
-            const backButton = document.getElementById('backButton');
-            if (backButton) {
-                backButton.addEventListener('click', function() {
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = '';
-                    const actionInput = document.createElement('input');
-                    actionInput.type = 'hidden';
-                    actionInput.name = 'action';
-                    actionInput.value = 'go_back';
-                    form.appendChild(actionInput);
-                    document.body.appendChild(form);
-                    form.submit();
-                });
-            }
         });
-    </script>
+
+        // Handle back button
+        const backButton = document.getElementById('backButton');
+        if (backButton) {
+            backButton.addEventListener('click', function() {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '';
+                const actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'action';
+                actionInput.value = 'go_back';
+                form.appendChild(actionInput);
+                document.body.appendChild(form);
+                form.submit();
+            });
+        }
+        
+        // Loading animation for verify button
+        const verifyForm = document.getElementById('verifyForm');
+        if (verifyForm) {
+            verifyForm.addEventListener('submit', function() {
+                const verifyButton = document.getElementById('verify-button');
+                const verifyText = document.getElementById('verify-text');
+                const loadingIcon = verifyButton.querySelector('.loading-icon');
+                
+                verifyText.textContent = 'Memeriksa...';
+                loadingIcon.style.display = 'inline-block';
+                verifyButton.disabled = true;
+            });
+        }
+        
+        // Loading animation for transfer button
+        const transferForm = document.getElementById('transferForm');
+        if (transferForm) {
+            transferForm.addEventListener('submit', function() {
+                const transferButton = document.getElementById('transfer-button');
+                const transferText = document.getElementById('transfer-text');
+                const loadingIcon = transferButton.querySelector('.transfer-loading');
+                
+                transferText.textContent = 'Memproses...';
+                loadingIcon.style.display = 'inline-block';
+                transferButton.disabled = true;
+            });
+        }
+    });
+</script>
+
+</div>
+<?php if (file_exists('../../includes/footer.php')) {
+    include '../../includes/footer.php';
+} ?>
 </body>
 </html>

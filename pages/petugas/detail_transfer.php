@@ -2,32 +2,13 @@
 session_start();
 require_once '../../includes/db_connection.php';
 
-// Check if user is logged in and has appropriate role
+// Authorization check
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] == 'siswa') {
     header("Location: login.php");
     exit;
 }
 
-// Make sure $conn variable is available from db_connection.php
-if (!isset($conn) && isset($koneksi)) {
-    $conn = $koneksi;
-} else if (!isset($conn) && !isset($koneksi)) {
-    // Fallback connection if needed - adjust these credentials to match your configuration
-    $servername = "localhost";
-    $username = "root";
-    $password = "";
-    $dbname = "bankmini";
-    
-    // Create connection
-    $conn = new mysqli($servername, $username, $password, $dbname);
-    
-    // Check connection
-    if ($conn->connect_error) {
-        die("Connection failed: " . $conn->connect_error);
-    }
-}
-
-// Check if transfer ID is provided
+// Validate transfer ID
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     header("Location: riwayat_transfer.php");
     exit;
@@ -35,17 +16,17 @@ if (!isset($_GET['id']) || empty($_GET['id'])) {
 
 $transfer_id = $_GET['id'];
 
-// Get transfer details
+// Get transfer details with staff names
 $sql = "SELECT t.*, 
         r_asal.no_rekening as rekening_asal, u_asal.nama as nama_asal,
         r_tujuan.no_rekening as rekening_tujuan, u_tujuan.nama as nama_tujuan,
-        u_petugas.nama as nama_petugas, u_petugas.username as username_petugas
+        pt.petugas1_nama, pt.petugas2_nama
         FROM transaksi t
         JOIN rekening r_asal ON t.rekening_id = r_asal.id
         JOIN users u_asal ON r_asal.user_id = u_asal.id
         JOIN rekening r_tujuan ON t.rekening_tujuan_id = r_tujuan.id
         JOIN users u_tujuan ON r_tujuan.user_id = u_tujuan.id
-        JOIN users u_petugas ON t.petugas_id = u_petugas.id
+        LEFT JOIN petugas_tugas pt ON DATE(t.created_at) = pt.tanggal
         WHERE t.id = ? AND t.jenis_transaksi = 'transfer'";
 
 $stmt = $conn->prepare($sql);
@@ -61,7 +42,7 @@ if ($result->num_rows == 0) {
 $transfer = $result->fetch_assoc();
 $stmt->close();
 
-// Get mutations related to this transfer
+// Get transaction mutations
 $sql = "SELECT m.*, r.no_rekening, u.nama
         FROM mutasi m
         JOIN rekening r ON m.rekening_id = r.id
@@ -73,13 +54,9 @@ $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $transfer_id);
 $stmt->execute();
 $result = $stmt->get_result();
-$mutations = [];
-while ($row = $result->fetch_assoc()) {
-    $mutations[] = $row;
-}
+$mutations = $result->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
-// Set timezone to WIB (Western Indonesian Time)
 date_default_timezone_set('Asia/Jakarta');
 ?>
 
@@ -269,6 +246,57 @@ date_default_timezone_set('Asia/Jakarta');
             background-color: var(--primary-light);
         }
 
+        /* Petugas Section Styles */
+        .petugas-section {
+            margin: 25px 0;
+            padding: 20px;
+            background-color: #f8fafc;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .petugas-title {
+            font-size: 18px;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+        }
+
+        .petugas-title i {
+            margin-right: 10px;
+            color: var(--primary-color);
+        }
+
+        .petugas-container {
+            display: flex;
+            gap: 15px;
+        }
+
+        .petugas-box {
+            flex: 1;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid #e2e8f0;
+        }
+
+        .petugas-label {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 5px;
+            display: block;
+        }
+
+        .petugas-name {
+            font-size: 16px;
+            color: var(--text-primary);
+            padding: 8px 0;
+        }
+
         .text-danger {
             color: var(--danger-color);
         }
@@ -319,15 +347,6 @@ date_default_timezone_set('Asia/Jakarta');
             transform: translateY(-2px);
         }
 
-        .btn-secondary {
-            background-color: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background-color: #5a6268;
-        }
-
         .btn-success {
             background-color: var(--secondary-color);
             color: white;
@@ -365,6 +384,10 @@ date_default_timezone_set('Asia/Jakarta');
                 margin-bottom: 0;
             }
 
+            .petugas-container {
+                flex-direction: column;
+            }
+
             table {
                 display: block;
                 overflow-x: auto;
@@ -374,22 +397,20 @@ date_default_timezone_set('Asia/Jakarta');
     </style>
 </head>
 <body>
-    <?php if (file_exists('../../includes/header.php')) {
-        include '../../includes/header.php';
-    } ?>
+    <?php if (file_exists('../../includes/header.php')) include '../../includes/header.php'; ?>
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-info-circle"></i> Detail Transfer</h2>
-            <p>Informasi lengkap transaksi #<?= $transfer['no_transaksi'] ?></p>
-            <a href="riwayat_transfer.php" class="cancel-btn" title="Kembali ke Riwayat Transfer">
+            <a href="riwayat_transfer.php" class="cancel-btn" title="Kembali">
                 <i class="fas fa-arrow-left"></i>
             </a>
+            <h2><i class="fas fa-info-circle"></i> Detail Transfer</h2>
+            <p>Transaksi #<?= htmlspecialchars($transfer['no_transaksi']) ?></p>
         </div>
 
         <div class="transaction-card">
             <div class="card-header">
-                <h3>Informasi Transfer #<?= $transfer['no_transaksi'] ?></h3>
+                <h3>Transfer #<?= htmlspecialchars($transfer['no_transaksi']) ?></h3>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -398,14 +419,14 @@ date_default_timezone_set('Asia/Jakarta');
                         <table>
                             <tr>
                                 <th>No. Transaksi</th>
-                                <td><?= $transfer['no_transaksi'] ?></td>
+                                <td><?= htmlspecialchars($transfer['no_transaksi']) ?></td>
                             </tr>
                             <tr>
-                                <th>Tanggal & Waktu</th>
+                                <th>Tanggal</th>
                                 <td><?= date('d/m/Y H:i:s', strtotime($transfer['created_at'])) ?> WIB</td>
                             </tr>
                             <tr>
-                                <th>Jumlah Transfer</th>
+                                <th>Jumlah</th>
                                 <td>Rp <?= number_format($transfer['jumlah'], 2, ',', '.') ?></td>
                             </tr>
                             <tr>
@@ -420,10 +441,6 @@ date_default_timezone_set('Asia/Jakarta');
                                     <?php endif; ?>
                                 </td>
                             </tr>
-                            <tr>
-                                <th>Petugas</th>
-                                <td><?= $transfer['nama_petugas'] ?> (<?= $transfer['username_petugas'] ?>)</td>
-                            </tr>
                         </table>
                     </div>
                     
@@ -431,24 +448,45 @@ date_default_timezone_set('Asia/Jakarta');
                         <h4>Rekening</h4>
                         <table>
                             <tr>
-                                <th>Rekening Asal</th>
+                                <th>Asal</th>
                                 <td>
-                                    <?= $transfer['rekening_asal'] ?><br>
-                                    <small><?= $transfer['nama_asal'] ?></small>
+                                    <?= htmlspecialchars($transfer['rekening_asal']) ?><br>
+                                    <small><?= htmlspecialchars($transfer['nama_asal']) ?></small>
                                 </td>
                             </tr>
                             <tr>
-                                <th>Rekening Tujuan</th>
+                                <th>Tujuan</th>
                                 <td>
-                                    <?= $transfer['rekening_tujuan'] ?><br>
-                                    <small><?= $transfer['nama_tujuan'] ?></small>
+                                    <?= htmlspecialchars($transfer['rekening_tujuan']) ?><br>
+                                    <small><?= htmlspecialchars($transfer['nama_tujuan']) ?></small>
                                 </td>
                             </tr>
                         </table>
                     </div>
                 </div>
                 
-                <h4>Mutasi Terkait</h4>
+                <!-- Petugas Section -->
+                <div class="petugas-section">
+                    <div class="petugas-title">
+                        <i class="fas fa-user-tie"></i> Petugas Bertugas
+                    </div>
+                    <div class="petugas-container">
+                        <div class="petugas-box">
+                            <span class="petugas-label">Petugas 1</span>
+                            <div class="petugas-name">
+                                <?= !empty($transfer['petugas1_nama']) ? htmlspecialchars($transfer['petugas1_nama']) : '-' ?>
+                            </div>
+                        </div>
+                        <div class="petugas-box">
+                            <span class="petugas-label">Petugas 2</span>
+                            <div class="petugas-name">
+                                <?= !empty($transfer['petugas2_nama']) ? htmlspecialchars($transfer['petugas2_nama']) : '-' ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h4>Mutasi</h4>
                 <div class="table-responsive">
                     <table class="table-striped">
                         <thead>
@@ -457,40 +495,37 @@ date_default_timezone_set('Asia/Jakarta');
                                 <th>Rekening</th>
                                 <th>Nama</th>
                                 <th>Jumlah</th>
-                                <th>Saldo Akhir</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($mutations as $mutation): ?>
                                 <tr>
-                                    <td><?= date('d/m/Y H:i:s', strtotime($mutation['created_at'])) ?> WIB</td>
-                                    <td><?= $mutation['no_rekening'] ?></td>
-                                    <td><?= $mutation['nama'] ?></td>
+                                    <td><?= date('d/m/Y H:i', strtotime($mutation['created_at'])) ?></td>
+                                    <td><?= htmlspecialchars($mutation['no_rekening']) ?></td>
+                                    <td><?= htmlspecialchars($mutation['nama']) ?></td>
                                     <td class="<?= $mutation['jumlah'] < 0 ? 'text-danger' : 'text-success' ?>">
-                                        <?= $mutation['jumlah'] < 0 ? '-' : '+' ?> 
                                         Rp <?= number_format(abs($mutation['jumlah']), 2, ',', '.') ?>
                                     </td>
-                                    <td>Rp <?= number_format($mutation['saldo_akhir'], 2, ',', '.') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 </div>
-                                
-                <?php if ($transfer['status'] == 'pending' && ($_SESSION['role'] == 'admin' || $_SESSION['role'] == 'petugas')): ?>
-                <a href="proses_transfer.php?id=<?= $transfer['id'] ?>&action=approve" class="btn btn-success" 
-                   onclick="return confirm('Apakah Anda yakin ingin menyetujui transfer ini?')">
-                    <i class="fas fa-check"></i> Setujui
-                </a>
-                <a href="proses_transfer.php?id=<?= $transfer['id'] ?>&action=reject" class="btn btn-danger"
-                   onclick="return confirm('Apakah Anda yakin ingin menolak transfer ini?')">
-                    <i class="fas fa-times"></i> Tolak
-                </a>
+                
+                <?php if ($transfer['status'] == 'pending' && in_array($_SESSION['role'], ['admin', 'petugas'])): ?>
+                <div style="margin-top: 20px;">
+                    <a href="proses_transfer.php?id=<?= $transfer['id'] ?>&action=approve" class="btn btn-success" 
+                       onclick="return confirm('Setujui transfer ini?')">
+                        <i class="fas fa-check"></i> Setujui
+                    </a>
+                    <a href="proses_transfer.php?id=<?= $transfer['id'] ?>&action=reject" class="btn btn-danger"
+                       onclick="return confirm('Tolak transfer ini?')">
+                        <i class="fas fa-times"></i> Tolak
+                    </a>
+                </div>
                 <?php endif; ?>
             </div>
         </div>
     </div>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
 </body>
 </html>
