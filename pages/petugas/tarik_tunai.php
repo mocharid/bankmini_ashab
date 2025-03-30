@@ -27,12 +27,14 @@ $username = $_SESSION['username'] ?? 'Petugas';
             --secondary-color: #4caf50;
             --accent-color: #ff9800;
             --danger-color: #f44336;
+            --warning-color: #ffc107;
             --text-primary: #333;
             --text-secondary: #666;
             --bg-light: #f8faff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
+            --border-radius: 12px;
         }
 
         * {
@@ -50,41 +52,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             flex-direction: column;
         }
 
-        .top-nav {
-            background: var(--primary-dark);
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .nav-buttons {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            font-size: 14px;
-            transition: var(--transition);
-        }
-
-        .nav-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-        
         .main-content {
             flex: 1;
             padding: 20px;
@@ -93,18 +60,25 @@ $username = $_SESSION['username'] ?? 'Petugas';
             margin: 0 auto;
         }
         
-        .welcome-banner {
+        .header-container {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
-            padding: 25px;
-            border-radius: 15px;
+            padding: 20px 25px;
+            border-radius: var(--border-radius);
             margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
             overflow: hidden;
         }
         
-        .welcome-banner::before {
+        .header-content {
+            flex: 1;
+        }
+        
+        .header-container::before {
             content: '';
             position: absolute;
             top: -50%;
@@ -125,14 +99,40 @@ $username = $_SESSION['username'] ?? 'Petugas';
             }
         }
         
-        .welcome-banner h2 {
-            margin-bottom: 10px;
+        .header-container h2 {
             font-size: 24px;
+            margin-bottom: 5px;
             display: flex;
             align-items: center;
             gap: 10px;
             position: relative;
-            z-index: 1;
+        }
+        
+        .header-container p {
+            font-size: 14px;
+            opacity: 0.9;
+            position: relative;
+        }
+
+        .back-button {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: var(--transition);
+            margin-left: 15px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .back-button:hover {
+            background-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
         }
 
         .transaction-container {
@@ -144,7 +144,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
         .transaction-card {
             background: white;
-            border-radius: 15px;
+            border-radius: var(--border-radius);
             padding: 25px;
             box-shadow: var(--shadow-sm);
             margin-bottom: 30px;
@@ -152,6 +152,18 @@ $username = $_SESSION['username'] ?? 'Petugas';
             max-width: 450px;
             width: 100%;
             transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .transaction-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--primary-color), var(--primary-dark));
         }
 
         .transaction-card:hover {
@@ -163,6 +175,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             display: flex;
             justify-content: space-between;
             margin-bottom: 20px;
+            position: relative;
         }
 
         .step {
@@ -170,7 +183,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             flex-direction: column;
             align-items: center;
             position: relative;
-            width: 33.33%;
+            width: 25%;
         }
 
         .step-number {
@@ -226,6 +239,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             font-size: 12px;
             color: var(--text-secondary);
             text-align: center;
+            transition: var(--transition);
         }
 
         .step.active .step-label {
@@ -271,7 +285,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         input[type="text"],
-        input[type="number"] {
+        input[type="number"],
+        input[type="password"] {
             width: 100%;
             padding: 14px 15px;
             border: 1px solid #ddd;
@@ -282,7 +297,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         input[type="text"]:focus,
-        input[type="number"]:focus {
+        input[type="number"]:focus,
+        input[type="password"]:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
@@ -335,6 +351,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
         .btn-cancel:hover {
             background-color: #d32f2f;
+        }
+
+        .btn-warning {
+            background-color: var(--warning-color);
+            color: #000;
+        }
+
+        .btn-warning:hover {
+            background-color: #e0a800;
         }
 
         .btn-actions {
@@ -404,7 +429,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
             border-left: 5px solid #fecaca;
         }
 
-        /* Button loading animation */
+        .alert-warning {
+            background-color: #fef3c7;
+            color: #92400e;
+            border-left: 5px solid #fde68a;
+        }
+
         .btn-loading {
             position: relative;
         }
@@ -434,7 +464,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             }
         }
 
-        /* Ripple effect */
         .ripple {
             position: relative;
             overflow: hidden;
@@ -463,7 +492,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transition: 0s;
         }
 
-        /* Success animation */
         .success-overlay {
             position: fixed;
             top: 0;
@@ -569,58 +597,44 @@ $username = $_SESSION['username'] ?? 'Petugas';
             }
         }
 
-        /* Shimmer loading effect for account details */
-        .shimmer-loading {
-            background: #f6f7f8;
-            background-image: linear-gradient(
-                to right,
-                #f6f7f8 0%,
-                #edeef1 20%,
-                #f6f7f8 40%,
-                #f6f7f8 100%
-            );
-            background-repeat: no-repeat;
-            background-size: 800px 104px;
-            display: inline-block;
-            position: relative;
-            animation-duration: 1.5s;
-            animation-fill-mode: forwards;
-            animation-iteration-count: infinite;
-            animation-name: shimmer;
-            animation-timing-function: linear;
-            border-radius: 4px;
+        .pin-container {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
         }
 
-        .shimmer-line {
-            height: 16px;
-            margin-bottom: 8px;
-            width: 100%;
+        .pin-input {
+            width: 50px;
+            height: 60px;
+            text-align: center;
+            font-size: 24px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 0 5px;
+            transition: var(--transition);
         }
 
-        .shimmer-line.short {
-            width: 60%;
-        }
-
-        @keyframes shimmer {
-            0% {
-                background-position: -468px 0;
-            }
-            100% {
-                background-position: 468px 0;
-            }
+        .pin-input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
         }
 
         @media (max-width: 768px) {
-            .top-nav {
-                padding: 15px;
-            }
-
-            .nav-buttons {
-                gap: 10px;
-            }
-
             .main-content {
                 padding: 15px;
+            }
+
+            .header-container {
+                padding: 15px;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .back-button {
+                position: absolute;
+                top: 15px;
+                right: 15px;
             }
 
             .transaction-card {
@@ -635,23 +649,41 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 margin-right: 0;
                 margin-bottom: 10px;
             }
+
+            .pin-container {
+                justify-content: center;
+            }
+
+            .pin-input {
+                width: 40px;
+                height: 50px;
+                font-size: 20px;
+                margin: 0 3px;
+            }
         }
-        </style>
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+
+        .shake {
+            animation: shake 0.5s;
+            border-color: var(--danger-color) !important;
+        }
+    </style>
 </head>
 <body>
-        <nav class="top-nav">
-            <h1>SCHOBANK</h1>
-            <div class="nav-buttons">
-                <a href="dashboard.php" class="nav-btn">
-                    <i class="fas fa-sign-out-alt"></i>
-                </a>
-            </div>
-        </nav>
-
-
     <div class="main-content">
-        <div class="welcome-banner">
-            <h2><i class="fas fa-money-bill-wave"></i> Tarik Tunai</h2>
+        <div class="header-container">
+            <div class="header-content">
+                <h2><i class="fas fa-money-bill-wave"></i> Tarik Tunai</h2>
+                <p>tarik Tunai Nasabah</p>
+            </div>
+            <a href="dashboard.php" class="back-button ripple">
+                <i class="fas fa-arrow-left"></i>
+            </a>
         </div>
 
         <div class="transaction-container">
@@ -670,6 +702,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     </div>
                     <div class="step" id="step3">
                         <div class="step-number">3</div>
+                        <div class="step-line"></div>
+                        <div class="step-label">Verifikasi PIN</div>
+                    </div>
+                    <div class="step" id="step4">
+                        <div class="step-number">4</div>
                         <div class="step-line"></div>
                         <div class="step-label">Konfirmasi</div>
                     </div>
@@ -715,14 +752,56 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         <button type="button" id="btnBackToRekening" class="btn-back ripple">
                             <span class="btn-text"><i class="fas fa-arrow-left"></i> Kembali</span>
                         </button>
-                        <button type="button" id="btnNextToConfirm" class="ripple">
-                            <span class="btn-text">Cek & Konfirmasi <i class="fas fa-arrow-right"></i></span>
+                        <button type="button" id="btnNextToPin" class="ripple">
+                            <span class="btn-text">Lanjutkan <i class="fas fa-arrow-right"></i></span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Form 3: Confirmation -->
+                <!-- Form 3: PIN Verification -->
                 <div class="input-form" id="form3">
+                    <h3 style="margin-bottom: 20px; color: var(--primary-dark);">Verifikasi PIN Nasabah</h3>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">Nomor Rekening:</div>
+                        <div class="detail-value" id="pin-norek">-</div>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Nasabah:</div>
+                        <div class="detail-value" id="pin-nama">-</div>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">Jumlah Penarikan:</div>
+                        <div class="detail-value" id="pin-jumlah" style="color: var(--danger-color);">-</div>
+                    </div>
+                    
+                    <div class="input-group" style="margin-top: 20px;">
+                        <label for="pin">Masukkan PIN Nasabah (6 digit):</label>
+                        <div class="pin-container">
+                            <input type="password" class="pin-input" maxlength="1" data-index="1" autocomplete="off">
+                            <input type="password" class="pin-input" maxlength="1" data-index="2" autocomplete="off">
+                            <input type="password" class="pin-input" maxlength="1" data-index="3" autocomplete="off">
+                            <input type="password" class="pin-input" maxlength="1" data-index="4" autocomplete="off">
+                            <input type="password" class="pin-input" maxlength="1" data-index="5" autocomplete="off">
+                            <input type="password" class="pin-input" maxlength="1" data-index="6" autocomplete="off">
+                        </div>
+                        <input type="hidden" id="pin" name="pin">
+                    </div>
+                    
+                    <div class="btn-actions">
+                        <button type="button" id="btnBackToAmount" class="btn-back ripple">
+                            <span class="btn-text"><i class="fas fa-arrow-left"></i> Kembali</span>
+                        </button>
+                        <button type="button" id="btnVerifyPin" class="ripple">
+                            <span class="btn-text"><i class="fas fa-lock"></i> Verifikasi PIN</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Form 4: Confirmation -->
+                <div class="input-form" id="form4">
                     <h3 style="margin-bottom: 20px; color: var(--primary-dark);">Konfirmasi Penarikan</h3>
                     
                     <div class="detail-row">
@@ -751,7 +830,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     </div>
                     
                     <div class="btn-actions">
-                        <button type="button" id="btnBackToAmount" class="btn-back ripple">
+                        <button type="button" id="btnBackToPin" class="btn-back ripple">
                             <span class="btn-text"><i class="fas fa-arrow-left"></i> Kembali</span>
                         </button>
                         <button type="button" id="btnConfirmWithdrawal" class="btn-confirm ripple">
@@ -774,6 +853,14 @@ $username = $_SESSION['username'] ?? 'Petugas';
             </div>
             <h3>Transaksi Berhasil!</h3>
             <p id="successMessage">Penarikan tunai telah berhasil diproses.</p>
+            <div class="button-container" style="margin-top: 20px;">
+                <button type="button" id="btnPrintReceipt" class="btn-warning ripple" style="width: auto; padding: 10px 20px;">
+                    <span class="btn-text"><i class="fas fa-print"></i> Cetak Struk</span>
+                </button>
+                <button type="button" id="btnNewTransaction" class="ripple" style="width: auto; padding: 10px 20px; margin-top: 10px;">
+                    <span class="btn-text"><i class="fas fa-redo"></i> Transaksi Baru</span>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -783,23 +870,35 @@ document.addEventListener('DOMContentLoaded', function() {
     const form1 = document.getElementById('form1');
     const form2 = document.getElementById('form2');
     const form3 = document.getElementById('form3');
+    const form4 = document.getElementById('form4');
     
     const step1 = document.getElementById('step1');
     const step2 = document.getElementById('step2');
     const step3 = document.getElementById('step3');
+    const step4 = document.getElementById('step4');
     
     const inputNoRek = document.getElementById('no_rekening');
     const inputJumlah = document.getElementById('jumlah_penarikan');
+    const pinInputs = document.querySelectorAll('.pin-input');
+    const hiddenPin = document.getElementById('pin');
     
     const btnNextToAmount = document.getElementById('btnNextToAmount');
     const btnBackToRekening = document.getElementById('btnBackToRekening');
-    const btnNextToConfirm = document.getElementById('btnNextToConfirm');
+    const btnNextToPin = document.getElementById('btnNextToPin');
     const btnBackToAmount = document.getElementById('btnBackToAmount');
+    const btnVerifyPin = document.getElementById('btnVerifyPin');
+    const btnBackToPin = document.getElementById('btnBackToPin');
     const btnConfirmWithdrawal = document.getElementById('btnConfirmWithdrawal');
+    const btnPrintReceipt = document.getElementById('btnPrintReceipt');
+    const btnNewTransaction = document.getElementById('btnNewTransaction');
     
     const summaryNoRek = document.getElementById('summary-norek');
     const summaryNama = document.getElementById('summary-nama');
     const summarySaldo = document.getElementById('summary-saldo');
+    
+    const pinNoRek = document.getElementById('pin-norek');
+    const pinNama = document.getElementById('pin-nama');
+    const pinJumlah = document.getElementById('pin-jumlah');
     
     const confirmNoRek = document.getElementById('confirm-norek');
     const confirmNama = document.getElementById('confirm-nama');
@@ -818,7 +917,9 @@ document.addEventListener('DOMContentLoaded', function() {
         saldo: 0,
         jumlah: 0,
         rekening_id: 0,
-        user_id: 0
+        user_id: 0,
+        email: '',
+        has_pin: false
     };
     
     // Add ripple effect to all buttons
@@ -839,82 +940,125 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // Step 1: Check No Rekening - DB CONNECTION VERSION
-    if (btnNextToAmount) {
-        btnNextToAmount.addEventListener('click', function() {
-            const rekening = inputNoRek.value.trim();
+    // PIN input handling
+    pinInputs.forEach((input, index) => {
+        input.addEventListener('input', function() {
+            // Auto focus to next input
+            if (this.value.length === 1 && index < pinInputs.length - 1) {
+                pinInputs[index + 1].focus();
+            }
             
-            if (!rekening) {
-                showAlert('Silakan masukkan nomor rekening nasabah', 'error');
+            // Update hidden PIN field
+            updateHiddenPin();
+        });
+        
+        input.addEventListener('keydown', function(e) {
+            // Handle backspace to move to previous input
+            if (e.key === 'Backspace' && this.value.length === 0 && index > 0) {
+                pinInputs[index - 1].focus();
+            }
+        });
+    });
+    
+    function updateHiddenPin() {
+        let pin = '';
+        pinInputs.forEach(input => {
+            pin += input.value;
+        });
+        hiddenPin.value = pin;
+    }
+    
+    function clearPinInputs() {
+        pinInputs.forEach(input => {
+            input.value = '';
+        });
+        hiddenPin.value = '';
+        pinInputs[0].focus();
+    }
+    
+    // Step 1: Check No Rekening
+    btnNextToAmount.addEventListener('click', function() {
+        const rekening = inputNoRek.value.trim();
+        
+        if (!rekening) {
+            showAlert('Silakan masukkan nomor rekening nasabah', 'error');
+            return;
+        }
+        
+        // Start loading animation
+        btnNextToAmount.classList.add('btn-loading');
+        
+        // Make AJAX request to check account
+        fetch('proses_tarik.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `action=cek_rekening&no_rekening=${rekening}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Remove loading animation
+            btnNextToAmount.classList.remove('btn-loading');
+            
+            if (data.status === 'error') {
+                showAlert(data.message, 'error');
                 return;
             }
             
-            // Start loading animation
-            btnNextToAmount.classList.add('btn-loading');
+            // Store account data
+            accountData.noRekening = data.no_rekening;
+            accountData.nama = data.nama;
+            accountData.saldo = parseFloat(data.saldo);
+            accountData.rekening_id = data.rekening_id;
+            accountData.user_id = data.user_id;
+            accountData.email = data.email || '';
+            accountData.has_pin = data.has_pin || false;
             
-            // Make AJAX request to check account
-            fetch('proses_tarik.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `action=cek_rekening&no_rekening=${rekening}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Remove loading animation
-                btnNextToAmount.classList.remove('btn-loading');
-                
-                if (data.status === 'error') {
-                    showAlert(data.message, 'error');
-                    return;
-                }
-                
-                // Store account data
-                accountData.noRekening = data.no_rekening;
-                accountData.nama = data.nama;
-                accountData.saldo = parseFloat(data.saldo);
-                accountData.rekening_id = data.rekening_id;
-                accountData.user_id = data.user_id;
-                
-                // Display in summary
-                summaryNoRek.textContent = data.no_rekening;
-                summaryNama.textContent = data.nama;
-                summarySaldo.textContent = formatRupiah(data.saldo);
-                
-                // Move to step 2
-                step1.classList.remove('active');
-                step1.classList.add('completed');
-                step2.classList.add('active');
-                
-                form1.classList.remove('active');
-                form2.classList.add('active');
-            })
-            .catch(error => {
-                btnNextToAmount.classList.remove('btn-loading');
-                showAlert('Terjadi kesalahan saat memverifikasi rekening', 'error');
-                console.error(error);
-            });
+            // Display in summary
+            summaryNoRek.textContent = data.no_rekening;
+            summaryNama.textContent = data.nama;
+            summarySaldo.textContent = formatRupiah(data.saldo);
+            
+            // Check if user has PIN
+            if (!accountData.has_pin) {
+                showAlert('Nasabah belum mengatur PIN, tidak dapat melakukan penarikan', 'error');
+                return;
+            }
+            
+            // Move to step 2
+            step1.classList.remove('active');
+            step1.classList.add('completed');
+            step2.classList.add('active');
+            
+            form1.classList.remove('active');
+            form2.classList.add('active');
+            
+            // Focus on amount input
+            inputJumlah.focus();
+        })
+        .catch(error => {
+            btnNextToAmount.classList.remove('btn-loading');
+            showAlert('Terjadi kesalahan saat memverifikasi rekening', 'error');
+            console.error(error);
         });
-    } else {
-        console.error("Button 'btnNextToAmount' not found!");
-    }
+    });
     
     // Back to Step 1
-    if (btnBackToRekening) {
-        btnBackToRekening.addEventListener('click', function() {
-            step2.classList.remove('active');
-            step1.classList.remove('completed');
-            step1.classList.add('active');
-            
-            form2.classList.remove('active');
-            form1.classList.add('active');
-        });
-    }
+    btnBackToRekening.addEventListener('click', function() {
+        step2.classList.remove('active');
+        step1.classList.remove('completed');
+        step1.classList.add('active');
+        
+        form2.classList.remove('active');
+        form1.classList.add('active');
+        
+        // Focus on rekening input
+        inputNoRek.focus();
+    });
     
     // Step 2: Verify Amount
-    if (btnNextToConfirm) {
-    btnNextToConfirm.addEventListener('click', function() {
+    btnNextToPin.addEventListener('click', function() {
         const jumlah = parseFloat(inputJumlah.value);
         
         if (!jumlah || isNaN(jumlah)) {
@@ -931,12 +1075,90 @@ document.addEventListener('DOMContentLoaded', function() {
             showAlert('Saldo tidak mencukupi untuk melakukan penarikan sebesar ' + formatRupiah(jumlah), 'error');
             return;
         }
+        
+        // Start loading animation
+        btnNextToPin.classList.add('btn-loading');
+        
+        // Update account data
+        accountData.jumlah = jumlah;
+        
+        // Display in PIN verification form
+        pinNoRek.textContent = accountData.noRekening;
+        pinNama.textContent = accountData.nama;
+        pinJumlah.textContent = formatRupiah(accountData.jumlah);
+        
+        // Remove loading animation
+        btnNextToPin.classList.remove('btn-loading');
+        
+        // Move to step 3
+        step2.classList.remove('active');
+        step2.classList.add('completed');
+        step3.classList.add('active');
+        
+        form2.classList.remove('active');
+        form3.classList.add('active');
+        
+        // Clear and focus on first PIN input
+        clearPinInputs();
+    });
+    
+    // Back to Step 2
+    btnBackToAmount.addEventListener('click', function() {
+        step3.classList.remove('active');
+        step2.classList.remove('completed');
+        step2.classList.add('active');
+        
+        form3.classList.remove('active');
+        form2.classList.add('active');
+        
+        // Focus on amount input
+        inputJumlah.focus();
+    });
+    
+    // Step 3: Verify PIN
+    btnVerifyPin.addEventListener('click', function() {
+        const pin = hiddenPin.value;
+        
+        if (pin.length !== 6) {
+            showAlert('PIN harus terdiri dari 6 digit', 'error');
+            pinInputs.forEach(input => {
+                input.classList.add('shake');
+                setTimeout(() => input.classList.remove('shake'), 500);
+            });
+            return;
+        }
+        
+        // Pastikan accountData.user_id ada dan valid
+        if (!accountData.user_id || accountData.user_id <= 0) {
+            showAlert('Data nasabah tidak valid, silakan ulangi proses', 'error');
+            return;
+        }
+
+        // Start loading animation
+        btnVerifyPin.classList.add('btn-loading');
+        
+        // Verify PIN via AJAX
+        fetch('proses_tarik.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `action=verify_pin&user_id=${accountData.user_id}&pin=${pin}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Remove loading animation
+            btnVerifyPin.classList.remove('btn-loading');
             
-            // Start loading animation
-            btnNextToConfirm.classList.add('btn-loading');
-            
-            // Update account data
-            accountData.jumlah = jumlah;
+            if (data.status === 'error') {
+                showAlert(data.message, 'error');
+                pinInputs.forEach(input => {
+                    input.classList.add('shake');
+                    setTimeout(() => input.classList.remove('shake'), 500);
+                });
+                clearPinInputs();
+                return;
+            }
             
             // Display in confirmation
             confirmNoRek.textContent = accountData.noRekening;
@@ -945,70 +1167,112 @@ document.addEventListener('DOMContentLoaded', function() {
             confirmJumlah.textContent = formatRupiah(accountData.jumlah);
             confirmSisa.textContent = formatRupiah(accountData.saldo - accountData.jumlah);
             
-            // Remove loading animation
-            btnNextToConfirm.classList.remove('btn-loading');
-            
-            // Move to step 3
-            step2.classList.remove('active');
-            step2.classList.add('completed');
-            step3.classList.add('active');
-            
-            form2.classList.remove('active');
-            form3.classList.add('active');
-        });
-    }
-    
-    // Back to Step 2
-    if (btnBackToAmount) {
-        btnBackToAmount.addEventListener('click', function() {
+            // Move to step 4
             step3.classList.remove('active');
-            step2.classList.remove('completed');
-            step2.classList.add('active');
+            step3.classList.add('completed');
+            step4.classList.add('active');
             
             form3.classList.remove('active');
-            form2.classList.add('active');
+            form4.classList.add('active');
+        })
+        .catch(error => {
+            btnVerifyPin.classList.remove('btn-loading');
+            showAlert('Terjadi kesalahan saat memverifikasi PIN', 'error');
+            console.error(error);
         });
-    }
+    });
     
-    // Step 3: Process Withdrawal
-    if (btnConfirmWithdrawal) {
-        btnConfirmWithdrawal.addEventListener('click', function() {
-            // Start loading animation
-            btnConfirmWithdrawal.classList.add('btn-loading');
+    // Back to Step 3
+    btnBackToPin.addEventListener('click', function() {
+        step4.classList.remove('active');
+        step3.classList.remove('completed');
+        step3.classList.add('active');
+        
+        form4.classList.remove('active');
+        form3.classList.add('active');
+        
+        // Focus on first PIN input
+        pinInputs[0].focus();
+    });
+    
+    // Step 4: Process Withdrawal
+    btnConfirmWithdrawal.addEventListener('click', function() {
+        // Start loading animation
+        btnConfirmWithdrawal.classList.add('btn-loading');
+        
+        fetch('proses_tarik.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `action=tarik_tunai&no_rekening=${accountData.noRekening}&jumlah=${accountData.jumlah}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Remove loading animation
+            btnConfirmWithdrawal.classList.remove('btn-loading');
             
-            fetch('proses_tarik.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `action=tarik_tunai&no_rekening=${accountData.noRekening}&jumlah=${accountData.jumlah}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Remove loading animation
-                btnConfirmWithdrawal.classList.remove('btn-loading');
-                
-                if (data.status === 'error') {
-                    showAlert(data.message, 'error');
-                    return;
-                }
-                
-                // Show success animation
-                successMessage.textContent = `Penarikan tunai sebesar ${formatRupiah(accountData.jumlah)} telah berhasil diproses.`;
-                successOverlay.classList.add('show');
-                
-                // Redirect after 3 seconds
-                setTimeout(() => {
-                    window.location.href = 'dashboard.php';
-                }, 3000);
-            })
-            .catch(error => {
-                btnConfirmWithdrawal.classList.remove('btn-loading');
-                showAlert('Terjadi kesalahan saat memproses penarikan', 'error');
-                console.error(error);
-            });
+            if (data.status === 'error') {
+                showAlert(data.message, 'error');
+                return;
+            }
+            
+            // Show success animation
+            successMessage.textContent = `Penarikan tunai sebesar ${formatRupiah(accountData.jumlah)} telah berhasil diproses.`;
+            successOverlay.classList.add('show');
+        })
+        .catch(error => {
+            btnConfirmWithdrawal.classList.remove('btn-loading');
+            showAlert('Saldo Petugas Tidak Mencukupi Untuk Penarikan', 'error');
+            console.error(error);
         });
-    }
+    });
+    
+    // Print Receipt button
+    btnPrintReceipt.addEventListener('click', function() {
+        // In a real application, this would generate a printable receipt
+        alert('Fitur cetak struk akan membuka jendela cetak. Di sini hanya simulasi.');
+        window.print();
+    });
+    
+    // New Transaction button
+    btnNewTransaction.addEventListener('click', function() {
+        // Reset the form and go back to step 1
+        successOverlay.classList.remove('show');
+        
+        // Reset all forms
+        inputNoRek.value = '';
+        inputJumlah.value = '';
+        clearPinInputs();
+        
+        // Reset account data
+        accountData = {
+            noRekening: '',
+            nama: '',
+            saldo: 0,
+            jumlah: 0,
+            rekening_id: 0,
+            user_id: 0,
+            email: '',
+            has_pin: false
+        };
+        
+        // Reset steps
+        step4.classList.remove('active');
+        step3.classList.remove('completed', 'active');
+        step2.classList.remove('completed', 'active');
+        step1.classList.remove('completed');
+        step1.classList.add('active');
+        
+        // Reset forms
+        form4.classList.remove('active');
+        form3.classList.remove('active');
+        form2.classList.remove('active');
+        form1.classList.add('active');
+        
+        // Focus on rekening input
+        inputNoRek.focus();
+    });
     
     // Helper function to format currency
     function formatRupiah(number) {
@@ -1021,6 +1285,11 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Function to show alerts
     function showAlert(message, type) {
+        // Remove existing alerts
+        while (alertContainer.firstChild) {
+            alertContainer.removeChild(alertContainer.firstChild);
+        }
+        
         const alert = document.createElement('div');
         alert.className = `alert alert-${type}`;
         
@@ -1028,6 +1297,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (type === 'error') icon = '<i class="fas fa-exclamation-circle"></i>';
         else if (type === 'success') icon = '<i class="fas fa-check-circle"></i>';
         else if (type === 'info') icon = '<i class="fas fa-info-circle"></i>';
+        else if (type === 'warning') icon = '<i class="fas fa-exclamation-triangle"></i>';
         
         alert.innerHTML = `${icon} ${message}`;
         
@@ -1044,35 +1314,39 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Enter key functionality
-    if (inputNoRek) {
-        inputNoRek.addEventListener('keyup', function(event) {
-            if (event.key === 'Enter') {
-                btnNextToAmount.click();
-            }
-        });
-    }
+    inputNoRek.addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            btnNextToAmount.click();
+        }
+    });
     
-    if (inputJumlah) {
-        inputJumlah.addEventListener('keyup', function(event) {
+    inputJumlah.addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            btnNextToPin.click();
+        }
+    });
+    
+    pinInputs.forEach(input => {
+        input.addEventListener('keyup', function(event) {
             if (event.key === 'Enter') {
-                btnNextToConfirm.click();
+                btnVerifyPin.click();
             }
         });
-    }
+    });
     
     // Close success overlay on click
-    if (successOverlay) {
-        successOverlay.addEventListener('click', function() {
+    successOverlay.addEventListener('click', function(e) {
+        if (e.target === successOverlay) {
             successOverlay.classList.remove('show');
-        });
-        
-        // Prevent click propagation from modal to overlay
-        const successModal = document.querySelector('.success-modal');
-        if (successModal) {
-            successModal.addEventListener('click', function(e) {
-                e.stopPropagation();
-            });
         }
+    });
+    
+    // Prevent click propagation from modal to overlay
+    const successModal = document.querySelector('.success-modal');
+    if (successModal) {
+        successModal.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
     }
 });
     </script>

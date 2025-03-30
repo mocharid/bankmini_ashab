@@ -60,27 +60,22 @@ $username = $_SESSION['username'] ?? 'Petugas';
             box-shadow: var(--shadow-sm);
         }
 
-        .nav-buttons {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-btn {
+        .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
+            padding: 10px;
+            border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            font-size: 14px;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
         }
 
-        .nav-btn:hover {
+        .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
         }
@@ -133,6 +128,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
             gap: 10px;
             position: relative;
             z-index: 1;
+        }
+
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
         }
 
         /* Step indicator */
@@ -550,10 +551,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 padding: 15px;
             }
 
-            .nav-buttons {
-                gap: 10px;
-            }
-
             .main-content {
                 padding: 15px;
             }
@@ -592,21 +589,21 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 flex-direction: column;
             }
         }
-        </style>
+    </style>
 </head>
 <body>
     <nav class="top-nav">
+        <button class="back-btn" onclick="window.location.href='dashboard.php'">
+            <i class="fas fa-arrow-left"></i>
+        </button>
         <h1>SCHOBANK</h1>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
+        <div style="width: 40px;"></div> <!-- Spacer for alignment -->
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
             <h2><i class="fas fa-money-bill-wave"></i> Setor Tunai</h2>
+            <p>Layanan setor tunai untuk nasabah</p>
         </div>
         
         <!-- Step indicators -->

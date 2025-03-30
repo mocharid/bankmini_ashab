@@ -1451,9 +1451,6 @@ function tanggal_indonesia($tanggal) {
                     <a href="cari_transaksi.php">
                         <i class="fas fa-receipt"></i> Cek Bukti Transaksi
                     </a>
-                    <a href="cari_nasabah.php">
-                        <i class="fas fa-address-card"></i> Cek Profil Siswa
-                    </a>
                     <a href="cek_saldo.php">
                         <i class="fas fa-wallet"></i> Cek Saldo
                     </a>
