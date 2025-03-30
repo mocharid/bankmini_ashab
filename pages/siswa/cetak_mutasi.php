@@ -124,33 +124,23 @@ try {
     $transactions = [];
     $running_balance = 0; // Start with 0 as we're not showing opening balance
 
-    // Track totals for all transaction types
-    $total_setor = 0;
-    $total_tarik = 0;
-    $total_transfer_keluar = 0;
-    $total_transfer_masuk = 0;
-
     while ($row = $result->fetch_assoc()) {
         // Calculate running balance based on transaction type
         switch ($row['jenis_mutasi']) {
             case 'setor':
                 $running_balance += $row['jumlah'];
-                $total_setor += $row['jumlah'];
                 break;
 
             case 'tarik':
                 $running_balance -= $row['jumlah'];
-                $total_tarik += $row['jumlah'];
                 break;
 
             case 'transfer_keluar':
                 $running_balance -= $row['jumlah'];
-                $total_transfer_keluar += $row['jumlah'];
                 break;
 
             case 'transfer_masuk':
                 $running_balance += $row['jumlah'];
-                $total_transfer_masuk += $row['jumlah'];
                 break;
         }
 
@@ -165,33 +155,60 @@ try {
 
 class MYPDF extends TCPDF {
     public function Header() {
-        $this->SetFont('helvetica', 'B', 20);
-
-        // Draw a decorative line
-        $this->SetLineStyle(array('width' => 0.5, 'color' => array(0, 48, 135)));
-        $this->Line(15, 15, $this->getPageWidth() - 15, 15);
-
-        // Bank name with custom styling
+        // Add bank logo - use a placeholder rectangle with gradient for now
+        $this->Rect(15, 10, 30, 15, 'F', array(), array(0, 71, 171, 0, 48, 135));
+        
+        // Add "SCHOBANK" text next to logo
+        $this->SetFont('helvetica', 'B', 22);
         $this->SetTextColor(0, 48, 135);
-        $this->Cell(0, 15, 'SCHOBANK', 0, false, 'C', 0, '', 0, false, 'M', 'M');
-        $this->Ln(12);
-
-        // Subtitle
+        $this->SetXY(50, 10);
+        $this->Cell(60, 15, 'SCHOBANK', 0, 0, 'L');
+        
+        // Add tagline
+        $this->SetFont('helvetica', 'I', 10);
+        $this->SetTextColor(100, 100, 100);
+        $this->SetXY(50, 20);
+        $this->Cell(60, 5, 'Banking for Your Future', 0, 0, 'L');
+        
+        // Add decorative element on the right
+        $this->SetLineStyle(array('width' => 0.5, 'color' => array(0, 48, 135)));
+        $this->Rect(160, 10, 35, 15, 'D');
+        $this->SetFont('helvetica', 'B', 12);
+        $this->SetTextColor(0, 48, 135);
+        $this->SetXY(160, 10);
+        $this->Cell(35, 15, 'E-Statement', 0, 0, 'C');
+        
+        // Add horizontal divider with gradient effect
+        $this->SetLineStyle(array('width' => 1, 'color' => array(0, 48, 135)));
+        $this->Line(15, 30, 195, 30);
+        $this->SetLineStyle(array('width' => 0.5, 'color' => array(180, 180, 180)));
+        $this->Line(15, 32, 195, 32);
+        
+        // Add statement title
         $this->SetFont('helvetica', 'B', 14);
         $this->SetTextColor(70, 70, 70);
-        $this->Cell(0, 10, 'Mutasi Rekening', 0, false, 'C', 0, '', 0, false, 'M', 'M');
-
-        // Bottom decorative line
-        $this->Line(15, 35, $this->getPageWidth() - 15, 35);
-        $this->Ln(25);
+        $this->SetXY(0, 35);
+        $this->Cell(0, 10, 'LAPORAN MUTASI REKENING', 0, 0, 'C');
     }
 
     public function Footer() {
+        // Footer with gradient top border
+        $this->SetLineStyle(array('width' => 0.5, 'color' => array(180, 180, 180)));
+        $this->Line(15, $this->getPageHeight() - 18, 195, $this->getPageHeight() - 18);
+        $this->SetLineStyle(array('width' => 1, 'color' => array(0, 48, 135)));
+        $this->Line(15, $this->getPageHeight() - 16, 195, $this->getPageHeight() - 16);
+        
+        // Footer content
         $this->SetY(-15);
-        $this->SetFont('helvetica', 'I', 8);
+        $this->SetFont('helvetica', '', 8);
         $this->SetTextColor(70, 70, 70);
         $this->Cell(97, 10, 'Halaman '.$this->getAliasNumPage().'/'.$this->getAliasNbPages(), 0, 0, 'L');
         $this->Cell(97, 10, 'Dicetak pada: '.date('d-m-Y H:i:s'), 0, 0, 'R');
+        
+        // Contact information
+        $this->SetY(-10);
+        $this->SetFont('helvetica', 'I', 7);
+        $this->Cell(0, 10, 'Customer Service: 0800-123-SCHOBANK | www.schobank.co.id', 0, 0, 'C');
     }
 }
 
@@ -200,12 +217,12 @@ try {
     $pdf = new MYPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
 
     // Set document information
-    $pdf->SetCreator('MINIBANK ASHAB');
-    $pdf->SetAuthor('MINIBANK ASHAB');
+    $pdf->SetCreator('SCHOBANK');
+    $pdf->SetAuthor('SCHOBANK');
     $pdf->SetTitle('Laporan Mutasi Rekening - ' . $user_data['nama']);
 
     // Set margins
-    $pdf->SetMargins(15, 45, 15);
+    $pdf->SetMargins(15, 55, 15); // Increased top margin for enhanced header
     $pdf->SetHeaderMargin(20);
     $pdf->SetFooterMargin(15);
 
@@ -215,176 +232,189 @@ try {
     // Add a page
     $pdf->AddPage();
 
-    // Customer Information Section
+    // Create a gradient box for the customer information section
+    $pdf->SetFillColor(240, 242, 245);
+    $pdf->RoundedRect(15, $pdf->GetY(), 180, 48, 3.50, '1111', 'F');
+
+    // Customer Information Section with section header
     $pdf->SetFont('helvetica', 'B', 11);
     $pdf->SetTextColor(0, 48, 135);
-    $pdf->Cell(0, 10, 'INFORMASI NASABAH', 0, 1, 'L');
+    $pdf->Cell(180, 8, 'INFORMASI NASABAH', 0, 1, 'L', false);
+    
+    // Set up 2-column layout for customer info
     $pdf->SetFont('helvetica', '', 10);
     $pdf->SetTextColor(0, 0, 0);
-
-    // Add subtle background to customer info
-    $pdf->SetFillColor(248, 249, 250);
-    $pdf->Rect(15, $pdf->GetY(), 180, 35, 'F');
-
-    // Customer details with better spacing
+    
     $pdf->SetY($pdf->GetY() + 2);
-    $customer_info = [
+    $left_column = [
         ['Nama', $user_data['nama']],
         ['No. Rekening', $user_data['no_rekening']],
-        ['Kelas', $user_data['nama_kelas']],
-        ['Jurusan', $user_data['nama_jurusan']],
-        ['Saldo Akhir', 'Rp ' . number_format($user_data['saldo'], 0, ',', '.')]
+        ['Kelas', $user_data['nama_kelas']]
     ];
-
-    foreach($customer_info as $info) {
+    
+    $right_column = [
+        ['Jurusan', $user_data['nama_jurusan']],
+        ['Saldo Akhir', 'Rp ' . number_format($user_data['saldo'], 0, ',', '.')],
+        ['Status', 'Aktif']
+    ];
+    
+    $y_position = $pdf->GetY();
+    
+    // Left column
+    foreach($left_column as $info) {
+        $pdf->SetXY(20, $y_position);
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->SetTextColor(80, 80, 80);
         $pdf->Cell(30, 7, $info[0], 0, 0);
         $pdf->Cell(5, 7, ':', 0, 0);
-        $pdf->Cell(0, 7, $info[1], 0, 1);
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->Cell(50, 7, $info[1], 0, 1);
+        $y_position += 7;
     }
-
-    $pdf->Ln(5);
-
+    
+    $y_position = $pdf->GetY() - 21; // Reset to the top of the right column
+    
+    // Right column
+    foreach($right_column as $info) {
+        $pdf->SetXY(110, $y_position);
+        $pdf->SetFont('helvetica', '', 9);
+        $pdf->SetTextColor(80, 80, 80);
+        $pdf->Cell(30, 7, $info[0], 0, 0);
+        $pdf->Cell(5, 7, ':', 0, 0);
+        $pdf->SetFont('helvetica', 'B', 9);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->Cell(50, 7, $info[1], 0, 1);
+        $y_position += 7;
+    }
+    
+    // Reset position after the customer info box
+    $pdf->SetY($pdf->GetY() + 7);
+    
     // Period information with styling
     $pdf->SetFont('helvetica', 'B', 10);
     $pdf->SetTextColor(0, 48, 135);
-    $pdf->Cell(0, 10, 'PERIODE TRANSAKSI', 0, 1, 'L');
+    $pdf->Cell(90, 10, 'PERIODE TRANSAKSI', 0, 0, 'L');
+    $pdf->Cell(90, 10, 'JENIS TRANSAKSI', 0, 1, 'L');
+    
     $pdf->SetTextColor(0, 0, 0);
     $pdf->SetFont('helvetica', '', 10);
-    $pdf->Cell(0, 7, date('d/m/Y', strtotime($start_date)) . ' s/d ' . date('d/m/Y', strtotime($end_date)), 0, 1, 'L');
-    $pdf->Cell(0, 7, 'Jenis Transaksi: ' . ucfirst($tabType), 0, 1, 'L');
+    $pdf->Cell(90, 7, date('d/m/Y', strtotime($start_date)) . ' s/d ' . date('d/m/Y', strtotime($end_date)), 0, 0, 'L');
+    $pdf->Cell(90, 7, ucfirst($tabType === 'all' ? 'Semua Transaksi' : $tabType), 0, 1, 'L');
+    
     $pdf->Ln(5);
 
     // Calculate total usable width
     $totalWidth = 180; // Total width in mm
 
-    // Table Header - ENHANCED STYLING
-    $pdf->SetFont('helvetica', 'B', 10);
+    // Transaction Table with Modern Design
+    // Create header background with gradient
     $pdf->SetFillColor(0, 48, 135);
+    $pdf->RoundedRect(15, $pdf->GetY(), $totalWidth, 8, 2.00, '1111', 'F');
+    
+    // Main Header Text
+    $pdf->SetFont('helvetica', 'B', 11);
     $pdf->SetTextColor(255, 255, 255);
-    $pdf->Cell($totalWidth, 7, 'DETAIL TRANSAKSI', 1, 1, 'C', true);
-
-    // Optimized column widths - adjusted to accommodate additional info column
-    $col_width = array(10, 25, 45, 25, 30, 25, 20);
-
-    // Table header - use the same blue color and white text
+    $pdf->Cell($totalWidth, 8, 'RINCIAN TRANSAKSI', 0, 1, 'C');
+    
+    // Define column structure
+    $col_width = array(10, 25, 40, 35, 35, 35);
+    
+    // Subheader Row
+    $pdf->SetFillColor(240, 242, 245);
+    $pdf->RoundedRect(15, $pdf->GetY(), $totalWidth, 7, 0, '0000', 'F');
+    
     $pdf->SetFont('helvetica', 'B', 9);
-    // Keep the same fill color (0, 48, 135) and text color white
-    $header_heights = 6;
-    $pdf->Cell($col_width[0], $header_heights, 'No', 1, 0, 'C', true);
-    $pdf->Cell($col_width[1], $header_heights, 'Tanggal', 1, 0, 'C', true);
-    $pdf->Cell($col_width[2], $header_heights, 'No Transaksi', 1, 0, 'C', true);
-    $pdf->Cell($col_width[3], $header_heights, 'Jenis', 1, 0, 'C', true);
-    $pdf->Cell($col_width[4], $header_heights, 'Jumlah', 1, 0, 'C', true);
-    $pdf->Cell($col_width[5], $header_heights, 'Saldo', 1, 0, 'C', true);
-    $pdf->Cell($col_width[6], $header_heights, 'Keterangan', 1, 1, 'C', true);
-
-    // Reset text color to black for table content
-    $pdf->SetTextColor(0, 0, 0);
+    $pdf->SetTextColor(0, 48, 135);
+    $pdf->Cell($col_width[0], 7, 'No', 1, 0, 'C');
+    $pdf->Cell($col_width[1], 7, 'Tanggal', 1, 0, 'C');
+    $pdf->Cell($col_width[2], 7, 'No Transaksi', 1, 0, 'C');
+    $pdf->Cell($col_width[3], 7, 'Jenis', 1, 0, 'C');
+    $pdf->Cell($col_width[4], 7, 'Nominal', 1, 0, 'C');
+    $pdf->Cell($col_width[5], 7, 'Saldo', 1, 1, 'C');
 
     // Table Content
+    $pdf->SetTextColor(0, 0, 0);
     $pdf->SetFont('helvetica', '', 8);
     $row_height = 6;
     $no = 1;
+    $alternate = false;
 
     foreach ($transactions as $row) {
-        // Set colors and display text based on transaction type
+        // Set alternate row background for better readability
+        if ($alternate) {
+            $pdf->SetFillColor(248, 248, 248);
+            $fill = true;
+        } else {
+            $pdf->SetFillColor(255, 255, 255);
+            $fill = true;
+        }
+        $alternate = !$alternate;
+        
+        // Set transaction type text (without amount)
         switch ($row['jenis_mutasi']) {
             case 'setor':
-                $typeColor = array(220, 252, 231); // Light green
-                $displayType = 'Setoran';
-                $keterangan = $row['petugas_nama'] ?? '-';
+                $displayType = 'SETORAN';
+                $textColor = array(0, 128, 0); // Dark green for positive
+                $amount = 'Rp ' . number_format($row['jumlah'], 0, ',', '.');
                 break;
-
+                
             case 'tarik':
-                $typeColor = array(254, 226, 226); // Light red
-                $displayType = 'Penarikan';
-                $keterangan = $row['petugas_nama'] ?? '-';
+                $displayType = 'PENARIKAN';
+                $textColor = array(192, 0, 0); // Dark red for negative
+                $amount = 'Rp ' . number_format($row['jumlah'], 0, ',', '.');
                 break;
 
             case 'transfer_keluar':
-                $typeColor = array(224, 242, 254); // Light blue
-                $displayType = 'Transfer Keluar';
-                $keterangan = 'Ke: ' . mb_substr($row['penerima'] ?? '-', 0, 8) . '...';
+                $displayType = 'TRF KELUAR';
+                $textColor = array(192, 0, 0); // Dark red for negative
+                $amount = 'Rp ' . number_format($row['jumlah'], 0, ',', '.');
                 break;
 
             case 'transfer_masuk':
-                $typeColor = array(220, 252, 231); // Light green (same as setoran)
-                $displayType = 'Transfer Masuk';
-                $keterangan = 'Dari: ' . mb_substr($row['pengirim'] ?? '-', 0, 8) . '...';
+                $displayType = 'TRF MASUK';
+                $textColor = array(0, 128, 0); // Dark green for positive
+                $amount = 'Rp ' . number_format($row['jumlah'], 0, ',', '.');
                 break;
 
             default:
-                $typeColor = array(240, 240, 240); // Light gray
-                $displayType = 'Lainnya';
-                $keterangan = '-';
+                $displayType = 'LAINNYA';
+                $textColor = array(0, 0, 0); // Black for others
+                $amount = 'Rp ' . number_format($row['jumlah'], 0, ',', '.');
                 break;
         }
 
-        $pdf->Cell($col_width[0], $row_height, $no, 1, 0, 'C');
-        $pdf->Cell($col_width[1], $row_height, date('d/m/Y', strtotime($row['created_at'])), 1, 0, 'C');
-        $pdf->Cell($col_width[2], $row_height, $row['no_transaksi'], 1, 0, 'L');
-
-        $pdf->SetFillColor($typeColor[0], $typeColor[1], $typeColor[2]);
-        $pdf->Cell($col_width[3], $row_height, $displayType, 1, 0, 'C', true);
-
-        $pdf->SetFillColor(255, 255, 255);
-        $pdf->Cell($col_width[4], $row_height, 'Rp ' . number_format($row['jumlah'], 0, ',', '.'), 1, 0, 'R');
-        $pdf->Cell($col_width[5], $row_height, 'Rp ' . number_format($row['running_balance'], 0, ',', '.'), 1, 0, 'R');
-        $pdf->Cell($col_width[6], $row_height, $keterangan, 1, 1, 'L');
+        $pdf->Cell($col_width[0], $row_height, $no, 1, 0, 'C', $fill);
+        $pdf->Cell($col_width[1], $row_height, date('d/m/Y', strtotime($row['created_at'])), 1, 0, 'C', $fill);
+        $pdf->Cell($col_width[2], $row_height, $row['no_transaksi'], 1, 0, 'L', $fill);
+        
+        $pdf->SetTextColor($textColor[0], $textColor[1], $textColor[2]);
+        $pdf->Cell($col_width[3], $row_height, $displayType, 1, 0, 'L', $fill);
+        $pdf->Cell($col_width[4], $row_height, $amount, 1, 0, 'R', $fill);
+        
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->Cell($col_width[5], $row_height, 'Rp ' . number_format($row['running_balance'], 0, ',', '.'), 1, 1, 'R', $fill);
 
         $no++;
     }
 
-    // Add Total Row
+    // Add Total Row with modern styling
     $pdf->SetFont('helvetica', 'B', 9);
-    $pdf->SetFillColor(240, 240, 240);
-
-    // Combine the first three columns for the "TOTAL" label
-    $combined_width = $col_width[0] + $col_width[1] + $col_width[2];
-    $pdf->Cell($combined_width, 7, 'TOTAL KESELURUHAN', 1, 0, 'C', true);
-
-    // Jenis column showing summary
-    $pdf->Cell($col_width[3], 7, '', 1, 0, 'C', true);
-
-    // Calculate net transaction amount
-    $net_amount = ($total_setor + $total_transfer_masuk) - ($total_tarik + $total_transfer_keluar);
-
-    // Total transaction amount 
-    $pdf->Cell($col_width[4], 7, 'Rp ' . number_format($net_amount, 0, ',', '.'), 1, 0, 'R', true);
-
+    $pdf->SetFillColor(220, 226, 240);
+    
+    // Combine the first columns for the "TOTAL" label
+    $combined_width = $col_width[0] + $col_width[1] + $col_width[2] + $col_width[3] + $col_width[4];
+    $pdf->Cell($combined_width, 7, 'SALDO AKHIR', 1, 0, 'R', true);
+    
     // Final balance (which should match saldo akhir)
-    $pdf->Cell($col_width[5], 7, 'Rp ' . number_format($running_balance, 0, ',', '.'), 1, 0, 'R', true);
-
-    // Empty cell for the keterangan column
-    $pdf->Cell($col_width[6], 7, '', 1, 1, 'C', true);
-
-    // Add breakdown row for total deposits
-    $pdf->SetFillColor(220, 252, 231); // Light green for deposits
-    $pdf->Cell($combined_width, 6, 'Total Setoran', 1, 0, 'R', false);
-    $pdf->Cell($col_width[3], 6, '', 1, 0, 'C', true);
-    $pdf->Cell($col_width[4], 6, 'Rp ' . number_format($total_setor, 0, ',', '.'), 1, 0, 'R', false);
-    $pdf->Cell($col_width[5] + $col_width[6], 6, '', 1, 1, 'C', false);
-
-    // Add breakdown row for total withdrawals
-    $pdf->SetFillColor(254, 226, 226); // Light red for withdrawals
-    $pdf->Cell($combined_width, 6, 'Total Penarikan', 1, 0, 'R', false);
-    $pdf->Cell($col_width[3], 6, '', 1, 0, 'C', true);
-    $pdf->Cell($col_width[4], 6, 'Rp ' . number_format($total_tarik, 0, ',', '.'), 1, 0, 'R', false);
-    $pdf->Cell($col_width[5] + $col_width[6], 6, '', 1, 1, 'C', false);
-
-    // Add breakdown row for outgoing transfers
-    $pdf->SetFillColor(224, 242, 254); // Light blue for transfers
-    $pdf->Cell($combined_width, 6, 'Total Transfer Keluar', 1, 0, 'R', false);
-    $pdf->Cell($col_width[3], 6, '', 1, 0, 'C', true);
-    $pdf->Cell($col_width[4], 6, 'Rp ' . number_format($total_transfer_keluar, 0, ',', '.'), 1, 0, 'R', false);
-    $pdf->Cell($col_width[5] + $col_width[6], 6, '', 1, 1, 'C', false);
-
-    // Add breakdown row for incoming transfers
-    $pdf->SetFillColor(220, 252, 231); // Light green for incoming transfers (same as deposits)
-    $pdf->Cell($combined_width, 6, 'Total Transfer Masuk', 1, 0, 'R', false);
-    $pdf->Cell($col_width[3], 6, '', 1, 0, 'C', true);
-    $pdf->Cell($col_width[4], 6, 'Rp ' . number_format($total_transfer_masuk, 0, ',', '.'), 1, 0, 'R', false);
-    $pdf->Cell($col_width[5] + $col_width[6], 6, '', 1, 1, 'C', false);
+    $pdf->SetTextColor(0, 48, 135);
+    $pdf->Cell($col_width[5], 7, 'Rp ' . number_format($running_balance, 0, ',', '.'), 1, 1, 'R', true);
+    
+    // Add a disclaimer note at the bottom
+    $pdf->Ln(5);
+    $pdf->SetFont('helvetica', 'I', 8);
+    $pdf->SetTextColor(100, 100, 100);
+    $pdf->MultiCell(0, 4, 'Catatan: Laporan ini merupakan dokumen resmi yang diterbitkan oleh SCHOBANK. Apabila terdapat perbedaan saldo, harap segera menghubungi Petugas kami. Terima kasih telah menjadi nasabah setia SCHOBANK.', 0, 'L');
 
     // Output the PDF
     $pdf->Output('mutasi_rekening_' . $user_data['no_rekening'] . '.pdf', 'I');

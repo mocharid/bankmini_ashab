@@ -1121,6 +1121,23 @@ if (isset($_POST['update_username'])) {
             font-weight: normal;
             color: #333;
         }
+
+        .forgot-pin-container {
+        text-align: right;
+        margin-top: 8px;
+    }
+    
+    .forgot-pin-link {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-size: 13px;
+        transition: var(--transition);
+    }
+    
+    .forgot-pin-link:hover {
+        color: var(--primary-dark);
+        text-decoration: underline;
+    }
         </style>
 </head>
 <body>
@@ -1401,8 +1418,8 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <!-- Modal for Edit PIN -->
-    <div id="pinModal" class="modal">
+        <!-- Modal for Edit PIN -->
+        <div id="pinModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3><i class="fas fa-key"></i> Buat/Ubah PIN</h3>
@@ -1417,6 +1434,9 @@ if (isset($_POST['update_username'])) {
                             <i class="fas fa-key input-icon"></i>
                             <input type="password" id="current_pin" name="current_pin" required placeholder="Masukkan PIN saat ini" maxlength="6">
                             <i class="fas fa-eye password-toggle" data-target="current_pin"></i>
+                        </div>
+                        <div class="forgot-pin-container">
+                            <a href="#" id="forgotPinLink" class="forgot-pin-link">Lupa PIN?</a>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -1496,6 +1516,45 @@ if (isset($_POST['update_username'])) {
     </div>
 
     <script>
+        document.addEventListener('DOMContentLoaded', function() {
+    const forgotPinLink = document.getElementById('forgotPinLink');
+    
+    if (forgotPinLink) {
+        forgotPinLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Show confirmation dialog
+            if (confirm('Apakah Anda yakin ingin mereset PIN? Link reset akan dikirim ke email Anda.')) {
+                // Create loading state
+                const originalText = forgotPinLink.textContent;
+                forgotPinLink.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+                
+                // Send AJAX request
+                fetch('send_pin_reset.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `user_id=<?= $_SESSION['user_id'] ?>`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Link reset PIN telah dikirim ke email Anda. Silakan cek email Anda untuk instruksi lebih lanjut.');
+                    } else {
+                        alert('Gagal mengirim link reset: ' + data.message);
+                    }
+                })
+                .catch(error => {
+                    alert('Terjadi kesalahan: ' + error);
+                })
+                .finally(() => {
+                    forgotPinLink.textContent = originalText;
+                });
+            }
+        });
+    }
+});
         // Handle alerts
         function dismissAlert(alert) {
             alert.classList.add('hide');
