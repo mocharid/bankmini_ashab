@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 // Cek waktu login
                 $current_time = date('H:i');
                 $start_time = '01:30';
-                $end_time = '18:00';
+                $end_time = '23:00';
 
                 if ($current_time >= $start_time && $current_time <= $end_time) {
                     // Simpan sesi

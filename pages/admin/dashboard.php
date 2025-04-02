@@ -794,66 +794,81 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
     
     <!-- Scrollable Content -->
     <div class="sidebar-content">
-        <div class="sidebar-menu">
-            <div class="menu-label">Menu Utama</div>
-            <div class="menu-item">
-                <a href="dashboard.php" class="active">
-                    <i class="fas fa-home"></i> Dashboard
-                </a>
-            </div>
-            <div class="menu-item">
-                <button class="dropdown-btn" id="dataDropdown">
-                    <div class="menu-icon">
-                        <i class="fas fa-database"></i> Tambah Data
-                    </div>
-                    <i class="fas fa-chevron-down arrow"></i>
-                </button>
-                <div class="dropdown-container" id="dataDropdownContainer">
-                    <a href="tambah_jurusan.php">
-                        <i class="fas fa-graduation-cap"></i> Tambah Jurusan
-                    </a>
-                    <a href="tambah_kelas.php">
-                        <i class="fas fa-chalkboard"></i> Tambah Kelas
-                    </a>
-                    <a href="tambah_nasabah.php">
-                        <i class="fas fa-user-plus"></i> Tambah Nasabah
-                    </a>
-                    <a href="tambah_petugas.php">
-                        <i class="fas fa-user-shield"></i> Tambah Petugas
-                    </a>
+    <div class="sidebar-menu">
+        <div class="menu-label">Menu Utama</div>
+        <div class="menu-item">
+            <a href="dashboard.php" class="active">
+                <i class="fas fa-home"></i> Dashboard
+            </a>
+        </div>
+        <div class="menu-item">
+            <button class="dropdown-btn" id="dataDropdown">
+                <div class="menu-icon">
+                    <i class="fas fa-database"></i> Tambah Data
                 </div>
-            </div>
-
-            <div class="menu-item">
-                <a href="laporan.php">
-                    <i class="fas fa-file-alt"></i> Laporan Transaksi
+                <i class="fas fa-chevron-down arrow"></i>
+            </button>
+            <div class="dropdown-container" id="dataDropdownContainer">
+                <a href="tambah_jurusan.php">
+                    <i class="fas fa-graduation-cap"></i> Tambah Jurusan
                 </a>
-            </div>
-            <div class="menu-item">
+                <a href="tambah_kelas.php">
+                    <i class="fas fa-chalkboard"></i> Tambah Kelas
+                </a>
+                <a href="tambah_nasabah.php">
+                    <i class="fas fa-user-plus"></i> Tambah Siswa
+                </a>
+                <a href="tambah_petugas.php">
+                    <i class="fas fa-user-shield"></i> Tambah Petugas
+                </a>
                 <a href="buat_jadwal.php">
-                    <i class="fas fa-user-cog"></i> Jadwal Petugas
-                </a>
-            </div>
-            <div class="menu-item">
-                <a href="rekap_absen.php">
-                    <i class="fas fa-user-check"></i> Rekap Absen Petugas
-                </a>
-            </div>
-            <div class="menu-item">
-                <a href="data_siswa.php">
-                    <i class="fas fa-id-card"></i> Rekap Data Nasabah
-                </a>
-            </div>
-
-            <div class="menu-label">Pengaturan</div>
-            
-            <div class="menu-item">
-                <a href="pengaturan.php">
-                    <i class="fas fa-cog"></i> Pengaturan
+                    <i class="fas fa-user-cog"></i> Tambah Jadwal Petugas
                 </a>
             </div>
         </div>
+
+        <!-- New Rekap Dropdown -->
+        <div class="menu-item">
+            <button class="dropdown-btn" id="rekapDropdown">
+                <div class="menu-icon">
+                    <i class="fas fa-file-alt"></i> Rekap Data
+                </div>
+                <i class="fas fa-chevron-down arrow"></i>
+            </button>
+            <div class="dropdown-container" id="rekapDropdownContainer">
+                <a href="laporan.php">
+                    <i class="fas fa-file-alt"></i> Rekap Transaksi
+                </a>
+                <a href="rekap_absen.php">
+                    <i class="fas fa-user-check"></i> Rekap Absen Petugas
+                </a>
+                <a href="data_siswa.php">
+                    <i class="fas fa-id-card"></i> Rekap Data Siswa
+                </a>
+            </div>
+        </div>
+
+        <div class="menu-item">
+            <a href="tarik_tunai_admin.php">
+            <i class="fas fa-credit-card"></i> Tarik Tunai Siswa
+            </a>
+        </div>
+
+        <div class="menu-item">
+            <a href="pemulihan_akun.php">
+                <i class="fas fa-user-lock"></i> Pemulihan Akun Siswa
+            </a>
+        </div>
+
+        <div class="menu-label">Pengaturan</div>
+        
+        <div class="menu-item">
+            <a href="pengaturan.php">
+                <i class="fas fa-cog"></i> Pengaturan
+            </a>
+        </div>
     </div>
+</div>
     
     <!-- Fixed Footer with Logout -->
     <div class="sidebar-footer">
@@ -979,24 +994,44 @@ $total_pages = $total_transactions > 0 ? ceil($total_transactions / $limit) : 1;
                 }
             });
 
-            // Dropdown functionality
-            const dropdownBtn = document.getElementById('dataDropdown');
-            const dropdownContainer = document.getElementById('dataDropdownContainer');
+            // Dropdown functionality for Data dropdown
+            const dataDropdownBtn = document.getElementById('dataDropdown');
+            const dataDropdownContainer = document.getElementById('dataDropdownContainer');
 
-            if (dropdownBtn && dropdownContainer) {
-                dropdownBtn.addEventListener('click', function() {
-                    dropdownContainer.classList.toggle('show');
-                    dropdownBtn.classList.toggle('active');
-                });
-
-                // Close dropdown when clicking outside
-                document.addEventListener('click', function(e) {
-                    if (!dropdownBtn.contains(e.target)) {
-                        dropdownContainer.classList.remove('show');
-                        dropdownBtn.classList.remove('active');
-                    }
+            if (dataDropdownBtn && dataDropdownContainer) {
+                dataDropdownBtn.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent event bubbling
+                    dataDropdownContainer.classList.toggle('show');
+                    dataDropdownBtn.classList.toggle('active');
                 });
             }
+
+            // Dropdown functionality for Rekap dropdown
+            const rekapDropdownBtn = document.getElementById('rekapDropdown');
+            const rekapDropdownContainer = document.getElementById('rekapDropdownContainer');
+
+            if (rekapDropdownBtn && rekapDropdownContainer) {
+                rekapDropdownBtn.addEventListener('click', function(e) {
+                    e.stopPropagation(); // Prevent event bubbling
+                    rekapDropdownContainer.classList.toggle('show');
+                    rekapDropdownBtn.classList.toggle('active');
+                });
+            }
+
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', function(e) {
+                // Close data dropdown if click is outside
+                if (dataDropdownBtn && !dataDropdownBtn.contains(e.target)) {
+                    dataDropdownContainer.classList.remove('show');
+                    dataDropdownBtn.classList.remove('active');
+                }
+                
+                // Close rekap dropdown if click is outside
+                if (rekapDropdownBtn && !rekapDropdownBtn.contains(e.target)) {
+                    rekapDropdownContainer.classList.remove('show');
+                    rekapDropdownBtn.classList.remove('active');
+                }
+            });
 
             // Sidebar toggle for mobile
             const menuToggle = document.getElementById('menuToggle');

@@ -38,11 +38,11 @@ $rekening_data = $result->fetch_assoc();
 if ($rekening_data) {
     $saldo = $rekening_data['saldo'];
     $no_rekening = $rekening_data['no_rekening'];
-    $rekening_id = $rekening_data['id']; // Pastikan ID rekening tersedia
+    $rekening_id = $rekening_data['id'];
 } else {
     $saldo = 0;
     $no_rekening = 'N/A';
-    $rekening_id = null; // Jika tidak ada data rekening
+    $rekening_id = null;
 }
 
 // Cek apakah pengguna sudah mengatur PIN
@@ -64,19 +64,36 @@ $user_email_data = $result_email->fetch_assoc();
 $has_email = !empty($user_email_data['email']);
 
 // Pagination settings
-$limit = 5; // Jumlah transaksi per halaman
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1; // Halaman saat ini
-$offset = ($page - 1) * $limit; // Hitung offset
+$limit = 5;
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $limit;
 
-// Query untuk mengambil transaksi dengan pagination
-$query = "SELECT t.no_transaksi, t.jenis_transaksi, t.jumlah, t.status, t.created_at, t.rekening_id, t.rekening_tujuan_id 
-          FROM transaksi t 
-          JOIN rekening r ON (t.rekening_id = r.id OR t.rekening_tujuan_id = r.id) 
-          WHERE r.user_id = ? 
+// Query untuk mengambil transaksi dengan detail lengkap
+$query = "SELECT 
+            t.no_transaksi, 
+            t.jenis_transaksi, 
+            t.jumlah, 
+            t.status, 
+            t.created_at, 
+            t.rekening_id, 
+            t.rekening_tujuan_id,
+            r1.no_rekening as rekening_asal,
+            r2.no_rekening as rekening_tujuan,
+            u1.nama as nama_pengirim,
+            u2.nama as nama_penerima,
+            p.nama as petugas_nama,
+            DATE(t.created_at) as transaksi_tanggal
+          FROM transaksi t
+          LEFT JOIN rekening r1 ON t.rekening_id = r1.id
+          LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
+          LEFT JOIN users u1 ON r1.user_id = u1.id
+          LEFT JOIN users u2 ON r2.user_id = u2.id
+          LEFT JOIN users p ON t.petugas_id = p.id
+          WHERE r1.user_id = ? OR r2.user_id = ?
           ORDER BY t.created_at DESC 
           LIMIT ? OFFSET ?";
 $stmt = $conn->prepare($query);
-$stmt->bind_param("iii", $user_id, $limit, $offset);
+$stmt->bind_param("iiii", $user_id, $user_id, $limit, $offset);
 $stmt->execute();
 $transaksi_result = $stmt->get_result();
 
@@ -90,8 +107,8 @@ $stmt_total->bind_param("i", $user_id);
 $stmt_total->execute();
 $total_result = $stmt_total->get_result();
 $total_row = $total_result->fetch_assoc();
-$total_transaksi = $total_row['total']; // Total jumlah transaksi
-$total_pages = ceil($total_transaksi / $limit); // Total jumlah halaman
+$total_transaksi = $total_row['total'];
+$total_pages = ceil($total_transaksi / $limit);
 
 // Fetch unread notifications
 $query = "SELECT * FROM notifications 
@@ -137,6 +154,50 @@ function tanggal_indonesia($tanggal) {
     $tahun = date('Y', $tanggal);
 
     return "$hari_ini, $tanggal_format $bulan_ini $tahun";
+}
+
+// Fungsi untuk menampilkan detail transaksi
+function tampilkanDetailTransaksi($transaksi, $conn) {
+    $detail = '';
+    
+    if ($transaksi['jenis_transaksi'] == 'transfer') {
+        if ($transaksi['rekening_tujuan_id'] == $GLOBALS['rekening_id']) {
+            // Transfer masuk
+            $detail = '<div class="transaction-detail">
+                          <p><strong>Dari:</strong> '.htmlspecialchars($transaksi['nama_pengirim']).' ('.htmlspecialchars($transaksi['rekening_asal']).')</p>
+                          <p><strong>Ke:</strong> Anda ('.htmlspecialchars($transaksi['rekening_tujuan']).')</p>
+                       </div>';
+        } else {
+            // Transfer keluar
+            $detail = '<div class="transaction-detail">
+                          <p><strong>Dari:</strong> Anda ('.htmlspecialchars($transaksi['rekening_asal']).')</p>
+                          <p><strong>Ke:</strong> '.htmlspecialchars($transaksi['nama_penerima']).' ('.htmlspecialchars($transaksi['rekening_tujuan']).')</p>
+                       </div>';
+        }
+    } elseif ($transaksi['jenis_transaksi'] == 'setor' || $transaksi['jenis_transaksi'] == 'tarik') {
+        // Get petugas from petugas_tugas table for the transaction date
+        $query = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = ?";
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param("s", $transaksi['transaksi_tanggal']);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            $petugas_data = $result->fetch_assoc();
+            $petugas1 = htmlspecialchars($petugas_data['petugas1_nama']);
+            $petugas2 = htmlspecialchars($petugas_data['petugas2_nama']);
+            
+            $detail = '<div class="transaction-detail">
+                          <p><strong>Ditangani oleh:</strong> '.$petugas1.' dan '.$petugas2.'</p>
+                       </div>';
+        } else {
+            $detail = '<div class="transaction-detail">
+                          <p><strong>Ditangani oleh:</strong> '.($transaksi['petugas_nama'] ? htmlspecialchars($transaksi['petugas_nama']) : 'Sistem').'</p>
+                       </div>';
+        }
+    }
+    
+    return $detail;
 }
 ?>
 
@@ -1082,7 +1143,35 @@ tbody tr:hover {
         border-radius: 20px; /* Make sure to update here too */
     }
 }
-</style>
+.transaction-detail {
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 8px;
+            margin-top: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .transaction-detail p {
+            margin: 5px 0;
+            color: #555;
+        }
+        
+        .detail-toggle {
+            color: #1e3c72;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-top: 5px;
+            display: inline-block;
+        }
+        
+        .detail-toggle:hover {
+            text-decoration: underline;
+        }
+        
+        .hidden-detail {
+            display: none;
+        }
+    </style>
 </head>
 <body>
     <!-- Header -->
@@ -1129,38 +1218,39 @@ tbody tr:hover {
             <i class="far fa-calendar-alt"></i> <?= tanggal_indonesia(date('Y-m-d')) ?>
         </div>
     </div>
+
     <!-- Notifikasi PIN jika belum diatur -->
     <?php if (!$has_pin): ?>
-<div class="pin-alert">
-    <div class="pin-alert-content">
-        <i class="fas fa-exclamation-triangle"></i>
-        <div class="pin-alert-text">
-            <strong>Perhatian!</strong> Anda belum mengatur PIN keamanan.  
-            <a href="profil.php#account-tab" class="pin-alert-button">Atur PIN Sekarang</a>
+    <div class="pin-alert">
+        <div class="pin-alert-content">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div class="pin-alert-text">
+                <strong>Perhatian!</strong> Anda belum mengatur PIN keamanan.  
+                <a href="profil.php#account-tab" class="pin-alert-button">Atur PIN Sekarang</a>
+            </div>
+            <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
-        <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
-            <i class="fas fa-times"></i>
-        </button>
     </div>
-</div>
-<?php endif; ?>
+    <?php endif; ?>
 
-<?php if (!$has_email): ?>
-<div class="pin-alert">
-    <div class="pin-alert-content">
-        <i class="fas fa-exclamation-triangle"></i>
-        <div class="pin-alert-text">
-            <strong>Perhatian!</strong> Anda belum menambahkan email.  
-            <a href="profil.php#account-tab" class="pin-alert-button">Tambahkan Email Sekarang</a>
+    <?php if (!$has_email): ?>
+    <div class="pin-alert">
+        <div class="pin-alert-content">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div class="pin-alert-text">
+                <strong>Perhatian!</strong> Anda belum menambahkan email.  
+                <a href="profil.php#account-tab" class="pin-alert-button">Tambahkan Email Sekarang</a>
+            </div>
+            <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
-        <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
-            <i class="fas fa-times"></i>
-        </button>
     </div>
-</div>
-<?php endif; ?>
+    <?php endif; ?>
 
-    <!-- Tambahkan judul "Menu Utama" di atas card-menu -->
+    <!-- Menu Utama -->
     <h2 class="menu-title">Menu Utama</h2>
 
     <!-- Enhanced Card Menu -->
@@ -1238,6 +1328,7 @@ tbody tr:hover {
                         <th>Jumlah</th>
                         <th>Status</th>
                         <th>Tanggal</th>
+                        <th>Detail</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1272,11 +1363,17 @@ tbody tr:hover {
                                     </span>
                                 </td>
                                 <td><?= date('d M Y H:i', strtotime($row['created_at'])) ?></td>
+                                <td>
+                                    <span class="detail-toggle" onclick="toggleDetail(this)">Lihat Detail</span>
+                                    <div class="hidden-detail">
+                                        <?= tampilkanDetailTransaksi($row, $conn) ?>
+                                    </div>
+                                </td>
                             </tr>
                         <?php endwhile; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="5" class="empty-state">
+                            <td colspan="6" class="empty-state">
                                 <i class="fas fa-receipt"></i>
                                 <p>Belum ada riwayat transaksi.</p>
                             </td>
@@ -1286,8 +1383,7 @@ tbody tr:hover {
             </table>
         </div>
     </div>
-</body>
-</html>
+
     <!-- Tampilkan navigasi pagination -->
     <div class="pagination">
         <?php if ($page > 1): ?>
@@ -1298,177 +1394,189 @@ tbody tr:hover {
             <a href="javascript:void(0);" onclick="loadPage(<?= $page + 1 ?>)" class="pagination-link">Selanjutnya &raquo;</a>
         <?php endif; ?>
     </div>
-<script>
-// Toggle saldo visibility
-document.addEventListener('DOMContentLoaded', function() {
-    const toggleBtn = document.getElementById('toggleBalance');
-    const balanceContainer = document.getElementById('balanceContainer');
-    const eyeIcon = document.getElementById('eyeIcon');
-    
-    toggleBtn.addEventListener('click', function() {
-        balanceContainer.classList.toggle('balance-hidden');
+
+    <script>
+    // Toggle saldo visibility
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggleBtn = document.getElementById('toggleBalance');
+        const balanceContainer = document.getElementById('balanceContainer');
+        const eyeIcon = document.getElementById('eyeIcon');
         
-        // Toggle eye icon
-        if (balanceContainer.classList.contains('balance-hidden')) {
-            eyeIcon.classList.remove('fa-eye-slash');
-            eyeIcon.classList.add('fa-eye');
-        } else {
-            eyeIcon.classList.remove('fa-eye');
-            eyeIcon.classList.add('fa-eye-slash');
-        }
-    });
-});
-
-// Fungsi untuk menyalin nomor rekening
-function copyToClipboard(text) {
-    // Buat elemen input sementara
-    const tempInput = document.createElement("input");
-    tempInput.value = text;
-    document.body.appendChild(tempInput);
-    
-    // Pilih teks dan salin
-    tempInput.select();
-    document.execCommand("copy");
-    
-    // Hapus elemen input sementara
-    document.body.removeChild(tempInput);
-    
-    // Tampilkan pesan suksis
-    const tooltip = document.getElementById("copy-tooltip");
-    tooltip.innerHTML = "Tersalin!";
-    
-    // Kembalikan teks tooltip setelah 2 detik
-    setTimeout(function() {
-        tooltip.innerHTML = "Klik untuk menyalin";
-    }, 2000);
-}
-
-// Fungsi untuk menandai notifikasi sebagai "dibaca"
-function markNotificationsAsRead() {
-    fetch('mark_notification_as_read.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-        },
-    })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                // Perbarui badge notifikasi
-                const badge = document.querySelector('.notification-badge');
-                if (badge) {
-                    badge.remove(); // Hapus badge karena semua notifikasi sudah dibaca
-                }
-
-                // Hapus kelas "unread" dari notifikasi yang sudah dibaca
-                const unreadNotifications = document.querySelectorAll('.notification-item.unread');
-                unreadNotifications.forEach(notification => {
-                    notification.classList.remove('unread');
-                });
-            }
-        });
-}
-
-// Fungsi untuk memeriksa notifikasi baru
-function checkNewNotifications() {
-    fetch('check_notifications.php')
-        .then(response => response.json())
-        .then(data => {
-            if (data.unread > 0) {
-                // Perbarui badge notifikasi
-                const badge = document.querySelector('.notification-badge');
-                if (badge) {
-                    badge.textContent = data.unread;
-                } else {
-                    const notificationLink = document.querySelector('.notification-toggle');
-                    notificationLink.innerHTML += `<span class="notification-badge">${data.unread}</span>`;
-                }
-
-                // Tampilkan notifikasi baru
-                const dropdownContent = document.querySelector('.notification-dropdown-content');
-                dropdownContent.innerHTML = ''; // Kosongkan dropdown sebelum menambahkan notifikasi baru
-                data.notifications.forEach(notification => {
-                    const notificationItem = document.createElement('a');
-                    notificationItem.href = '#';
-                    notificationItem.className = notification.is_read ? 'notification-item' : 'notification-item unread';
-                    notificationItem.innerHTML = `
-                        <div class="notification-message" style="color: #333;">${notification.message}</div>
-                        <div class="notification-time">${new Date(notification.created_at).toLocaleString()}</div>
-                    `;
-                    dropdownContent.appendChild(notificationItem);
-                });
+        toggleBtn.addEventListener('click', function() {
+            balanceContainer.classList.toggle('balance-hidden');
+            
+            // Toggle eye icon
+            if (balanceContainer.classList.contains('balance-hidden')) {
+                eyeIcon.classList.remove('fa-eye-slash');
+                eyeIcon.classList.add('fa-eye');
             } else {
-                // Jika tidak ada notifikasi baru, pastikan badge dihapus
-                const badge = document.querySelector('.notification-badge');
-                if (badge) {
-                    badge.remove();
-                }
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
             }
         });
-}
+    });
 
-// Fungsi untuk membuka/menutup dropdown notifikasi
-document.addEventListener('DOMContentLoaded', function () {
-    const notificationToggle = document.querySelector('.notification-toggle');
-    const notificationContent = document.querySelector('.notification-dropdown-content');
+    // Fungsi untuk menyalin nomor rekening
+    function copyToClipboard(text) {
+        // Buat elemen input sementara
+        const tempInput = document.createElement("input");
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        
+        // Pilih teks dan salin
+        tempInput.select();
+        document.execCommand("copy");
+        
+        // Hapus elemen input sementara
+        document.body.removeChild(tempInput);
+        
+        // Tampilkan pesan sukses
+        const tooltip = document.getElementById("copy-tooltip");
+        tooltip.innerHTML = "Tersalin!";
+        
+        // Kembalikan teks tooltip setelah 2 detik
+        setTimeout(function() {
+            tooltip.innerHTML = "Klik untuk menyalin";
+        }, 2000);
+    }
 
-    // Buka/tutup dropdown saat ikon notifikasi diklik
-    notificationToggle.addEventListener('click', function (e) {
-        e.preventDefault(); // Mencegah perilaku default link
-        const isOpen = notificationContent.style.display === 'block';
-        notificationContent.style.display = isOpen ? 'none' : 'block';
-
-        // Jika dropdown dibuka, tandai notifikasi sebagai "dibaca"
-        if (!isOpen) {
-            markNotificationsAsRead();
+    // Fungsi untuk toggle detail transaksi
+    function toggleDetail(element) {
+        const detailDiv = element.nextElementSibling;
+        if (detailDiv.style.display === 'block') {
+            detailDiv.style.display = 'none';
+            element.textContent = 'Lihat Detail';
+        } else {
+            detailDiv.style.display = 'block';
+            element.textContent = 'Sembunyikan';
         }
-    });
+    }
 
-// Tutup dropdown saat scroll layar
-window.addEventListener('scroll', function() {
-    notificationContent.style.display = 'none';
-});
-    
-    // Inisialisasi animasi card dengan delay
-    const cards = document.querySelectorAll('.card');
-    cards.forEach((card, index) => {
-        card.style.setProperty('--i', index + 1);
-    });
-});
+    // Fungsi untuk menandai notifikasi sebagai "dibaca"
+    function markNotificationsAsRead() {
+        fetch('mark_notification_as_read.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Perbarui badge notifikasi
+                    const badge = document.querySelector('.notification-badge');
+                    if (badge) {
+                        badge.remove();
+                    }
 
-
-// Periksa notifikasi baru setiap 10 detik
-setInterval(checkNewNotifications, 10000);
-        // Fungsi untuk memuat halaman dengan AJAX
-            function loadPage(page) {
-            const xhr = new XMLHttpRequest();
-            const url = `?page=${page}`;
-
-            xhr.open('GET', url, true);
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(xhr.responseText, 'text/html');
-
-                    // Perbarui tabel dan pagination
-                    document.querySelector('.table-container').innerHTML = doc.querySelector('.table-container').innerHTML;
-                    document.querySelector('.pagination').innerHTML = doc.querySelector('.pagination').innerHTML;
-
-                    // Perbarui URL tanpa reload halaman
-                    history.pushState(null, '', url);
+                    // Hapus kelas "unread" dari notifikasi yang sudah dibaca
+                    const unreadNotifications = document.querySelectorAll('.notification-item.unread');
+                    unreadNotifications.forEach(notification => {
+                        notification.classList.remove('unread');
+                    });
                 }
-            };
+            });
+    }
 
-            xhr.send();
-        }
+    // Fungsi untuk memeriksa notifikasi baru
+    function checkNewNotifications() {
+        fetch('check_notifications.php')
+            .then(response => response.json())
+            .then(data => {
+                if (data.unread > 0) {
+                    // Perbarui badge notifikasi
+                    const badge = document.querySelector('.notification-badge');
+                    if (badge) {
+                        badge.textContent = data.unread;
+                    } else {
+                        const notificationLink = document.querySelector('.notification-toggle');
+                        notificationLink.innerHTML += `<span class="notification-badge">${data.unread}</span>`;
+                    }
 
-        // Handle tombol "Back" dan "Forward" di browser
-        window.addEventListener('popstate', function(event) {
-            const page = new URL(window.location.href).searchParams.get('page') || 1;
-            loadPage(page);
+                    // Tampilkan notifikasi baru
+                    const dropdownContent = document.querySelector('.notification-dropdown-content');
+                    dropdownContent.innerHTML = '';
+                    data.notifications.forEach(notification => {
+                        const notificationItem = document.createElement('a');
+                        notificationItem.href = '#';
+                        notificationItem.className = notification.is_read ? 'notification-item' : 'notification-item unread';
+                        notificationItem.innerHTML = `
+                            <div class="notification-message" style="color: #333;">${notification.message}</div>
+                            <div class="notification-time">${new Date(notification.created_at).toLocaleString()}</div>
+                        `;
+                        dropdownContent.appendChild(notificationItem);
+                    });
+                } else {
+                    // Jika tidak ada notifikasi baru, pastikan badge dihapus
+                    const badge = document.querySelector('.notification-badge');
+                    if (badge) {
+                        badge.remove();
+                    }
+                }
+            });
+    }
+
+    // Fungsi untuk membuka/menutup dropdown notifikasi
+    document.addEventListener('DOMContentLoaded', function () {
+        const notificationToggle = document.querySelector('.notification-toggle');
+        const notificationContent = document.querySelector('.notification-dropdown-content');
+
+        // Buka/tutup dropdown saat ikon notifikasi diklik
+        notificationToggle.addEventListener('click', function (e) {
+            e.preventDefault();
+            const isOpen = notificationContent.style.display === 'block';
+            notificationContent.style.display = isOpen ? 'none' : 'block';
+
+            // Jika dropdown dibuka, tandai notifikasi sebagai "dibaca"
+            if (!isOpen) {
+                markNotificationsAsRead();
+            }
         });
+
+        // Tutup dropdown saat scroll layar
+        window.addEventListener('scroll', function() {
+            notificationContent.style.display = 'none';
+        });
+        
+        // Inisialisasi animasi card dengan delay
+        const cards = document.querySelectorAll('.card');
+        cards.forEach((card, index) => {
+            card.style.setProperty('--i', index + 1);
+        });
+    });
+
+    // Periksa notifikasi baru setiap 10 detik
+    setInterval(checkNewNotifications, 10000);
+
+    // Fungsi untuk memuat halaman dengan AJAX
+    function loadPage(page) {
+        const xhr = new XMLHttpRequest();
+        const url = `?page=${page}`;
+
+        xhr.open('GET', url, true);
+
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(xhr.responseText, 'text/html');
+
+                // Perbarui tabel dan pagination
+                document.querySelector('.table-container').innerHTML = doc.querySelector('.table-container').innerHTML;
+                document.querySelector('.pagination').innerHTML = doc.querySelector('.pagination').innerHTML;
+
+                // Perbarui URL tanpa reload halaman
+                history.pushState(null, '', url);
+            }
+        };
+
+        xhr.send();
+    }
+
+    // Handle tombol "Back" dan "Forward" di browser
+    window.addEventListener('popstate', function(event) {
+        const page = new URL(window.location.href).searchParams.get('page') || 1;
+        loadPage(page);
+    });
     </script>
-</script>
 </body>
 </html>
