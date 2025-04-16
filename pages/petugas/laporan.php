@@ -1,26 +1,28 @@
 <?php
-// Set timezone first to ensure all date functions use the correct time
+// Atur zona waktu ke Asia/Jakarta untuk konsistensi fungsi tanggal
 date_default_timezone_set('Asia/Jakarta');
 
+// Sertakan file autentikasi dan koneksi database
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
+// Ambil informasi pengguna dari sesi
 $username = $_SESSION['username'] ?? 'Petugas';
-$user_id = $_SESSION['user_id'] ?? 0; // Get current petugas ID
+$user_id = $_SESSION['user_id'] ?? 0; // ID petugas saat ini
 
-// Get today's date
+// Dapatkan tanggal hari ini
 $today = date('Y-m-d');
 
-// Pagination settings
-$limit = 10; // Number of records per page
+// Pengaturan paginasi
+$limit = 10; // Jumlah data per halaman
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-// Calculate summary statistics for today - Exclude transfers
+// Hitung statistik ringkasan untuk hari ini, kecuali transaksi transfer
 $total_query = "SELECT 
     COUNT(id) as total_transactions,
-    SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) as total_setoran,
-    SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as total_penarikan
+    SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_setoran,
+    SUM(CASE WHEN jenis_transaksi = 'tarik' AND status = 'approved' THEN jumlah ELSE 0 END) as total_penarikan
     FROM transaksi 
     WHERE DATE(created_at) = ? 
     AND jenis_transaksi != 'transfer'";
@@ -30,7 +32,7 @@ $stmt->bind_param("s", $today);
 $stmt->execute();
 $totals = $stmt->get_result()->fetch_assoc();
 
-// Calculate total admin transfers for this petugas today
+// Hitung total penambahan saldo dari admin untuk petugas ini hari ini
 $admin_transfers_query = "SELECT SUM(jumlah) as total_admin_transfers 
                          FROM saldo_transfers 
                          WHERE petugas_id = ? AND DATE(tanggal) = ?";
@@ -39,18 +41,21 @@ $stmt_admin->bind_param("is", $user_id, $today);
 $stmt_admin->execute();
 $total_admin_transfers = $stmt_admin->get_result()->fetch_assoc()['total_admin_transfers'] ?? 0;
 
-// Calculate saldo_bersih as total_setoran - total_penarikan
+// Hitung saldo bersih: total_setoran - total_penarikan (izinkan negatif)
 $saldo_bersih = ($totals['total_setoran'] ?? 0) - ($totals['total_penarikan'] ?? 0);
 
-// Get total number of records for pagination
-$total_records_query = "SELECT COUNT(*) as total FROM transaksi WHERE DATE(created_at) = ? AND jenis_transaksi != 'transfer'";
+// Hitung total jumlah data untuk paginasi
+$total_records_query = "SELECT COUNT(*) as total 
+                       FROM transaksi 
+                       WHERE DATE(created_at) = ? 
+                       AND jenis_transaksi != 'transfer'";
 $stmt_total = $conn->prepare($total_records_query);
 $stmt_total->bind_param("s", $today);
 $stmt_total->execute();
 $total_records = $stmt_total->get_result()->fetch_assoc()['total'];
 $total_pages = ceil($total_records / $limit);
 
-// Function to format Rupiah
+// Fungsi untuk memformat jumlah ke format Rupiah
 function formatRupiah($amount) {
     return 'Rp ' . number_format($amount, 0, ',', '.');
 }
@@ -349,27 +354,35 @@ function formatRupiah($amount) {
         .table-responsive {
             overflow-x: auto;
             margin-top: 20px;
+            border-radius: 10px;
+            background: white;
+            box-shadow: var(--shadow-sm);
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
             background: white;
         }
 
         th, td {
-            padding: 15px;
+            padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid #eee;
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            white-space: nowrap;
         }
 
         th {
             background-color: var(--primary-light);
             color: var(--primary-dark);
-            font-weight: 500;
-            white-space: nowrap;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+        }
+
+        td {
+            color: var(--text-primary);
         }
 
         tr:hover {
@@ -382,6 +395,8 @@ function formatRupiah($amount) {
             border-radius: 6px;
             font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             font-weight: 500;
+            text-align: center;
+            min-width: 90px;
         }
 
         .type-setoran {
@@ -451,6 +466,14 @@ function formatRupiah($amount) {
             gap: 10px;
         }
 
+        /* Penyesuaian lebar kolom untuk keseimbangan */
+        th:nth-child(1), td:nth-child(1) { width: 10%; } /* No */
+        th:nth-child(2), td:nth-child(2) { width: 20%; } /* No Transaksi */
+        th:nth-child(3), td:nth-child(3) { width: 30%; } /* Nama Siswa */
+        th:nth-child(4), td:nth-child(4) { width: 15%; } /* Jenis */
+        th:nth-child(5), td:nth-child(5) { width: 15%; } /* Jumlah */
+        th:nth-child(6), td:nth-child(6) { width: 10%; } /* Waktu */
+
         @media (max-width: 768px) {
             .top-nav {
                 padding: 15px;
@@ -484,7 +507,12 @@ function formatRupiah($amount) {
 
             th, td {
                 padding: 10px;
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+                font-size: clamp(0.75rem, 1.6vw, 0.85rem);
+            }
+
+            .transaction-type {
+                min-width: 80px;
+                padding: 5px 10px;
             }
 
             .summary-boxes {
@@ -504,10 +532,16 @@ function formatRupiah($amount) {
             .stat-box .stat-icon {
                 margin-bottom: 10px;
             }
+
+            /* Nonaktifkan white-space nowrap untuk responsivitas */
+            th, td {
+                white-space: normal;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- Navigasi atas -->
     <nav class="top-nav">
         <a href="dashboard.php" class="back-btn">
             <i class="fas fa-xmark"></i>
@@ -516,31 +550,39 @@ function formatRupiah($amount) {
         <div style="width: 40px;"></div>
     </nav>
 
+    <!-- Konten utama -->
     <div class="main-content">
+        <!-- Banner sambutan -->
         <div class="welcome-banner">
             <h2><i class="fas fa-chart-bar"></i> Laporan Harian</h2>
             <p>Transaksi pada <?= date('d/m/Y') ?></p>
         </div>
 
+        <!-- Kartu laporan -->
         <div class="report-card">
             <h3 class="section-title"><i class="fas fa-list"></i> Ringkasan Transaksi</h3>
             <div class="summary-boxes">
+                <!-- Total Transaksi -->
                 <div class="summary-box">
                     <h3>Total Transaksi</h3>
                     <div class="amount"><?= $totals['total_transactions'] ?? 0 ?></div>
                 </div>
+                <!-- Total Setoran -->
                 <div class="summary-box">
                     <h3>Total Setoran</h3>
                     <div class="amount"><?= formatRupiah($totals['total_setoran'] ?? 0) ?></div>
                 </div>
+                <!-- Total Penarikan -->
                 <div class="summary-box">
                     <h3>Total Penarikan</h3>
                     <div class="amount"><?= formatRupiah($totals['total_penarikan'] ?? 0) ?></div>
                 </div>
+                <!-- Total Penambahan dari Admin -->
                 <div class="summary-box">
                     <h3>Total Penambahan oleh Admin</h3>
                     <div class="amount"><?= formatRupiah($total_admin_transfers) ?></div>
                 </div>
+                <!-- Saldo Bersih -->
                 <div class="stat-box balance">
                     <div class="stat-icon">
                         <i class="fas fa-wallet"></i>
@@ -553,24 +595,23 @@ function formatRupiah($amount) {
                 </div>
             </div>
 
+            <!-- Tombol aksi -->
             <div class="action-buttons">
                 <a href="download_laporan.php?date=<?= $today ?>&format=pdf" class="download-btn" id="pdf-btn">
                     <i class="fas fa-file-pdf"></i>
-                    <span>Download PDF</span>
-                </a>
-                <a href="download_laporan.php?date=<?= $today ?>&format=excel" class="download-btn" id="excel-btn">
-                    <i class="fas fa-file-excel"></i>
-                    <span>Download Excel</span>
+                    <span>Unduh PDF</span>
                 </a>
             </div>
 
+            <!-- Tabel transaksi -->
             <div class="table-responsive" id="transaction-table">
                 <!-- Data akan diisi oleh JavaScript -->
             </div>
 
+            <!-- Paginasi -->
             <div class="pagination">
-                <button id="prev-page" class="pagination-btn" style="display: none;">Back</button>
-                <button id="next-page" class="pagination-btn" style="display: none;">Next</button>
+                <button id="prev-page" class="pagination-btn" style="display: none;">Kembali</button>
+                <button id="next-page" class="pagination-btn" style="display: none;">Lanjut</button>
             </div>
         </div>
     </div>
@@ -578,16 +619,18 @@ function formatRupiah($amount) {
     <script>
         let currentPage = 1;
         const totalPages = <?= $total_pages ?>;
+        const limit = <?= $limit ?>;
 
+        // Fungsi untuk mengambil data transaksi dari server
         async function fetchTransactions(page) {
             try {
                 const response = await fetch(`fetch_transactions.php?page=${page}`);
-                if (!response.ok) throw new Error('Network response was not ok');
+                if (!response.ok) throw new Error('Respon jaringan tidak ok');
                 const transactions = await response.json();
-                updateTable(transactions);
+                updateTable(transactions, page);
                 updatePagination(page);
             } catch (error) {
-                console.error('Error fetching transactions:', error);
+                console.error('Gagal mengambil transaksi:', error);
                 document.getElementById('transaction-table').innerHTML = `
                     <div class="alert">
                         <i class="fas fa-info-circle"></i>
@@ -596,7 +639,8 @@ function formatRupiah($amount) {
             }
         }
 
-        function updateTable(transactions) {
+        // Fungsi untuk memperbarui tabel transaksi
+        function updateTable(transactions, page) {
             const tableContainer = document.getElementById('transaction-table');
             
             if (transactions.length > 0) {
@@ -604,6 +648,7 @@ function formatRupiah($amount) {
                     <table>
                         <thead>
                             <tr>
+                                <th>No</th>
                                 <th>No Transaksi</th>
                                 <th>Nama Siswa</th>
                                 <th>Jenis</th>
@@ -613,11 +658,13 @@ function formatRupiah($amount) {
                         </thead>
                         <tbody>`;
 
-                transactions.forEach(transaction => {
+                transactions.forEach((transaction, index) => {
                     const typeClass = transaction.jenis_transaksi === 'setor' ? 'type-setoran' : 'type-penarikan';
                     const displayType = transaction.jenis_transaksi === 'setor' ? 'Setoran' : 'Penarikan';
+                    const noUrut = ((page - 1) * limit) + index + 1;
                     tableHTML += `
                         <tr>
+                            <td>${noUrut}</td>
                             <td>${transaction.no_transaksi}</td>
                             <td>${transaction.nama_siswa}</td>
                             <td><span class="transaction-type ${typeClass}">${displayType}</span></td>
@@ -637,6 +684,7 @@ function formatRupiah($amount) {
             }
         }
 
+        // Fungsi untuk memperbarui tombol paginasi
         function updatePagination(page) {
             const prevButton = document.getElementById('prev-page');
             const nextButton = document.getElementById('next-page');
@@ -645,6 +693,7 @@ function formatRupiah($amount) {
             nextButton.style.display = page < totalPages ? 'inline-block' : 'none';
         }
 
+        // Event listener untuk tombol paginasi sebelumnya
         document.getElementById('prev-page').addEventListener('click', () => {
             if (currentPage > 1) {
                 currentPage--;
@@ -652,6 +701,7 @@ function formatRupiah($amount) {
             }
         });
 
+        // Event listener untuk tombol paginasi berikutnya
         document.getElementById('next-page').addEventListener('click', () => {
             if (currentPage < totalPages) {
                 currentPage++;
@@ -659,6 +709,7 @@ function formatRupiah($amount) {
             }
         });
 
+        // Fungsi untuk menangani proses unduh dengan efek loading
         function handleDownload(buttonId, url) {
             const button = document.getElementById(buttonId);
             button.classList.add('btn-loading');
@@ -668,16 +719,13 @@ function formatRupiah($amount) {
             }, 500);
         }
 
+        // Event listener untuk tombol unduh PDF
         document.getElementById('pdf-btn').addEventListener('click', (e) => {
             e.preventDefault();
             handleDownload('pdf-btn', e.target.href);
         });
 
-        document.getElementById('excel-btn').addEventListener('click', (e) => {
-            e.preventDefault();
-            handleDownload('excel-btn', e.target.href);
-        });
-
+        // Panggil fungsi untuk mengambil transaksi saat halaman dimuat
         fetchTransactions(currentPage);
     </script>
 </body>

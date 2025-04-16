@@ -110,11 +110,10 @@ $total_row = $total_result->fetch_assoc();
 $total_transaksi = $total_row['total'];
 $total_pages = ceil($total_transaksi / $limit);
 
-// Fetch notifications (limited to 5)
+// Fetch notifications (all notifications)
 $query = "SELECT * FROM notifications 
           WHERE user_id = ? 
-          ORDER BY created_at DESC 
-          LIMIT 5";
+          ORDER BY created_at DESC";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
@@ -177,7 +176,7 @@ function tampilkanDetailTransaksi($transaksi, $conn) {
             $petugas1 = htmlspecialchars($petugas_data['petugas1_nama']);
             $petugas2 = htmlspecialchars($petugas_data['petugas2_nama']);
             $detail = '<div class="transaction-detail">
-                          <p><strong>Ditangani oleh:</strong> '.$petugas1.' dan '.$petugas2.'</p>
+                          <p><strong>Ditangani oleh Warna : <span class="warna">Merah</span></strong> '.$petugas1.' dan '.$petugas2.'</p>
                        </div>';
         } else {
             $detail = '<div class="transaction-detail">
@@ -1817,7 +1816,7 @@ $daily_quote = $quotes[$day_index];
                     const dropdownContent = document.querySelector('.notification-dropdown-content');
                     if (data.notifications.length > 0) {
                         dropdownContent.innerHTML = '';
-                        data.notifications.slice(0, 5).forEach(notification => {
+                        data.notifications.forEach(notification => {
                             const notificationItem = document.createElement('div');
                             notificationItem.className = `notification-item ${notification.is_read ? '' : 'unread'}`;
                             notificationItem.dataset.id = notification.id;
@@ -1846,6 +1845,9 @@ $daily_quote = $quotes[$day_index];
             e.preventDefault();
             const dropdownContent = document.querySelector('.notification-dropdown-content');
             dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block';
+            if (dropdownContent.style.display === 'block') {
+                checkNewNotifications();
+            }
         });
 
         // Close dropdown when clicking outside
@@ -1857,72 +1859,24 @@ $daily_quote = $quotes[$day_index];
             }
         });
 
-        // Load page via AJAX
-        function loadPage(page) {
-            fetch(`?page=${page}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => response.text())
-            .then(data => {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(data, 'text/html');
-                const newTableContainer = doc.querySelector('.table-container');
-                const newPagination = doc.querySelector('.pagination');
-                
-                document.querySelector('.table-container').innerHTML = newTableContainer.innerHTML;
-                document.querySelector('.pagination').innerHTML = newPagination.innerHTML;
-                
-                // Update nomor urut based on page
-                const itemsPerPage = 5; // 5 item per halaman
-                const startNumber = (page - 1) * itemsPerPage + 1;
-                const rows = document.querySelectorAll('#tableContainer tbody tr:not(.empty-state)');
-                rows.forEach((row, index) => {
-                    const nomorCell = row.querySelector('.nomor-urut');
-                    if (nomorCell) {
-                        nomorCell.textContent = startNumber + index;
-                    }
-                });
+        // Periodically check for new notifications
+        setInterval(checkNewNotifications, 60000);
 
-                // Update status text after AJAX load
-                rows.forEach(row => {
-                    const statusCell = row.querySelector('.status-badge');
-                    if (statusCell && statusCell.textContent.trim().toLowerCase() === 'approved') {
-                        statusCell.textContent = 'Berhasil';
-                    }
-                });
-                
-                history.pushState({}, '', `?page=${page}`);
-            })
-            .catch(error => console.error('Error loading page:', error));
+        // Initialize swipe on page load
+        initializeSwipe();
+
+        // Load page for pagination
+        function loadPage(page) {
+            window.location.href = `dashboard.php?page=${page}`;
         }
 
-        // Smooth scroll for Android
-        document.addEventListener('touchmove', (e) => {
-            // Allow smooth scrolling
-        }, { passive: true });
-
-        // Prevent pinch zoom but allow scroll
-        document.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 1) {
-                e.preventDefault();
-            }
-        }, { passive: false });
-
-        // Initialize swipe on DOM load
-        document.addEventListener('DOMContentLoaded', () => {
-            initializeSwipe();
-            updateNotificationBadge();
-            // Periodically check for new notifications
-            setInterval(checkNewNotifications, 60000);
-
-            // Initial update for status text
-            const rows = document.querySelectorAll('#tableContainer tbody tr:not(.empty-state)');
-            rows.forEach(row => {
-                const statusCell = row.querySelector('.status-badge');
-                if (statusCell && statusCell.textContent.trim().toLowerCase() === 'approved') {
-                    statusCell.textContent = 'Berhasil';
+        // Detail toggle for transactions
+        document.querySelectorAll('.detail-toggle').forEach(button => {
+            button.addEventListener('click', function() {
+                const detailRow = this.closest('tr').nextElementSibling;
+                if (detailRow && detailRow.classList.contains('detail-row')) {
+                    detailRow.classList.toggle('hidden-detail');
+                    this.textContent = detailRow.classList.contains('hidden-detail') ? 'Lihat Detail' : 'Sembunyikan';
                 }
             });
         });

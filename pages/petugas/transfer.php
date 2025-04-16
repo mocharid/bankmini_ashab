@@ -966,7 +966,7 @@ if ($role == 'admin' || $role == 'petugas') {
 <body>
     <nav class="top-nav">
         <button class="back-btn" onclick="window.location.href='dashboard.php'">
-            <i class="fas fa-arrow-left"></i>
+            <i class="fas fa-xmark"></i>
         </button>
         <h1>SCHOBANK</h1>
         <div style="width: 40px;"></div>
