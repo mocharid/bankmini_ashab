@@ -74,12 +74,12 @@ $stmt->execute();
 $result = $stmt->get_result();
 $total_saldo = $result->fetch_assoc()['total_saldo'] ?? 0;
 
-// Get today's transactions for Net Setoran Harian
+// Get today's transactions for Net Setoran Harian (aligned with petugas)
 $query_setor = "SELECT SUM(jumlah) as total_setor 
                 FROM transaksi 
                 WHERE jenis_transaksi = 'setor' 
                 AND DATE(created_at) = CURDATE() 
-                AND status = 'approved'";
+                AND (status = 'approved' OR status IS NULL)";
 $result_setor = $conn->query($query_setor);
 $total_setor = $result_setor->fetch_assoc()['total_setor'] ?? 0;
 
@@ -91,29 +91,37 @@ $query_tarik = "SELECT SUM(jumlah) as total_tarik
 $result_tarik = $conn->query($query_tarik);
 $total_tarik = $result_tarik->fetch_assoc()['total_tarik'] ?? 0;
 
-$saldo_harian = $total_setor - $total_tarik;
+$query_transfers = "SELECT SUM(jumlah) as saldo_transferred 
+                   FROM saldo_transfers 
+                   WHERE tanggal = CURDATE()";
+$result_transfers = $conn->query($query_transfers);
+$saldo_transferred = $result_transfers->fetch_assoc()['saldo_transferred'] ?? 0;
 
-// Get total transferred amount to officers
-$query = "SELECT SUM(jumlah) as saldo_transferred 
-          FROM saldo_transfers 
-          WHERE admin_id = ? 
-          AND tanggal = CURDATE()";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $admin_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$saldo_transferred = $result->fetch_assoc()['saldo_transferred'] ?? 0;
+$saldo_harian = ($total_setor - $total_tarik) + $saldo_transferred;
 
-$saldo_bersih = ($total_setor - $total_tarik) - $saldo_transferred;
-
-// Get net setoran for last 7 days (for pop-up)
-$query_net_setoran = "SELECT DATE(created_at) as tanggal,
-                            SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) -
-                            SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as net_setoran
-                      FROM transaksi
-                      WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) AND status = 'approved'
-                      GROUP BY DATE(created_at)
-                      ORDER BY DATE(created_at) DESC";
+// Get net setoran for last 7 days (for pop-up, aligned with petugas)
+$query_net_setoran = "SELECT 
+                        dates.tanggal,
+                        (COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'setor' AND (t.status = 'approved' OR t.status IS NULL) THEN t.jumlah ELSE 0 END), 0) -
+                         COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'tarik' AND t.status = 'approved' THEN t.jumlah ELSE 0 END), 0) +
+                         COALESCE(SUM(st.jumlah), 0)) as net_setoran
+                      FROM (
+                          SELECT DATE(created_at) as tanggal
+                          FROM transaksi
+                          WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                          GROUP BY DATE(created_at)
+                          UNION
+                          SELECT DATE(tanggal) as tanggal
+                          FROM saldo_transfers
+                          WHERE tanggal >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                          GROUP BY DATE(tanggal)
+                      ) as dates
+                      LEFT JOIN transaksi t ON DATE(t.created_at) = dates.tanggal
+                          AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                      LEFT JOIN saldo_transfers st ON DATE(st.tanggal) = dates.tanggal
+                          AND st.tanggal >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+                      GROUP BY dates.tanggal
+                      ORDER BY dates.tanggal DESC";
 $result_net_setoran = $conn->query($query_net_setoran);
 $net_setoran_data = [];
 while ($row = $result_net_setoran->fetch_assoc()) {
