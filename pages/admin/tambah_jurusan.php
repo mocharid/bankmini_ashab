@@ -2,11 +2,14 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
+// Initialize variables
+$error = null;
+
 // Handle delete request
 if (isset($_POST['delete_id'])) {
     $id = intval($_POST['delete_id']);
     
-    // Check if jurusan has students
+    // Check if jurusan has associated students
     $check_query = "SELECT COUNT(*) as count FROM users WHERE jurusan_id = ?";
     $check_stmt = $conn->prepare($check_query);
     $check_stmt->bind_param("i", $id);
@@ -30,14 +33,14 @@ if (isset($_POST['delete_id'])) {
 }
 
 // Handle edit request
-if (isset($_POST['edit_id']) && isset($_POST['edit_nama'])) {
+if (isset($_POST['edit_confirm'])) {
     $id = intval($_POST['edit_id']);
     $nama = trim($_POST['edit_nama']);
     
     if (empty($nama)) {
         $error = "Nama jurusan tidak boleh kosong!";
     } else {
-        // Check if new name already exists for different id
+        // Check for duplicate jurusan name
         $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ? AND id != ?";
         $check_stmt = $conn->prepare($check_query);
         $check_stmt->bind_param("si", $nama, $id);
@@ -62,31 +65,43 @@ if (isset($_POST['edit_id']) && isset($_POST['edit_nama'])) {
 }
 
 // Handle form submission for new jurusan
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isset($_POST['edit_id'])) {
-    $nama_jurusan = trim($_POST['nama_jurusan']);
-    
-    if (empty($nama_jurusan)) {
-        $error = "Nama jurusan tidak boleh kosong!";
-    } else {
-        $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("s", $nama_jurusan);
-        $check_stmt->execute();
-        $result = $check_stmt->get_result();
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isset($_POST['edit_id']) && !isset($_POST['edit_confirm'])) {
+    if (isset($_POST['confirm'])) {
+        $nama_jurusan = trim($_POST['nama_jurusan']);
         
-        if ($result->num_rows > 0) {
-            $error = "Jurusan sudah ada!";
+        if (empty($nama_jurusan)) {
+            $error = "Nama jurusan tidak boleh kosong!";
         } else {
-            $query = "INSERT INTO jurusan (nama_jurusan) VALUES (?)";
-            $stmt = $conn->prepare($query);
-            $stmt->bind_param("s", $nama_jurusan);
+            // Check for duplicate jurusan name
+            $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("s", $nama_jurusan);
+            $check_stmt->execute();
+            $result = $check_stmt->get_result();
             
-            if ($stmt->execute()) {
-                header('Location: tambah_jurusan.php?success=1');
-                exit();
+            if ($result->num_rows > 0) {
+                $error = "Jurusan sudah ada!";
             } else {
-                $error = "Gagal menambahkan jurusan: " . $conn->error;
+                $query = "INSERT INTO jurusan (nama_jurusan) VALUES (?)";
+                $stmt = $conn->prepare($query);
+                $stmt->bind_param("s", $nama_jurusan);
+                
+                if ($stmt->execute()) {
+                    header('Location: tambah_jurusan.php?success=1');
+                    exit();
+                } else {
+                    $error = "Gagal menambahkan jurusan: " . $conn->error;
+                }
             }
+        }
+    } else {
+        $nama_jurusan = trim($_POST['nama_jurusan']);
+        if (empty($nama_jurusan)) {
+            $error = "Nama jurusan tidak boleh kosong!";
+        } else {
+            // Redirect to show confirmation modal
+            header('Location: tambah_jurusan.php?confirm=1&nama=' . urlencode($nama_jurusan));
+            exit();
         }
     }
 }
@@ -101,28 +116,84 @@ $result = $conn->query($query_list);
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
-    <title>Tambah Jurusan - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tambah Jurusan - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --primary-light: #e0e9f5;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
+            --accent-color: #ff9800;
+            --danger-color: #f44336;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f8faff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+            --setor-bg: #dcfce7;
+            --tarik-bg: #fee2e2;
+            --net-positive-bg: #dcfce7;
+            --net-negative-bg: #fee2e2;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        
+
         body {
-            background-color: #f0f5ff;
-            color: #333;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
-        
+
+        .top-nav {
+            background: var(--primary-dark);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            transition: var(--transition);
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
         .main-content {
             flex: 1;
             padding: 20px;
@@ -130,54 +201,63 @@ $result = $conn->query($query_list);
             max-width: 1200px;
             margin: 0 auto;
         }
-        
+
         .welcome-banner {
-            background: linear-gradient(135deg, #0a2e5c 0%, #154785 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
             padding: 25px;
             border-radius: 15px;
             margin-bottom: 30px;
-            box-shadow: 0 5px 15px rgba(10, 46, 92, 0.15);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
         }
-        
+
+        .welcome-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+            animation: shimmer 8s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .welcome-banner h2 {
-            font-size: 24px;
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
             gap: 10px;
-        }
-        
-        .back-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-decoration: none;
-            font-size: 14px;
-            transition: all 0.3s ease;
-            width: 36px;
-            height: 36px;
-        }
-
-        .back-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-1px);
+            position: relative;
+            z-index: 1;
         }
 
         .form-card {
             background: white;
             border-radius: 15px;
             padding: 25px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            box-shadow: var(--shadow-sm);
             margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         form {
@@ -194,141 +274,194 @@ $result = $conn->query($query_list);
 
         label {
             font-weight: 500;
-            color: #0a2e5c;
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         input[type="text"] {
             width: 100%;
-            padding: 12px;
+            padding: 12px 15px;
             border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 16px;
-            transition: all 0.3s ease;
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
         }
 
         input[type="text"]:focus {
-            border-color: #0a2e5c;
             outline: none;
-            box-shadow: 0 0 0 3px rgba(10, 46, 92, 0.1);
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            transform: scale(1.02);
         }
 
-        button[type="submit"] {
-            background: #0a2e5c;
+        .btn {
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 6px;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             font-weight: 500;
-            transition: all 0.3s ease;
-            align-self: flex-start;
             display: flex;
             align-items: center;
             gap: 8px;
+            transition: var(--transition);
+            width: auto;
+            max-width: 200px;
         }
 
-        button[type="submit"]:hover {
-            background: #154785;
-            transform: translateY(-1px);
+        .btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-edit {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-edit:hover {
+            background-color: var(--secondary-dark);
+        }
+
+        .btn-delete {
+            background-color: var(--danger-color);
+        }
+
+        .btn-delete:hover {
+            background-color: #d32f2f;
+        }
+
+        .btn-cancel {
+            background-color: #f0f0f0;
+            color: var(--text-secondary);
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
+        }
+
+        .btn-cancel:hover {
+            background-color: #e0e0e0;
+            transform: translateY(-2px);
+        }
+
+        .btn-confirm {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-confirm:hover {
+            background-color: var(--secondary-dark);
         }
 
         .alert {
             padding: 15px;
-            border-radius: 8px;
+            border-radius: 10px;
             margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
+            animation: slideIn 0.5s ease-out;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        .alert-success {
-            background-color: #dcfce7;
-            color: #166534;
+        .alert.hide {
+            animation: slideOut 0.5s ease-out forwards;
+        }
+
+        @keyframes slideOut {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(-20px); opacity: 0; }
         }
 
         .alert-error {
             background-color: #fee2e2;
-            color: #991b1b;
+            color: #b91c1c;
+            border-left: 5px solid #fecaca;
+        }
+
+        .alert-success {
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+            border-left: 5px solid var(--primary-color);
         }
 
         .jurusan-list {
             background: white;
             border-radius: 15px;
             padding: 25px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            box-shadow: var(--shadow-sm);
+            transition: var(--transition);
+        }
+
+        .jurusan-list:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-5px);
         }
 
         .jurusan-list h3 {
-            color: #0a2e5c;
             margin-bottom: 20px;
+            color: var(--primary-dark);
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
             display: flex;
             align-items: center;
             gap: 10px;
-            font-size: 20px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
         }
 
         th, td {
-            padding: 12px;
+            padding: 12px 15px;
             text-align: left;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            min-width: 80px;
             border-bottom: 1px solid #eee;
         }
 
         th {
-            background-color: #f8fafc;
-            color: #0a2e5c;
+            background: var(--primary-light);
+            color: var(--text-secondary);
             font-weight: 600;
         }
 
+        tr {
+            transition: opacity 0.3s ease;
+        }
+
+        tr.deleting {
+            animation: fadeOutRow 0.5s ease forwards;
+        }
+
+        @keyframes fadeOutRow {
+            from { opacity: 1; transform: translateX(0); }
+            to { opacity: 0; transform: translateX(-20px); }
+        }
+
         tr:hover {
-            background-color: #f8fafc;
+            background-color: #f8faff;
         }
 
         .total-siswa {
-            background: #e0e7ff;
-            color: #3730a3;
-            padding: 4px 8px;
+            background: var(--primary-light);
+            color: var(--primary-dark);
+            padding: 5px 10px;
             border-radius: 12px;
-            font-size: 14px;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             font-weight: 500;
         }
 
         .action-buttons {
             display: flex;
-            gap: 8px;
-        }
-
-        .btn-edit, .btn-delete {
-            padding: 6px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            border: none;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-edit {
-            background: #0ea5e9;
-            color: white;
-        }
-
-        .btn-delete {
-            background: #ef4444;
-            color: white;
-        }
-
-        .btn-edit:hover, .btn-delete:hover {
-            opacity: 0.9;
-            transform: translateY(-1px);
+            gap: 10px;
         }
 
         .modal {
@@ -350,196 +483,464 @@ $result = $conn->query($query_list);
             border-radius: 15px;
             width: 90%;
             max-width: 500px;
-            position: relative;
+            box-shadow: var(--shadow-md);
+            animation: slideIn 0.5s ease-out;
         }
 
         .modal-title {
-            font-size: 20px;
-            color: #0a2e5c;
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            color: var(--primary-dark);
             margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
+        .modal p {
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
         .modal-buttons {
             display: flex;
             gap: 10px;
-            margin-top: 20px;
             justify-content: flex-end;
         }
 
-        .btn-cancel {
-            background: #f3f4f6;
-            color: #666;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
+        .success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
         }
 
-        .btn-confirm {
-            background: #ef4444;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
-        .btn-save {
-            background: #0ea5e9;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .success-modal {
+            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 90%;
+            width: 450px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            transform: scale(0.5);
+            opacity: 0;
+            animation: popInModal 0.7s ease-out forwards;
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon {
+            font-size: clamp(4rem, 8vw, 4.5rem);
+            color: var(--secondary-color);
+            margin-bottom: 25px;
+            animation: bounceIn 0.6s ease-out;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3 {
+            color: var(--primary-dark);
+            margin-bottom: 15px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            animation: slideUpText 0.5s ease-out 0.2s both;
+            font-weight: 600;
+        }
+
+        .success-modal p {
+            color: var(--text-secondary);
+            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+            margin-bottom: 25px;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+            line-height: 1.5;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .confetti {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            opacity: 0.8;
+            animation: confettiFall 4s ease-out forwards;
+            transform-origin: center;
+        }
+
+        .confetti:nth-child(odd) {
+            background: var(--accent-color);
+        }
+
+        .confetti:nth-child(even) {
+            background: var(--secondary-color);
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
+        }
+
+        .modal-content-confirm {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .modal-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .modal-row:last-child {
+            border-bottom: none;
+        }
+
+        .modal-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .modal-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .loading i {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .no-data {
-            color: #666;
-            padding: 15px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .no-data i {
+            font-size: clamp(2rem, 4vw, 2.5rem);
+            color: #d1d5db;
+            margin-bottom: 15px;
+        }
+
+        .no-data p {
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         @media (max-width: 768px) {
+            .top-nav {
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+            }
+
             .main-content {
                 padding: 15px;
             }
 
-            button[type="submit"] {
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
+            }
+
+            .form-card, .jurusan-list {
+                padding: 20px;
+            }
+
+            form {
+                gap: 15px;
+            }
+
+            .btn {
                 width: 100%;
+                max-width: none;
                 justify-content: center;
             }
 
-            .table-responsive {
+            table {
+                display: block;
                 overflow-x: auto;
+                white-space: nowrap;
             }
 
-            table {
-                min-width: 500px;
+            th, td {
+                padding: 10px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
 
             .action-buttons {
                 flex-direction: column;
+                gap: 5px;
             }
 
             .modal-content {
                 margin: 15px;
                 width: calc(100% - 30px);
+                padding: 20px;
+            }
+
+            .modal-buttons {
+                flex-direction: column;
+            }
+
+            .success-modal {
+                width: 90%;
+                padding: 30px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            }
+
+            .top-nav {
+                padding: 10px;
+            }
+
+            .welcome-banner {
+                padding: 20px;
+            }
+
+            .jurusan-list h3 {
+                font-size: clamp(1rem, 2.5vw, 1.1rem);
+            }
+
+            .no-data i {
+                font-size: clamp(1.8rem, 4vw, 2rem);
+            }
+
+            .success-modal h3 {
+                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            }
+
+            .success-modal p {
+                font-size: clamp(0.9rem, 2.2vw, 1rem);
             }
         }
     </style>
 </head>
 <body>
+    <!-- Header -->
+    <nav class="top-nav">
+        <button class="back-btn" onclick="window.location.href='dashboard.php'">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
+    </nav>
+
     <div class="main-content">
+        <!-- Welcome Banner -->
         <div class="welcome-banner">
             <h2><i class="fas fa-plus-circle"></i> Tambah Jurusan</h2>
-            <a href="dashboard.php" class="back-btn">
-                <i class="fas fa-times"></i>
-            </a>
         </div>
 
-        <div class="form-card">
+        <!-- Alerts -->
+        <div id="alertContainer">
             <?php if (isset($error)): ?>
                 <div class="alert alert-error">
                     <i class="fas fa-exclamation-circle"></i>
-                    <?php echo $error; ?>
+                    <?php echo htmlspecialchars($error); ?>
                 </div>
             <?php endif; ?>
-
-            <?php if (isset($_GET['success'])): ?>
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i>
-                    Jurusan berhasil ditambahkan!
-                </div>
-            <?php endif; ?>
-
             <?php if (isset($_GET['edit_success'])): ?>
                 <div class="alert alert-success">
                     <i class="fas fa-check-circle"></i>
                     Jurusan berhasil diupdate!
                 </div>
             <?php endif; ?>
-
             <?php if (isset($_GET['delete_success'])): ?>
                 <div class="alert alert-success">
                     <i class="fas fa-check-circle"></i>
                     Jurusan berhasil dihapus!
                 </div>
             <?php endif; ?>
+        </div>
 
-            <form action="" method="POST">
+        <!-- Form Section -->
+        <div class="form-card">
+            <form action="" method="POST" id="jurusan-form">
                 <div class="form-group">
-                    <label for="nama_jurusan">Nama Jurusan:</label>
+                    <label for="nama_jurusan">Nama Jurusan</label>
                     <input type="text" id="nama_jurusan" name="nama_jurusan" required 
-                           placeholder="Masukkan nama jurusan" 
-                           value="<?php echo isset($_POST['nama_jurusan']) ? htmlspecialchars($_POST['nama_jurusan']) : ''; ?>">
+                           placeholder="Masukkan nama jurusan">
                 </div>
-                <button type="submit">
+                <button type="submit" class="btn" id="submit-btn">
                     <i class="fas fa-plus"></i>
                     Tambah Jurusan
                 </button>
             </form>
         </div>
 
+        <!-- Jurusan List -->
         <div class="jurusan-list">
             <h3><i class="fas fa-list"></i> Daftar Jurusan</h3>
             <?php if ($result && $result->num_rows > 0): ?>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Nama Jurusan</th>
-                                <th>Jumlah Siswa</th>
-                                <th>Aksi</th>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>No</th>
+                            <th>Nama Jurusan</th>
+                            <th>Jumlah Siswa</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jurusan-table">
+                        <?php 
+                        $no = 1;
+                        while ($row = $result->fetch_assoc()): 
+                        ?>
+                            <tr id="row-<?php echo $row['id']; ?>">
+                                <td><?php echo $no++; ?></td>
+                                <td><?php echo htmlspecialchars($row['nama_jurusan']); ?></td>
+                                <td>
+                                    <span class="total-siswa">
+                                        <?php echo $row['total_siswa']; ?> Siswa
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button type="button" class="btn btn-edit" 
+                                                onclick="showEditModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_jurusan'], ENT_QUOTES); ?>')">
+                                            <i class="fas fa-edit"></i>
+                                            Edit
+                                        </button>
+                                        <button type="button" class="btn btn-delete" 
+                                                onclick="deleteJurusan(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_jurusan'], ENT_QUOTES); ?>')">
+                                            <i class="fas fa-trash"></i>
+                                            Hapus
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <?php 
-                            $no = 1;
-                            while ($row = $result->fetch_assoc()): 
-                            ?>
-                                <tr>
-                                    <td><?php echo $no++; ?></td>
-                                    <td><?php echo htmlspecialchars($row['nama_jurusan']); ?></td>
-                                    <td>
-                                        <span class="total-siswa">
-                                            <?php echo $row['total_siswa']; ?> Siswa
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            <button type="button" class="btn-edit" 
-                                                    onclick="showEditModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_jurusan'], ENT_QUOTES); ?>')">
-                                                <i class="fas fa-edit"></i>
-                                                Edit
-                                            </button>
-                                            <button type="button" class="btn-delete" 
-                                                    onclick="showDeleteModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_jurusan'], ENT_QUOTES); ?>')">
-                                                <i class="fas fa-trash"></i>
-                                                Hapus
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <?php endwhile; ?>
-                        </tbody>
-                    </table>
-                </div>
+                        <?php endwhile; ?>
+                    </tbody>
+                </table>
             <?php else: ?>
                 <div class="no-data">
                     <i class="fas fa-info-circle"></i>
-                    Belum ada data jurusan
+                    <p>Belum ada data jurusan</p>
                 </div>
             <?php endif; ?>
         </div>
+
+        <!-- Confirmation Modal for Adding Jurusan -->
+        <?php if (isset($_GET['confirm']) && isset($_GET['nama'])): ?>
+            <div class="success-overlay" id="confirmModal">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-graduation-cap"></i>
+                    </div>
+                    <h3>Konfirmasi Jurusan Baru</h3>
+                    <div class="modal-content-confirm">
+                        <div class="modal-row">
+                            <span class="modal-label">Nama Jurusan</span>
+                            <span class="modal-value"><?php echo htmlspecialchars(urldecode($_GET['nama'])); ?></span>
+                        </div>
+                    </div>
+                    <form action="" method="POST" id="confirm-form">
+                        <input type="hidden" name="nama_jurusan" value="<?php echo htmlspecialchars(urldecode($_GET['nama'])); ?>">
+                        <div class="modal-buttons">
+                            <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
+                                <i class="fas fa-check"></i> Konfirmasi
+                            </button>
+                            <button type="button" class="btn btn-cancel" onclick="window.location.href='tambah_jurusan.php'">
+                                <i class="fas fa-times"></i> Batal
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Success Modal for Adding Jurusan -->
+        <?php if (isset($_GET['success'])): ?>
+            <div class="success-overlay" id="successModal">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>BERHASIL</h3>
+                    <p>Jurusan berhasil ditambahkan!</p>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Success Modal for Updating Jurusan -->
+        <?php if (isset($_GET['edit_success'])): ?>
+            <div class="success-overlay" id="editSuccessModal">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>BERHASIL</h3>
+                    <p>Jurusan berhasil diupdate!</p>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Success Modal for Deleting Jurusan -->
+        <?php if (isset($_GET['delete_success'])): ?>
+            <div class="success-overlay" id="deleteSuccessModal">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>BERHASIL</h3>
+                    <p>Jurusan berhasil dihapus!</p>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <!-- Edit Modal -->
@@ -549,17 +950,46 @@ $result = $conn->query($query_list);
                 <i class="fas fa-edit"></i>
                 Edit Jurusan
             </div>
-            <form id="editForm" method="POST" action="">
+            <form id="editForm" method="POST" action="" onsubmit="return showEditConfirmation()">
                 <input type="hidden" name="edit_id" id="edit_id">
                 <div class="form-group">
-                    <label for="edit_nama">Nama Jurusan:</label>
+                    <label for="edit_nama">Nama Jurusan</label>
                     <input type="text" id="edit_nama" name="edit_nama" required>
                 </div>
                 <div class="modal-buttons">
                     <button type="button" class="btn-cancel" onclick="hideEditModal()">Batal</button>
-                    <button type="submit" class="btn-save">
+                    <button type="submit" class="btn btn-edit" id="edit-submit-btn">
                         <i class="fas fa-save"></i>
                         Simpan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit Confirmation Modal -->
+    <div class="success-overlay" id="editConfirmModal" style="display: none;">
+        <div class="success-modal">
+            <div class="success-icon">
+                <i class="fas fa-graduation-cap"></i>
+            </div>
+            <h3>Konfirmasi Edit Jurusan</h3>
+            <div class="modal-content-confirm">
+                <div class="modal-row">
+                    <span class="modal-label">Nama Jurusan</span>
+                    <span class="modal-value" id="editConfirmNama"></span>
+                </div>
+            </div>
+            <form action="" method="POST" id="editConfirmForm">
+                <input type="hidden" name="edit_id" id="editConfirmId">
+                <input type="hidden" name="edit_nama" id="editConfirmNamaInput">
+                <input type="hidden" name="edit_confirm" value="1">
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-confirm" id="edit-confirm-btn">
+                        <i class="fas fa-check"></i> Konfirmasi
+                    </button>
+                    <button type="button" class="btn btn-cancel" onclick="hideEditConfirmModal()">
+                        <i class="fas fa-times"></i> Batal
                     </button>
                 </div>
             </form>
@@ -578,7 +1008,7 @@ $result = $conn->query($query_list);
                 <input type="hidden" name="delete_id" id="delete_id">
                 <div class="modal-buttons">
                     <button type="button" class="btn-cancel" onclick="hideDeleteModal()">Batal</button>
-                    <button type="submit" class="btn-confirm">
+                    <button type="submit" class="btn btn-delete" id="delete-submit-btn">
                         <i class="fas fa-trash"></i>
                         Hapus
                     </button>
@@ -599,6 +1029,23 @@ $result = $conn->query($query_list);
             document.getElementById('editModal').style.display = 'none';
         }
 
+        function showEditConfirmation() {
+            const nama = document.getElementById('edit_nama').value.trim();
+            if (nama.length < 3) {
+                showAlert('Nama jurusan harus minimal 3 karakter!', 'error');
+                return false;
+            }
+            document.getElementById('editConfirmId').value = document.getElementById('edit_id').value;
+            document.getElementById('editConfirmNama').textContent = nama;
+            document.getElementById('editConfirmNamaInput').value = nama;
+            document.getElementById('editConfirmModal').style.display = 'flex';
+            return false; // Prevent form submission
+        }
+
+        function hideEditConfirmModal() {
+            document.getElementById('editConfirmModal').style.display = 'none';
+        }
+
         // Delete Modal Functions
         function showDeleteModal(id, nama) {
             document.getElementById('delete_id').value = id;
@@ -610,12 +1057,203 @@ $result = $conn->query($query_list);
             document.getElementById('deleteModal').style.display = 'none';
         }
 
+        // Delete Jurusan with Animation
+        function deleteJurusan(id, nama) {
+            showDeleteModal(id, nama);
+            const deleteForm = document.getElementById('deleteForm');
+            const deleteBtn = document.getElementById('delete-submit-btn');
+            
+            deleteForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const row = document.getElementById(`row-${id}`);
+                if (row) {
+                    row.classList.add('deleting');
+                    setTimeout(() => {
+                        deleteForm.submit();
+                    }, 500); // Match animation duration
+                } else {
+                    deleteForm.submit();
+                }
+            }, { once: true });
+        }
+
+        // Show Alert Function
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alertContainer');
+            const existingAlerts = document.querySelectorAll('.alert');
+            existingAlerts.forEach(alert => {
+                alert.classList.add('hide');
+                setTimeout(() => alert.remove(), 500);
+            });
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            let icon = 'info-circle';
+            if (type === 'success') icon = 'check-circle';
+            if (type === 'error') icon = 'exclamation-circle';
+            alertDiv.innerHTML = `
+                <i class="fas fa-${icon}"></i>
+                <span>${message}</span>
+            `;
+            alertContainer.appendChild(alertDiv);
+            setTimeout(() => {
+                alertDiv.classList.add('hide');
+                setTimeout(() => alertDiv.remove(), 500);
+            }, 5000);
+        }
+
         // Close modals when clicking outside
         window.onclick = function(event) {
             if (event.target.className === 'modal') {
                 event.target.style.display = 'none';
             }
         }
+
+        // Handle alert animations and other events
+        document.addEventListener('DOMContentLoaded', () => {
+            // Handle alerts
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                setTimeout(() => {
+                    alert.classList.add('hide');
+                    setTimeout(() => alert.remove(), 500);
+                }, 5000);
+            });
+
+            // Handle confirmation modal
+            const confirmModal = document.querySelector('#confirmModal .success-modal');
+            if (confirmModal) {
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    confirmModal.appendChild(confetti);
+                }
+            }
+
+            // Handle edit confirmation modal
+            const editConfirmModal = document.querySelector('#editConfirmModal .success-modal');
+            if (editConfirmModal) {
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    editConfirmModal.appendChild(confetti);
+                }
+            }
+
+            // Handle success modals (for add, edit, and delete)
+            const successModals = document.querySelectorAll('#successModal .success-modal, #editSuccessModal .success-modal, #deleteSuccessModal .success-modal');
+            successModals.forEach(modal => {
+                if (modal) {
+                    for (let i = 0; i < 30; i++) {
+                        const confetti = document.createElement('div');
+                        const delay = Math.random() * 1;
+                        const duration = Math.random() * 2 + 3;
+                        confetti.className = 'confetti';
+                        confetti.style.left = Math.random() * 100 + '%';
+                        confetti.style.animationDelay = `${delay}s`;
+                        confetti.style.animationDuration = `${duration}s`;
+                        modal.appendChild(confetti);
+                    }
+                    // Clear URL parameters after modal fades out
+                    setTimeout(() => {
+                        const overlay = modal.closest('.success-overlay');
+                        overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        setTimeout(() => {
+                            overlay.remove();
+                            // Redirect to clean URL to prevent modal on refresh
+                            window.location.href = 'tambah_jurusan.php';
+                        }, 500);
+                    }, 2000);
+                }
+            });
+
+            // Form submission handling
+            const jurusanForm = document.getElementById('jurusan-form');
+            const submitBtn = document.getElementById('submit-btn');
+            
+            if (jurusanForm && submitBtn) {
+                jurusanForm.addEventListener('submit', function(e) {
+                    const nama = document.getElementById('nama_jurusan').value.trim();
+                    if (nama.length < 3) {
+                        e.preventDefault();
+                        showAlert('Nama jurusan harus minimal 3 karakter!', 'error');
+                        submitBtn.classList.remove('loading');
+                        submitBtn.innerHTML = '<i class="fas fa-plus"></i> Tambah Jurusan';
+                    } else {
+                        submitBtn.classList.add('loading');
+                        submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                    }
+                });
+            }
+
+            // Confirm form handling
+            const confirmForm = document.getElementById('confirm-form');
+            const confirmBtn = document.getElementById('confirm-btn');
+            
+            if (confirmForm && confirmBtn) {
+                confirmForm.addEventListener('submit', function() {
+                    confirmBtn.classList.add('loading');
+                    confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
+                    jurusanForm.reset(); // Clear form after successful submission
+                });
+            }
+
+            // Edit form handling
+            const editForm = document.getElementById('editForm');
+            const editSubmitBtn = document.getElementById('edit-submit-btn');
+            
+            if (editForm && editSubmitBtn) {
+                editForm.addEventListener('submit', function() {
+                    editSubmitBtn.classList.add('loading');
+                    editSubmitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                });
+            }
+
+            // Edit confirm form handling
+            const editConfirmForm = document.getElementById('editConfirmForm');
+            const editConfirmBtn = document.getElementById('edit-confirm-btn');
+            
+            if (editConfirmForm && editConfirmBtn) {
+                editConfirmForm.addEventListener('submit', function() {
+                    editConfirmBtn.classList.add('loading');
+                    editConfirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
+                });
+            }
+        });
+
+        // Prevent pinch zooming
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        // Prevent double-tap zooming
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+
+        // Prevent zoom on wheel with ctrl
+        document.addEventListener('wheel', function(event) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        // Prevent double-click zooming
+        document.addEventListener('dblclick', function(event) {
+            event.preventDefault();
+        }, { passive: false });
     </script>
 </body>
 </html>

@@ -1,11 +1,12 @@
 <?php
 // Set timezone first to ensure all date functions use the correct time
-date_default_timezone_set('Asia/Jakarta'); // Adjust to your local timezone if needed
+date_default_timezone_set('Asia/Jakarta');
 
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
 $username = $_SESSION['username'] ?? 'Petugas';
+$user_id = $_SESSION['user_id'] ?? 0; // Get current petugas ID
 
 // Get today's date
 $today = date('Y-m-d');
@@ -15,19 +16,31 @@ $limit = 10; // Number of records per page
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-// Calculate summary statistics for today only - Exclude transfers
+// Calculate summary statistics for today - Exclude transfers
 $total_query = "SELECT 
     COUNT(id) as total_transactions,
     SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) as total_setoran,
     SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as total_penarikan
     FROM transaksi 
     WHERE DATE(created_at) = ? 
-    AND jenis_transaksi != 'transfer'"; // Hapus transfer dari query
+    AND jenis_transaksi != 'transfer'";
 
 $stmt = $conn->prepare($total_query);
 $stmt->bind_param("s", $today);
 $stmt->execute();
 $totals = $stmt->get_result()->fetch_assoc();
+
+// Calculate total admin transfers for this petugas today
+$admin_transfers_query = "SELECT SUM(jumlah) as total_admin_transfers 
+                         FROM saldo_transfers 
+                         WHERE petugas_id = ? AND DATE(tanggal) = ?";
+$stmt_admin = $conn->prepare($admin_transfers_query);
+$stmt_admin->bind_param("is", $user_id, $today);
+$stmt_admin->execute();
+$total_admin_transfers = $stmt_admin->get_result()->fetch_assoc()['total_admin_transfers'] ?? 0;
+
+// Calculate saldo_bersih as total_setoran - total_penarikan
+$saldo_bersih = ($totals['total_setoran'] ?? 0) - ($totals['total_penarikan'] ?? 0);
 
 // Get total number of records for pagination
 $total_records_query = "SELECT COUNT(*) as total FROM transaksi WHERE DATE(created_at) = ? AND jenis_transaksi != 'transfer'";
@@ -36,29 +49,88 @@ $stmt_total->bind_param("s", $today);
 $stmt_total->execute();
 $total_records = $stmt_total->get_result()->fetch_assoc()['total'];
 $total_pages = ceil($total_records / $limit);
+
+// Function to format Rupiah
+function formatRupiah($amount) {
+    return 'Rp ' . number_format($amount, 0, ',', '.');
+}
 ?>
+
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
     <title>Laporan - SCHOBANK SYSTEM</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --primary-light: #e0e9f5;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
+            --accent-color: #ff9800;
+            --danger-color: #f44336;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f8faff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Consolas', 'Courier New', monospace;
+            font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        
+
         body {
-            background-color: #f0f5ff;
-            color: #333;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
-        
+
+        .top-nav {
+            background: var(--primary-dark);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: white;
+            box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            transition: var(--transition);
+            text-decoration: none;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
         .main-content {
             flex: 1;
             padding: 20px;
@@ -66,53 +138,70 @@ $total_pages = ceil($total_records / $limit);
             max-width: 1200px;
             margin: 0 auto;
         }
-        
+
         .welcome-banner {
-            background: linear-gradient(135deg, #0a2e5c 0%, #154785 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
             padding: 25px;
             border-radius: 15px;
             margin-bottom: 30px;
-            box-shadow: 0 5px 15px rgba(10, 46, 92, 0.15);
+            box-shadow: var(--shadow-md);
             position: relative;
+            overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
         }
-        
+
+        .welcome-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+            animation: shimmer 8s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .welcome-banner h2 {
             margin-bottom: 10px;
-            font-size: 24px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
             gap: 10px;
+            position: relative;
+            z-index: 1;
         }
 
-        .back-btn {
-            position: absolute;
-            top: 25px;
-            right: 25px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            width: 32px;
-            height: 32px;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            transition: background-color 0.3s ease;
-            text-decoration: none;
-        }
-
-        .back-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .report-card {
             background: white;
             border-radius: 15px;
             padding: 25px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
+            transition: var(--transition);
+        }
+
+        .report-card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-5px);
         }
 
         .summary-boxes {
@@ -122,57 +211,139 @@ $total_pages = ceil($total_records / $limit);
             margin-bottom: 25px;
         }
 
-        .summary-box {
-            background: #f8fafc;
+        .stat-box {
+            background: var(--primary-light);
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            transition: var(--transition);
+        }
+
+        .stat-box:hover {
+            transform: scale(1.03);
+        }
+
+        .stat-box .stat-icon {
+            font-size: 2rem;
+            color: var(--primary-dark);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stat-box .stat-content {
+            flex: 1;
+        }
+
+        .stat-box .stat-title {
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .stat-box .stat-value {
+            color: var(--primary-dark);
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            font-weight: 600;
+        }
+
+        .stat-box .stat-note {
+            color: var(--text-secondary);
+            font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+            margin-top: 5px;
+        }
+
+        .summary-box {
+            background: var(--primary-light);
+            padding: 20px;
+            border-radius: 10px;
+            transition: var(--transition);
         }
 
         .summary-box:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transform: scale(1.03);
         }
 
         .summary-box h3 {
-            color: #666;
-            font-size: 14px;
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             margin-bottom: 10px;
+            font-weight: 500;
         }
 
         .summary-box .amount {
-            color: #0a2e5c;
-            font-size: 20px;
-            font-weight: bold;
+            color: var(--primary-dark);
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            font-weight: 600;
         }
 
         .amount-total {
-            color: #0a2e5c;
-            font-weight: bold;
+            color: var(--primary-dark);
+            font-weight: 600;
         }
 
         .action-buttons {
             display: flex;
-            gap: 10px;
+            gap: 15px;
             margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
         .download-btn {
-            background: #0a2e5c;
+            background-color: var(--primary-color);
             color: white;
-            text-decoration: none;
-            padding: 12px 20px;
-            border-radius: 8px;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 15px;
-            transition: background-color 0.3s ease;
+            transition: var(--transition);
+            text-decoration: none;
         }
 
         .download-btn:hover {
-            background-color: #154785;
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .download-btn:active {
+            transform: scale(0.95);
+        }
+
+        .download-btn.btn-loading {
+            position: relative;
+            pointer-events: none;
+        }
+
+        .download-btn.btn-loading span,
+        .download-btn.btn-loading i {
+            visibility: hidden;
+        }
+
+        .download-btn.btn-loading::after {
+            content: '. . .';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-weight: bold;
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0% { content: '. . .'; }
+            33% { content: '.. .'; }
+            66% { content: '...'; }
         }
 
         .table-responsive {
@@ -191,97 +362,115 @@ $total_pages = ceil($total_records / $limit);
             padding: 15px;
             text-align: left;
             border-bottom: 1px solid #eee;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         th {
-            background-color: #f8fafc;
-            color: #0a2e5c;
-            font-weight: 600;
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+            font-weight: 500;
             white-space: nowrap;
         }
 
         tr:hover {
-            background-color: #f8fafc;
+            background-color: var(--primary-light);
         }
 
         .transaction-type {
             display: inline-block;
             padding: 6px 12px;
             border-radius: 6px;
-            font-size: 14px;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             font-weight: 500;
         }
 
         .type-setoran {
-            background: #dcfce7;
-            color: #166534;
+            background: #e0f2fe;
+            color: #0369a1;
         }
 
         .type-penarikan {
             background: #fee2e2;
-            color: #991b1b;
+            color: #b91c1c;
         }
 
         .alert {
-            text-align: center;
-            padding: 40px 15px;
-            border-radius: 8px;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
             display: flex;
             align-items: center;
-            justify-content: center;
             gap: 10px;
+            animation: slideIn 0.5s ease-out;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             background-color: #e0f2fe;
             color: #0369a1;
-            border: 1px solid #bae6fd;
-            font-family: 'Consolas', 'Courier New', monospace;
-            letter-spacing: 0.5px;
-            font-size: 16px;
-            margin: 20px 0;
+            border-left: 5px solid #bae6fd;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         .pagination {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
+            gap: 15px;
             margin-top: 20px;
         }
 
         .pagination-btn {
-            background: #0a2e5c;
+            background-color: var(--primary-color);
             color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            text-decoration: none;
-            transition: background-color 0.3s ease;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            transition: var(--transition);
         }
 
         .pagination-btn:hover {
-            background: #154785;
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
         }
 
-        .no-data-container {
-            width: 100%;
-            text-align: center;
+        .pagination-btn:active {
+            transform: scale(0.95);
+        }
+
+        .section-title {
+            margin-bottom: 20px;
+            color: var(--primary-dark);
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         @media (max-width: 768px) {
+            .top-nav {
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+            }
+
             .main-content {
                 padding: 15px;
             }
 
-            .welcome-banner {
-                padding: 20px;
-            }
-
             .welcome-banner h2 {
-                font-size: 20px;
-                margin-right: 40px;
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
 
-            .back-btn {
-                top: 20px;
-                right: 20px;
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .report-card {
+                padding: 20px;
             }
 
             .action-buttons {
@@ -295,26 +484,46 @@ $total_pages = ceil($total_records / $limit);
 
             th, td {
                 padding: 10px;
-                font-size: 14px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
 
             .summary-boxes {
                 grid-template-columns: 1fr;
             }
+
+            .pagination-btn {
+                width: 100%;
+                text-align: center;
+            }
+
+            .stat-box {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .stat-box .stat-icon {
+                margin-bottom: 10px;
+            }
         }
     </style>
 </head>
 <body>
+    <nav class="top-nav">
+        <a href="dashboard.php" class="back-btn">
+            <i class="fas fa-xmark"></i>
+        </a>
+        <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
+    </nav>
+
     <div class="main-content">
         <div class="welcome-banner">
             <h2><i class="fas fa-chart-bar"></i> Laporan Harian</h2>
             <p>Transaksi pada <?= date('d/m/Y') ?></p>
-            <a href="dashboard.php" class="back-btn">
-                <i class="fas fa-times"></i>
-            </a>
         </div>
 
         <div class="report-card">
+            <h3 class="section-title"><i class="fas fa-list"></i> Ringkasan Transaksi</h3>
             <div class="summary-boxes">
                 <div class="summary-box">
                     <h3>Total Transaksi</h3>
@@ -322,31 +531,43 @@ $total_pages = ceil($total_records / $limit);
                 </div>
                 <div class="summary-box">
                     <h3>Total Setoran</h3>
-                    <div class="amount">Rp <?= number_format($totals['total_setoran'] ?? 0, 0, ',', '.') ?></div>
+                    <div class="amount"><?= formatRupiah($totals['total_setoran'] ?? 0) ?></div>
                 </div>
                 <div class="summary-box">
                     <h3>Total Penarikan</h3>
-                    <div class="amount">Rp <?= number_format($totals['total_penarikan'] ?? 0, 0, ',', '.') ?></div>
+                    <div class="amount"><?= formatRupiah($totals['total_penarikan'] ?? 0) ?></div>
+                </div>
+                <div class="summary-box">
+                    <h3>Total Penambahan oleh Admin</h3>
+                    <div class="amount"><?= formatRupiah($total_admin_transfers) ?></div>
+                </div>
+                <div class="stat-box balance">
+                    <div class="stat-icon">
+                        <i class="fas fa-wallet"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-title">Saldo Bersih</div>
+                        <div class="stat-value"><?= formatRupiah($saldo_bersih) ?></div>
+                        <div class="stat-note">Selisih setoran dan penarikan</div>
+                    </div>
                 </div>
             </div>
 
             <div class="action-buttons">
-                <a href="download_laporan.php?date=<?= $today ?>&format=pdf" target="_blank" class="download-btn">
+                <a href="download_laporan.php?date=<?= $today ?>&format=pdf" class="download-btn" id="pdf-btn">
                     <i class="fas fa-file-pdf"></i>
-                    Download PDF
+                    <span>Download PDF</span>
                 </a>
-                <a href="download_laporan.php?date=<?= $today ?>&format=excel" target="_blank" class="download-btn">
+                <a href="download_laporan.php?date=<?= $today ?>&format=excel" class="download-btn" id="excel-btn">
                     <i class="fas fa-file-excel"></i>
-                    Download Excel
+                    <span>Download Excel</span>
                 </a>
             </div>
 
-            <!-- Table Container -->
             <div class="table-responsive" id="transaction-table">
                 <!-- Data akan diisi oleh JavaScript -->
             </div>
 
-            <!-- Pagination -->
             <div class="pagination">
                 <button id="prev-page" class="pagination-btn" style="display: none;">Back</button>
                 <button id="next-page" class="pagination-btn" style="display: none;">Next</button>
@@ -358,19 +579,23 @@ $total_pages = ceil($total_records / $limit);
         let currentPage = 1;
         const totalPages = <?= $total_pages ?>;
 
-        // Function to fetch transactions via AJAX
         async function fetchTransactions(page) {
             try {
                 const response = await fetch(`fetch_transactions.php?page=${page}`);
+                if (!response.ok) throw new Error('Network response was not ok');
                 const transactions = await response.json();
                 updateTable(transactions);
                 updatePagination(page);
             } catch (error) {
                 console.error('Error fetching transactions:', error);
+                document.getElementById('transaction-table').innerHTML = `
+                    <div class="alert">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Gagal memuat transaksi. Silakan coba lagi.</span>
+                    </div>`;
             }
         }
 
-        // Function to update the table with new data
         function updateTable(transactions) {
             const tableContainer = document.getElementById('transaction-table');
             
@@ -390,7 +615,7 @@ $total_pages = ceil($total_records / $limit);
 
                 transactions.forEach(transaction => {
                     const typeClass = transaction.jenis_transaksi === 'setor' ? 'type-setoran' : 'type-penarikan';
-                    const displayType = transaction.jenis_transaksi === 'setor' ? 'setoran' : 'penarikan';
+                    const displayType = transaction.jenis_transaksi === 'setor' ? 'Setoran' : 'Penarikan';
                     tableHTML += `
                         <tr>
                             <td>${transaction.no_transaksi}</td>
@@ -407,32 +632,19 @@ $total_pages = ceil($total_records / $limit);
                 tableContainer.innerHTML = `
                     <div class="alert">
                         <i class="fas fa-info-circle"></i>
-                        [ TIDAK ADA TRANSAKSI HARI INI ]
+                        <span>TIDAK ADA TRANSAKSI HARI INI</span>
                     </div>`;
             }
         }
 
-        // Function to update pagination buttons
         function updatePagination(page) {
             const prevButton = document.getElementById('prev-page');
             const nextButton = document.getElementById('next-page');
 
-            // Show/hide "Back" button
-            if (page > 1) {
-                prevButton.style.display = 'inline-block';
-            } else {
-                prevButton.style.display = 'none';
-            }
-
-            // Show/hide "Next" button
-            if (page < totalPages) {
-                nextButton.style.display = 'inline-block';
-            } else {
-                nextButton.style.display = 'none';
-            }
+            prevButton.style.display = page > 1 ? 'inline-block' : 'none';
+            nextButton.style.display = page < totalPages ? 'inline-block' : 'none';
         }
 
-        // Event listeners for pagination buttons
         document.getElementById('prev-page').addEventListener('click', () => {
             if (currentPage > 1) {
                 currentPage--;
@@ -447,7 +659,25 @@ $total_pages = ceil($total_records / $limit);
             }
         });
 
-        // Load initial data
+        function handleDownload(buttonId, url) {
+            const button = document.getElementById(buttonId);
+            button.classList.add('btn-loading');
+            setTimeout(() => {
+                button.classList.remove('btn-loading');
+                window.location.href = url;
+            }, 500);
+        }
+
+        document.getElementById('pdf-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            handleDownload('pdf-btn', e.target.href);
+        });
+
+        document.getElementById('excel-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            handleDownload('excel-btn', e.target.href);
+        });
+
         fetchTransactions(currentPage);
     </script>
 </body>

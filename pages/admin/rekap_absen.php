@@ -19,10 +19,10 @@ $offset = ($page - 1) * $rows_per_page;
 $baseQuery = "SELECT DISTINCT a.tanggal, 
               MAX(pt.petugas1_nama) AS petugas1_nama, 
               MAX(pt.petugas2_nama) AS petugas2_nama,
-              MAX(CASE WHEN a.petugas_type = 'petugas1' THEN a.waktu_masuk ELSE NULL END) AS petugas1_masuk,
-              MAX(CASE WHEN a.petugas_type = 'petugas1' THEN a.waktu_keluar ELSE NULL END) AS petugas1_keluar,
-              MAX(CASE WHEN a.petugas_type = 'petugas2' THEN a.waktu_masuk ELSE NULL END) AS petugas2_masuk,
-              MAX(CASE WHEN a.petugas_type = 'petugas2' THEN a.waktu_keluar ELSE NULL END) AS petugas2_keluar
+              MAX(CASE WHEN a.petugas_type = 'petugas1' THEN NULLIF(a.waktu_masuk, '23:59:00') ELSE NULL END) AS petugas1_masuk,
+              MAX(CASE WHEN a.petugas_type = 'petugas1' THEN NULLIF(a.waktu_keluar, '23:59:00') ELSE NULL END) AS petugas1_keluar,
+              MAX(CASE WHEN a.petugas_type = 'petugas2' THEN NULLIF(a.waktu_masuk, '23:59:00') ELSE NULL END) AS petugas2_masuk,
+              MAX(CASE WHEN a.petugas_type = 'petugas2' THEN NULLIF(a.waktu_keluar, '23:59:00') ELSE NULL END) AS petugas2_keluar
               FROM absensi a 
               JOIN users u ON a.user_id = u.id 
               LEFT JOIN petugas_tugas pt ON a.tanggal = pt.tanggal";
@@ -88,6 +88,12 @@ if (!empty($params)) {
 }
 $stmt->execute();
 $result = $stmt->get_result();
+
+// Store data in array for display
+$absensi = [];
+while ($row = $result->fetch_assoc()) {
+    $absensi[] = $row;
+}
 
 // Function to format date to dd/mm/yy
 function formatDate($date) {
@@ -179,7 +185,7 @@ if (isset($_GET['export'])) {
         while ($row = $exportResult->fetch_assoc()) {
             // First row - Petugas 1
             $pdf->Cell(10, 6, $no, 'LTR', 0, 'C');
-            $pdf->Cell(25, 6, formatDate($row['tanggal']), 'LTR', 0, 'C'); // Format date
+            $pdf->Cell(25, 6, formatDate($row['tanggal']), 'LTR', 0, 'C');
             $pdf->Cell(65, 6, $row['petugas1_nama'] ?? '-', 1, 0, 'L');
             $pdf->Cell(40, 6, $row['petugas1_masuk'] ?? '-', 1, 0, 'C');
             $pdf->Cell(40, 6, $row['petugas1_keluar'] ?? '-', 1, 1, 'C');
@@ -191,7 +197,7 @@ if (isset($_GET['export'])) {
             $pdf->Cell(40, 6, $row['petugas2_masuk'] ?? '-', 1, 0, 'C');
             $pdf->Cell(40, 6, $row['petugas2_keluar'] ?? '-', 1, 1, 'C');
             
-            $no++; // Increment only once per date
+            $no++;
         }
 
         $pdf->Output('rekap_absen.pdf', 'D');
@@ -260,7 +266,7 @@ if (isset($_GET['export'])) {
             // For petugas 1
             echo '<tr>';
             echo '<td class="text-center" rowspan="2">' . $no . '</td>';
-            echo '<td class="text-center" rowspan="2">' . formatDate($row['tanggal']) . '</td>'; // Format date
+            echo '<td class="text-center" rowspan="2">' . formatDate($row['tanggal']) . '</td>';
             echo '<td class="text-left">' . ($row['petugas1_nama'] ?? '-') . '</td>';
             echo '<td class="text-center">' . ($row['petugas1_masuk'] ?? '-') . '</td>';
             echo '<td class="text-center">' . ($row['petugas1_keluar'] ?? '-') . '</td>';
@@ -268,13 +274,12 @@ if (isset($_GET['export'])) {
             
             // For petugas 2
             echo '<tr>';
-            // No need to repeat the number and date cells as they use rowspan="2"
             echo '<td class="text-left">' . ($row['petugas2_nama'] ?? '-') . '</td>';
             echo '<td class="text-center">' . ($row['petugas2_masuk'] ?? '-') . '</td>';
             echo '<td class="text-center">' . ($row['petugas2_keluar'] ?? '-') . '</td>';
             echo '</tr>';
             
-            $no++; // Increment only once per date
+            $no++;
         }
         echo '</table>';
 
@@ -288,59 +293,77 @@ if (isset($_GET['export'])) {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rekap Absen - SCHOBANK SYSTEM</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rekap Absensi Petugas - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --primary-light: #e0e9f5;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
+            --accent-color: #ff9800;
+            --danger-color: #f44336;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f8faff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        
+
         body {
-            background-color: #f0f5ff;
-            color: #333;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
-            background: #0a2e5c;
+            background: var(--primary-dark);
             padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
+            box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
-        .nav-buttons {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-btn {
+        .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 8px 15px;
-            border-radius: 6px;
+            padding: 10px;
+            border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            font-size: 14px;
-            transition: background-color 0.3s ease;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            transition: var(--transition);
         }
 
-        .nav-btn:hover {
+        .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
         }
-        
+
         .main-content {
             flex: 1;
             padding: 20px;
@@ -348,293 +371,563 @@ if (isset($_GET['export'])) {
             max-width: 1200px;
             margin: 0 auto;
         }
-        
+
         .welcome-banner {
-            background: linear-gradient(135deg, #0a2e5c 0%, #154785 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
             padding: 25px;
             border-radius: 15px;
             margin-bottom: 30px;
-            box-shadow: 0 5px 15px rgba(10, 46, 92, 0.15);
+            box-shadow: var(--shadow-md);
             position: relative;
+            overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
         }
-        
+
+        .welcome-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+            animation: shimmer 8s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .welcome-banner h2 {
             margin-bottom: 10px;
-            font-size: 24px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
             gap: 10px;
-        }
-        
-        .close-btn {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: none;
-            border: none;
-            color: white;
-            font-size: 20px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-        
-        .close-btn:hover {
-            transform: scale(1.2);
+            position: relative;
+            z-index: 1;
         }
 
-        .report-card {
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .filter-section {
             background: white;
             border-radius: 15px;
             padding: 25px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-            position: relative;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
         }
 
-        .filters {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-            margin-bottom: 20px;
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
-        .filters form {
+        .filter-form {
             display: flex;
-            align-items: center;
             flex-wrap: wrap;
-            gap: 10px;
+            gap: 20px;
+            align-items: flex-end;
+        }
+
+        .form-group {
+            flex: 1;
+            min-width: 150px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 500;
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        input[type="date"] {
             width: 100%;
-        }
-
-        .filters input {
-            padding: 8px;
+            padding: 12px 15px;
             border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
         }
 
-        .filters button {
-            padding: 8px 16px;
-            background-color: #0a2e5c;
+        input[type="date"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            transform: scale(1.02);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            border-radius: 8px;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
-            transition: background-color 0.3s;
-        }
-
-        .filters button:hover {
-            background-color: #093b7a;
-        }
-
-        .export-buttons {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .export-buttons a {
-            padding: 8px 16px;
-            background-color: #0a2e5c;
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 5px;
-            transition: background-color 0.3s;
+            gap: 8px;
+            transition: var(--transition);
         }
 
-        .export-buttons a:hover {
-            background-color: #154785;
+        .btn:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
         }
 
-        .table-responsive {
-            overflow-x: auto;
-            margin-top: 20px;
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-print {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-print:hover {
+            background-color: var(--secondary-dark);
+        }
+
+        .transactions-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .transactions-title {
+            background: var(--primary-dark);
+            color: white;
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
-            background: white;
+            margin-bottom: 20px;
         }
 
         th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: center;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         th {
-            background-color: #f8fafc;
-            color: #0a2e5c;
+            background: #f0f4ff;
             font-weight: 600;
-            white-space: nowrap;
+            color: var(--text-primary);
         }
 
-        tr:hover {
-            background-color: #f8fafc;
+        td {
+            background: white;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            animation: slideIn 0.5s ease-out;
+        }
+
+        .empty-state i {
+            font-size: clamp(2rem, 4vw, 2.5rem);
+            color: #d1d5db;
+            margin-bottom: 15px;
+        }
+
+        .empty-state p {
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .pagination {
             display: flex;
             justify-content: center;
+            gap: 15px;
+            padding: 20px 0;
+        }
+
+        .pagination-link {
+            background-color: var(--primary-light);
+            color: var(--text-primary);
+            padding: 10px 20px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .pagination-link:hover:not(.disabled) {
+            background-color: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .pagination-link.disabled {
+            background-color: #f0f0f0;
+            color: #aaa;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
             align-items: center;
             gap: 10px;
-            margin-top: 20px;
+            animation: slideIn 0.5s ease-out;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        .pagination-btn {
-            background: #0a2e5c;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            text-decoration: none;
-            transition: background-color 0.3s ease;
+        .alert.hide {
+            animation: slideOut 0.5s ease-out forwards;
         }
 
-        .pagination-btn:hover {
-            background: #154785;
+        @keyframes slideOut {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(-20px); opacity: 0; }
         }
 
-        .pagination-btn.active {
-            background: #154785;
+        .alert-error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border-left: 5px solid #fecaca;
+        }
+
+        .alert-success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border-left: 5px solid #81c784;
+        }
+
+        .loading .btn {
             pointer-events: none;
+            background-color: #cccccc;
+        }
+
+        .loading .btn i {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 768px) {
             .top-nav {
                 padding: 15px;
-            }
-
-            .nav-buttons {
-                gap: 10px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
                 padding: 15px;
             }
 
-            .filters form {
-                flex-direction: column;
-                align-items: flex-start;
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
 
-            .filters input {
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .filter-form {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .form-group {
+                min-width: 100%;
+            }
+
+            .filter-buttons {
+                flex-direction: column;
                 width: 100%;
             }
 
-            .export-buttons {
-                flex-direction: column;
-            }
-
-            .export-buttons a {
+            .btn {
                 width: 100%;
                 justify-content: center;
             }
 
+            .transactions-container {
+                padding: 20px;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
             th, td {
                 padding: 10px;
-                font-size: 14px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            }
+
+            .pagination {
+                flex-wrap: wrap;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            }
+
+            .top-nav {
+                padding: 10px;
+            }
+
+            .welcome-banner {
+                padding: 20px;
+            }
+
+            .transactions-title {
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+            }
+
+            .empty-state i {
+                font-size: clamp(1.8rem, 4vw, 2rem);
             }
         }
     </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
+    <!-- Header -->
+    <nav class="top-nav">
+        <button class="back-btn" onclick="window.location.href='dashboard.php'">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
+    </nav>
+
     <div class="main-content">
+        <!-- Welcome Banner -->
         <div class="welcome-banner">
             <h2><i class="fas fa-calendar-alt"></i> Rekap Absensi Petugas</h2>
             <p>Rekap absensi petugas berdasarkan tanggal</p>
-            <button class="close-btn" onclick="window.location.href='dashboard.php'">
-                <i class="fas fa-times"></i>
-            </button>
         </div>
 
-        <div class="report-card">
-            <div class="filters">
-                <form method="GET" action="">
-                    <input type="date" name="start_date" value="<?php echo $start_date; ?>" placeholder="Tanggal Mulai">
-                    <input type="date" name="end_date" value="<?php echo $end_date; ?>" placeholder="Tanggal Selesai">
-                    <button type="submit">Filter</button>
-                </form>
-            </div>
+        <div id="alertContainer"></div>
 
-            <div class="export-buttons">
-                <a href="?export=pdf<?php echo !empty($start_date) ? '&start_date='.$start_date : ''; ?><?php echo !empty($end_date) ? '&end_date='.$end_date : ''; ?>">
-                    <i class="fas fa-file-pdf"></i> Unduh PDF
-                </a>
-                <a href="?export=excel<?php echo !empty($start_date) ? '&start_date='.$start_date : ''; ?><?php echo !empty($end_date) ? '&end_date='.$end_date : ''; ?>">
-                    <i class="fas fa-file-excel"></i> Unduh Excel
-                </a>
-            </div>
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <form id="filterForm" class="filter-form">
+                <div class="form-group">
+                    <label for="start_date">Dari Tanggal</label>
+                    <input type="date" id="start_date" name="start_date" 
+                           value="<?= htmlspecialchars($start_date) ?>">
+                </div>
+                <div class="form-group">
+                    <label for="end_date">Sampai Tanggal</label>
+                    <input type="date" id="end_date" name="end_date" 
+                           value="<?= htmlspecialchars($end_date) ?>">
+                </div>
+                <div class="filter-buttons">
+                    <button type="submit" id="filterButton" class="btn">
+                        <i class="fas fa-filter"></i> Filter
+                    </button>
+                    <button type="button" id="printButton" class="btn btn-print">
+                        <i class="fas fa-print"></i> Cetak
+                    </button>
+                </div>
+            </form>
+        </div>
 
-            <div class="table-responsive">
+        <!-- Transactions Table -->
+        <div class="transactions-container">
+            <h3 class="transactions-title">Daftar Absensi</h3>
+            <?php if (empty($absensi)): ?>
+                <div class="empty-state">
+                    <i class="fas fa-calendar-alt"></i>
+                    <p>Tidak ada data absensi dalam periode ini</p>
+                </div>
+            <?php else: ?>
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 5%;">No</th>
-                            <th style="width: 15%;">Tanggal</th>
-                            <th style="width: 40%;">Nama Petugas</th>
-                            <th style="width: 20%;">Jam Masuk</th>
-                            <th style="width: 20%;">Jam Keluar</th>
+                            <th>No</th>
+                            <th>Tanggal</th>
+                            <th>Nama Petugas</th>
+                            <th>Jam Masuk</th>
+                            <th>Jam Keluar</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php if ($result->num_rows > 0): ?>
-                            <?php $no = $offset + 1; ?>
-                            <?php while ($row = $result->fetch_assoc()): ?>
-                                <tr>
-                                    <td rowspan="2" data-label="No"><?php echo $no++; ?></td>
-                                    <td rowspan="2" data-label="Tanggal"><?php echo formatDate($row['tanggal']); ?></td>
-                                    <td data-label="Nama Petugas"><?php echo htmlspecialchars($row['petugas1_nama'] ?? '-'); ?></td>
-                                    <td data-label="Jam Masuk"><?php echo htmlspecialchars($row['petugas1_masuk'] ?? '-'); ?></td>
-                                    <td data-label="Jam Keluar"><?php echo htmlspecialchars($row['petugas1_keluar'] ?? '-'); ?></td>
-                                </tr>
-                                <tr>
-                                    <td data-label="Nama Petugas"><?php echo htmlspecialchars($row['petugas2_nama'] ?? '-'); ?></td>
-                                    <td data-label="Jam Masuk"><?php echo htmlspecialchars($row['petugas2_masuk'] ?? '-'); ?></td>
-                                    <td data-label="Jam Keluar"><?php echo htmlspecialchars($row['petugas2_keluar'] ?? '-'); ?></td>
-                                </tr>
-                            <?php endwhile; ?>
-                        <?php else: ?>
+                        <?php
+                        $no = $offset + 1;
+                        foreach ($absensi as $index => $record):
+                        ?>
                             <tr>
-                                <td colspan="5" style="text-align: center;">Tidak ada data absensi yang ditemukan.</td>
+                                <td rowspan="2"><?= $no ?></td>
+                                <td rowspan="2"><?= formatDate($record['tanggal']) ?></td>
+                                <td><?= htmlspecialchars($record['petugas1_nama'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($record['petugas1_masuk'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($record['petugas1_keluar'] ?? '-') ?></td>
                             </tr>
-                        <?php endif; ?>
+                            <tr>
+                                <td><?= htmlspecialchars($record['petugas2_nama'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($record['petugas2_masuk'] ?? '-') ?></td>
+                                <td><?= htmlspecialchars($record['petugas2_keluar'] ?? '-') ?></td>
+                            </tr>
+                            <?php $no++; ?>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
-            </div>
-
+            <?php endif; ?>
             <?php if ($totalPages > 1): ?>
                 <div class="pagination">
-                    <?php if ($page > 1): ?>
-                        <a href="?page=1<?php echo !empty($start_date) ? '&start_date='.$start_date : ''; ?><?php echo !empty($end_date) ? '&end_date='.$end_date : ''; ?>" class="pagination-btn">Pertama</a>
-                        <a href="?page=<?php echo $page-1; ?><?php echo !empty($start_date) ? '&start_date='.$start_date : ''; ?><?php echo !empty($end_date) ? '&end_date='.$end_date : ''; ?>" class="pagination-btn">Sebelumnya</a>
-                    <?php endif; ?>
-                    
-                    <?php
-                    $startPage = max(1, $page - 2);
-                    $endPage = min($totalPages, $page + 2);
-                    
-                    for ($i = $startPage; $i <= $endPage; $i++):
-                    ?>
-                        <?php if ($i == $page): ?>
-                            <span class="pagination-btn active"><?php echo $i; ?></span>
-                        <?php else: ?>
-                            <a href="?page=<?php echo $i; ?><?php echo !empty($start_date) ? '&start_date='.$start_date : ''; ?><?php echo !empty($end_date) ? '&end_date='.$end_date : ''; ?>" class="pagination-btn"><?php echo $i; ?></a>
-                        <?php endif; ?>
-                    <?php endfor; ?>
-                    
-                    <?php if ($page < $totalPages): ?>
-                        <a href="?page=<?php echo $page+1; ?><?php echo !empty($start_date) ? '&start_date='.$start_date : ''; ?><?php echo !empty($end_date) ? '&end_date='.$end_date : ''; ?>" class="pagination-btn">Selanjutnya</a>
-                        <a href="?page=<?php echo $totalPages; ?><?php echo !empty($start_date) ? '&start_date='.$start_date : ''; ?><?php echo !empty($end_date) ? '&end_date='.$end_date : ''; ?>" class="pagination-btn">Terakhir</a>
-                    <?php endif; ?>
+                    <a href="?page=<?= max(1, $page - 1) ?>&start_date=<?= htmlspecialchars($start_date) ?>&end_date=<?= htmlspecialchars($end_date) ?>" 
+                       class="pagination-link <?= $page <= 1 ? 'disabled' : '' ?>">« Sebelumnya</a>
+                    <a href="?page=<?= min($totalPages, $page + 1) ?>&start_date=<?= htmlspecialchars($start_date) ?>&end_date=<?= htmlspecialchars($end_date) ?>" 
+                       class="pagination-link <?= $page >= $totalPages ? 'disabled' : '' ?>">Selanjutnya »</a>
                 </div>
             <?php endif; ?>
         </div>
     </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Prevent zooming
+            document.addEventListener('touchstart', function(event) {
+                if (event.touches.length > 1) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', function(event) {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, { passive: false });
+
+            document.addEventListener('wheel', function(event) {
+                if (event.ctrlKey) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            document.addEventListener('dblclick', function(event) {
+                event.preventDefault();
+            }, { passive: false });
+
+            // Alert function
+            function showAlert(message, type) {
+                const alertContainer = document.getElementById('alertContainer');
+                const existingAlerts = alertContainer.querySelectorAll('.alert');
+                existingAlerts.forEach(alert => {
+                    alert.classList.add('hide');
+                    setTimeout(() => alert.remove(), 500);
+                });
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type}`;
+                let icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+                alertDiv.innerHTML = `
+                    <i class="fas fa-${icon}"></i>
+                    <span>${message}</span>
+                `;
+                alertContainer.appendChild(alertDiv);
+                setTimeout(() => {
+                    alertDiv.classList.add('hide');
+                    setTimeout(() => alertDiv.remove(), 500);
+                }, 5000);
+            }
+
+            // Filter form handling
+            const filterForm = document.getElementById('filterForm');
+            const filterButton = document.getElementById('filterButton');
+            const printButton = document.getElementById('printButton');
+
+            if (filterForm && filterButton) {
+                filterForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const startDate = document.getElementById('start_date').value;
+                    const endDate = document.getElementById('end_date').value;
+
+                    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+                        showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
+                        return;
+                    }
+
+                    filterButton.classList.add('loading');
+                    filterButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+
+                    const url = new URL(window.location);
+                    if (startDate) url.searchParams.set('start_date', startDate);
+                    else url.searchParams.delete('start_date');
+                    if (endDate) url.searchParams.set('end_date', endDate);
+                    else url.searchParams.delete('end_date');
+                    url.searchParams.set('page', 1);
+                    window.location.href = url.toString();
+                });
+            }
+
+            if (printButton) {
+                printButton.addEventListener('click', function() {
+                    const startDate = document.getElementById('start_date').value;
+                    const endDate = document.getElementById('end_date').value;
+
+                    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+                        showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
+                        return;
+                    }
+
+                    printButton.classList.add('loading');
+                    printButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+
+                    let url = '?export=pdf';
+                    if (startDate) url += `&start_date=${startDate}`;
+                    if (endDate) url += `&end_date=${endDate}`;
+                    window.open(url, '_blank');
+
+                    // Reset button state
+                    setTimeout(() => {
+                        printButton.classList.remove('loading');
+                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
+                    }, 1000);
+                });
+            }
+        });
+    </script>
 </body>
 </html>

@@ -2,33 +2,42 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin'])) {
+    header('Location: ../login.php');
+    exit();
+}
+
 $username = $_SESSION['username'] ?? 'Petugas';
+
+// Pagination settings
+$per_page = 10;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $per_page;
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cek Mutasi - SCHOBANK SYSTEM</title>
-    
-    <!-- CSS Libraries -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
-    
     <style>
         :root {
             --primary-color: #0c4da2;
             --primary-dark: #0a2e5c;
             --primary-light: #e0e9f5;
-            --secondary-color: #4caf50;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
             --accent-color: #ff9800;
             --danger-color: #f44336;
             --text-primary: #333;
             --text-secondary: #666;
             --bg-light: #f8faff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
 
@@ -37,77 +46,70 @@ $username = $_SESSION['username'] ?? 'Petugas';
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
-            line-height: 1.6;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            -webkit-text-size-adjust: none;
+            zoom: 1;
         }
 
-        /* Navigation Styles */
         .top-nav {
             background: var(--primary-dark);
-            padding: 1rem 2rem;
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
-        .nav-brand {
-            font-size: 1.5rem;
-            font-weight: bold;
-        }
-
-        .nav-buttons {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .nav-btn {
-            background: rgba(255,255,255,0.1);
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 10px;
+            padding: 10px;
+            border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            text-decoration: none;
-            font-size: 0.9rem;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
         }
 
-        .nav-btn:hover {
-            background: rgba(255,255,255,0.2);
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
         }
 
-        /* Main Content */
         .main-content {
             flex: 1;
-            padding: 2rem;
+            padding: 20px;
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
         }
 
-        /* Welcome Banner */
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
-            padding: 2rem;
+            padding: 25px;
             border-radius: 15px;
-            margin-bottom: 2rem;
+            margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
         }
 
         .welcome-banner::before {
@@ -123,216 +125,192 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         @keyframes shimmer {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(360deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .welcome-banner h2 {
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 1.5rem;
+            gap: 10px;
             position: relative;
             z-index: 1;
         }
 
-        /* Search Card */
-        .search-card {
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .search-card, .filter-section, .results-card {
             background: white;
             border-radius: 15px;
-            padding: 2rem;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: 2rem;
+            margin-bottom: 30px;
             transition: var(--transition);
         }
 
-        .search-card:hover {
+        .search-card:hover, .filter-section:hover, .results-card:hover {
             box-shadow: var(--shadow-md);
             transform: translateY(-5px);
         }
 
-        .search-form {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            align-items: flex-end;
-            max-width: 100%;
+        .search-form, .filter-form {
+            display: grid;
+            gap: 20px;
         }
 
-        .form-group {
-            flex: 1;
-            min-width: 200px;
-            position: relative;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 0.75rem;
-            padding-left: 2.5rem; /* Space for the icon */
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: var(--transition);
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-        }
-
-        .input-icon {
-            position: absolute;
-            left: 1rem;
-            bottom: 0.75rem; /* Position relative to bottom to align properly */
-            color: var(--text-secondary);
-            pointer-events: none; /* Ensures clicks pass through to the input */
-        }
-
-        .search-btn {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 10px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 1rem;
-            transition: var(--transition);
-            min-width: 120px;
-            position: relative; /* For loading animation */
-        }
-
-        .search-btn:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-
-        /* Filter Section */
         .filter-section {
             display: none;
-            background: white;
-            border-radius: 15px;
-            padding: 1.5rem;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 2rem;
-            transition: var(--transition);
         }
 
-        .filter-section:hover {
-            box-shadow: var(--shadow-md);
+        .filter-section.visible {
+            display: block;
+            animation: slideStep 0.5s ease-in-out;
         }
 
-        .filter-form {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            align-items: flex-end;
+        @keyframes slideStep {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
         }
 
         .date-inputs {
+            display: grid;
+            gap: 20px;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        input[type="text"], input[type="tel"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
+            -webkit-text-size-adjust: none;
+            background: white;
+        }
+
+        input[type="text"]:focus, input[type="tel"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            transform: scale(1.02);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
             display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+            width: fit-content;
+        }
+
+        button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: scale(0.95);
         }
 
         .filter-btn {
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 10px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 1rem;
-            transition: var(--transition);
-            min-width: 120px;
-            position: relative; /* For loading animation */
+            background-color: var(--accent-color);
         }
 
         .filter-btn:hover {
-            background: #e08600;
-            transform: translateY(-2px);
+            background-color: #e08600;
         }
 
         .reset-btn {
-            background: #f1f1f1;
-            color: var(--text-secondary);
-            border: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 10px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 1rem;
-            transition: var(--transition);
-            position: relative; /* For loading animation */
+            background-color: var(--danger-color);
         }
 
         .reset-btn:hover {
-            background: #e1e1e1;
-            transform: translateY(-2px);
+            background-color: #d32f2f;
         }
 
-        /* Results Section */
-        .results-card {
-            background: white;
-            border-radius: 15px;
-            padding: 2rem;
-            box-shadow: var(--shadow-sm);
+        .filter-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px 15px;
+            background: var(--primary-light);
+            border-radius: 10px;
+            cursor: pointer;
+            width: fit-content;
+            color: var(--primary-dark);
+            font-weight: 500;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
         }
-        
-        .results-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-5px);
+
+        .filter-toggle:hover {
+            background: #d0ddef;
+            transform: translateY(-2px);
         }
 
         .table-responsive {
             overflow-x: auto;
-            margin: 0 -1rem;
+            margin: 0 -15px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 1rem;
+            margin-bottom: 15px;
         }
 
         th, td {
-            padding: 1rem;
+            padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid #eee;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         th {
-            background: #f8fafc;
+            background: var(--primary-light);
             font-weight: 600;
-            color: var(--primary-color);
+            color: var(--primary-dark);
+        }
+
+        tbody tr {
+            transition: var(--transition);
         }
 
         tbody tr:hover {
-            background: #f8fafc;
+            background: var(--primary-light);
         }
 
         .amount {
-            font-family: 'Poppins', sans-serif;
             font-weight: 600;
         }
 
@@ -344,241 +322,431 @@ $username = $_SESSION['username'] ?? 'Petugas';
             color: var(--danger-color);
         }
 
-        /* Alert Styles */
-        .alert {
-            padding: 1rem;
+        .results-count {
+            margin-bottom: 15px;
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        .pagination a, .pagination span {
+            padding: 8px 15px;
             border-radius: 10px;
-            margin-top: 1rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            background: var(--primary-light);
+            transition: var(--transition);
+            cursor: pointer;
+        }
+
+        .pagination a:hover {
+            background: var(--primary-color);
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .pagination .active {
+            background: var(--primary-color);
+            color: white;
+            font-weight: 600;
+        }
+
+        .pagination .disabled {
+            background: #eee;
+            color: #aaa;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 10px;
+            animation: slideIn 0.5s ease-out;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .alert.hide {
+            animation: slideOut 0.5s ease-out forwards;
+        }
+
+        @keyframes slideOut {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(-20px); opacity: 0; }
         }
 
         .alert-info {
-            background: #e0f2fe;
+            background-color: #e0f2fe;
             color: #0369a1;
             border-left: 5px solid #bae6fd;
         }
 
-        /* Results Count */
-        .results-count {
-            margin-bottom: 1rem;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        /* Loading Spinner - Button specific */
-        .button-spinner {
-            display: inline-block;
-            width: 18px;
-            height: 18px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-            display: none; /* Hide by default */
-        }
-
-        /* Filter toggle button */
-        .filter-toggle {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-top: -1rem;
-            margin-bottom: 1rem;
-            padding: 0.5rem 1rem;
-            background: var(--primary-light);
-            border-radius: 8px;
-            cursor: pointer;
-            width: fit-content;
+        .alert-success {
+            background-color: var(--primary-light);
             color: var(--primary-dark);
-            font-weight: 500;
-            transition: var(--transition);
+            border-left: 5px solid var(--primary-color);
         }
 
-        .filter-toggle:hover {
-            background: #d0ddef;
+        .alert-error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border-left: 5px solid #fecaca;
         }
 
-        /* Button loading animation */
         .btn-loading {
             position: relative;
             pointer-events: none;
+            min-width: 100px;
         }
 
-        .btn-loading span {
+        .btn-loading .btn-content {
             visibility: hidden;
         }
 
         .btn-loading::after {
-            content: "";
+            content: ". . .";
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: rotate 0.8s linear infinite;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            animation: dots 1.5s infinite;
+            white-space: nowrap;
         }
 
-        @keyframes rotate {
-            to {
-                transform: rotate(360deg);
-            }
+        @keyframes dots {
+            0% { content: "."; }
+            33% { content: ". ."; }
+            66% { content: ". . ."; }
+            100% { content: "."; }
         }
 
-        /* Responsive Design */
+        .success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .success-modal {
+            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 90%;
+            width: 450px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            transform: scale(0.5);
+            opacity: 0;
+            animation: popInModal 0.7s ease-out forwards;
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon {
+            font-size: clamp(4rem, 8vw, 4.5rem);
+            color: var(--secondary-color);
+            margin-bottom: 25px;
+            animation: bounceIn 0.6s ease-out;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3 {
+            color: var(--primary-dark);
+            margin-bottom: 15px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            animation: slideUpText 0.5s ease-out 0.2s both;
+            font-weight: 600;
+        }
+
+        .success-modal p {
+            color: var(--text-secondary);
+            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+            margin-bottom: 25px;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+            line-height: 1.5;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .confetti {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            opacity: 0.8;
+            animation: confettiFall 4s ease-out forwards;
+            transform-origin: center;
+        }
+
+        .confetti:nth-child(odd) {
+            background: var(--accent-color);
+        }
+
+        .confetti:nth-child(even) {
+            background: var(--secondary-color);
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
+        }
+
+        .section-title {
+            margin-bottom: 20px;
+            color: var(--primary-dark);
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Flatpickr Custom Theme */
+        .flatpickr-calendar {
+            background: white;
+            border-radius: 10px;
+            box-shadow: var(--shadow-md);
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
+
+        .flatpickr-day.today {
+            border-color: var(--secondary-color);
+        }
+
+        .flatpickr-monthDropdown-months, .flatpickr-year {
+            font-weight: 500;
+            color: var(--primary-dark);
+        }
+
+        .flatpickr-current-month {
+            color: var(--primary-dark);
+        }
+
+        .flatpickr-day:hover {
+            background: var(--primary-light);
+            border-color: var(--primary-light);
+        }
+
         @media (max-width: 768px) {
             .top-nav {
-                padding: 1rem;
-                flex-direction: column;
-                gap: 1rem;
-                text-align: center;
-            }
-
-            .nav-buttons {
-                width: 100%;
-                justify-content: center;
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
-                padding: 1rem;
+                padding: 15px;
+            }
+
+            .welcome-banner {
+                padding: 20px;
+            }
+
+            .search-card, .filter-section, .results-card {
+                padding: 20px;
+            }
+
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
+            }
+
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .section-title {
+                font-size: clamp(1rem, 2.5vw, 1.1rem);
             }
 
             .search-form, .filter-form {
-                flex-direction: column;
-                gap: 0.5rem;
+                gap: 15px;
             }
 
-            .form-group {
-                width: 100%;
+            .date-inputs {
+                grid-template-columns: 1fr;
             }
 
-            .input-icon {
-                bottom: 0.85rem; /* Adjust for mobile */
+            input[type="text"], input[type="tel"] {
+                padding: 10px 12px;
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
-            .search-btn, .filter-btn, .reset-btn {
+            button {
                 width: 100%;
                 justify-content: center;
-                padding: 0.75rem;
-                font-size: 0.9rem;
-            }
-
-            .welcome-banner,
-            .search-card,
-            .results-card,
-            .filter-section {
-                padding: 1rem;
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
             th, td {
-                padding: 0.75rem;
-                font-size: 0.9rem;
+                padding: 10px 12px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
-            
-            .date-inputs {
-                flex-direction: column;
-                width: 100%;
+
+            .alert {
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            }
+
+            .pagination {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .pagination a, .pagination span {
+                padding: 6px 12px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            }
+
+            .success-modal {
+                width: 90%;
+                padding: 30px;
+            }
+
+            .success-icon {
+                font-size: clamp(3.5rem, 7vw, 4rem);
+            }
+
+            .success-modal h3 {
+                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            }
+
+            .success-modal p {
+                font-size: clamp(0.9rem, 2vw, 1rem);
             }
         }
     </style>
 </head>
 <body>
-    <!-- Navigation -->
     <nav class="top-nav">
-        <div class="nav-brand">SCHOBANK</div>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
+        <button class="back-btn" onclick="window.location.href='dashboard.php'">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+        <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
     </nav>
 
-    <!-- Main Content -->
     <div class="main-content">
         <div class="welcome-banner">
-            <h2>
-                <i class="fas fa-list-alt"></i>
-                <span>Cek Mutasi Rekening</span>
-            </h2>
+            <h2><i class="fas fa-list-alt"></i> Cek Mutasi Rekening</h2>
+            <p>Lihat riwayat transaksi rekening dengan mudah</p>
         </div>
 
         <div class="search-card">
+            <h3 class="section-title"><i class="fas fa-search"></i> Cari Mutasi</h3>
             <form id="searchForm" action="" method="GET" class="search-form">
-                <div class="form-group">
+                <div>
                     <label for="no_rekening">No Rekening:</label>
-                    <span class="input-icon"><i class="fas fa-credit-card"></i></span>
-                    <input type="text" 
-                           id="no_rekening" 
-                           name="no_rekening" 
-                           placeholder="Masukkan nomor rekening"
-                           value="<?php echo isset($_GET['no_rekening']) ? htmlspecialchars($_GET['no_rekening']) : ''; ?>"
-                           required>
+                    <input type="tel" id="no_rekening" name="no_rekening" placeholder="REK..." 
+                           inputmode="numeric"
+                           value="<?php echo isset($_GET['no_rekening']) ? htmlspecialchars($_GET['no_rekening']) : ''; ?>" required>
                 </div>
-                <button type="submit" class="search-btn" id="searchBtn">
-                    <span class="button-spinner" id="searchSpinner"></span>
-                    <i class="fas fa-search"></i>
-                    <span>Cari</span>
+                <button type="submit" id="searchBtn">
+                    <span class="btn-content">
+                        <i class="fas fa-search"></i>
+                        <span>Cari</span>
+                    </span>
                 </button>
             </form>
         </div>
 
         <?php if (isset($_GET['no_rekening']) && !empty($_GET['no_rekening'])): ?>
-        <div class="filter-toggle" id="filterToggle">
-            <i class="fas fa-filter"></i>
-            <span>Filter Berdasarkan Tanggal</span>
-        </div>
+            <div class="filter-toggle" id="filterToggle">
+                <i class="fas fa-filter"></i>
+                <span>Filter Berdasarkan Tanggal</span>
+            </div>
 
-        <div class="filter-section" id="filterSection">
-            <form id="filterForm" action="" method="GET" class="filter-form">
-                <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($_GET['no_rekening']); ?>">
-                
-                <div class="form-group">
-                    <label>Rentang Tanggal:</label>
-                    <div class="date-inputs">
-                        <div class="form-group">
-                            <span class="input-icon"><i class="fas fa-calendar-alt"></i></span>
-                            <input type="text" 
-                                id="start_date" 
-                                name="start_date" 
-                                placeholder="Tanggal Awal"
-                                value="<?php echo isset($_GET['start_date']) ? htmlspecialchars($_GET['start_date']) : ''; ?>"
-                                class="datepicker">
-                        </div>
-                        <div class="form-group">
-                            <span class="input-icon"><i class="fas fa-calendar-alt"></i></span>
-                            <input type="text" 
-                                id="end_date" 
-                                name="end_date" 
-                                placeholder="Tanggal Akhir"
-                                value="<?php echo isset($_GET['end_date']) ? htmlspecialchars($_GET['end_date']) : ''; ?>"
-                                class="datepicker">
+            <div class="filter-section" id="filterSection" <?php echo (isset($_GET['start_date']) || isset($_GET['end_date'])) ? 'style="display: block;"' : ''; ?>>
+                <h3 class="section-title"><i class="fas fa-calendar-alt"></i> Filter Tanggal</h3>
+                <form id="filterForm" action="" method="GET" class="filter-form">
+                    <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($_GET['no_rekening']); ?>">
+                    <div>
+                        <label>Rentang Tanggal:</label>
+                        <div class="date-inputs">
+                            <div>
+                                <input type="text" id="start_date" name="start_date" placeholder="Tanggal Awal"
+                                       value="<?php echo isset($_GET['start_date']) ? htmlspecialchars($_GET['start_date']) : ''; ?>" 
+                                       class="datepicker" readonly>
+                            </div>
+                            <div>
+                                <input type="text" id="end_date" name="end_date" placeholder="Tanggal Akhir"
+                                       value="<?php echo isset($_GET['end_date']) ? htmlspecialchars($_GET['end_date']) : ''; ?>" 
+                                       class="datepicker" readonly>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <div style="display: flex; gap: 1rem;">
-                    <button type="submit" class="filter-btn" id="filterBtn">
-                        <span class="button-spinner" id="filterSpinner"></span>
-                        <i class="fas fa-filter"></i>
-                        <span>Terapkan Filter</span>
-                    </button>
-                    <button type="button" class="reset-btn" id="resetBtn">
-                        <span class="button-spinner" id="resetSpinner"></span>
-                        <i class="fas fa-undo"></i>
-                        <span>Reset</span>
-                    </button>
-                </div>
-            </form>
-        </div>
+                    <div style="display: flex; gap: 15px;">
+                        <button type="submit" class="filter-btn" id="filterBtn">
+                            <span class="btn-content">
+                                <i class="fas fa-filter"></i>
+                                <span>Terapkan Filter</span>
+                            </span>
+                        </button>
+                        <button type="button" class="reset-btn" id="resetBtn">
+                            <span class="btn-content">
+                                <i class="fas fa-undo"></i>
+                                <span>Reset</span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
         <?php endif; ?>
 
-        <!-- Results Section -->
         <div id="results">
             <?php
             if (isset($_GET['no_rekening'])) {
@@ -586,7 +754,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 
                 $where_clause = "r.no_rekening = '$no_rekening'";
                 
-                // Add date filtering if provided
                 if (isset($_GET['start_date']) && !empty($_GET['start_date'])) {
                     $start_date = $conn->real_escape_string($_GET['start_date']);
                     $start_date = date('Y-m-d', strtotime($start_date));
@@ -599,36 +766,42 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     $where_clause .= " AND m.created_at <= '$end_date'";
                 }
                 
+                // Count total records for pagination
+                $count_query = "SELECT COUNT(*) as total 
+                               FROM mutasi m 
+                               JOIN rekening r ON m.rekening_id = r.id 
+                               WHERE $where_clause";
+                $count_result = $conn->query($count_query);
+                $total_rows = $count_result ? $count_result->fetch_assoc()['total'] : 0;
+                $total_pages = ceil($total_rows / $per_page);
+
+                // Fetch paginated records
                 $query = "SELECT m.*, r.no_rekening 
                          FROM mutasi m 
                          JOIN rekening r ON m.rekening_id = r.id 
                          WHERE $where_clause 
-                         ORDER BY m.created_at DESC";
+                         ORDER BY m.created_at DESC 
+                         LIMIT $offset, $per_page";
                 $result = $conn->query($query);
-                $total_rows = $result ? $result->num_rows : 0;
 
                 echo '<div class="results-card">';
                 
-                // Show filter status if any filter is applied
                 if (isset($_GET['start_date']) && !empty($_GET['start_date']) || isset($_GET['end_date']) && !empty($_GET['end_date'])) {
-                    echo '<div class="alert alert-info" style="margin-bottom: 1rem;">
+                    echo '<div class="alert alert-info" style="margin-bottom: 15px;">
                         <i class="fas fa-info-circle"></i>
                         <span>Menampilkan hasil filter ';
-                    
                     if (isset($_GET['start_date']) && !empty($_GET['start_date'])) {
                         echo 'dari ' . date('d/m/Y', strtotime($_GET['start_date']));
                     }
-                    
                     if (isset($_GET['end_date']) && !empty($_GET['end_date'])) {
                         echo ' sampai ' . date('d/m/Y', strtotime($_GET['end_date']));
                     }
-                    
                     echo '</span>
                     </div>';
                 }
                 
                 if ($result && $result->num_rows > 0) {
-                    echo '<div class="results-count">Menampilkan ' . $total_rows . ' transaksi</div>';
+                    echo '<div class="results-count">Menampilkan ' . $result->num_rows . ' dari ' . $total_rows . ' transaksi</div>';
                     echo '<div class="table-responsive">
                         <table>
                             <thead>
@@ -641,28 +814,56 @@ $username = $_SESSION['username'] ?? 'Petugas';
                             </thead>
                             <tbody>';
                     
-                    $counter = 1;
+                    $counter = $offset + 1;
                     while ($row = $result->fetch_assoc()) {
                         $amountClass = $row['jumlah'] < 0 ? 'negative' : 'positive';
                         $amountPrefix = $row['jumlah'] < 0 ? '-' : '+';
                         echo "<tr>
                             <td>{$counter}</td>
-                            <td class='amount {$amountClass}'>{$amountPrefix}Rp " . number_format(abs($row['jumlah']), 2, ',', '.') . "</td>
-                            <td class='amount'>Rp " . number_format($row['saldo_akhir'], 2, ',', '.') . "</td>
+                            <td class='amount {$amountClass}'>{$amountPrefix}Rp " . number_format(abs($row['jumlah']), 0, ',', '.') . "</td>
+                            <td class='amount'>Rp " . number_format($row['saldo_akhir'], 0, ',', '.') . "</td>
                             <td>" . date('d/m/Y H:i', strtotime($row['created_at'])) . "</td>
                         </tr>";
                         $counter++;
                     }
                     echo '</tbody></table>';
+
+                    // Pagination links
+                    if ($total_pages > 1) {
+                        echo '<div class="pagination">';
+                        $base_url = '?no_rekening=' . urlencode($no_rekening);
+                        if (isset($_GET['start_date'])) {
+                            $base_url .= '&start_date=' . urlencode($_GET['start_date']);
+                        }
+                        if (isset($_GET['end_date'])) {
+                            $base_url .= '&end_date=' . urlencode($_GET['end_date']);
+                        }
+
+                        // Previous
+                        if ($page > 1) {
+                            echo '<a href="' . $base_url . '&page=' . ($page - 1) . '"><i class="fas fa-chevron-left"></i></a>';
+                        } else {
+                            echo '<span class="disabled"><i class="fas fa-chevron-left"></i></span>';
+                        }
+
+                        // Current page
+                        echo '<span class="active">' . $page . '</span>';
+
+                        // Next
+                        if ($page < $total_pages) {
+                            echo '<a href="' . $base_url . '&page=' . ($page + 1) . '"><i class="fas fa-chevron-right"></i></a>';
+                        } else {
+                            echo '<span class="disabled"><i class="fas fa-chevron-right"></i></span>';
+                        }
+                        echo '</div>';
+                    }
                 } else {
                     echo '<div class="alert alert-info">
                         <i class="fas fa-info-circle"></i>
                         <span>Tidak ada mutasi untuk rekening ini';
-                    
                     if (isset($_GET['start_date']) && !empty($_GET['start_date']) || isset($_GET['end_date']) && !empty($_GET['end_date'])) {
                         echo ' dengan filter yang diterapkan';
                     }
-                    
                     echo '.</span>
                     </div>';
                 }
@@ -670,116 +871,225 @@ $username = $_SESSION['username'] ?? 'Petugas';
             }
             ?>
         </div>
+
+        <div id="alertContainer"></div>
     </div>
 
-    <!-- JavaScript -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
     <script>
-        $(document).ready(function() {
-            // Initialize date picker
-            $(".datepicker").flatpickr({
+        // Prevent pinch-to-zoom and double-tap zoom
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('gesturestart', function(event) {
+            event.preventDefault();
+        });
+
+        document.addEventListener('wheel', function(event) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchForm = document.getElementById('searchForm');
+            const filterForm = document.getElementById('filterForm');
+            const searchBtn = document.getElementById('searchBtn');
+            const filterBtn = document.getElementById('filterBtn');
+            const resetBtn = document.getElementById('resetBtn');
+            const filterToggle = document.getElementById('filterToggle');
+            const filterSection = document.getElementById('filterSection');
+            const inputNoRek = document.getElementById('no_rekening');
+            const alertContainer = document.getElementById('alertContainer');
+            const results = document.getElementById('results');
+            const prefix = "REK";
+
+            // Initialize Flatpickr with mobile support
+            flatpickr(".datepicker", {
                 dateFormat: "d/m/Y",
-                allowInput: true,
-                locale: {
-                    firstDayOfWeek: 1
+                enableMobile: true,
+                locale: { firstDayOfWeek: 1 },
+                wrap: false,
+                clickOpens: true
+            });
+
+            // Initialize rekening input
+            if (!inputNoRek.value) {
+                inputNoRek.value = prefix;
+            }
+
+            // Restrict rekening input to numbers and enforce prefix
+            inputNoRek.addEventListener('input', function(e) {
+                let value = this.value;
+                if (!value.startsWith(prefix)) {
+                    this.value = prefix + value.replace(prefix, '');
+                }
+                let userInput = value.slice(prefix.length).replace(/[^0-9]/g, '');
+                this.value = prefix + userInput;
+            });
+
+            inputNoRek.addEventListener('keydown', function(e) {
+                let cursorPos = this.selectionStart;
+                if ((e.key === 'Backspace' || e.key === 'Delete') && cursorPos <= prefix.length) {
+                    e.preventDefault();
                 }
             });
-            
-            // Toggle filter section
-            $("#filterToggle").on("click", function() {
-                $("#filterSection").slideToggle(300);
-                const icon = $(this).find("i");
-                if (icon.hasClass("fa-filter")) {
-                    icon.removeClass("fa-filter").addClass("fa-times");
-                    $(this).find("span").text("Tutup Filter");
+
+            inputNoRek.addEventListener('paste', function(e) {
+                e.preventDefault();
+                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+                let currentValue = this.value.slice(prefix.length);
+                let newValue = prefix + (currentValue + pastedData);
+                this.value = newValue;
+            });
+
+            inputNoRek.addEventListener('focus', function() {
+                if (this.value === prefix) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            inputNoRek.addEventListener('click', function(e) {
+                if (this.selectionStart < prefix.length) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            // Filter toggle
+            filterToggle?.addEventListener('click', function() {
+                if (filterSection.style.display === 'block') {
+                    filterSection.style.display = 'none';
+                    this.querySelector('i').className = 'fas fa-filter';
+                    this.querySelector('span').textContent = 'Filter Berdasarkan Tanggal';
                 } else {
-                    icon.removeClass("fa-times").addClass("fa-filter");
-                    $(this).find("span").text("Filter Berdasarkan Tanggal");
+                    filterSection.style.display = 'block';
+                    filterSection.classList.add('visible');
+                    this.querySelector('i').className = 'fas fa-times';
+                    this.querySelector('span').textContent = 'Tutup Filter';
                 }
             });
-            
-            // Show filter section if filters are applied
-            <?php if (isset($_GET['start_date']) || isset($_GET['end_date'])): ?>
-                $("#filterSection").show();
-                $("#filterToggle").find("i").removeClass("fa-filter").addClass("fa-times");
-                $("#filterToggle").find("span").text("Tutup Filter");
-            <?php endif; ?>
-            
-            // Form handling with improved loading
-            $('#searchForm').on('submit', function(e) {
+
+            // Search form handling
+            searchForm.addEventListener('submit', function(e) {
                 e.preventDefault();
-                
-                const input = $('#no_rekening');
-                const value = input.val().trim();
-                
-                if (!value) {
-                    alert('Silakan masukkan nomor rekening');
-                    input.focus();
-                    return false;
+                const rekening = inputNoRek.value.trim();
+                if (rekening === prefix || rekening.length <= prefix.length) {
+                    showAlert('Masukkan nomor rekening yang valid (REK diikuti angka)', 'error');
+                    inputNoRek.focus();
+                    return;
                 }
-                
-                // Show loading spinner in button
-                $('#searchBtn').addClass('btn-loading');
-                
-                // Submit after short delay to show animation
+                searchBtn.classList.add('btn-loading');
                 setTimeout(() => {
-                    this.submit();
-                }, 300);
+                    searchForm.submit();
+                }, 1000); // Increased delay for visibility of dots
             });
-            
+
             // Filter form handling
-            $('#filterForm').on('submit', function(e) {
+            filterForm?.addEventListener('submit', function(e) {
                 e.preventDefault();
-                
-                // Show loading spinner in button
-                $('#filterBtn').addClass('btn-loading');
-                
-                // Submit after short delay
+                filterBtn.classList.add('btn-loading');
                 setTimeout(() => {
-                    this.submit();
-                }, 300);
+                    filterForm.submit();
+                }, 1000);
             });
-            
-            // Reset button functionality
-            $('#resetBtn').on('click', function() {
-                $('#resetBtn').addClass('btn-loading');
-                
-                // Redirect to the page with just the account number
+
+            // Reset button handling
+            resetBtn?.addEventListener('click', function() {
+                resetBtn.classList.add('btn-loading');
                 setTimeout(() => {
                     window.location.href = window.location.pathname + '?no_rekening=' + 
-                        encodeURIComponent($('input[name="no_rekening"]').val());
-                }, 300);
+                        encodeURIComponent(document.querySelector('input[name="no_rekening"]').value);
+                }, 1000);
             });
 
-            // Account number input handling
-            $('#no_rekening').on('input', function() {
-                this.value = this.value.toUpperCase();
-                
-                if (this.value.length > 20) {
-                    this.value = this.value.slice(0, 20);
-                }
-            });
+            // Show success animation only on initial search (no pagination or filters)
+            <?php if (
+                isset($_GET['no_rekening']) && 
+                $result && 
+                $result->num_rows > 0 && 
+                !isset($_GET['page']) && 
+                !isset($_GET['start_date']) && 
+                !isset($_GET['end_date'])
+            ): ?>
+                showSuccessAnimation('Mutasi rekening berhasil ditemukan');
+            <?php endif; ?>
 
-            // Table row hover effect
-            $(document).on('mouseenter', 'table tbody tr', function() {
-                $(this).css('background-color', '#f8fafc');
-            }).on('mouseleave', 'table tbody tr', function() {
-                $(this).css('background-color', '');
-            });
-
-            // Keyboard navigation
-            $('#no_rekening').on('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    $('#searchForm').submit();
-                }
-            });
-            
-            // Add animation when results are loaded
-            if ($('#results').children().length > 0) {
-                $('#results').hide().fadeIn(500);
+            function showAlert(message, type) {
+                const existingAlerts = document.querySelectorAll('.alert');
+                existingAlerts.forEach(alert => {
+                    alert.classList.add('hide');
+                    setTimeout(() => alert.remove(), 500);
+                });
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type}`;
+                let icon = 'info-circle';
+                if (type === 'success') icon = 'check-circle';
+                if (type === 'error') icon = 'exclamation-circle';
+                alertDiv.innerHTML = `
+                    <i class="fas fa-${icon}"></i>
+                    <span>${message}</span>
+                `;
+                alertContainer.appendChild(alertDiv);
+                setTimeout(() => {
+                    alertDiv.classList.add('hide');
+                    setTimeout(() => alertDiv.remove(), 500);
+                }, 5000);
             }
+
+            function showSuccessAnimation(message) {
+                const overlay = document.createElement('div');
+                overlay.className = 'success-overlay';
+                overlay.innerHTML = `
+                    <div class="success-modal">
+                        <div class="success-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h3>Pencarian Berhasil!</h3>
+                        <p>${message}</p>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                const modal = overlay.querySelector('.success-modal');
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    modal.appendChild(confetti);
+                }
+
+                overlay.addEventListener('click', () => {
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
+                    setTimeout(() => overlay.remove(), 500);
+                });
+
+                setTimeout(() => {
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
+                    setTimeout(() => overlay.remove(), 500);
+                }, 5000);
+            }
+
+            // Animate results
+            if (results.children.length > 0) {
+                results.style.display = 'none';
+                setTimeout(() => {
+                    results.style.display = 'block';
+                    results.classList.add('visible');
+                }, 100);
+            }
+
+            // Enter key support
+            inputNoRek.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') searchBtn.click();
+            });
         });
     </script>
 </body>

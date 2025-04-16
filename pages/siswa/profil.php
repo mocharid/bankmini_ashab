@@ -1,7 +1,7 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
-require '../../vendor/autoload.php'; // Sesuaikan path ke autoload Composer
+require_once '../../vendor/autoload.php'; // Sesuaikan path ke autoload Composer
 date_default_timezone_set('Asia/Jakarta'); // Set timezone ke WIB
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -33,10 +33,10 @@ function sendEmail($email, $subject, $body) {
     $mail = new PHPMailer(true);
     try {
         $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com'; // Ganti dengan SMTP host Anda
+        $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'mocharid.ip@gmail.com'; // Ganti dengan email pengirim
-        $mail->Password = 'spjs plkg ktuu lcxh'; // Ganti dengan password email pengirim
+        $mail->Username = 'mocharid.ip@gmail.com';
+        $mail->Password = 'spjs plkg ktuu lcxh';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
@@ -57,6 +57,61 @@ function sendEmail($email, $subject, $body) {
     }
 }
 
+// Template email tanpa logo (karena localhost)
+function getEmailTemplate($title, $greeting, $content, $additionalInfo = '') {
+    return "
+    <!DOCTYPE html>
+    <html lang='id'>
+    <head>
+        <meta charset='UTF-8'>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+        <title>{$title}</title>
+    </head>
+    <body style='margin: 0; padding: 0; background-color: #f5f5f5; font-family: Helvetica, Arial, sans-serif; color: #333333;'>
+        <table align='center' border='0' cellpadding='0' cellspacing='0' width='100%' style='max-width: 600px; background-color: #ffffff; margin: 40px auto; border: 1px solid #e0e0e0;'>
+            <!-- Header -->
+            <tr>
+                <td style='padding: 20px; border-bottom: 2px solid #0c4da2;'>
+                    <table width='100%' border='0' cellpadding='0' cellspacing='0'>
+                        <tr>
+                            <td style='font-size: calc(1rem + 0.2vw); font-weight: bold; color: #0c4da2;'>
+                                SCHOBANK
+                            </td>
+                            <td style='text-align: right;'>
+                                <span style='font-size: calc(0.75rem + 0.1vw); color: #666666;'>SCHOBANK SYSTEM</span><br>
+                                <span style='font-size: calc(0.65rem + 0.1vw); color: #999999;'>Tanggal: " . date('d M Y') . "</span>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+            <!-- Body -->
+            <tr>
+                <td style='padding: 30px 20px;'>
+                    <h2 style='font-size: calc(1.2rem + 0.3vw); color: #0c4da2; margin: 0 0 15px 0; font-weight: bold;'>{$title}</h2>
+                    <p style='font-size: calc(0.85rem + 0.2vw); line-height: 1.5; margin: 0 0 20px 0;'>{$greeting}</p>
+                    <table border='0' cellpadding='0' cellspacing='0' width='100%' style='border: 1px solid #e0e0e0; padding: 15px; background-color: #fafafa;'>
+                        <tr>
+                            <td style='font-size: calc(0.85rem + 0.2vw); color: #333333;'>{$content}</td>
+                        </tr>
+                    </table>
+                    {$additionalInfo}
+                </td>
+            </tr>
+            <!-- Footer -->
+            <tr>
+                <td style='padding: 20px; background-color: #f9f9f9; border-top: 1px solid #e0e0e0; font-size: calc(0.75rem + 0.1vw); color: #666666; text-align: center;'>
+                    <p style='margin: 0 0 10px 0;'>Hubungi kami di <a href='mailto:support@schobank.com' style='color: #0c4da2; text-decoration: none;'>support@schobank.com</a> jika ada pertanyaan.</p>
+                    <p style='margin: 0;'>© " . date('Y') . " SCHOBANK. Hak cipta dilindungi.</p>
+                    <p style='margin: 10px 0 0 0; font-size: calc(0.7rem + 0.1vw); color: #999999;'>Email ini dikirim secara otomatis. Mohon tidak membalas email ini.</p>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    ";
+}
+
 // Handle form submission
 if (isset($_POST['update_username'])) {
     $new_username = trim($_POST['new_username']);
@@ -66,7 +121,6 @@ if (isset($_POST['update_username'])) {
     } elseif ($new_username === $user['username']) {
         $error = "Username baru tidak boleh sama dengan username saat ini!";
     } else {
-        // Cek apakah username sudah digunakan oleh pengguna lain
         $check_query = "SELECT id FROM users WHERE username = ?";
         $check_stmt = $conn->prepare($check_query);
         $check_stmt->bind_param("s", $new_username);
@@ -76,64 +130,28 @@ if (isset($_POST['update_username'])) {
         if ($check_result->num_rows > 0) {
             $error = "Username sudah digunakan oleh pengguna lain!";
         } else {
-            // Jika username tersedia, lakukan update
             $update_query = "UPDATE users SET username = ? WHERE id = ?";
             $update_stmt = $conn->prepare($update_query);
             $update_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
             
             if ($update_stmt->execute()) {
                 $message = "Username berhasil diubah!";
+                // MODIFIED: Kirim email hanya jika email tersedia
+                if (!empty($user['email'])) {
+                    $email_title = "Pemberitahuan Perubahan Username";
+                    $email_greeting = "Yth. {$user['nama']},";
+                    $email_content = "Kami informasikan bahwa username akun SCHOBANK Anda telah berhasil diperbarui menjadi: <strong>{$new_username}</strong>.";
+                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
+                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                    $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
 
-                // Template email untuk perubahan username
-                $subject = "Username Berhasil Diubah - SCHOBANK SYSTEM";
-                $email_body = "
-                <!DOCTYPE html>
-                <html lang='id'>
-                <head>
-                    <meta charset='UTF-8'>
-                    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-                    <title>Username Berhasil Diubah</title>
-                    <style>
-                        body { font-family: 'Poppins', sans-serif; background-color: #f8faff; color: #333; margin: 0; padding: 0; }
-                        .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1); }
-                        .email-header { background: linear-gradient(135deg, #0c4da2 0%, #0a2e5c 100%); color: white; padding: 30px; text-align: center; }
-                        .email-header h1 { margin: 0; font-size: 24px; font-weight: 600; }
-                        .email-body { padding: 30px; color: #666; }
-                        .email-body h2 { font-size: 20px; color: #0c4da2; margin-top: 0; }
-                        .email-body p { font-size: 16px; line-height: 1.6; }
-                        .email-footer { background-color: #f1f5f9; padding: 20px; text-align: center; font-size: 14px; color: #666; }
-                        .email-footer a { color: #0c4da2; text-decoration: none; }
-                        .btn { display: inline-block; padding: 12px 25px; background-color: #0c4da2; color: white; text-decoration: none; border-radius: 10px; font-size: 16px; margin-top: 20px; transition: background-color 0.3s ease; }
-                        .btn:hover { background-color: #0a2e5c; }
-                        .highlight { background-color: #e0e9f5; padding: 10px; border-radius: 10px; font-weight: 500; color: #0c4da2; margin: 20px 0; }
-                    </style>
-                </head>
-                <body>
-                    <div class='email-container'>
-                        <div class='email-header'>
-                            <h1>SCHOBANK SYSTEM</h1>
-                        </div>
-                        <div class='email-body'>
-                            <h2>Username Berhasil Diubah</h2>
-                            <p>Halo, <strong>{$user['nama']}</strong>!</p>
-                            <p>Username akun SCHOBANK Anda telah berhasil diubah menjadi:</p>
-                            <div class='highlight'>{$new_username}</div>
-                            <p>Perubahan ini dilakukan pada <strong>" . date('d M Y H:i:s') . " WIB</strong>.</p>
-                            <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator kami.</p>
-                        </div>
-                        <div class='email-footer'>
-                            <p>&copy; " . date('Y') . " SCHOBANK. Semua hak dilindungi undang-undang.</p>
-                        </div>
-                    </div>
-                </body>
-                </html>
-                ";
-
-                // Kirim email
-                if (sendEmail($user['email'], $subject, $email_body)) {
-                    logout();
+                    if (sendEmail($user['email'], $email_title, $email_body)) {
+                        logout();
+                    } else {
+                        $error = "Gagal mengirim email notifikasi!";
+                    }
                 } else {
-                    $error = "Gagal mengirim email notifikasi!";
+                    logout(); // Lanjutkan logout jika email kosong
                 }
             } else {
                 $error = "Gagal mengubah username!";
@@ -141,7 +159,6 @@ if (isset($_POST['update_username'])) {
         }
     }
 } elseif (isset($_POST['update_password'])) {
-    // Password update code
     $current_password = $_POST['current_password'];
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
@@ -153,7 +170,6 @@ if (isset($_POST['update_username'])) {
     } elseif (strlen($new_password) < 6) {
         $error = "Password baru minimal 6 karakter!";
     } else {
-        // Get current password from database
         $verify_query = "SELECT password FROM users WHERE id = ?";
         $verify_stmt = $conn->prepare($verify_query);
         $verify_stmt->bind_param("i", $_SESSION['user_id']);
@@ -165,75 +181,34 @@ if (isset($_POST['update_username'])) {
             $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
         } else {
             $stored_hash = $user_data['password'];
-            
-            // Check if the hash is a SHA-256 hash (64 characters in length)
             $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
-            
-            // Verify the password based on hash type
-            $password_verified = false;
-            
-            if ($is_sha256) {
-                // For SHA-256 hashed passwords
-                $password_verified = (hash('sha256', $current_password) === $stored_hash);
-            } else {
-                // For passwords hashed with password_hash()
-                $password_verified = password_verify($current_password, $stored_hash);
-            }
+            $password_verified = $is_sha256 ? (hash('sha256', $current_password) === $stored_hash) : password_verify($current_password, $stored_hash);
             
             if ($password_verified) {
-                // Use consistent hashing method - if original was SHA-256, use SHA-256 for new password too
-                if ($is_sha256) {
-                    $hashed_password = hash('sha256', $new_password);
-                } else {
-                    $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
-                }
-                
+                $hashed_password = $is_sha256 ? hash('sha256', $new_password) : password_hash($new_password, PASSWORD_DEFAULT);
                 $update_query = "UPDATE users SET password = ? WHERE id = ?";
                 $update_stmt = $conn->prepare($update_query);
                 $update_stmt->bind_param("si", $hashed_password, $_SESSION['user_id']);
                 
                 if ($update_stmt->execute()) {
                     $message = "Password berhasil diubah! Anda dapat menggunakan password baru untuk login selanjutnya.";
+                    // MODIFIED: Kirim email hanya jika email tersedia
+                    if (!empty($user['email'])) {
+                        $email_title = "Pemberitahuan Perubahan Password";
+                        $email_greeting = "Yth. {$user['nama']},";
+                        $email_content = "Kami informasikan bahwa password akun SCHOBANK Anda telah berhasil diperbarui.";
+                        $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
+                                           <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                        $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
 
-                    // Kirim email notifikasi
-                    $subject = "Password Berhasil Diubah - SCHOBANK SYSTEM";
-                    $message_email = "
-                    <html>
-                    <body>
-                        <h2>Password Berhasil Diubah</h2>
-                        <p>Halo, <strong>{$user['nama']}</strong>!</p>
-                        <p>Password akun SCHOBANK Anda telah berhasil diubah pada " . date('d M Y H:i:s') . " WIB.</p>
-                        <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
-                        <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
-                    </body>
-                    </html>
-                    ";
-
-                    try {
-                        $mail = new PHPMailer(true);
-                        $mail->isSMTP();
-                        $mail->Host = 'smtp.gmail.com';
-                        $mail->SMTPAuth = true;
-                        $mail->Username = 'mocharid.ip@gmail.com';
-                        $mail->Password = 'spjs plkg ktuu lcxh';
-                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                        $mail->Port = 587;
-                        $mail->CharSet = 'UTF-8';
-
-                        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
-                        $mail->addAddress($user['email'], $user['nama']);
-
-                        $mail->isHTML(true);
-                        $mail->Subject = $subject;
-                        $mail->Body = $message_email;
-                        $mail->AltBody = strip_tags($message_email);
-
-                        $mail->send();
-                    } catch (Exception $e) {
-                        error_log("Mail error: " . $mail->ErrorInfo);
+                        if (sendEmail($user['email'], $email_title, $email_body)) {
+                            logout();
+                        } else {
+                            $error = "Gagal mengirim email notifikasi!";
+                        }
+                    } else {
+                        logout(); // Lanjutkan logout jika email kosong
                     }
-
-                    logout();
                 } else {
                     $error = "Gagal mengubah password!";
                 }
@@ -243,7 +218,6 @@ if (isset($_POST['update_username'])) {
         }
     }
 } elseif (isset($_POST['update_pin'])) {
-    // PIN update code
     $new_pin = $_POST['new_pin'];
     $confirm_pin = $_POST['confirm_pin'];
 
@@ -254,112 +228,56 @@ if (isset($_POST['update_username'])) {
     } elseif (strlen($new_pin) !== 6 || !ctype_digit($new_pin)) {
         $error = "PIN harus terdiri dari 6 digit angka!";
     } else {
-        // Verify current PIN first if user already has a PIN
         if (!empty($user['pin'])) {
-            // Check if current_pin exists in POST
             if (!isset($_POST['current_pin']) || empty($_POST['current_pin'])) {
                 $error = "PIN saat ini harus diisi!";
             } elseif ($_POST['current_pin'] !== $user['pin']) {
                 $error = "PIN saat ini tidak valid!";
             } else {
-                // Current PIN is correct, proceed with update
                 $update_query = "UPDATE users SET pin = ? WHERE id = ?";
                 $update_stmt = $conn->prepare($update_query);
                 $update_stmt->bind_param("si", $new_pin, $_SESSION['user_id']);
 
                 if ($update_stmt->execute()) {
                     $message = "PIN berhasil diubah!";
+                    // MODIFIED: Kirim email hanya jika email tersedia
+                    if (!empty($user['email'])) {
+                        $email_title = "Pemberitahuan Perubahan PIN";
+                        $email_greeting = "Yth. {$user['nama']},";
+                        $email_content = "Kami informasikan bahwa PIN akun SCHOBANK Anda telah berhasil diperbarui.";
+                        $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
+                                           <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                        $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
 
-                    // Kirim email notifikasi
-                    $subject = "PIN Berhasil Diubah - SCHOBANK SYSTEM";
-                    $message_email = "
-                    <html>
-                    <body>
-                        <h2>PIN Berhasil Diubah</h2>
-                        <p>Halo, <strong>{$user['nama']}</strong>!</p>
-                        <p>PIN akun SCHOBANK Anda telah berhasil diubah pada " . date('d M Y H:i:s') . " WIB.</p>
-                        <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
-                        <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
-                    </body>
-                    </html>
-                    ";
-
-                    try {
-                        $mail = new PHPMailer(true);
-                        $mail->isSMTP();
-                        $mail->Host = 'smtp.gmail.com';
-                        $mail->SMTPAuth = true;
-                        $mail->Username = 'mocharid.ip@gmail.com';
-                        $mail->Password = 'spjs plkg ktuu lcxh';
-                        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                        $mail->Port = 587;
-                        $mail->CharSet = 'UTF-8';
-
-                        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
-                        $mail->addAddress($user['email'], $user['nama']);
-
-                        $mail->isHTML(true);
-                        $mail->Subject = $subject;
-                        $mail->Body = $message_email;
-                        $mail->AltBody = strip_tags($message_email);
-
-                        $mail->send();
-                    } catch (Exception $e) {
-                        error_log("Mail error: " . $mail->ErrorInfo);
+                        if (!sendEmail($user['email'], $email_title, $email_body)) {
+                            $error = "Gagal mengirim email notifikasi!";
+                        }
                     }
-
                     $user['pin'] = $new_pin;
                 } else {
                     $error = "Gagal mengubah PIN!";
                 }
             }
         } else {
-            // User doesn't have a PIN yet, allow creating new PIN without verification
             $update_query = "UPDATE users SET pin = ? WHERE id = ?";
             $update_stmt = $conn->prepare($update_query);
             $update_stmt->bind_param("si", $new_pin, $_SESSION['user_id']);
 
             if ($update_stmt->execute()) {
                 $message = "PIN berhasil dibuat!";
+                // MODIFIED: Kirim email hanya jika email tersedia
+                if (!empty($user['email'])) {
+                    $email_title = "Pemberitahuan Pembuatan PIN";
+                    $email_greeting = "Yth. {$user['nama']},";
+                    $email_content = "Kami informasikan bahwa PIN akun SCHOBANK Anda telah berhasil dibuat.";
+                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Pembuatan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
+                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan pembuatan ini, segera hubungi kami.</p>";
+                    $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
 
-                // Kirim email notifikasi
-                $subject = "PIN Berhasil Dibuat - SCHOBANK SYSTEM";
-                $message_email = "
-                <html>
-                <body>
-                    <h2>PIN Berhasil Dibuat</h2>
-                    <p>Halo, <strong>{$user['nama']}</strong>!</p>
-                    <p>PIN akun SCHOBANK Anda telah berhasil dibuat pada " . date('d M Y H:i:s') . " WIB.</p>
-                    <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
-                    <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
-                </body>
-                </html>
-                ";
-
-                try {
-                    $mail = new PHPMailer(true);
-                    $mail->isSMTP();
-                    $mail->Host = 'smtp.gmail.com';
-                    $mail->SMTPAuth = true;
-                    $mail->Username = 'mocharid.ip@gmail.com';
-                    $mail->Password = 'spjs plkg ktuu lcxh';
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    $mail->Port = 587;
-                    $mail->CharSet = 'UTF-8';
-
-                    $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
-                    $mail->addAddress($user['email'], $user['nama']);
-
-                    $mail->isHTML(true);
-                    $mail->Subject = $subject;
-                    $mail->Body = $message_email;
-                    $mail->AltBody = strip_tags($message_email);
-
-                    $mail->send();
-                } catch (Exception $e) {
-                    error_log("Mail error: " . $mail->ErrorInfo);
+                    if (!sendEmail($user['email'], $email_title, $email_body)) {
+                        $error = "Gagal mengirim email notifikasi!";
+                    }
                 }
-
                 $user['pin'] = $new_pin;
             } else {
                 $error = "Gagal membuat PIN!";
@@ -374,7 +292,6 @@ if (isset($_POST['update_username'])) {
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Format email tidak valid!";
     } else {
-        // Cek apakah email sudah digunakan oleh pengguna lain
         $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
         $check_stmt = $conn->prepare($check_query);
         $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
@@ -382,57 +299,27 @@ if (isset($_POST['update_username'])) {
         $check_result = $check_stmt->get_result();
 
         if ($check_result->num_rows > 0) {
-            $error = "Email sudah digunakan oleh pengguna lain!";
+            $error = "You've already got that email registered with another account!";
         } else {
-            // Generate OTP
             $otp = rand(100000, 999999);
-            $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes')); // OTP berlaku 5 menit
-
-            // Simpan OTP ke database
+            $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes'));
             $update_query = "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?";
             $update_stmt = $conn->prepare($update_query);
             $update_stmt->bind_param("ssi", $otp, $expiry, $_SESSION['user_id']);
 
             if ($update_stmt->execute()) {
-                // Kirim OTP ke email
-                try {
-                    $mail = new PHPMailer(true);
-                    $mail->isSMTP();
-                    $mail->Host = 'smtp.gmail.com'; // Ganti dengan SMTP host Anda
-                    $mail->SMTPAuth = true;
-                    $mail->Username = 'mocharid.ip@gmail.com'; // Ganti dengan email pengirim
-                    $mail->Password = 'spjs plkg ktuu lcxh'; // Ganti dengan password email pengirim
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    $mail->Port = 587;
-                    $mail->CharSet = 'UTF-8';
+                $email_title = "Verifikasi Perubahan Email";
+                $email_greeting = "Yth. {$user['nama']},";
+                $email_content = "Kode OTP untuk verifikasi perubahan email Anda adalah: <strong>{$otp}</strong>";
+                $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Kode ini berlaku hingga: <strong>" . date('d M Y H:i:s', strtotime($expiry)) . " WIB</strong></p>
+                                   <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak meminta perubahan ini, abaikan email ini atau hubungi kami.</p>";
+                $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
 
-                    // Pengirim dan penerima
-                    $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
-                    $mail->addAddress($email, $user['nama']);
-
-                    // Konten email
-                    $mail->isHTML(true);
-                    $mail->Subject = "Verifikasi Email - SCHOBANK SYSTEM";
-                    $mail->Body = "
-                        <html>
-                        <body>
-                            <h2>Verifikasi Email</h2>
-                            <p>Halo, <strong>{$user['nama']}</strong>!</p>
-                            <p>Kode OTP Anda adalah: <strong>{$otp}</strong>.</p>
-                            <p>Kode ini berlaku hingga " . date('d M Y H:i:s', strtotime($expiry)) . " WIB.</p>
-                            <p>Jika Anda tidak melakukan permintaan ini, abaikan email ini.</p>
-                            <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
-                        </body>
-                        </html>
-                    ";
-
-                    // Kirim email
-                    $mail->send();
-                    $_SESSION['new_email'] = $email; // Simpan email baru di session
-                    header("Location: verify_otp.php"); // Redirect ke halaman verifikasi OTP
+                if (sendEmail($email, $email_title, $email_body)) {
+                    $_SESSION['new_email'] = $email;
+                    header("Location: verify_otp.php");
                     exit();
-                } catch (Exception $e) {
-                    error_log("Mail error: " . $mail->ErrorInfo); // Log error
+                } else {
                     $error = "Gagal mengirim OTP. Silakan coba lagi nanti.";
                 }
             } else {
@@ -448,18 +335,13 @@ if (isset($_POST['update_username'])) {
     } elseif ($new_kelas_id == $user['kelas_id']) {
         $error = "Kelas baru tidak boleh sama dengan kelas saat ini!";
     } else {
-        // Update kelas
         $update_query = "UPDATE users SET kelas_id = ? WHERE id = ?";
         $update_stmt = $conn->prepare($update_query);
         $update_stmt->bind_param("ii", $new_kelas_id, $_SESSION['user_id']);
         
         if ($update_stmt->execute()) {
             $message = "Kelas berhasil diubah!";
-            
-            // Update user data
             $user['kelas_id'] = $new_kelas_id;
-            
-            // Get new class name
             $kelas_query = "SELECT nama_kelas FROM kelas WHERE id = ?";
             $kelas_stmt = $conn->prepare($kelas_query);
             $kelas_stmt->bind_param("i", $new_kelas_id);
@@ -467,27 +349,19 @@ if (isset($_POST['update_username'])) {
             $kelas_result = $kelas_stmt->get_result();
             $kelas_data = $kelas_result->fetch_assoc();
             $user['nama_kelas'] = $kelas_data['nama_kelas'];
-            
-            // Kirim email notifikasi
-            $subject = "Perubahan Kelas - SCHOBANK SYSTEM";
-            $message_email = "
-            <html>
-            <body>
-                <h2>Kelas Berhasil Diubah</h2>
-                <p>Halo, <strong>{$user['nama']}</strong>!</p>
-                <p>Kelas Anda telah berhasil diubah menjadi:</p>
-                <p><strong>{$user['nama_kelas']}</strong></p>
-                <p>Perubahan ini dilakukan pada " . date('d M Y H:i:s') . " WIB.</p>
-                <p>Jika Anda tidak melakukan perubahan ini, segera hubungi administrator.</p>
-                <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
-            </body>
-            </html>
-            ";
-            
-            if (sendEmail($user['email'], $subject, $message_email)) {
-                $message .= " Notifikasi telah dikirim ke email Anda.";
-            } else {
-                $error = "Gagal mengirim email notifikasi!";
+
+            // MODIFIED: Kirim email hanya jika email tersedia
+            if (!empty($user['email'])) {
+                $email_title = "Pemberitahuan Perubahan Kelas";
+                $email_greeting = "Yth. {$user['nama']},";
+                $email_content = "Kami informasikan bahwa kelas Anda di SCHOBANK telah diperbarui menjadi: <strong>{$user['nama_kelas']}</strong>.";
+                $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
+                                   <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
+
+                if (!sendEmail($user['email'], $email_title, $email_body)) {
+                    $error = "Gagal mengirim email notifikasi!";
+                }
             }
         } else {
             $error = "Gagal mengubah kelas!";
@@ -501,7 +375,7 @@ if (isset($_POST['update_username'])) {
 <head>
     <title>Profil Pengguna - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -512,11 +386,11 @@ if (isset($_POST['update_username'])) {
             --secondary-color: #4caf50;
             --accent-color: #ff9800;
             --danger-color: #f44336;
-            --text-primary: #333;
+            --text-primary: #1a1a1a;
             --text-secondary: #666;
             --bg-light: #f8faff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
+            --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.12);
             --transition: all 0.3s ease;
         }
 
@@ -527,65 +401,58 @@ if (isset($_POST['update_username'])) {
             font-family: 'Poppins', sans-serif;
         }
 
+        html, body {
+            touch-action: manipulation; /* Restricts pinch zooming */
+            -webkit-text-size-adjust: 100%; /* Prevents text scaling */
+            -webkit-user-select: none; /* Optional: Prevents text selection */
+            user-select: none; /* Optional: Prevents text selection */
+        }
+
         body {
-            background-color: var(--bg-light);
+            background: linear-gradient(135deg, var(--bg-light), #e8effd);
             color: var(--text-primary);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
+            font-size: calc(0.95rem + 0.3vw); /* Responsive base font */
         }
 
         .main-content {
             flex: 1;
-            padding: 20px;
+            padding: 40px 20px;
             width: 100%;
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
+            position: relative;
+            z-index: 1;
         }
 
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
-            padding: 30px;
-            border-radius: 15px;
-            margin-bottom: 30px;
+            padding: 40px;
+            border-radius: 20px;
+            margin-bottom: 40px;
             text-align: center;
             position: relative;
             box-shadow: var(--shadow-md);
             overflow: hidden;
-        }
-
-        .welcome-banner::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
-            transform: rotate(30deg);
-            animation: shimmer 8s infinite linear;
-        }
-
-        @keyframes shimmer {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(360deg);
-            }
+            animation: fadeInDown 0.8s ease-out;
+            z-index: 2;
         }
 
         .welcome-banner h2 {
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 10px;
+            font-size: calc(1.8rem + 0.4vw);
+            font-weight: 700;
+            margin-bottom: 12px;
             position: relative;
             z-index: 1;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
         .welcome-banner p {
-            font-size: 16px;
+            font-size: calc(1rem + 0.2vw);
             opacity: 0.9;
             position: relative;
             z-index: 1;
@@ -595,218 +462,345 @@ if (isset($_POST['update_username'])) {
             position: absolute;
             top: 20px;
             right: 20px;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.15);
             color: white;
             border: none;
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 16px;
+            font-size: calc(1.1rem + 0.3vw);
             transition: var(--transition);
             text-decoration: none;
             z-index: 2;
         }
 
         .cancel-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: rotate(90deg);
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.1);
         }
 
         .profile-container {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 25px;
+            gap: 30px;
         }
 
-        .profile-card, .edit-form-container {
+        .profile-card {
             background: white;
-            border-radius: 15px;
+            border-radius: 20px;
             box-shadow: var(--shadow-sm);
             transition: var(--transition);
             overflow: hidden;
+            animation: fadeInUp 0.6s ease-out;
+            position: relative;
+            z-index: 3;
         }
 
-        .profile-card:hover, .edit-form-container:hover {
+        .profile-card:hover {
             box-shadow: var(--shadow-md);
-            transform: translateY(-5px);
+            transform: translateY(-8px);
         }
 
-        .profile-header, .edit-form-header {
+        .profile-header {
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
             color: white;
-            padding: 15px 20px;
-            font-size: 18px;
+            padding: 20px 25px;
+            font-size: calc(1.2rem + 0.3vw);
             font-weight: 600;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            position: relative;
         }
 
-        .profile-header i, .edit-form-header i {
-            margin-right: 10px;
-            font-size: 20px;
-        }
-
-        .edit-btn {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        .edit-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: rotate(90deg);
+        .profile-header i {
+            margin-right: 12px;
+            font-size: calc(1.4rem + 0.3vw);
         }
 
         .profile-info {
-            padding: 20px;
+            padding: 25px;
         }
 
         .info-item {
-            padding: 12px 0;
+            padding: 15px 0;
             display: flex;
             align-items: center;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #f0f2f5;
             position: relative;
+            transition: var(--transition);
         }
 
         .info-item:last-child {
             border-bottom: none;
         }
 
+        .info-item:hover {
+            background: var(--primary-light);
+            border-radius: 10px;
+        }
+
         .info-item i {
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             display: flex;
             align-items: center;
             justify-content: center;
             background: var(--primary-light);
             color: var(--primary-color);
-            border-radius: 10px;
-            margin-right: 15px;
-            font-size: 16px;
+            border-radius: 12px;
+            margin-right: 20px;
+            font-size: calc(1.1rem + 0.2vw);
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .info-item .text-container {
+            flex: 1;
+            min-width: 0;
         }
 
         .info-item .label {
-            font-size: 14px;
+            font-size: calc(0.85rem + 0.1vw);
             color: var(--text-secondary);
-            margin-bottom: 3px;
+            margin-bottom: 4px;
         }
 
         .info-item .value {
-            font-size: 16px;
+            font-size: calc(0.95rem + 0.2vw);
             font-weight: 500;
             color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .info-item .edit-icon {
+        .info-item .edit-btn {
             position: absolute;
-            right: 10px;
+            right: 15px;
             background: var(--primary-light);
             color: var(--primary-color);
-            border: none;
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
+            border: 1px solid var(--primary-color);
+            padding: 8px 12px;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
+            font-size: calc(0.85rem + 0.1vw);
             transition: var(--transition);
+            flex-shrink: 0;
         }
 
-        .info-item .edit-icon:hover {
+        .info-item .edit-btn i {
+            margin: 0;
+            background: none;
+            width: auto;
+            height: auto;
+            font-size: calc(0.95rem + 0.1vw);
+        }
+
+        .info-item .edit-btn:hover {
             background: var(--primary-color);
             color: white;
         }
 
+        @media (max-width: 768px) {
+            .info-item {
+                padding: 10px 0;
+                position: relative;
+            }
+
+            .info-item i {
+                width: 40px;
+                height: 40px;
+                margin-right: 15px;
+                font-size: calc(1rem + 0.2vw);
+            }
+
+            .info-item .label {
+                font-size: calc(0.75rem + 0.1vw);
+            }
+
+            .info-item .value {
+                font-size: calc(0.85rem + 0.2vw);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .info-item .edit-btn {
+                padding: 6px 10px;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+            }
+
+            .info-item .edit-btn i {
+                font-size: calc(0.85rem + 0.1vw);
+            }
+        }
+
         .badge {
             display: inline-block;
-            padding: 4px 12px;
+            padding: 6px 14px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: calc(0.8rem + 0.1vw);
             font-weight: 500;
             text-transform: uppercase;
             background: var(--primary-light);
             color: var(--primary-color);
+            animation: pulse 2s infinite;
         }
 
-        .edit-form-content {
-            padding: 20px;
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .modal {
             display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
         }
 
-        .edit-form-content.active {
-            display: block;
-            animation: fadeIn 0.3s ease-in;
+        .modal-content {
+            background: white;
+            margin: 8% auto;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: var(--shadow-md);
+            width: 90%;
+            max-width: 550px;
+            position: relative;
+            z-index: 1001;
+            animation: zoomIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes zoomIn {
+            from {
+                opacity: 0;
+                transform: scale(0.7);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: calc(1.3rem + 0.3vw);
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .modal-header .close-modal {
+            background: none;
+            border: none;
+            font-size: calc(1.5rem + 0.3vw);
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: var(--transition);
+        }
+
+        .modal-header .close-modal:hover {
+            color: var(--primary-color);
+        }
+
+        .modal-body {
+            margin-bottom: 25px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             position: relative;
-        }
-
-        .form-group:last-child {
-            margin-bottom: 0;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
+            margin-bottom: 10px;
+            font-size: calc(0.9rem + 0.2vw);
             font-weight: 500;
-            color: var(--text-secondary);
+            color: var(--text-primary);
         }
 
         .form-group .input-wrapper {
             position: relative;
         }
 
-        .form-group input {
+        .form-group input, .form-group select {
             width: 100%;
-            padding: 12px 15px;
-            padding-left: 40px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: 15px;
+            padding: 14px 20px;
+            padding-left: 50px;
+            border: none;
+            border-radius: 12px;
+            font-size: calc(0.95rem + 0.2vw);
+            background: #f5f7fa;
             transition: var(--transition);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .form-group select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 20px center;
+            background-size: 18px;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.2);
         }
 
         .form-group i.input-icon {
             position: absolute;
             top: 50%;
-            left: 15px;
+            left: 20px;
             transform: translateY(-50%);
             color: var(--text-secondary);
-            font-size: 16px;
+            font-size: calc(1rem + 0.2vw);
+            transition: var(--transition);
         }
 
-        .form-group input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+        .form-group input:focus + i.input-icon, .form-group select:focus + i.input-icon {
+            color: var(--primary-color);
         }
 
         .form-group .password-toggle {
             position: absolute;
             top: 50%;
-            right: 15px;
+            right: 20px;
             transform: translateY(-50%);
             color: var(--text-secondary);
             cursor: pointer;
-            font-size: 16px;
+            font-size: calc(1rem + 0.2vw);
             transition: var(--transition);
         }
 
@@ -816,14 +810,16 @@ if (isset($_POST['update_username'])) {
 
         .btn {
             display: inline-block;
-            padding: 12px 25px;
-            border-radius: 10px;
+            padding: 14px 30px;
+            border-radius: 12px;
             font-weight: 500;
-            font-size: 15px;
+            font-size: calc(0.95rem + 0.2vw);
             cursor: pointer;
             transition: var(--transition);
             border: none;
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
 
         .btn-primary {
@@ -833,85 +829,85 @@ if (isset($_POST['update_username'])) {
 
         .btn-primary:hover {
             background: var(--primary-dark);
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(12, 77, 162, 0.3);
         }
 
         .btn-outline {
             background: transparent;
             color: var(--primary-color);
-            border: 1px solid var(--primary-color);
+            border: 2px solid var(--primary-color);
         }
 
         .btn-outline:hover {
             background: var(--primary-light);
-        }
-
-        .btn-container {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
+            transform: translateY(-3px);
         }
 
         .btn i {
-            margin-right: 8px;
+            margin-right: 10px;
+            font-size: calc(1rem + 0.2vw);
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
         }
 
         .alert {
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+            padding: 18px 24px;
+            border-radius: 12px;
+            margin-bottom: 25px;
             position: fixed;
             top: 20px;
             right: 20px;
-            z-index: 1000;
-            animation: slideIn 0.5s ease-out;
+            z-index: 500;
+            animation: slideInRight 0.5s ease-out;
             display: flex;
             align-items: center;
-            max-width: 350px;
+            max-width: 400px;
             box-shadow: var(--shadow-md);
         }
 
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
         }
 
-        @keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
+        @keyframes slideOutRight {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
         }
 
         .alert.hide {
-            animation: slideOut 0.5s ease-in forwards;
+            animation: slideOutRight 0.5s ease-in forwards;
         }
 
         .alert-success {
-            background-color: #d1fae5;
+            background: #d1fae5;
             color: #065f46;
-            border-left: 5px solid #34d399;
+            border-left: 6px solid #34d399;
         }
 
         .alert-danger {
-            background-color: #fee2e2;
+            background: #fee2e2;
             color: #991b1b;
-            border-left: 5px solid #f87171;
+            border-left: 6px solid #f87171;
         }
 
         .alert i {
             margin-right: 15px;
-            font-size: 20px;
+            font-size: calc(1.3rem + 0.3vw);
         }
 
         .alert-content {
@@ -920,13 +916,14 @@ if (isset($_POST['update_username'])) {
 
         .alert-content p {
             margin: 0;
+            font-size: calc(0.9rem + 0.2vw);
         }
 
         .alert .close-alert {
             background: none;
             border: none;
             color: inherit;
-            font-size: 16px;
+            font-size: calc(1rem + 0.2vw);
             cursor: pointer;
             margin-left: 15px;
             opacity: 0.7;
@@ -937,16 +934,6 @@ if (isset($_POST['update_username'])) {
             opacity: 1;
         }
 
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
-
-        /* Loader animation for buttons */
         .btn-loading {
             position: relative;
             pointer-events: none;
@@ -961,184 +948,69 @@ if (isset($_POST['update_username'])) {
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
+            width: 24px;
+            height: 24px;
+            margin: -12px 0 0 -12px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
             border-top-color: #fff;
             border-radius: 50%;
             animation: rotate 0.8s linear infinite;
         }
 
         @keyframes rotate {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        @media (max-width: 768px) {
-            .btn-container {
-                flex-direction: column;
-            }
-            
-            .btn {
-                width: 100%;
-            }
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(5px);
-        }
-
-        .modal-content {
-            background-color: white;
-            margin: 10% auto;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: var(--shadow-md);
-            width: 90%;
-            max-width: 500px;
-            position: relative;
-            animation: fadeIn 0.3s ease-in;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .modal-header h3 {
-            margin: 0;
-            font-size: 20px;
-            font-weight: 600;
-        }
-
-        .modal-header .close-modal {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--text-secondary);
-            transition: var(--transition);
-        }
-
-        .modal-header .close-modal:hover {
-            color: var(--primary-color);
-        }
-
-        .modal-body {
-            margin-bottom: 20px;
-        }
-
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-                /* CSS untuk dropdown kelas */
-        .form-control {
-            width: 100%;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            font-family: 'Poppins', sans-serif;
-            background-color: white;
-            color: #333;
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            background-size: 15px;
-            transition: border-color 0.3s;
-        }
-
-        .form-control:focus {
-            outline: none;
-            border-color: #0c4da2;
-            box-shadow: 0 0 0 2px rgba(12, 77, 162, 0.2);
-        }
-
-        /* Style untuk opsi dropdown */
-        .form-control option {
-            padding: 10px;
-            background-color: white;
-            color: #333;
-        }
-
-        /* Style untuk hover option */
-        .form-control option:hover {
-            background-color: #f0f5ff;
-        }
-
-        /* Style untuk selected option */
-        .form-control option:checked {
-            background-color: #e0e9f5;
-            color: #0c4da2;
-            font-weight: 500;
-        }
-
-        /* Style untuk disabled option */
-        .form-control option:disabled {
-            color: #999;
-            background-color: #f5f5f5;
-        }
-
-        /* Style untuk grup optgroup */
-        .form-control optgroup {
-            font-weight: 600;
-            color: #0c4da2;
-            background-color: #f0f5ff;
-            padding: 5px;
-        }
-
-        /* Style untuk option dalam optgroup */
-        .form-control optgroup option {
-            padding-left: 20px;
-            font-weight: normal;
-            color: #333;
+            to { transform: rotate(360deg); }
         }
 
         .forgot-pin-container {
-        text-align: right;
-        margin-top: 8px;
-    }
-    
-    .forgot-pin-link {
-        color: var(--primary-color);
-        text-decoration: none;
-        font-size: 13px;
-        transition: var(--transition);
-    }
-    
-    .forgot-pin-link:hover {
-        color: var(--primary-dark);
-        text-decoration: underline;
-    }
-        </style>
+            text-align: right;
+            margin-top: 10px;
+        }
+
+        .forgot-pin-link {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-size: calc(0.85rem + 0.1vw);
+            transition: var(--transition);
+        }
+
+        .forgot-pin-link:hover {
+            color: var(--primary-dark);
+            text-decoration: underline;
+        }
+
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @media (max-width: 768px) {
+            .welcome-banner h2 {
+                font-size: calc(1.4rem + 0.4vw);
+            }
+
+            .welcome-banner p {
+                font-size: calc(0.9rem + 0.2vw);
+            }
+
+            .modal-content {
+                margin: 20% auto;
+                padding: 20px;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .modal-footer {
+                flex-direction: column;
+            }
+        }
+    </style>
 </head>
 <body>
     <?php if (file_exists('../../includes/header.php')) {
@@ -1148,7 +1020,7 @@ if (isset($_POST['update_username'])) {
     <div class="main-content">
         <div class="welcome-banner">
             <h2>Profil Pengguna</h2>
-            <p>Kelola informasi dan pengaturan profil Anda</p>
+            <p>Kelola informasi dan pengaturan akun Anda dengan mudah</p>
             <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
                 <i class="fas fa-arrow-left"></i>
             </a>
@@ -1190,7 +1062,7 @@ if (isset($_POST['update_username'])) {
                 <div class="profile-info">
                     <div class="info-item">
                         <i class="fas fa-user"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Nama Lengkap</div>
                             <div class="value"><?= htmlspecialchars($user['nama']) ?></div>
                         </div>
@@ -1198,42 +1070,42 @@ if (isset($_POST['update_username'])) {
                     
                     <div class="info-item">
                         <i class="fas fa-user-tag"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Username</div>
                             <div class="value"><?= htmlspecialchars($user['username']) ?></div>
                         </div>
-                        <button class="edit-icon" data-target="username">
-                            <i class="fas fa-pen"></i>
+                        <button class="edit-btn" data-target="username">
+                            <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
 
                     <div class="info-item">
                         <i class="fas fa-lock"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Password</div>
                             <div class="value">••••••••</div>
                         </div>
-                        <button class="edit-icon" data-target="password">
-                            <i class="fas fa-pen"></i>
+                        <button class="edit-btn" data-target="password">
+                            <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
                     
                     <div class="info-item">
                         <i class="fas fa-envelope"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Email</div>
                             <div class="value">
                                 <?= !empty($user['email']) ? htmlspecialchars($user['email']) : 'Belum diatur' ?>
                             </div>
                         </div>
-                        <button class="edit-icon" data-target="email">
-                            <i class="fas fa-pen"></i>
+                        <button class="edit-btn" data-target="email">
+                            <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
                     
                     <div class="info-item">
                         <i class="fas fa-graduation-cap"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Jurusan</div>
                             <div class="value"><?= htmlspecialchars($user['nama_jurusan']) ?></div>
                         </div>
@@ -1241,18 +1113,18 @@ if (isset($_POST['update_username'])) {
                     
                     <div class="info-item">
                         <i class="fas fa-users"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Kelas</div>
                             <div class="value"><?= htmlspecialchars($user['nama_kelas']) ?></div>
                         </div>
-                        <button class="edit-icon" data-target="kelas">
-                            <i class="fas fa-pen"></i>
+                        <button class="edit-btn" data-target="kelas">
+                            <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
                     
                     <div class="info-item">
                         <i class="fas fa-user-shield"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Status</div>
                             <div class="value">
                                 <span class="badge"><?= htmlspecialchars(ucfirst($user['role'])) ?></span>
@@ -1262,7 +1134,7 @@ if (isset($_POST['update_username'])) {
                     
                     <div class="info-item">
                         <i class="fas fa-calendar-alt"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">Bergabung Sejak</div>
                             <div class="value"><?= date('d F Y', strtotime($user['tanggal_bergabung'])) ?></div>
                         </div>
@@ -1270,14 +1142,14 @@ if (isset($_POST['update_username'])) {
                     
                     <div class="info-item">
                         <i class="fas fa-key"></i>
-                        <div>
+                        <div class="text-container">
                             <div class="label">PIN</div>
                             <div class="value">
                                 <?= !empty($user['pin']) ? '••••••' : 'Belum diatur' ?>
                             </div>
                         </div>
-                        <button class="edit-icon" data-target="pin">
-                            <i class="fas fa-pen"></i>
+                        <button class="edit-btn" data-target="pin">
+                            <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
                 </div>
@@ -1290,7 +1162,7 @@ if (isset($_POST['update_username'])) {
         <div class="modal-content">
             <div class="modal-header">
                 <h3><i class="fas fa-user-edit"></i> Ubah Username</h3>
-                <button class="close-modal">&times;</button>
+                <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
                 <form method="POST" action="" id="usernameForm">
@@ -1319,7 +1191,7 @@ if (isset($_POST['update_username'])) {
         <div class="modal-content">
             <div class="modal-header">
                 <h3><i class="fas fa-envelope"></i> Ubah Email</h3>
-                <button class="close-modal">&times;</button>
+                <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
                 <form method="POST" action="" id="emailForm">
@@ -1348,7 +1220,7 @@ if (isset($_POST['update_username'])) {
         <div class="modal-content">
             <div class="modal-header">
                 <h3><i class="fas fa-shield-alt"></i> Verifikasi OTP</h3>
-                <button class="close-modal">&times;</button>
+                <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
                 <form method="POST" action="" id="otpForm">
@@ -1377,7 +1249,7 @@ if (isset($_POST['update_username'])) {
         <div class="modal-content">
             <div class="modal-header">
                 <h3><i class="fas fa-lock"></i> Ubah Password</h3>
-                <button class="close-modal">&times;</button>
+                <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
                 <form method="POST" action="" id="passwordForm">
@@ -1418,12 +1290,12 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-        <!-- Modal for Edit PIN -->
-        <div id="pinModal" class="modal">
+    <!-- Modal for Edit PIN -->
+    <div id="pinModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3><i class="fas fa-key"></i> Buat/Ubah PIN</h3>
-                <button class="close-modal">&times;</button>
+                <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
                 <form method="POST" action="" id="pinForm">
@@ -1473,19 +1345,18 @@ if (isset($_POST['update_username'])) {
     <div id="kelasModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3><i class="fas fa-users-class"></i> Ubah Kelas</h3>
-                <button class="close-modal">&times;</button>
+                <h3><i class="fas fa-users"></i> Ubah Kelas</h3>
+                <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
                 <form method="POST" action="" id="kelasForm">
                     <div class="form-group">
                         <label for="new_kelas_id">Kelas Baru</label>
                         <div class="input-wrapper">
-                            <i class="fas fa-users-class input-icon"></i>
-                            <select id="new_kelas_id" name="new_kelas_id" required class="form-control">
+                            <i class="fas fa-users input-icon"></i>
+                            <select id="new_kelas_id" name="new_kelas_id" required>
                                 <option value="">Pilih Kelas</option>
                                 <?php
-                                // Get classes for the current major
                                 $kelas_query = "SELECT k.id, k.nama_kelas FROM kelas k 
                                                WHERE k.jurusan_id = ? 
                                                ORDER BY k.nama_kelas";
@@ -1516,153 +1387,156 @@ if (isset($_POST['update_username'])) {
     </div>
 
     <script>
+        // Prevent pinch zooming
+        document.addEventListener('touchstart', function (event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        // Prevent double-tap zooming
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function (event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+
         document.addEventListener('DOMContentLoaded', function() {
-    const forgotPinLink = document.getElementById('forgotPinLink');
-    
-    if (forgotPinLink) {
-        forgotPinLink.addEventListener('click', function(e) {
-            e.preventDefault();
-            
-            // Show confirmation dialog
-            if (confirm('Apakah Anda yakin ingin mereset PIN? Link reset akan dikirim ke email Anda.')) {
-                // Create loading state
-                const originalText = forgotPinLink.textContent;
-                forgotPinLink.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
-                
-                // Send AJAX request
-                fetch('send_pin_reset.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: `user_id=<?= $_SESSION['user_id'] ?>`
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        alert('Link reset PIN telah dikirim ke email Anda. Silakan cek email Anda untuk instruksi lebih lanjut.');
-                    } else {
-                        alert('Gagal mengirim link reset: ' + data.message);
+            // Handle forgot PIN
+            const forgotPinLink = document.getElementById('forgotPinLink');
+            if (forgotPinLink) {
+                forgotPinLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (confirm('Apakah Anda yakin ingin mereset PIN? Link reset akan dikirim ke email Anda.')) {
+                        const originalText = forgotPinLink.textContent;
+                        forgotPinLink.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+                        
+                        fetch('send_pin_reset.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: `user_id=<?= $_SESSION['user_id'] ?>`
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                alert('Link reset PIN telah dikirim ke email Anda.');
+                            } else {
+                                alert('Gagal mengirim link reset: ' + data.message);
+                            }
+                        })
+                        .catch(error => {
+                            alert('Terjadi kesalahan: ' + error);
+                        })
+                        .finally(() => {
+                            forgotPinLink.textContent = originalText;
+                        });
                     }
-                })
-                .catch(error => {
-                    alert('Terjadi kesalahan: ' + error);
-                })
-                .finally(() => {
-                    forgotPinLink.textContent = originalText;
                 });
             }
-        });
-    }
-});
-        // Handle alerts
-        function dismissAlert(alert) {
-            alert.classList.add('hide');
-            setTimeout(() => {
-                alert.remove();
-            }, 500);
-        }
 
-        // Auto dismiss alerts after 5 seconds
-        document.addEventListener('DOMContentLoaded', function() {
-            const alerts = document.querySelectorAll('.alert');
-            alerts.forEach(alert => {
-                setTimeout(() => {
-                    dismissAlert(alert);
-                }, 5000);
-            });
-
-            // Redirect to login page after successful update
-            if (window.location.href.indexOf('success') > -1) {
-                setTimeout(() => {
-                    window.location.href = '../../login.php';
-                }, 3000);
+            // Handle alerts
+            function dismissAlert(alert) {
+                alert.classList.add('hide');
+                setTimeout(() => alert.remove(), 500);
             }
 
-            // Toggle password visibility
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                setTimeout(() => dismissAlert(alert), 5000);
+            });
+
+            // Password visibility toggle
             const toggles = document.querySelectorAll('.password-toggle');
             toggles.forEach(toggle => {
                 toggle.addEventListener('click', function() {
                     const targetId = this.getAttribute('data-target');
-                    const passwordInput = document.getElementById(targetId);
-                    
-                    if (passwordInput.type === 'password') {
-                        passwordInput.type = 'text';
+                    const input = document.getElementById(targetId);
+                    if (input.type === 'password') {
+                        input.type = 'text';
                         this.classList.remove('fa-eye');
                         this.classList.add('fa-eye-slash');
                     } else {
-                        passwordInput.type = 'password';
+                        input.type = 'password';
                         this.classList.remove('fa-eye-slash');
                         this.classList.add('fa-eye');
                     }
                 });
             });
 
-            // Handle modal open and close
-            const editIcons = document.querySelectorAll('.edit-icon');
+            // Modal handling
+            const editButtons = document.querySelectorAll('.edit-btn');
             const modals = document.querySelectorAll('.modal');
             const closeModalButtons = document.querySelectorAll('.close-modal');
 
-            // Open modal when edit icon is clicked
-            editIcons.forEach(icon => {
-                icon.addEventListener('click', function() {
+            editButtons.forEach(button => {
+                button.addEventListener('click', function() {
                     const target = this.getAttribute('data-target');
                     const modal = document.getElementById(target + 'Modal');
                     if (modal) {
                         modal.style.display = 'block';
+                        modal.style.zIndex = '1000';
+                        document.body.style.overflow = 'hidden';
+                        setTimeout(() => modal.classList.add('active'), 10);
                     }
                 });
             });
 
-            // Close modal when close button is clicked
             closeModalButtons.forEach(button => {
                 button.addEventListener('click', function() {
                     const modal = this.closest('.modal');
-                    if (modal) {
+                    modal.classList.remove('active');
+                    setTimeout(() => {
                         modal.style.display = 'none';
-                    }
+                        document.body.style.overflow = 'auto';
+                    }, 400);
                 });
             });
 
-            // Close modal when clicking outside the modal
             window.addEventListener('click', function(event) {
                 modals.forEach(modal => {
                     if (event.target === modal) {
-                        modal.style.display = 'none';
+                        modal.classList.remove('active');
+                        setTimeout(() => {
+                            modal.style.display = 'none';
+                            document.body.style.overflow = 'auto';
+                        }, 400);
                     }
                 });
             });
 
-            // Form submission with loading animation
-            document.getElementById('usernameForm').addEventListener('submit', function() {
-                const button = document.getElementById('usernameBtn');
-                button.classList.add('btn-loading');
+            // Form submission loading state
+            const forms = [
+                'usernameForm', 'passwordForm', 'pinForm', 
+                'emailForm', 'otpForm', 'kelasForm'
+            ];
+
+            forms.forEach(formId => {
+                const form = document.getElementById(formId);
+                if (form) {
+                    form.addEventListener('submit', function() {
+                        const button = document.getElementById(formId.replace('Form', 'Btn'));
+                        button.classList.add('btn-loading');
+                    });
+                }
             });
 
-            document.getElementById('passwordForm').addEventListener('submit', function() {
-                const button = document.getElementById('passwordBtn');
-                button.classList.add('btn-loading');
-            });
-            
-            document.getElementById('pinForm').addEventListener('submit', function() {
-                const button = document.getElementById('pinBtn');
-                button.classList.add('btn-loading');
-            });
+            // Intersection Observer for animations
+            const animatedElements = document.querySelectorAll('.profile-card, .welcome-banner');
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('animate');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.2 });
 
-            document.getElementById('emailForm').addEventListener('submit', function() {
-                const button = document.getElementById('emailBtn');
-                button.classList.add('btn-loading');
-            });
-
-            document.getElementById('otpForm').addEventListener('submit', function() {
-                const button = document.getElementById('otpBtn');
-                button.classList.add('btn-loading');
-            });
-
-            document.getElementById('kelasForm').addEventListener('submit', function() {
-                const button = document.getElementById('kelasBtn');
-                button.classList.add('btn-loading');
-            });
+            animatedElements.forEach(element => observer.observe(element));
         });
     </script>
 </body>

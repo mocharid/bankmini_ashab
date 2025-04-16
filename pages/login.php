@@ -25,15 +25,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $session_result = $stmt->get_result();
 
             if ($session_result->num_rows > 0) {
-                $error_message = "Petugas sudah login di tempat lain!";
+                $_SESSION['error_message'] = "Petugas sudah login di tempat lain!";
+                $_SESSION['username'] = $username;
+                $_SESSION['password'] = $password;
             } else {
                 // Set timezone ke WIB
                 date_default_timezone_set('Asia/Jakarta');
                 
                 // Cek waktu login
                 $current_time = date('H:i');
-                $start_time = '01:30';
-                $end_time = '23:00';
+                $start_time = '00:09';
+                $end_time = '23:59:00';
 
                 if ($current_time >= $start_time && $current_time <= $end_time) {
                     // Simpan sesi
@@ -48,10 +50,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $stmt->bind_param("iss", $user['id'], $session_id, $user['role']);
                     $stmt->execute();
 
+                    // Redirect untuk mencegah resubmission
                     header("Location: ../index.php");
                     exit();
                 } else {
-                    $error_message = "Login hanya bisa dilakukan saat jam tugas 7:30 sampai 15:00 WIB!";
+                    $_SESSION['error_message'] = "Login hanya bisa dilakukan saat jam tugas 07:30 sampai 15:00 WIB!";
+                    $_SESSION['username'] = $username;
+                    $_SESSION['password'] = $password;
                 }
             }
         } else {
@@ -63,23 +68,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
     } else {
-        $error_message = "Username atau password salah!";
+        $_SESSION['error_message'] = "Username atau password salah!";
+        $_SESSION['username'] = $username;
+        $_SESSION['password'] = $password;
     }
+
+    // Redirect ke halaman login untuk mencegah resubmission
+    header("Location: login.php");
+    exit();
 }
+
+// Ambil data dari sesi jika ada
+$error_message = isset($_SESSION['error_message']) ? $_SESSION['error_message'] : null;
+$username = isset($_SESSION['username']) ? $_SESSION['username'] : '';
+$password = isset($_SESSION['password']) ? $_SESSION['password'] : '';
+
+// Bersihkan data sesi setelah digunakan
+unset($_SESSION['error_message']);
+unset($_SESSION['username']);
+unset($_SESSION['password']);
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
     <title>Login - SCHOBANK SYSTEM</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Roboto', 'Helvetica', 'Arial', sans-serif;
         }
 
         body {
@@ -88,43 +109,58 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             display: flex;
             justify-content: center;
             align-items: center;
-            background-image: url('https://www.transparenttextures.com/patterns/geometry.png');
+            background-image: url('https://www.transparenttextures.com/patterns/geometry2.png');
             background-size: cover;
             background-position: center;
             padding: 20px;
         }
 
         .login-container {
-            background: rgba(255, 255, 255, 0.9);
-            padding: 2rem;
-            border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            background: #ffffff;
+            padding: 2.5rem;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
             text-align: center;
-            backdrop-filter: blur(5px);
+            border: 1px solid #e8ecef;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .logo-container {
-            margin-bottom: 1.5rem;
+            margin-bottom: 2rem;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e8ecef;
         }
 
         .logo {
-            width: 100px; /* Ukuran logo yang ditampilkan di halaman */
-            height: auto; /* Menjaga aspek rasio */
-            margin-bottom: 0.2rem; /* Jarak antara logo dan teks di bawahnya */
+            width: 110px;
+            height: auto;
         }
 
         .bank-name {
-            font-size: 1.3rem;
-            color: #0a2e5c;
-            font-weight: bold;
-            margin-bottom: 1.2rem;
+            font-size: 1.5rem;
+            color: #003087;
+            font-weight: 700;
+            margin-top: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .input-group {
             position: relative;
-            margin-bottom: 1.2rem;
+            margin-bottom: 1.5rem;
         }
 
         .input-group i.icon {
@@ -132,7 +168,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             left: 15px;
             top: 50%;
             transform: translateY(-50%);
-            color: #0a2e5c;
+            color: #555555;
+            font-size: 1.1rem;
         }
 
         .input-group i.toggle-password {
@@ -140,64 +177,74 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             right: 15px;
             top: 50%;
             transform: translateY(-50%);
-            color: #0a2e5c;
+            color: #555555;
             cursor: pointer;
-            padding: 5px;
+            font-size: 1.1rem;
+            transition: color 0.3s ease;
+        }
+
+        .input-group i.toggle-password:hover {
+            color: #003087;
         }
 
         input {
             width: 100%;
-            padding: 12px 40px;
-            border: 2px solid #e1e5ee;
-            border-radius: 10px;
+            padding: 14px 45px;
+            border: 1px solid #d1d9e6;
+            border-radius: 8px;
             font-size: 16px;
             transition: all 0.3s ease;
-            -webkit-appearance: none;
-            appearance: none;
+            background: #f9fbfd;
         }
 
         input[type="password"] {
-            padding-right: 45px;
+            padding-right: 50px;
         }
 
         input:focus {
-            border-color: #0a2e5c;
+            border-color: #003087;
             outline: none;
-            box-shadow: 0 0 0 3px rgba(10, 46, 92, 0.1);
+            box-shadow: 0 0 0 3px rgba(0, 48, 135, 0.1);
+            background: #ffffff;
         }
 
         button {
             width: 100%;
-            padding: 12px;
-            background: #0a2e5c;
+            padding: 14px;
+            background: #003087;
             color: white;
             border: none;
-            border-radius: 10px;
+            border-radius: 8px;
             font-size: 16px;
-            font-weight: bold;
+            font-weight: 500;
             cursor: pointer;
-            transition: background 0.3s ease;
-            -webkit-appearance: none;
-            appearance: none;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
 
-        button:hover, button:active {
-            background: #154785;
+        button:hover {
+            background: #0041b8;
+            box-shadow: 0 4px 12px rgba(0, 48, 135, 0.2);
+            transform: translateY(-1px);
         }
 
-        button:focus {
-            outline: none;
+        button:active {
+            background: #002a6e;
+            transform: translateY(0);
         }
 
         .error-message {
-            background: #ffe5e5;
-            color: #e74c3c;
+            background: #fff4f4;
+            color: #a94442;
             padding: 1rem;
-            border-radius: 10px;
-            margin-bottom: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
             font-size: 0.9rem;
-            opacity: 1;
-            transition: opacity 0.5s ease-in-out;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #e4b7b7;
         }
 
         .error-message.fade-out {
@@ -205,60 +252,61 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .bank-tagline {
-            color: #666;
-            font-size: 0.8rem;
-            margin-top: 1.5rem;
-            line-height: 1.3;
+            color: #666666;
+            font-size: 0.85rem;
+            margin-top: 2rem;
+            line-height: 1.4;
         }
-        
+
         .forgot-password {
             text-align: right;
-            margin-bottom: 1.2rem;
+            margin-bottom: 1.5rem;
         }
-        
+
         .forgot-password a {
-            color: #0a2e5c;
-            font-size: 0.85rem;
+            color: #003087;
+            font-size: 0.9rem;
             text-decoration: none;
-            transition: color 0.3s ease;
+            transition: all 0.3s ease;
         }
-        
+
         .forgot-password a:hover {
-            color: #154785;
+            color: #0041b8;
             text-decoration: underline;
         }
 
-        /* Responsive adjustments */
         @media (max-width: 480px) {
             .login-container {
-                padding: 1.5rem;
+                padding: 2rem;
             }
-            
+
             .logo {
-                font-size: 2rem;
-                width: 80px; 
+                width: 90px;
             }
-            
+
             .bank-name {
-                font-size: 1.2rem;
+                font-size: 1.3rem;
             }
-            
+
             input, button {
-                font-size: 16px;
-                padding: 10px 40px;
+                font-size: 15px;
+                padding: 12px 40px;
             }
-            
+
+            input[type="password"] {
+                padding-right: 45px;
+            }
+
             button {
-                padding: 10px;
+                padding: 12px;
             }
-            
+
             .bank-tagline {
-                font-size: 0.75rem;
+                font-size: 0.8rem;
             }
         }
 
-        /* Fix for iOS zoom on input focus */
-        @media screen and (-webkit-min-device-pixel-ratio: 0) { 
+        @media screen and (-webkit-min-device-pixel-ratio: 0) {
             select,
             textarea,
             input {
@@ -266,10 +314,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
 
-        /* Fix for touch targets */
         @media (max-width: 480px) {
+            .input-group i.icon,
             .input-group i.toggle-password {
-                padding: 10px;
+                font-size: 1rem;
             }
         }
     </style>
@@ -278,44 +326,43 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <div class="login-container">
         <div class="logo-container">
             <img src="/bankmini/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
-        <div class="bank-name">SCHOBANK</div>
-    </div>
+            <div class="bank-name">SCHOBANK</div>
+        </div>
 
         <?php if (isset($error_message)): ?>
             <div class="error-message" id="error-alert">
                 <i class="fas fa-exclamation-circle"></i>
-                <?php echo $error_message; ?>
+                <?php echo htmlspecialchars($error_message); ?>
             </div>
         <?php endif; ?>
 
         <form method="POST">
             <div class="input-group">
                 <i class="fas fa-user icon"></i>
-                <input type="text" name="username" placeholder="Username" required autocomplete="username">
+                <input type="text" name="username" placeholder="Username" value="<?php echo htmlspecialchars($username); ?>" required autocomplete="username">
             </div>
             
             <div class="input-group">
                 <i class="fas fa-lock icon"></i>
-                <input type="password" name="password" id="password" placeholder="Password" required autocomplete="current-password">
+                <input type="password" name="password" id="password" placeholder="Password" value="<?php echo htmlspecialchars($password); ?>" required autocomplete="current-password">
                 <i class="fas fa-eye toggle-password" id="togglePassword"></i>
             </div>
             
             <div class="forgot-password">
-                <a href="forgot_password.php">Lupa password?</a>
+                <a href="forgot_password.php">Forgot Password?</a>
             </div>
 
             <button type="submit">
-                <i class="fas fa-sign-in-alt"></i> Login
+                <i class="fas fa-sign-in-alt"></i> Sign In
             </button>
         </form>
 
         <div class="bank-tagline">
-        SMK PLUS ASHABULYAMIN CIANJUR
+            SMK PLUS ASHABULYAMIN CIANJUR
         </div>
     </div>
 
     <script>
-        // Toggle Password Visibility
         const togglePassword = document.getElementById('togglePassword');
         const password = document.getElementById('password');
 
@@ -332,7 +379,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         });
 
-        // Error Message Auto Dismiss
         document.addEventListener('DOMContentLoaded', function() {
             const errorAlert = document.getElementById('error-alert');
             

@@ -2,17 +2,18 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
-$error = ''; 
-$success = ''; 
+$error = '';
+$success = '';
+$show_success_popup = false; // Flag untuk menampilkan pop-up BERHASIL
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['confirm'])) {
         // Jika konfirmasi diterima, tambahkan petugas ke database
         $nama = trim($_POST['nama']);
         $username = $_POST['username'];
-        $password = $_POST['password']; // Store the plain password temporarily
+        $password = $_POST['password'];
         
-        // Use the same SHA2 function as in login page (through MySQL)
+        // Use SHA2 for password hashing
         $query = "INSERT INTO users (username, password, role, nama) 
                   VALUES (?, SHA2(?, 256), 'petugas', ?)";
         $stmt = $conn->prepare($query);
@@ -20,52 +21,53 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         if ($stmt->execute()) {
             $success = 'Petugas berhasil ditambahkan!';
-            // Set header untuk redirect setelah beberapa detik
-            header("refresh:3;url=dashboard.php");
+            $show_success_popup = true; // Set flag untuk menampilkan pop-up BERHASIL
+            header("refresh:3;url=tambah_petugas.php");
         } else {
             $error = 'Terjadi kesalahan saat menambahkan petugas. Silakan coba lagi.';
         }
     } else {
-        // Jika belum konfirmasi, tampilkan data yang akan ditambahkan
+        // Jika belum konfirmasi, siapkan data untuk modal
         $nama = trim($_POST['nama']);
         if (empty($nama)) {
             $error = 'Nama tidak boleh kosong.';
         } else {
-            $username = generateUsername($nama); // Generate username otomatis
-            $password = "12345678"; // Password default seperti diminta
+            $username = generateUsername($nama);
+            $password = "12345678";
         }
     }
 }
 
 // Fungsi untuk generate username otomatis
 function generateUsername($nama) {
-    $nama = strtolower(str_replace(' ', '', $nama)); // Hilangkan spasi dan ubah ke lowercase
-    $randomNumber = rand(100, 999); // Tambahkan angka acak
+    $nama = strtolower(str_replace(' ', '', $nama));
+    $randomNumber = rand(100, 999);
     return $nama . $randomNumber;
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tambah Petugas - SCHOBANK SYSTEM</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #4361ee;
-            --primary-light: #edf2ff;
-            --primary-dark: #2940b2;
-            --secondary-color: #4cc9f0;
-            --success-color: #06d6a0;
-            --error-color: #ef476f;
-            --warning-color: #ffd166;
-            --dark-color: #2b2d42;
-            --light-color: #f8f9fa;
-            --grey-color: #e9ecef;
-            --text-color: #495057;
-            --border-radius: 8px;
-            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --primary-light wrongs: #e0e9f5;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
+            --accent-color: #ff9800;
+            --danger-color: #f44336;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f8faff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
 
@@ -73,207 +75,244 @@ function generateUsername($nama) {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         body {
-            background-color: #f5f7ff;
-            color: var(--text-color);
-            line-height: 1.6;
-            overflow-x: hidden;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .container {
-            max-width: 800px;
-            margin: 2rem auto;
-            background: white;
-            border-radius: var(--border-radius);
-            box-shadow: var(--shadow);
-            overflow: hidden;
-            transition: var(--transition);
-            animation: fadeIn 0.5s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .header {
-            padding: 1.5rem 2rem;
-            background: linear-gradient(135deg, #0a2e5c, #154785);
+        .top-nav {
+            background: var(--primary-dark);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             color: white;
-            position: relative;
-        }
-
-        .header h2 {
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-        }
-
-        .header p {
-            opacity: 0.85;
-            font-size: 0.95rem;
+            box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
-            position: absolute;
-            top: 1.5rem;
-            right: 2rem;
+            background: rgba(255, 255, 255, 0.1);
             color: white;
-            background: rgba(255, 255, 255, 0.2);
-            width: 40px;
-            height: 40px;
+            border: none;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 50%;
-            text-decoration: none;
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
         }
 
         .back-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
         }
 
-        .content {
-            padding: 2rem;
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .welcome-banner {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
+        }
+
+        .welcome-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+            animation: shimmer 8s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .welcome-banner h2 {
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .form-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
         .form-group {
-            margin-bottom: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
 
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
+        label {
             font-weight: 500;
-            color: var(--text-color);
-            transition: var(--transition);
-        }
-
-        .input-wrapper {
-            position: relative;
-        }
-
-        .input-wrapper .icon {
-            position: absolute;
-            left: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--primary-color);
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         input[type="text"] {
             width: 100%;
-            padding: 1rem 1rem 1rem 3rem;
-            border: 2px solid var(--grey-color);
-            border-radius: var(--border-radius);
-            font-size: 1rem;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
-            background-color: white;
         }
 
         input[type="text"]:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 4px var(--primary-light);
             outline: none;
-        }
-
-        input[type="text"]::placeholder {
-            color: #adb5bd;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            transform: scale(1.02);
         }
 
         .btn {
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: var(--border-radius);
-            font-size: 1rem;
-            font-weight: 500;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            transition: var(--transition);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .btn i {
-            font-size: 0.9rem;
-        }
-
-        .btn-primary {
             background-color: var(--primary-color);
             color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
         }
 
-        .btn-primary:hover {
+        .btn:hover {
             background-color: var(--primary-dark);
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn:active {
+            framför: scale(0.95);
         }
 
         .btn-secondary {
-            background-color: var(--grey-color);
-            color: var(--text-color);
+            background-color: #f0f0f0;
+            color: var(--text-secondary);
         }
 
         .btn-secondary:hover {
-            background-color: #dde2e6;
+            background-color: #e0e0e0;
             transform: translateY(-2px);
         }
 
-        .action-buttons {
-            display: flex;
-            gap: 1rem;
-            margin-top: 1.5rem;
-            justify-content: flex-end;
+        .btn-confirm {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-confirm:hover {
+            background-color: var(--secondary-dark);
+        }
+
+        .btn-cancel {
+            background-color: var(--danger-color);
+        }
+
+        .btn-cancel:hover {
+            background-color: #d32f2f;
         }
 
         .alert {
-            padding: 1rem;
-            border-radius: var(--border-radius);
-            margin-bottom: 1.5rem;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            animation: slideIn 0.3s ease-out;
+            gap: 10px;
+            animation: slideIn 0.5s ease-out;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-10px); }
-            to { opacity: 1; transform: translateX(0); }
+        .alert.hide {
+            animation: slideOut 0.5s ease-out forwards;
+        }
+
+        @keyframes slideOut {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(-20px); opacity: 0; }
         }
 
         .alert-error {
-            background-color: #fdecf0;
-            color: var(--error-color);
-            border-left: 4px solid var(--error-color);
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border-left: 5px solid #fecaca;
         }
 
         .alert-success {
-            background-color: #e0f9f0;
-            color: var(--success-color);
-            border-left: 4px solid var(--success-color);
-            position: relative;
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+            border-left: 5px solid var(--primary-color);
         }
 
         .redirect-message {
             display: block;
-            margin-top: 0.5rem;
-            font-size: 0.9rem;
-            opacity: 0.85;
+            margin-top: 10px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            opacity: 0.9;
         }
 
         .redirect-loader {
             height: 4px;
-            background-color: var(--success-color);
-            position: absolute;
-            bottom: 0;
-            left: 0;
+            background-color: var(--primary-color);
             width: 0;
             animation: progress 3s linear forwards;
         }
@@ -283,282 +322,372 @@ function generateUsername($nama) {
             to { width: 100%; }
         }
 
-        .confirmation {
-            background-color: var(--light-color);
-            border-radius: var(--border-radius);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
-            box-shadow: inset 0 0 0 1px var(--grey-color);
-            animation: fadeIn 0.4s ease-out;
-        }
-
-        .confirmation-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: var(--dark-color);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .confirmation-item {
-            display: flex;
-            margin-bottom: 1rem;
-            border-bottom: 1px solid var(--grey-color);
-            padding-bottom: 1rem;
-        }
-
-        .confirmation-item:last-child {
-            margin-bottom: 0;
-            border-bottom: none;
-            padding-bottom: 0;
-        }
-
-        .confirmation-label {
-            width: 120px;
-            font-weight: 500;
-            color: var(--text-color);
-            opacity: 0.8;
-        }
-
-        .confirmation-value {
-            flex: 1;
-            font-weight: 500;
-            color: var(--dark-color);
-            word-break: break-word;
-        }
-
-        .password-container {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            position: relative;
-        }
-
-        .copy-button {
-            background-color: var(--primary-light);
-            color: var(--primary-color);
-            border: none;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        .copy-button:hover {
-            background-color: var(--primary-color);
-            color: white;
-            transform: translateY(-2px);
-        }
-
-        .copy-notice {
-            position: absolute;
-            right: 0;
-            top: -30px;
-            background-color: var(--dark-color);
-            color: white;
-            padding: 0.5rem 0.75rem;
-            border-radius: var(--border-radius);
-            font-size: 0.8rem;
-            opacity: 0;
-            visibility: hidden;
-            transition: var(--transition);
-        }
-
-        .copy-notice:after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            right: 14px;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-top: 8px solid var(--dark-color);
-        }
-
-        .show-notice {
-            opacity: 1;
-            visibility: visible;
-            top: -40px;
-        }
-
         .loading {
-            position: relative;
             pointer-events: none;
+            opacity: 0.7;
         }
 
-        @media (max-width: 768px) {
-            .container {
-                margin: 1rem;
-                width: auto;
-            }
-
-            .header, .content {
-                padding: 1.25rem;
-            }
-
-            .confirmation-item {
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-
-            .confirmation-label {
-                width: 100%;
-            }
-
-            .action-buttons {
-                flex-direction: column;
-            }
-
-            .btn {
-                width: 100%;
-            }
+        .loading i {
+            animation: spin 1s linear infinite;
         }
 
-        @media (max-width: 480px) {
-            .header h2 {
-                font-size: 1.5rem;
-                padding-right: 40px;
-            }
-        }
-
-        /* Animasi loading */
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
 
-        .btn.loading .fa-spinner {
-            animation: spin 1s linear infinite;
+        .success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
         }
 
-        /* Animasi pulsing untuk elemen interaktif */
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
-        .btn-primary:active {
-            animation: pulse 0.3s;
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .success-modal {
+            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 90%;
+            width: 450px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            transform: scale(0.5);
+            opacity: 0;
+            animation: popInModal 0.7s ease-out forwards;
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon {
+            font-size: clamp(4rem, 8vw, 4.5rem);
+            color: var(--secondary-color);
+            margin-bottom: 25px;
+            animation: bounceIn 0.6s ease-out;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3 {
+            color: var(--primary-dark);
+            margin-bottom: 15px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            animation: slideUpText 0.5s ease-out 0.2s both;
+            font-weight: 600;
+        }
+
+        .success-modal p {
+            color: var(--text-secondary);
+            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+            margin-bottom: 25px;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+            line-height: 1.5;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .confetti {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            opacity: 0.8;
+            animation: confettiFall 4s ease-out forwards;
+            transform-origin: center;
+        }
+
+        .confetti:nth-child(odd) {
+            background: var(--accent-color);
+        }
+
+        .confetti:nth-child(even) {
+            background: var(--secondary-color);
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
+        }
+
+        .modal-content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .modal-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .modal-row:last-child {
+            border-bottom: none;
+        }
+
+        .modal-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .modal-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .top-nav {
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+            }
+
+            .main-content {
+                padding: 15px;
+            }
+
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
+            }
+
+            .form-card {
+                padding: 20px;
+            }
+
+            form {
+                gap: 15px;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .modal-buttons {
+                flex-direction: column;
+            }
+
+            .success-modal {
+                width: 90%;
+                padding: 30px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            }
+
+            .top-nav {
+                padding: 10px;
+            }
+
+            .welcome-banner {
+                padding: 20px;
+            }
+
+            .success-modal h3 {
+                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            }
+
+            .success-modal p {
+                font-size: clamp(0.9rem, 2.2vw, 1rem);
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <a href="dashboard.php" class="back-btn">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <h2>Tambah Petugas</h2>
-            <p>Data petugas baru untuk sistem</p>
+    <!-- Header -->
+    <nav class="top-nav">
+        <button class="back-btn" onclick="window.location.href='dashboard.php'">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
+    </nav>
+
+    <div class="main-content">
+        <!-- Welcome Banner -->
+        <div class="welcome-banner">
+            <h2><i class="fas fa-user-plus"></i> Tambah Petugas</h2>
         </div>
-        <div class="content">
+
+        <div id="alertContainer">
             <?php if (!empty($error)): ?>
                 <div class="alert alert-error">
-                    <i class="fas fa-circle-exclamation"></i>
-                    <?php echo $error; ?>
+                    <i class="fas fa-exclamation-circle"></i>
+                    <?php echo htmlspecialchars($error); ?>
                 </div>
             <?php endif; ?>
 
-            <?php if (!empty($success)): ?>
+            <?php if (!empty($success) && !$show_success_popup): ?>
                 <div class="alert alert-success">
-                    <i class="fas fa-circle-check"></i>
-                    <?php echo $success; ?>
+                    <i class="fas fa-check-circle"></i>
+                    <?php echo htmlspecialchars($success); ?>
                     <span class="redirect-message">
                         Mengalihkan ke Dashboard dalam <span id="countdown">3</span> detik
-                        <span class="redirect-loader"></span>
+                        <div class="redirect-loader"></div>
                     </span>
                 </div>
-            <?php elseif (!isset($_POST['confirm']) && $_SERVER['REQUEST_METHOD'] == 'POST' && empty($error)): ?>
-                <!-- Tampilkan konfirmasi data -->
-                <div class="confirmation">
-                    <div class="confirmation-title">
-                        <i class="fas fa-user-check"></i> Detail Petugas Baru
-                    </div>
-                    <div class="confirmation-item">
-                        <div class="confirmation-label">Nama</div>
-                        <div class="confirmation-value"><?php echo htmlspecialchars($nama); ?></div>
-                    </div>
-                    <div class="confirmation-item">
-                        <div class="confirmation-label">Username</div>
-                        <div class="confirmation-value"><?php echo htmlspecialchars($username); ?></div>
-                    </div>
-                    <div class="confirmation-item">
-                        <div class="confirmation-label">Password</div>
-                        <div class="confirmation-value password-container">
-                            <span id="password-text"><?php echo htmlspecialchars($password); ?></span>
-                            <button type="button" id="copy-password" class="copy-button" title="Salin Password">
-                                <i class="fas fa-copy"></i>
-                            </button>
-                            <span class="copy-notice" id="copy-notice">Password disalin!</span>
-                        </div>
-                    </div>
-                </div>
-                <form action="" method="POST" id="confirm-form">
-                    <input type="hidden" name="nama" value="<?php echo htmlspecialchars($nama); ?>">
-                    <input type="hidden" name="username" value="<?php echo htmlspecialchars($username); ?>">
-                    <input type="hidden" name="password" value="<?php echo htmlspecialchars($password); ?>">
-                    <div class="action-buttons">
-                        <button type="submit" name="confirm" class="btn btn-primary" id="confirm-btn">
-                            <i class="fas fa-check"></i> Konfirmasi
-                        </button>
-                        <button type="button" onclick="window.history.back();" class="btn btn-secondary">
-                            <i class="fas fa-arrow-left"></i> Kembali
-                        </button>
-                    </div>
-                </form>
-            <?php else: ?>
-                <!-- Form input data -->
-                <form action="" method="POST" id="input-form">
-                    <div class="form-group">
-                        <label for="nama">Nama Lengkap Petugas</label>
-                        <div class="input-wrapper">
-                            <input type="text" id="nama" name="nama" required placeholder="Masukkan nama lengkap">
-                            <i class="fas fa-user icon"></i>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary" id="submit-btn">
-                        <i class="fas fa-paper-plane"></i> Lanjutkan
-                    </button>
-                </form>
             <?php endif; ?>
         </div>
+
+        <!-- Input Form -->
+        <div class="form-card">
+            <form action="" method="POST" id="input-form">
+                <div class="form-group">
+                    <label for="nama">Nama Lengkap Petugas</label>
+                    <input type="text" id="nama" name="nama" required placeholder="Masukkan nama lengkap">
+                </div>
+                <button type="submit" class="btn" id="submit-btn">
+                    <i class="fas fa-paper-plane"></i> Lanjutkan
+                </button>
+            </form>
+        </div>
+
+        <!-- Confirmation Modal -->
+        <?php if (!isset($_POST['confirm']) && $_SERVER['REQUEST_METHOD'] == 'POST' && empty($error)): ?>
+            <div class="success-overlay" id="confirmModal">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-user-check"></i>
+                    </div>
+                    <h3>Konfirmasi Petugas Baru</h3>
+                    <div class="modal-content">
+                        <div class="modal-row">
+                            <span class="modal-label">Nama</span>
+                            <span class="modal-value"><?php echo htmlspecialchars($nama); ?></span>
+                        </div>
+                        <div class="modal-row">
+                            <span class="modal-label">Username</span>
+                            <span class="modal-value"><?php echo htmlspecialchars($username); ?></span>
+                        </div>
+                        <div class="modal-row">
+                            <span class="modal-label">Password</span>
+                            <span class="modal-value"><?php echo htmlspecialchars($password); ?></span>
+                        </div>
+                    </div>
+                    <form action="" method="POST" id="confirm-form">
+                        <input type="hidden" name="nama" value="<?php echo htmlspecialchars($nama); ?>">
+                        <input type="hidden" name="username" value="<?php echo htmlspecialchars($username); ?>">
+                        <input type="hidden" name="password" value="<?php echo htmlspecialchars($password); ?>">
+                        <div class="modal-buttons">
+                            <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
+                                <i class="fas fa-check"></i> Konfirmasi
+                            </button>
+                            <button type="button" class="btn btn-cancel" onclick="window.history.back();">
+                                <i class="fas fa-times"></i> Batal
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Success Modal -->
+        <?php if ($show_success_popup): ?>
+            <div class="success-overlay" id="successModal">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>BERHASIL</h3>
+                    <p>Petugas berhasil ditambahkan!</p>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <script>
-        // Event listener untuk tombol copy password
         document.addEventListener('DOMContentLoaded', function() {
-            const copyButton = document.getElementById('copy-password');
-            const copyNotice = document.getElementById('copy-notice');
-            const passwordText = document.getElementById('password-text');
-            
-            if (copyButton) {
-                copyButton.addEventListener('click', function() {
-                    // Salin password ke clipboard
-                    const textToCopy = passwordText.textContent;
-                    navigator.clipboard.writeText(textToCopy).then(function() {
-                        // Tampilkan notifikasi
-                        copyNotice.classList.add('show-notice');
-                        setTimeout(function() {
-                            copyNotice.classList.remove('show-notice');
-                        }, 2000);
-                    });
-                });
+            // Alert auto-hide
+            const alerts = document.querySelectorAll('.alert');
+            alerts.forEach(alert => {
+                setTimeout(() => {
+                    alert.classList.add('hide');
+                    setTimeout(() => alert.remove(), 500);
+                }, 5000);
+            });
+
+            // Modal confetti for confirmation modal
+            const confirmModal = document.querySelector('#confirmModal .success-modal');
+            if (confirmModal) {
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    confirmModal.appendChild(confetti);
+                }
             }
 
-            // Tambahkan efek loading saat form dikirim
+            // Modal confetti for success modal
+            const successModal = document.querySelector('#successModal .success-modal');
+            if (successModal) {
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    successModal.appendChild(confetti);
+                }
+                // Auto-close success modal after 2 seconds
+                setTimeout(() => {
+                    const overlay = document.querySelector('#successModal');
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => overlay.remove(), 500);
+                }, 2000);
+            }
+
+            // Loading effect for forms
             const inputForm = document.getElementById('input-form');
             const submitBtn = document.getElementById('submit-btn');
             
             if (inputForm && submitBtn) {
                 inputForm.addEventListener('submit', function() {
                     submitBtn.classList.add('loading');
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+                    submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
                 });
             }
 
@@ -568,26 +697,11 @@ function generateUsername($nama) {
             if (confirmForm && confirmBtn) {
                 confirmForm.addEventListener('submit', function() {
                     confirmBtn.classList.add('loading');
-                    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+                    confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
                 });
             }
 
-            // Animasi untuk input field
-            const inputs = document.querySelectorAll('input');
-            
-            inputs.forEach(input => {
-                input.addEventListener('focus', function() {
-                    this.parentNode.parentNode.querySelector('label').style.color = 'var(--primary-color)';
-                    this.parentNode.style.transform = 'translateY(-2px)';
-                });
-                
-                input.addEventListener('blur', function() {
-                    this.parentNode.parentNode.querySelector('label').style.color = 'var(--text-color)';
-                    this.parentNode.style.transform = 'translateY(0)';
-                });
-            });
-
-            // Countdown timer untuk redirect
+            // Countdown timer for redirect
             const countdownElement = document.getElementById('countdown');
             if (countdownElement) {
                 let seconds = 3;
@@ -600,31 +714,53 @@ function generateUsername($nama) {
                 }, 1000);
             }
 
-            // Efek hover untuk card
-            const container = document.querySelector('.container');
-            if (container) {
-                container.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateY(-5px)';
-                    this.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.12)';
-                });
-                
-                container.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0)';
-                    this.style.boxShadow = 'var(--shadow)';
-                });
-            }
-
-            // Validasi form dengan pesan error yang lebih baik
+            // Form validation
             const namaInput = document.getElementById('nama');
             if (namaInput && inputForm) {
                 inputForm.addEventListener('submit', function(e) {
                     if (namaInput.value.trim().length < 3) {
                         e.preventDefault();
-                        alert('Nama harus minimal 3 karakter!');
+                        const alertContainer = document.getElementById('alertContainer');
+                        const alertDiv = document.createElement('div');
+                        alertDiv.className = 'alert alert-error';
+                        alertDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Nama harus minimal 3 karakter!';
+                        alertContainer.appendChild(alertDiv);
                         namaInput.focus();
+                        submitBtn.classList.remove('loading');
+                        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Lanjutkan';
+                        setTimeout(() => {
+                            alertDiv.classList.add('hide');
+                            setTimeout(() => alertDiv.remove(), 500);
+                        }, 5000);
                     }
                 });
             }
+
+            // Prevent zooming
+            document.addEventListener('touchstart', function(event) {
+                if (event.touches.length > 1) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', function(event) {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, { passive: false });
+
+            document.addEventListener('wheel', function(event) {
+                if (event.ctrlKey) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            document.addEventListener('dblclick', function(event) {
+                event.preventDefault();
+            }, { passive: false });
         });
     </script>
 </body>

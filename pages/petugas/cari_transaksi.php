@@ -2,33 +2,36 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
-$username = $_SESSION['username'] ?? 'Petugas';
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin'])) {
+    header('Location: ../login.php');
+    exit();
+}
 
+$username = $_SESSION['username'] ?? 'Petugas';
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cari Transaksi - SCHOBANK SYSTEM</title>
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
     <style>
         :root {
             --primary-color: #0c4da2;
             --primary-dark: #0a2e5c;
             --primary-light: #e0e9f5;
-            --secondary-color: #4caf50;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
             --accent-color: #ff9800;
             --danger-color: #f44336;
             --text-primary: #333;
             --text-secondary: #666;
             --bg-light: #f8faff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 20px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
 
@@ -37,88 +40,70 @@ $username = $_SESSION['username'] ?? 'Petugas';
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
-            line-height: 1.6;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            -webkit-text-size-adjust: none;
+            zoom: 1;
         }
 
-        /* Navigation Styles */
         .top-nav {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-            padding: 1rem 2rem;
+            background: var(--primary-dark);
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
-        .nav-brand {
-            font-size: 1.5rem;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .nav-brand i {
-            font-size: 1.2rem;
-        }
-
-        .nav-buttons {
-            display: flex;
-            gap: 1rem;
-        }
-
-        .nav-btn {
-            background: rgba(255,255,255,0.15);
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 10px;
+            padding: 10px;
+            border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            text-decoration: none;
-            font-size: 0.9rem;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
-            backdrop-filter: blur(5px);
         }
 
-        .nav-btn:hover {
-            background: rgba(255,255,255,0.25);
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
         }
 
-        /* Main Content */
         .main-content {
             flex: 1;
-            padding: 2rem;
+            padding: 20px;
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
         }
 
-        /* Welcome Banner */
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
-            padding: 2rem;
+            padding: 25px;
             border-radius: 15px;
-            margin-bottom: 2rem;
+            margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
         }
 
         .welcome-banner::before {
@@ -134,391 +119,493 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         @keyframes shimmer {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(360deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .welcome-banner h2 {
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            font-size: 1.5rem;
+            gap: 10px;
             position: relative;
             z-index: 1;
         }
 
-        /* Search Card */
-        .search-card {
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .deposit-card {
             background: white;
             border-radius: 15px;
-            padding: 2rem;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: 2rem;
+            margin-bottom: 30px;
             transition: var(--transition);
-            position: relative;
-            overflow: hidden;
         }
 
-        .search-card::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 5px;
-            background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
-            transform: scaleX(0);
-            transform-origin: right;
-            transition: transform 0.3s ease;
-        }
-
-        .search-card:hover {
+        .deposit-card:hover {
             box-shadow: var(--shadow-md);
             transform: translateY(-5px);
         }
 
-        .search-card:hover::after {
-            transform: scaleX(1);
-            transform-origin: left;
+        .deposit-form {
+            display: grid;
+            gap: 20px;
         }
 
-        .search-form {
-            display: flex;
-            gap: 1rem;
-            align-items: flex-end;
-            max-width: 600px;
-        }
-
-        .form-group {
-            flex: 1;
-            position: relative;
-        }
-
-        .form-group label {
+        label {
             display: block;
-            margin-bottom: 0.5rem;
+            margin-bottom: 8px;
             color: var(--text-secondary);
             font-weight: 500;
-            transition: var(--transition);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        .form-group input {
+        input[type="text"] {
             width: 100%;
-            padding: 0.75rem 1rem 0.75rem 2.75rem;
-            border: 2px solid #ddd;
-            border-radius: 12px;
-            font-size: 1rem;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
-            background-color: #fcfcfc;
+            -webkit-text-size-adjust: none;
         }
 
-        .form-group input:focus {
+        input[type="text"]:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            background-color: white;
+            transform: scale(1.02);
         }
 
-        .form-group i {
-            position: absolute;
-            left: 1rem;
-            top: 2.3rem;
-            color: var(--text-secondary);
-            transition: var(--transition);
-        }
-
-        .form-group input:focus + i {
-            color: var(--primary-color);
-        }
-
-        .search-btn {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
+        button {
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 0.85rem 1.5rem;
-            border-radius: 12px;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            font-size: 1rem;
+            gap: 8px;
             transition: var(--transition);
-            font-weight: 500;
-            box-shadow: 0 4px 10px rgba(12, 77, 162, 0.2);
+            width: fit-content;
         }
 
-        .search-btn:hover {
-            background: linear-gradient(135deg, var(--primary-dark), var(--primary-color));
+        button:hover {
+            background-color: var(--primary-dark);
             transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(12, 77, 162, 0.25);
         }
 
-        /* Results Section */
+        button:active {
+            transform: scale(0.95);
+        }
+
         .results-card {
             background: white;
             border-radius: 15px;
-            padding: 2rem;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
             transition: var(--transition);
-            position: relative;
-            overflow: hidden;
+            animation: slideStep 0.5s ease-in-out;
         }
-        
+
         .results-card:hover {
             box-shadow: var(--shadow-md);
             transform: translateY(-5px);
         }
 
-        .transaction-details {
+        @keyframes slideStep {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .detail-row {
             display: grid;
-            gap: 15px;
-            padding: 20px;
-            background: #f8fafc;
-            border-radius: 8px;
-        }
-
-        .transaction-details p {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
+            grid-template-columns: 1fr 2fr;
+            align-items: center;
             border-bottom: 1px solid #eee;
-            font-size: 16px;
+            padding: 12px 0;
+            gap: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
         }
 
-        .transaction-details p strong {
-            color: var(--primary-color);
+        .detail-row:hover {
+            background: var(--primary-light);
         }
-        
-        /* Transaction Info Styles */
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-align: left;
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: var(--text-primary);
+            text-align: left;
+        }
+
         .transaction-info {
             margin-top: 20px;
             border-top: 2px dashed #e0e9f5;
             padding-top: 20px;
         }
-        
+
         .transaction-info h3 {
-            color: var(--primary-color);
+            color: var(--primary-dark);
             margin-bottom: 15px;
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
-        
+
         .account-info {
             background: #f0f7ff;
-            border-radius: 8px;
+            border-radius: 12px;
             padding: 15px;
         }
-        
+
         .account-box {
             background: white;
-            border-radius: 8px;
+            border-radius: 12px;
             padding: 15px;
             box-shadow: var(--shadow-sm);
             margin-bottom: 15px;
         }
-        
+
         .account-box:last-child {
             margin-bottom: 0;
         }
-        
+
         .account-box h4 {
-            color: var(--primary-color);
+            color: var(--primary-dark);
             margin-bottom: 10px;
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: 16px;
+            font-size: clamp(0.95rem, 2vw, 1rem);
         }
-        
-        .transaction-icon {
-            font-size: 1.5rem;
-            color: var(--primary-color);
-            background: var(--primary-light);
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            margin-right: 10px;
+
+        .account-box p {
+            font-size: clamp(0.9rem, 2vw, 0.95rem);
+            margin: 5px 0;
         }
-        
+
         .transfer-details {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 20px;
         }
-        
-        .arrow-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            position: relative;
-            margin: 10px 0;
-        }
-        
-        .transfer-arrow {
-            color: var(--primary-color);
-            font-size: 24px;
-            animation: pulse 1.5s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
-        }
-        
+
         .badge {
             display: inline-block;
             padding: 4px 8px;
             border-radius: 5px;
-            font-size: 12px;
+            font-size: clamp(0.75rem, 1.5vw, 0.8rem);
             font-weight: 600;
             text-transform: uppercase;
         }
-        
+
         .badge-deposit {
             background-color: #e6f4ea;
             color: #34a853;
         }
-        
+
         .badge-withdraw {
             background-color: #fef2e0;
             color: #fbbc04;
         }
-        
+
         .badge-transfer {
             background-color: #e8f0fe;
             color: #4285f4;
         }
 
         .alert {
-            padding: 1.25rem;
-            border-radius: 12px;
-            margin-top: 1rem;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            animation: fadeIn 0.5s ease-out;
+            gap: 10px;
+            animation: slideIn 0.5s ease-out;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         .alert-info {
-            background: #e0f2fe;
+            background-color: #e0f2fe;
             color: #0369a1;
             border-left: 5px solid #bae6fd;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+        .alert-error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+            border-left: 5px solid #fecaca;
         }
 
-        /* Responsive Design */
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+        }
+
+        .btn-loading span {
+            visibility: hidden;
+        }
+
+        .btn-loading::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: rotate 0.8s linear infinite;
+        }
+
+        @keyframes rotate {
+            to { transform: rotate(360deg); }
+        }
+
+        .section-title {
+            margin-bottom: 20px;
+            color: var(--primary-dark);
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-error {
+            animation: shake 0.4s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+
         @media (max-width: 768px) {
             .top-nav {
-                padding: 0.75rem 1rem;
-                position: sticky;
-                top: 0;
-                z-index: 100;
-            }
-
-            .nav-brand {
-                font-size: 1.25rem;
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
-                padding: 1rem;
+                padding: 15px;
             }
 
             .welcome-banner {
-                padding: 1.5rem;
-                margin-bottom: 1.5rem;
+                padding: 20px;
+                margin-bottom: 20px;
             }
 
             .welcome-banner h2 {
-                font-size: 1.25rem;
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
 
-            .search-card,
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .deposit-card,
             .results-card {
-                padding: 1.5rem;
-                margin-bottom: 1.5rem;
-                border-radius: 12px;
+                padding: 20px;
+                margin-bottom: 20px;
             }
 
-            .search-form {
-                flex-direction: column;
-                width: 100%;
-                gap: 0.5rem;
+            .deposit-form {
+                gap: 15px;
             }
 
-            .form-group {
-                width: 100%;
+            .section-title {
+                font-size: clamp(1rem, 2.5vw, 1.1rem);
             }
 
-            .search-btn {
+            input[type="text"] {
+                padding: 10px 12px;
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            }
+
+            button {
+                padding: 10px 20px;
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
                 width: 100%;
                 justify-content: center;
-                margin-top: 0.5rem;
-                padding: 1rem;
             }
-            
+
+            .detail-row {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+                grid-template-columns: 1fr 1.5fr;
+            }
+
+            .transaction-info h3 {
+                font-size: clamp(1rem, 2.5vw, 1.1rem);
+            }
+
+            .account-box h4 {
+                font-size: clamp(0.9rem, 2vw, 0.95rem);
+            }
+
+            .account-box p {
+                font-size: clamp(0.85rem, 2vw, 0.9rem);
+            }
+
             .transfer-details {
                 grid-template-columns: 1fr;
+                gap: 15px;
+            }
+
+            .badge {
+                font-size: clamp(0.7rem, 1.5vw, 0.75rem);
+            }
+
+            .alert {
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+                margin-top: 15px;
             }
         }
-        </style>
+
+        @media (max-width: 480px) {
+            .top-nav {
+                padding: 12px;
+                font-size: clamp(0.9rem, 2.5vw, 1.1rem);
+            }
+
+            .main-content {
+                padding: 12px;
+            }
+
+            .welcome-banner {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+
+            .welcome-banner h2 {
+                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            }
+
+            .welcome-banner p {
+                font-size: clamp(0.75rem, 2vw, 0.85rem);
+            }
+
+            .deposit-card,
+            .results-card {
+                padding: 15px;
+                margin-bottom: 15px;
+            }
+
+            .deposit-form {
+                gap: 12px;
+            }
+
+            .section-title {
+                font-size: clamp(0.9rem, 2.5vw, 1rem);
+            }
+
+            input[type="text"] {
+                padding: 8px 10px;
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            button {
+                padding: 8px 15px;
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .detail-row {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .transaction-info h3 {
+                font-size: clamp(0.9rem, 2.5vw, 1rem);
+            }
+
+            .account-box h4 {
+                font-size: clamp(0.85rem, 2vw, 0.9rem);
+            }
+
+            .account-box p {
+                font-size: clamp(0.8rem, 2vw, 0.85rem);
+            }
+
+            .badge {
+                font-size: clamp(0.65rem, 1.5vw, 0.7rem);
+            }
+
+            .alert {
+                font-size: clamp(0.75rem, 1.8vw, 0.85rem);
+                margin-top: 12px;
+            }
+        }
+    </style>
 </head>
 <body>
-    <!-- Navigation -->
     <nav class="top-nav">
-        <div class="nav-brand">
-            <i class="fas fa-university"></i>
-            SCHOBANK
-        </div>
-        <div class="nav-buttons">
-            <a href="dashboard.php" class="nav-btn">
-                <i class="fas fa-sign-out-alt"></i>
-            </a>
-        </div>
+        <button class="back-btn" onclick="window.location.href='dashboard.php'">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+        <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
     </nav>
 
-    <!-- Main Content -->
     <div class="main-content">
-        <div class="welcome-banner slide-up">
-            <h2>
-                <i class="fas fa-search"></i>
-                <span>Cari Transaksi</span>
-            </h2>
+        <div class="welcome-banner">
+            <h2><i class="fas fa-search"></i> Cari Transaksi</h2>
+            <p>Cari informasi transaksi berdasarkan nomor transaksi</p>
         </div>
 
-        <div class="search-card fade-in">
-            <form action="" method="GET" class="search-form">
-                <div class="form-group">
+        <div class="deposit-card">
+            <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Transaksi</h3>
+            <form id="searchForm" action="" method="GET" class="deposit-form">
+                <div>
                     <label for="no_transaksi">No Transaksi:</label>
-                    <input type="text" id="no_transaksi" name="no_transaksi" placeholder="Masukkan nomor transaksi" required>
+                    <input type="text" id="no_transaksi" name="no_transaksi" placeholder="TRX..." required autofocus
+                           value="<?php echo isset($_GET['no_transaksi']) ? htmlspecialchars($_GET['no_transaksi']) : 'TRX'; ?>">
                 </div>
-                <button type="submit" class="search-btn">
+                <button type="submit" id="searchBtn">
                     <i class="fas fa-search"></i>
                     <span>Cari</span>
                 </button>
             </form>
         </div>
 
+        <div id="alertContainer"></div>
+
         <?php
         if (isset($_GET['no_transaksi'])) {
-            $no_transaksi = $_GET['no_transaksi'];
-            
-            // Secure against SQL injection
-            $no_transaksi = $conn->real_escape_string($no_transaksi);
-            
-            // Query untuk mengambil semua jenis transaksi
+            $no_transaksi = $conn->real_escape_string($_GET['no_transaksi']);
             $query = "SELECT 
                         t.*, 
                         r1.no_rekening AS rekening_asal, 
@@ -537,34 +624,21 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         users u2 ON r2.user_id = u2.id
                       WHERE 
                         t.no_transaksi = '$no_transaksi'";
-                      
             $result = $conn->query($query);
 
-            echo '<div class="results-card">';
-            if ($result->num_rows > 0) {
+            if ($result && $result->num_rows > 0) {
                 $row = $result->fetch_assoc();
-                
-                // Mendapatkan tanggal transaksi untuk mencari petugas yang bertugas pada hari itu
                 $transaksi_date = date('Y-m-d', strtotime($row['created_at']));
-                
-                // Query untuk mencari petugas yang bertugas pada tanggal transaksi
                 $query_petugas = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = '$transaksi_date'";
                 $result_petugas = $conn->query($query_petugas);
                 
-                if ($result_petugas && $result_petugas->num_rows > 0) {
-                    $row_petugas = $result_petugas->fetch_assoc();
-                    $petugas1 = $row_petugas['petugas1_nama'];
-                    $petugas2 = $row_petugas['petugas2_nama'];
-                    $petugas_info = $petugas1 . ' dan ' . $petugas2;
-                } else {
-                    $petugas_info = 'Tidak ada data petugas';
-                }
-                
-                // Set badge class berdasarkan jenis transaksi
+                $petugas_info = $result_petugas && $result_petugas->num_rows > 0
+                    ? $result_petugas->fetch_assoc()['petugas1_nama'] . ' dan ' . $result_petugas->fetch_assoc()['petugas2_nama']
+                    : 'Tidak ada data petugas';
+
                 $badgeClass = '';
                 $transactionIcon = '';
-                
-                switch($row['jenis_transaksi']) {
+                switch ($row['jenis_transaksi']) {
                     case 'setor':
                         $badgeClass = 'badge-deposit';
                         $transactionIcon = '<i class="fas fa-arrow-circle-down"></i>';
@@ -578,93 +652,224 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         $transactionIcon = '<i class="fas fa-exchange-alt"></i>';
                         break;
                 }
-                
-                // Tampilkan informasi dasar transaksi
-                echo '<div class="transaction-details">
-                    <p><strong>No Transaksi:</strong> <span>' . $row['no_transaksi'] . '</span></p>
-                    <p><strong>Jenis Transaksi:</strong> <span><span class="badge ' . $badgeClass . '">' . strtoupper($row['jenis_transaksi']) . '</span></span></p>
-                    <p><strong>Jumlah:</strong> <span>Rp ' . number_format($row['jumlah'], 0, ',', '.') . '</span></p>
-                    <p><strong>Tanggal:</strong> <span>' . date('d/m/Y H:i', strtotime($row['created_at'])) . '</span></p>
-                    <p><strong>Petugas:</strong> <span>' . $petugas_info . '</span></p>
-                    <p><strong>Status:</strong> <span>' . strtoupper($row['status']) . '</span></p>
-                </div>';
-                
-                echo '<div class="transaction-info">';
-                
-                // Tampilkan informasi berdasarkan jenis transaksi
-                switch($row['jenis_transaksi']) {
-                    case 'setor':
-                        echo '<h3>' . $transactionIcon . ' Detail Setoran</h3>
-                        <div class="account-info">
-                            <div class="account-box">
-                                <h4><i class="fas fa-user-circle"></i> Rekening Tujuan</h4>
-                                <p><strong>No Rekening:</strong> ' . $row['rekening_asal'] . '</p>
-                                <p><strong>Nama:</strong> ' . $row['nama_nasabah'] . '</p>
-                                <p><strong>Keterangan:</strong> Setoran tunai ke rekening</p>
-                            </div>
-                        </div>';
-                        break;
-                    
-                    case 'tarik':
-                        echo '<h3>' . $transactionIcon . ' Detail Penarikan</h3>
-                        <div class="account-info">
-                            <div class="account-box">
-                                <h4><i class="fas fa-user-circle"></i> Rekening Sumber</h4>
-                                <p><strong>No Rekening:</strong> ' . $row['rekening_asal'] . '</p>
-                                <p><strong>Nama:</strong> ' . $row['nama_nasabah'] . '</p>
-                                <p><strong>Keterangan:</strong> Penarikan tunai dari rekening</p>
-                            </div>
-                        </div>';
-                        break;
-                    
-                    case 'transfer':
-                        echo '<h3>' . $transactionIcon . ' Detail Transfer</h3>
-                        <div class="account-info">
-                            <div class="transfer-details">
-                                <div class="account-box">
-                                    <h4><i class="fas fa-user-circle"></i> Rekening Pengirim</h4>
-                                    <p><strong>No Rekening:</strong> ' . $row['rekening_asal'] . '</p>
-                                    <p><strong>Nama:</strong> ' . $row['nama_nasabah'] . '</p>
+                ?>
+                <div class="results-card" id="resultsContainer">
+                    <h3 class="section-title"><i class="fas fa-receipt"></i> Detail Transaksi</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">No Transaksi:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['no_transaksi']); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jenis Transaksi:</div>
+                        <div class="detail-value"><span class="badge <?php echo $badgeClass; ?>"><?php echo strtoupper($row['jenis_transaksi']); ?></span></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jumlah:</div>
+                        <div class="detail-value">Rp <?php echo number_format($row['jumlah'], 0, ',', '.'); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Tanggal:</div>
+                        <div class="detail-value"><?php echo date('d/m/Y H:i', strtotime($row['created_at'])); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Petugas:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($petugas_info); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Status:</div>
+                        <div class="detail-value"><?php echo strtoupper($row['status']); ?></div>
+                    </div>
+
+                    <div class="transaction-info">
+                        <?php
+                        switch ($row['jenis_transaksi']) {
+                            case 'setor':
+                                ?>
+                                <h3><?php echo $transactionIcon; ?> Detail Setoran</h3>
+                                <div class="account-info">
+                                    <div class="account-box">
+                                        <h4><i class="fas fa-user-circle"></i> Rekening Tujuan</h4>
+                                        <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_asal']); ?></p>
+                                        <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_nasabah']); ?></p>
+                                        <p><strong>Keterangan:</strong> Setoran tunai ke rekening</p>
+                                    </div>
                                 </div>
-                                <div class="account-box">
-                                    <h4><i class="fas fa-user-circle"></i> Rekening Penerima</h4>
-                                    <p><strong>No Rekening:</strong> ' . $row['rekening_tujuan'] . '</p>
-                                    <p><strong>Nama:</strong> ' . $row['nama_penerima'] . '</p>
+                                <?php
+                                break;
+                            case 'tarik':
+                                ?>
+                                <h3><?php echo $transactionIcon; ?> Detail Penarikan</h3>
+                                <div class="account-info">
+                                    <div class="account-box">
+                                        <h4><i class="fas fa-user-circle"></i> Rekening Sumber</h4>
+                                        <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_asal']); ?></p>
+                                        <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_nasabah']); ?></p>
+                                        <p><strong>Keterangan:</strong> Penarikan tunai dari rekening</p>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>';
-                        break;
-                }
-                
-                echo '</div>';
-                
+                                <?php
+                                break;
+                            case 'transfer':
+                                ?>
+                                <h3><?php echo $transactionIcon; ?> Detail Transfer</h3>
+                                <div class="account-info">
+                                    <div class="transfer-details">
+                                        <div class="account-box">
+                                            <h4><i class="fas fa-user-circle"></i> Rekening Pengirim</h4>
+                                            <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_asal']); ?></p>
+                                            <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_nasabah']); ?></p>
+                                        </div>
+                                        <div class="account-box">
+                                            <h4><i class="fas fa-user-circle"></i> Rekening Penerima</h4>
+                                            <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_tujuan']); ?></p>
+                                            <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_penerima']); ?></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php
+                                break;
+                        }
+                        ?>
+                    </div>
+                </div>
+                <?php
             } else {
-                echo '<div class="alert alert-info">
-                    <i class="fas fa-info-circle"></i>
-                    Transaksi tidak ditemukan.
-                </div>';
+                ?>
+                <div class="results-card" id="resultsContainer">
+                    <div class="alert alert-error" id="alertNotFound">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span>Transaksi tidak ditemukan. Silakan periksa kembali nomor transaksi.</span>
+                    </div>
+                </div>
+                <?php
             }
-            echo '</div>';
         }
         ?>
     </div>
 
-    <!-- JavaScript -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script>
-        $(document).ready(function() {
-            // Form handling
-            $('form').on('submit', function(e) {
-                const input = $('#no_transaksi');
-                const value = input.val().trim();
-                
-                if (!value) {
-                    e.preventDefault();
-                    input.addClass('error');
-                    setTimeout(() => input.removeClass('error'), 1000);
-                    input.focus();
-                    return false;
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('gesturestart', function(event) {
+            event.preventDefault();
+        });
+
+        document.addEventListener('wheel', function(event) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchForm = document.getElementById('searchForm');
+            const searchBtn = document.getElementById('searchBtn');
+            const inputNoTransaksi = document.getElementById('no_transaksi');
+            const alertContainer = document.getElementById('alertContainer');
+            const prefix = "TRX";
+
+            // Initialize input with prefix
+            if (!inputNoTransaksi.value) {
+                inputNoTransaksi.value = prefix;
+            }
+
+            // Restrict transaction number to alphanumeric
+            inputNoTransaksi.addEventListener('input', function(e) {
+                let value = this.value;
+                if (!value.startsWith(prefix)) {
+                    this.value = prefix + value.replace(prefix, '');
                 }
+                let userInput = value.slice(prefix.length).replace(/[^0-9A-Z]/g, '');
+                this.value = prefix + userInput;
+            });
+
+            inputNoTransaksi.addEventListener('keydown', function(e) {
+                let cursorPos = this.selectionStart;
+                if ((e.key === 'Backspace' || e.key === 'Delete') && cursorPos <= prefix.length) {
+                    e.preventDefault();
+                }
+            });
+
+            inputNoTransaksi.addEventListener('paste', function(e) {
+                e.preventDefault();
+                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9A-Z]/g, '');
+                let currentValue = this.value.slice(prefix.length);
+                let newValue = prefix + (currentValue + pastedData);
+                this.value = newValue;
+            });
+
+            inputNoTransaksi.addEventListener('focus', function() {
+                if (this.value === prefix) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            inputNoTransaksi.addEventListener('click', function(e) {
+                if (this.selectionStart < prefix.length) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            searchForm.addEventListener('submit', function(e) {
+                const transaksi = inputNoTransaksi.value.trim();
+                if (transaksi === prefix) {
+                    e.preventDefault();
+                    showAlert('Silakan masukkan nomor transaksi lengkap', 'error');
+                    inputNoTransaksi.classList.add('form-error');
+                    setTimeout(() => inputNoTransaksi.classList.remove('form-error'), 400);
+                    inputNoTransaksi.focus();
+                    return;
+                }
+                searchBtn.classList.add('btn-loading');
+                setTimeout(() => {
+                    searchBtn.classList.remove('btn-loading');
+                }, 800);
+            });
+
+            function showAlert(message, type) {
+                const existingAlerts = document.querySelectorAll('.alert');
+                existingAlerts.forEach(alert => {
+                    alert.classList.add('hide');
+                    setTimeout(() => alert.remove(), 500);
+                });
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type}`;
+                let icon = 'info-circle';
+                if (type === 'success') icon = 'check-circle';
+                if (type === 'error') icon = 'exclamation-circle';
+                alertDiv.innerHTML = `
+                    <i class="fas fa-${icon}"></i>
+                    <span>${message}</span>
+                `;
+                alertContainer.appendChild(alertDiv);
+                setTimeout(() => {
+                    alertDiv.classList.add('hide');
+                    setTimeout(() => alertDiv.remove(), 500);
+                }, 5000);
+            }
+
+            // Auto-hide and remove the "Transaksi tidak ditemukan" alert and its container
+            const alertNotFound = document.getElementById('alertNotFound');
+            if (alertNotFound) {
+                setTimeout(() => {
+                    const resultsContainer = document.getElementById('resultsContainer');
+                    alertNotFound.classList.add('hide');
+                    setTimeout(() => {
+                        if (resultsContainer) resultsContainer.remove();
+                    }, 500);
+                }, 5000);
+            }
+
+            inputNoTransaksi.focus();
+            if (inputNoTransaksi.value === prefix) {
+                inputNoTransaksi.setSelectionRange(prefix.length, prefix.length);
+            }
+
+            inputNoTransaksi.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') searchBtn.click();
             });
         });
     </script>

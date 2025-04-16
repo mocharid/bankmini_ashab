@@ -16,7 +16,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 <head>
     <title>Setor Tunai - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -24,7 +24,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
             --primary-color: #0c4da2;
             --primary-dark: #0a2e5c;
             --primary-light: #e0e9f5;
-            --secondary-color: #4caf50;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
             --accent-color: #ff9800;
             --danger-color: #f44336;
             --text-primary: #333;
@@ -40,6 +41,9 @@ $username = $_SESSION['username'] ?? 'Petugas';
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         body {
@@ -48,6 +52,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            -webkit-text-size-adjust: none;
+            zoom: 1;
         }
 
         .top-nav {
@@ -58,6 +64,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
@@ -97,6 +104,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
         }
         
         .welcome-banner::before {
@@ -112,17 +120,18 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         @keyframes shimmer {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(360deg);
-            }
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         .welcome-banner h2 {
             margin-bottom: 10px;
-            font-size: 24px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
             gap: 10px;
@@ -134,13 +143,19 @@ $username = $_SESSION['username'] ?? 'Petugas';
             position: relative;
             z-index: 1;
             opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        /* Step indicator */
         .steps-container {
             display: flex;
             justify-content: center;
             margin-bottom: 30px;
+            animation: slideInSteps 0.5s ease-out;
+        }
+
+        @keyframes slideInSteps {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .step-item {
@@ -150,6 +165,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             position: relative;
             z-index: 1;
             padding: 0 20px;
+            transition: var(--transition);
         }
 
         .step-number {
@@ -166,10 +182,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
             position: relative;
             z-index: 2;
             transition: var(--transition);
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .step-text {
-            font-size: 14px;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             color: #666;
             text-align: center;
             transition: var(--transition);
@@ -183,11 +200,13 @@ $username = $_SESSION['username'] ?? 'Petugas';
             width: 100%;
             left: 50%;
             z-index: 0;
+            transition: var(--transition);
         }
 
         .step-item.active .step-number {
             background-color: var(--primary-color);
             color: white;
+            transform: scale(1.1);
         }
 
         .step-item.active .step-text {
@@ -234,18 +253,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
         .account-details.visible {
             display: block;
-            animation: fadeIn 0.5s ease-in;
+            animation: slideStep 0.5s ease-in-out;
         }
 
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        @keyframes slideStep {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
         }
 
         .deposit-form {
@@ -258,24 +271,44 @@ $username = $_SESSION['username'] ?? 'Petugas';
             margin-bottom: 8px;
             color: var(--text-secondary);
             font-weight: 500;
-            font-size: 14px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        .currency-input {
+            position: relative;
+        }
+
+        .currency-prefix {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            pointer-events: none;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         input[type="text"],
-        input[type="number"] {
+        input.currency {
             width: 100%;
             padding: 12px 15px;
             border: 1px solid #ddd;
             border-radius: 10px;
-            font-size: 15px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
+            -webkit-text-size-adjust: none;
+        }
+
+        input.currency {
+            padding-left: 45px !important;
         }
 
         input[type="text"]:focus,
-        input[type="number"]:focus {
+        input.currency:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            transform: scale(1.02);
         }
 
         button {
@@ -285,7 +318,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             padding: 12px 25px;
             border-radius: 10px;
             cursor: pointer;
-            font-size: 15px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             font-weight: 500;
             display: flex;
             align-items: center;
@@ -299,10 +332,23 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transform: translateY(-2px);
         }
 
+        button:active {
+            transform: scale(0.95);
+        }
+
         .detail-row {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            align-items: center;
             border-bottom: 1px solid #eee;
             padding: 12px 0;
+            gap: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
+        }
+
+        .detail-row:hover {
+            background: var(--primary-light);
         }
 
         .detail-row:last-child {
@@ -310,15 +356,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .detail-label {
-            flex: 1;
             color: var(--text-secondary);
             font-weight: 500;
+            text-align: left;
         }
 
         .detail-value {
-            flex: 2;
             font-weight: 600;
             color: var(--text-primary);
+            text-align: left;
         }
 
         .confirm-buttons {
@@ -332,7 +378,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .btn-confirm:hover {
-            background-color: #3d8b40;
+            background-color: var(--secondary-dark);
         }
 
         .btn-cancel {
@@ -351,17 +397,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
             align-items: center;
             gap: 10px;
             animation: slideIn 0.5s ease-out;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         @keyframes slideIn {
-            from {
-                transform: translateY(-20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         .alert-info {
@@ -371,9 +412,9 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .alert-success {
-            background-color: #dcfce7;
-            color: #166534;
-            border-left: 5px solid #bbf7d0;
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+            border-left: 5px solid var(--primary-color);
         }
 
         .alert-error {
@@ -382,7 +423,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             border-left: 5px solid #fecaca;
         }
 
-        /* Loader animation for buttons */
         .btn-loading {
             position: relative;
             pointer-events: none;
@@ -407,127 +447,125 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         @keyframes rotate {
-            to {
-                transform: rotate(360deg);
-            }
+            to { transform: rotate(360deg); }
         }
 
-        /* Success animation styles */
         .success-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.6);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1000;
             opacity: 0;
-            animation: fadeIn 0.5s forwards;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
         }
 
         .success-modal {
-            background-color: white;
+            background: linear-gradient(145deg, #ffffff, #f0f4ff);
             border-radius: 20px;
-            padding: 30px;
+            padding: 40px;
             text-align: center;
             max-width: 90%;
-            width: 400px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            transform: translateY(30px);
+            width: 450px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+            transform: scale(0.5);
             opacity: 0;
+            animation: popInModal 0.7s ease-out forwards;
         }
 
-        .success-modal.animate {
-            animation: slideUp 0.5s forwards;
-        }
-
-        @keyframes slideUp {
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
+        @keyframes popInModal {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
         .success-icon {
-            font-size: 60px;
+            font-size: clamp(4rem, 8vw, 4.5rem);
             color: var(--secondary-color);
-            margin-bottom: 20px;
-            animation: scaleUp 0.5s 0.3s both;
+            margin-bottom: 25px;
+            animation: bounceIn 0.6s ease-out;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
         }
 
-        @keyframes scaleUp {
-            from {
-                transform: scale(0.5);
-                opacity: 0;
-            }
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
         }
 
         .success-modal h3 {
             color: var(--primary-dark);
-            margin-bottom: 10px;
-            font-size: 22px;
+            margin-bottom: 15px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            animation: slideUpText 0.5s ease-out 0.2s both;
+            font-weight: 600;
         }
 
         .success-modal p {
             color: var(--text-secondary);
-            font-size: 16px;
+            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+            margin-bottom: 25px;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+            line-height: 1.5;
         }
 
-        /* Receipt print animation */
-        .receipt-animation {
-            width: 150px;
-            height: 30px;
-            background-color: white;
-            margin: 0 auto 20px;
-            animation: printReceipt 2s ease-out forwards;
-            transform-origin: center top;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        @keyframes slideUpText {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
-        @keyframes printReceipt {
-            0% {
-                height: 0;
-            }
-            70% {
-                height: 150px;
-            }
-            100% {
-                height: 150px;
-            }
+        .confetti {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            opacity: 0.8;
+            animation: confettiFall 4s ease-out forwards;
+            transform-origin: center;
         }
 
-        /* Add for Button animation */
-        .alert.hide {
-            animation: fadeOut 0.5s forwards;
+        .confetti:nth-child(odd) {
+            background: var(--accent-color);
         }
 
-        @keyframes fadeOut {
-            to {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
+        .confetti:nth-child(even) {
+            background: var(--secondary-color);
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
         }
 
         .section-title {
             margin-bottom: 20px;
             color: var(--primary-dark);
-            font-size: 1.2rem;
+            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        /* For highlighting changes */
         .highlight-change {
-            background-color: #fef9c3;
-            color: #854d0e;
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
             padding: 2px 5px;
             border-radius: 4px;
             display: inline-block;
@@ -535,20 +573,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(254, 249, 195, 0.7);
-            }
-            70% {
-                box-shadow: 0 0 0 10px rgba(254, 249, 195, 0);
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(254, 249, 195, 0);
-            }
+            0% { box-shadow: 0 0 0 0 rgba(224, 233, 245, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(224, 233, 245, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(224, 233, 245, 0); }
         }
 
         @media (max-width: 768px) {
             .top-nav {
                 padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
@@ -578,15 +611,47 @@ $username = $_SESSION['username'] ?? 'Petugas';
             .step-number {
                 margin-bottom: 0;
                 margin-right: 10px;
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .step-text {
+                font-size: clamp(0.75rem, 1.8vw, 0.85rem);
             }
 
             button {
                 width: 100%;
                 justify-content: center;
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
             
             .confirm-buttons {
                 flex-direction: column;
+            }
+
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
+            }
+
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .section-title {
+                font-size: clamp(1rem, 2.5vw, 1.1rem);
+            }
+
+            .detail-row {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+                grid-template-columns: 1fr 1.5fr;
+            }
+
+            .alert {
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            }
+
+            .success-modal {
+                width: 90%;
+                padding: 30px;
             }
         }
     </style>
@@ -594,10 +659,10 @@ $username = $_SESSION['username'] ?? 'Petugas';
 <body>
     <nav class="top-nav">
         <button class="back-btn" onclick="window.location.href='dashboard.php'">
-            <i class="fas fa-arrow-left"></i>
+            <i class="fas fa-xmark"></i>
         </button>
         <h1>SCHOBANK</h1>
-        <div style="width: 40px;"></div> <!-- Spacer for alignment -->
+        <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
@@ -606,7 +671,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             <p>Layanan setor tunai untuk nasabah</p>
         </div>
         
-        <!-- Step indicators -->
         <div class="steps-container">
             <div class="step-item active" id="step1-indicator">
                 <div class="step-number">1</div>
@@ -625,13 +689,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
         </div>
 
         <div class="transaction-container">
-            <!-- Step 1: Check Account Form -->
             <div class="deposit-card" id="checkAccountStep">
                 <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Rekening</h3>
                 <form id="cekRekening" class="deposit-form">
                     <div>
                         <label for="no_rekening">No Rekening:</label>
-                        <input type="text" id="no_rekening" name="no_rekening" placeholder="Masukkan nomor rekening" required autofocus>
+                        <input type="text" id="no_rekening" name="no_rekening" placeholder="REK..." required autofocus>
                     </div>
                     
                     <button type="submit" id="cekButton">
@@ -641,7 +704,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 </form>
             </div>
 
-            <!-- Step 2: Account Details and Input Amount -->
             <div class="account-details" id="accountDetails">
                 <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
                 
@@ -661,9 +723,10 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 </div>
                 
                 <form id="formSetorTunai" class="deposit-form" style="margin-top: 20px;">
-                    <div>
+                    <div class="currency-input">
                         <label for="jumlah">Jumlah Setoran (Rp):</label>
-                        <input type="number" id="jumlah" name="jumlah" placeholder="Masukkan jumlah setoran" min="1000" required>
+                        <span class="currency-prefix">Rp</span>
+                        <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="10000" required>
                     </div>
                     
                     <div class="confirm-buttons">
@@ -680,7 +743,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 </form>
             </div>
             
-            <!-- Step 3: Confirmation View -->
             <div class="account-details" id="confirmationDetails">
                 <h3 class="section-title"><i class="fas fa-receipt"></i> Konfirmasi Setoran</h3>
                 
@@ -727,302 +789,334 @@ $username = $_SESSION['username'] ?? 'Petugas';
     </div>
 
     <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const cekForm = document.getElementById('cekRekening');
-    const depositForm = document.getElementById('formSetorTunai');
-    const checkAccountStep = document.getElementById('checkAccountStep');
-    const accountDetails = document.getElementById('accountDetails');
-    const confirmationDetails = document.getElementById('confirmationDetails');
-    const alertContainer = document.getElementById('alertContainer');
-    
-    // Step indicators
-    const step1Indicator = document.getElementById('step1-indicator');
-    const step2Indicator = document.getElementById('step2-indicator');
-    const step3Indicator = document.getElementById('step3-indicator');
-    
-    const inputNoRek = document.getElementById('no_rekening');
-    const inputJumlah = document.getElementById('jumlah');
-    
-    // Step 1 - Account checking elements
-    const displayNoRek = document.getElementById('displayNoRek');
-    const displayNama = document.getElementById('displayNama');
-    const displaySaldo = document.getElementById('displaySaldo');
-    const cekButton = document.getElementById('cekButton');
-    
-    // Step 2 - Confirmation elements
-    const confirmBtn = document.getElementById('confirmDeposit');
-    const cancelBtn = document.getElementById('cancelDeposit');
-    
-    // Step 3 - Final confirmation elements
-    const confirmNoRek = document.getElementById('confirmNoRek');
-    const confirmNama = document.getElementById('confirmNama');
-    const confirmSaldo = document.getElementById('confirmSaldo');
-    const confirmJumlah = document.getElementById('confirmJumlah');
-    const confirmSisaSaldo = document.getElementById('confirmSisaSaldo');
-    const processDepositBtn = document.getElementById('processDeposit');
-    const backToFormBtn = document.getElementById('backToForm');
-    
-    // Function to update step indicators
-    function updateStepIndicators(activeStep) {
-        // Reset all steps
-        step1Indicator.className = 'step-item';
-        step2Indicator.className = 'step-item';
-        step3Indicator.className = 'step-item';
-        
-        // Mark completed steps
-        if (activeStep >= 1) {
-            step1Indicator.className = activeStep > 1 ? 'step-item completed' : 'step-item active';
-        }
-        
-        if (activeStep >= 2) {
-            step2Indicator.className = activeStep > 2 ? 'step-item completed' : 'step-item active';
-        }
-        
-        if (activeStep === 3) {
-            step3Indicator.className = 'step-item active';
-        }
-    }
-    
-    // Step 1: Handle account check
-    cekForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const rekening = inputNoRek.value.trim();
-        
-        if (!rekening) {
-            showAlert('Silakan masukkan nomor rekening', 'error');
-            return;
-        }
-        
-        // Add loading animation to button
-        cekButton.classList.add('btn-loading');
-
-        try {
-            const response = await fetch('proses_setor.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `action=cek&no_rekening=${rekening}`
-            });
-
-            const data = await response.json();
-            
-            // Remove loading animation
-            cekButton.classList.remove('btn-loading');
-
-            if (data.status === 'error') {
-                showAlert(data.message, 'error');
-                return;
+        // Prevent pinch-to-zoom and double-tap zoom
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
             }
+        }, { passive: false });
 
-            // Display account details
-            displayNoRek.textContent = data.no_rekening;
-            displayNama.textContent = data.nama;
-            displaySaldo.textContent = formatRupiah(parseFloat(data.saldo));
-            
-            // Hide Step 1, show Step 2
-            checkAccountStep.style.display = 'none';
-            accountDetails.classList.add('visible');
-            
-            // Focus on amount input
-            inputJumlah.focus();
-            
-            // Update step indicators
-            updateStepIndicators(2);
-            
-            // Show success notification
-            showAlert(`Rekening atas nama ${data.nama} ditemukan`, 'success');
-
-        } catch (error) {
-            // Remove loading animation
-            cekButton.classList.remove('btn-loading');
-            showAlert('Terjadi kesalahan sistem', 'error');
-        }
-    });
-    
-    // Step 2: Handle deposit amount input and confirmation
-    confirmBtn.addEventListener('click', function() {
-        const jumlah = parseFloat(inputJumlah.value);
-        
-        if (!jumlah || jumlah < 1000) {
-            showAlert('Jumlah setoran minimal Rp 1.000', 'error');
-            inputJumlah.focus();
-            return;
-        }
-        
-        // Show confirmation page with all details
-        const saldoSekarang = parseFloat(displaySaldo.textContent.replace(/[^\d]/g, ''));
-        const saldoBaru = saldoSekarang + jumlah;
-        
-        confirmNoRek.textContent = displayNoRek.textContent;
-        confirmNama.textContent = displayNama.textContent;
-        confirmSaldo.textContent = formatRupiah(saldoSekarang);
-        confirmJumlah.textContent = formatRupiah(jumlah);
-        confirmSisaSaldo.textContent = formatRupiah(saldoBaru);
-        
-        // Hide Step 2, show Step 3
-        accountDetails.classList.remove('visible');
-        confirmationDetails.classList.add('visible');
-        
-        // Update step indicators
-        updateStepIndicators(3);
-    });
-    
-    // Step 3: Process deposit
-    processDepositBtn.addEventListener('click', async function() {
-        // Add loading animation
-        processDepositBtn.classList.add('btn-loading');
-        
-        try {
-            const rekening = inputNoRek.value.trim();
-            const jumlah = parseFloat(inputJumlah.value);
-
-            const response = await fetch('proses_setor.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: `action=setor&no_rekening=${rekening}&jumlah=${jumlah}`
-            });
-
-            const data = await response.json();
-            
-            // Remove loading animation
-            processDepositBtn.classList.remove('btn-loading');
-
-            if (data.status === 'error') {
-                showAlert(data.message, 'error');
-                return;
-            }
-
-            // Show success message with thank you message and receipt animation
-            showSuccessAnimation(data.message);
-            
-            // Reset all forms and hide details
-            cekForm.reset();
-            depositForm.reset();
-            confirmationDetails.classList.remove('visible');
-            accountDetails.classList.remove('visible');
-            checkAccountStep.style.display = 'block';
-            
-            // Reset step indicators
-            updateStepIndicators(1);
-
-        } catch (error) {
-            // Remove loading animation
-            processDepositBtn.classList.remove('btn-loading');
-            showAlert('Gagal memproses transaksi', 'error');
-        }
-    });
-    
-    // Handle going back from confirmation to deposit form
-    backToFormBtn.addEventListener('click', function() {
-        confirmationDetails.classList.remove('visible');
-        accountDetails.classList.add('visible');
-        
-        // Update step indicators
-        updateStepIndicators(2);
-    });
-    
-    // Handle cancel
-    cancelBtn.addEventListener('click', function() {
-        cekForm.reset();
-        depositForm.reset();
-        accountDetails.classList.remove('visible');
-        checkAccountStep.style.display = 'block';
-        
-        // Reset step indicators
-        updateStepIndicators(1);
-        
-        // Focus on account number input
-        inputNoRek.focus();
-    });
-    
-    // Format currency
-    function formatRupiah(amount) {
-        return 'Rp ' + new Intl.NumberFormat('id-ID').format(amount);
-    }
-    
-    // Function to show success animation with thank you message and receipt animation
-    function showSuccessAnimation(message) {
-        // Create overlay for the success animation
-        const overlay = document.createElement('div');
-        overlay.className = 'success-overlay';
-        
-        overlay.innerHTML = `
-            <div class="success-modal">
-                <div class="success-icon">
-                    <i class="fas fa-check-circle"></i>
-                </div>
-                <h3>Transaksi Berhasil!</h3>
-                <p>${message}</p>
-                <button type="button" class="btn-confirm" style="margin: 20px auto 0;" id="closeSuccessModalBtn">
-                    <i class="fas fa-receipt"></i>
-                    <span>Selesai</span>
-                </button>
-            </div>
-        `;
-        
-        document.body.appendChild(overlay);
-        
-        // Add animation to the modal
-        setTimeout(() => {
-            const modal = overlay.querySelector('.success-modal');
-            modal.classList.add('animate');
-        }, 100);
-
-        // Add event listener to the "Selesai" button
-        const closeButton = overlay.querySelector('#closeSuccessModalBtn');
-        closeButton.addEventListener('click', closeSuccessModal);
-    }
-    
-    // Function to close success modal
-    function closeSuccessModal() {
-        const overlay = document.querySelector('.success-overlay');
-        if (overlay) {
-            overlay.style.animation = 'fadeOut 0.5s forwards';
-            setTimeout(() => {
-                overlay.remove();
-            }, 500);
-        }
-    }
-    
-    // Show alert message
-    function showAlert(message, type) {
-        // Remove any existing alerts
-        const existingAlerts = document.querySelectorAll('.alert');
-        existingAlerts.forEach(alert => {
-            alert.classList.add('hide');
-            setTimeout(() => alert.remove(), 500);
+        document.addEventListener('gesturestart', function(event) {
+            event.preventDefault();
         });
-        
-        // Create new alert
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${type}`;
-        
-        // Define icon based on type
-        let icon = 'info-circle';
-        if (type === 'success') icon = 'check-circle';
-        if (type === 'error') icon = 'exclamation-circle';
-        
-        alertDiv.innerHTML = `
-            <i class="fas fa-${icon}"></i>
-            <span>${message}</span>
-        `;
-        
-        alertContainer.appendChild(alertDiv);
-        
-        // Auto-remove alert after 5 seconds
-        setTimeout(() => {
-            alertDiv.classList.add('hide');
-            setTimeout(() => alertDiv.remove(), 500);
-        }, 5000);
-    }
-    
-    // Set focus on account number field on page load
-    inputNoRek.focus();
-});
+
+        document.addEventListener('wheel', function(event) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const cekForm = document.getElementById('cekRekening');
+            const depositForm = document.getElementById('formSetorTunai');
+            const checkAccountStep = document.getElementById('checkAccountStep');
+            const accountDetails = document.getElementById('accountDetails');
+            const confirmationDetails = document.getElementById('confirmationDetails');
+            const alertContainer = document.getElementById('alertContainer');
+            
+            const step1Indicator = document.getElementById('step1-indicator');
+            const step2Indicator = document.getElementById('step2-indicator');
+            const step3Indicator = document.getElementById('step3-indicator');
+            
+            const inputNoRek = document.getElementById('no_rekening');
+            const inputJumlah = document.getElementById('jumlah');
+            
+            const displayNoRek = document.getElementById('displayNoRek');
+            const displayNama = document.getElementById('displayNama');
+            const displaySaldo = document.getElementById('displaySaldo');
+            const cekButton = document.getElementById('cekButton');
+            
+            const confirmBtn = document.getElementById('confirmDeposit');
+            const cancelBtn = document.getElementById('cancelDeposit');
+            
+            const confirmNoRek = document.getElementById('confirmNoRek');
+            const confirmNama = document.getElementById('confirmNama');
+            const confirmSaldo = document.getElementById('confirmSaldo');
+            const confirmJumlah = document.getElementById('confirmJumlah');
+            const confirmSisaSaldo = document.getElementById('confirmSisaSaldo');
+            const processDepositBtn = document.getElementById('processDeposit');
+            const backToFormBtn = document.getElementById('backToForm');
+            
+            const prefix = "REK";
+
+            inputNoRek.value = prefix;
+
+            inputNoRek.addEventListener('input', function(e) {
+                let value = this.value;
+                if (!value.startsWith(prefix)) {
+                    this.value = prefix + value.replace(prefix, '');
+                }
+                let userInput = value.slice(prefix.length).replace(/[^0-9]/g, '');
+                this.value = prefix + userInput;
+            });
+
+            inputNoRek.addEventListener('keydown', function(e) {
+                let cursorPos = this.selectionStart;
+                if ((e.key === 'Backspace' || e.key === 'Delete') && cursorPos <= prefix.length) {
+                    e.preventDefault();
+                }
+            });
+
+            inputNoRek.addEventListener('paste', function(e) {
+                e.preventDefault();
+                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+                let currentValue = this.value.slice(prefix.length);
+                let newValue = prefix + (currentValue + pastedData);
+                this.value = newValue;
+            });
+
+            inputNoRek.addEventListener('focus', function() {
+                if (this.value === prefix) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            inputNoRek.addEventListener('click', function(e) {
+                if (this.selectionStart < prefix.length) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            inputJumlah.addEventListener('input', function(e) {
+                let value = this.value.replace(/[^0-9]/g, '');
+                if (value === '') {
+                    this.value = '';
+                    return;
+                }
+                this.value = formatRupiahInput(value);
+            });
+
+            function updateStepIndicators(activeStep) {
+                step1Indicator.className = 'step-item';
+                step2Indicator.className = 'step-item';
+                step3Indicator.className = 'step-item';
+                
+                if (activeStep >= 1) {
+                    step1Indicator.className = activeStep > 1 ? 'step-item completed' : 'step-item active';
+                }
+                
+                if (activeStep >= 2) {
+                    step2Indicator.className = activeStep > 2 ? 'step-item completed' : 'step-item active';
+                }
+                
+                if (activeStep === 3) {
+                    step3Indicator.className = 'step-item active';
+                }
+
+                checkAccountStep.style.display = activeStep === 1 ? 'block' : 'none';
+                accountDetails.classList.toggle('visible', activeStep === 2);
+                confirmationDetails.classList.toggle('visible', activeStep === 3);
+            }
+            
+            cekForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const rekening = inputNoRek.value.trim();
+                
+                if (rekening === prefix) {
+                    showAlert('Silakan masukkan nomor rekening lengkap', 'error');
+                    return;
+                }
+                
+                cekButton.classList.add('btn-loading');
+
+                try {
+                    const response = await fetch('proses_setor.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=cek&no_rekening=${encodeURIComponent(rekening)}`
+                    });
+
+                    const data = await response.json();
+                    
+                    cekButton.classList.remove('btn-loading');
+
+                    if (data.status === 'error') {
+                        showAlert(data.message, 'error');
+                        return;
+                    }
+
+                    displayNoRek.textContent = data.no_rekening;
+                    displayNama.textContent = data.nama;
+                    displaySaldo.textContent = formatRupiah(parseFloat(data.saldo));
+                    
+                    checkAccountStep.style.display = 'none';
+                    accountDetails.classList.add('visible');
+                    
+                    inputJumlah.focus();
+                    updateStepIndicators(2);
+                    showAlert(`Rekening atas nama ${data.nama} ditemukan`, 'success');
+
+                } catch (error) {
+                    cekButton.classList.remove('btn-loading');
+                    showAlert('Terjadi kesalahan sistem', 'error');
+                }
+            });
+            
+            confirmBtn.addEventListener('click', function() {
+                let jumlah = inputJumlah.value.replace(/[^0-9]/g, '');
+                jumlah = parseFloat(jumlah);
+                
+                if (!jumlah || jumlah < 1000) {
+                    showAlert('Jumlah setoran minimal Rp 1.000', 'error');
+                    inputJumlah.focus();
+                    return;
+                }
+                
+                const saldoSekarang = parseFloat(displaySaldo.textContent.replace(/[^\d]/g, ''));
+                const saldoBaru = saldoSekarang + jumlah;
+                
+                confirmNoRek.textContent = displayNoRek.textContent;
+                confirmNama.textContent = displayNama.textContent;
+                confirmSaldo.textContent = formatRupiah(saldoSekarang);
+                confirmJumlah.textContent = formatRupiah(jumlah);
+                confirmSisaSaldo.textContent = formatRupiah(saldoBaru);
+                
+                accountDetails.classList.remove('visible');
+                confirmationDetails.classList.add('visible');
+                
+                updateStepIndicators(3);
+            });
+            
+            processDepositBtn.addEventListener('click', async function() {
+                processDepositBtn.classList.add('btn-loading');
+                
+                try {
+                    const rekening = confirmNoRek.textContent;
+                    let jumlah = inputJumlah.value.replace(/[^0-9]/g, '');
+                    jumlah = parseFloat(jumlah);
+
+                    const response = await fetch('proses_setor.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `action=setor&no_rekening=${encodeURIComponent(rekening)}&jumlah=${jumlah}`
+                    });
+
+                    const data = await response.json();
+                    
+                    processDepositBtn.classList.remove('btn-loading');
+
+                    if (data.status === 'error') {
+                        showAlert(data.message, 'error');
+                        return;
+                    }
+
+                    showSuccessAnimation(data.message);
+                    cekForm.reset();
+                    depositForm.reset();
+                    inputNoRek.value = prefix;
+                    inputJumlah.value = '';
+                    confirmationDetails.classList.remove('visible');
+                    accountDetails.classList.remove('visible');
+                    checkAccountStep.style.display = 'block';
+                    updateStepIndicators(1);
+                    inputNoRek.focus();
+                    inputNoRek.setSelectionRange(prefix.length, prefix.length);
+
+                } catch (error) {
+                    processDepositBtn.classList.remove('btn-loading');
+                    showAlert('Gagal memproses transaksi', 'error');
+                }
+            });
+            
+            backToFormBtn.addEventListener('click', function() {
+                confirmationDetails.classList.remove('visible');
+                accountDetails.classList.add('visible');
+                updateStepIndicators(2);
+                inputJumlah.focus();
+            });
+            
+            cancelBtn.addEventListener('click', function() {
+                cekForm.reset();
+                depositForm.reset();
+                inputNoRek.value = prefix;
+                inputJumlah.value = '';
+                accountDetails.classList.remove('visible');
+                checkAccountStep.style.display = 'block';
+                updateStepIndicators(1);
+                inputNoRek.focus();
+                inputNoRek.setSelectionRange(prefix.length, prefix.length);
+            });
+            
+            function formatRupiah(amount) {
+                return 'Rp ' + new Intl.NumberFormat('id-ID').format(amount);
+            }
+
+            function formatRupiahInput(value) {
+                value = value.replace(/^0+/, '');
+                if (!value) return '';
+                let number = parseInt(value);
+                return new Intl.NumberFormat('id-ID').format(number);
+            }
+            
+            function showSuccessAnimation(message) {
+                const overlay = document.createElement('div');
+                overlay.className = 'success-overlay';
+                overlay.innerHTML = `
+                    <div class="success-modal">
+                        <div class="success-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h3>Setor Tunai Berhasil!</h3>
+                        <p>${message}</p>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                const modal = overlay.querySelector('.success-modal');
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    modal.appendChild(confetti);
+                }
+
+                setTimeout(() => {
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
+                    setTimeout(() => overlay.remove(), 500);
+                }, 5000);
+            }
+            
+            function showAlert(message, type) {
+                const existingAlerts = document.querySelectorAll('.alert');
+                existingAlerts.forEach(alert => {
+                    alert.classList.add('hide');
+                    setTimeout(() => alert.remove(), 500);
+                });
+                const alertDiv = document.createElement('div');
+                alertDiv.className = `alert alert-${type}`;
+                let icon = 'info-circle';
+                if (type === 'success') icon = 'check-circle';
+                if (type === 'error') icon = 'exclamation-circle';
+                alertDiv.innerHTML = `
+                    <i class="fas fa-${icon}"></i>
+                    <span>${message}</span>
+                `;
+                alertContainer.appendChild(alertDiv);
+                setTimeout(() => {
+                    alertDiv.classList.add('hide');
+                    setTimeout(() => alertDiv.remove(), 500);
+                }, 5000);
+            }
+            
+            inputNoRek.focus();
+            inputNoRek.setSelectionRange(prefix.length, prefix.length);
+
+            inputNoRek.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') cekButton.click();
+            });
+
+            inputJumlah.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') confirmBtn.click();
+            });
+        });
     </script>
 </body>
 </html>
