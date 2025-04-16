@@ -17,7 +17,6 @@ $showConfirmation = false;
 $formData = [];
 $successMessage = null;
 $show_success_popup = false; // Flag untuk pop-up BERHASIL
-$error = null;
 
 function generateUsername($nama) {
     $username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nama));
@@ -98,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id, email) 
                 VALUES (?, ?, 'siswa', ?, ?, ?, ?)";
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("ssssii", $username, $password_hash, $nama, $jurusan_id, $kelas_id, $email);
+        $stmt->bind_param("sssiss", $username, $password_hash, $nama, $jurusan_id, $kelas_id, $email);
         
         if ($stmt->execute()) {
             $user_id = $conn->insert_id;
@@ -112,10 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $email_sent = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password);
                 }
                 
-                // Show success pop-up and prepare to reset form
-                $show_success_popup = true;
-                $showConfirmation = false;
-                $formData = [];
+                $show_success_popup = true; // Set flag untuk pop-up BERHASIL
+                header('refresh:3;url=tambah_nasabah.php');
             } else {
                 $error = "Error saat membuat rekening!";
             }
@@ -420,12 +417,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             background-color: #fee2e2;
             color: #b91c1c;
             border-left: 5px solid #fecaca;
-        }
-
-        .alert-success {
-            background-color: #e8f5e9;
-            color: #2e7d32;
-            border-left: 5px solid #81c784;
         }
 
         .success-overlay {
@@ -849,7 +840,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
             }
 
-            // Modal confetti for success modal and auto-close
+            // Modal confetti for success modal
             const successModal = document.querySelector('#successModal .success-modal');
             if (successModal) {
                 for (let i = 0; i < 30; i++) {
@@ -860,27 +851,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
                     successModal.appendChild(confetti);
                 }
-                // Auto-close success modal after 2 seconds and reset form
+                // Auto-close success modal after 2 seconds
                 setTimeout(() => {
                     const overlay = document.querySelector('#successModal');
                     overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => {
-                        overlay.remove();
-                        // Reset form and reload initial state
-                        resetForm();
-                        window.location.href = 'tambah_nasabah.php';
-                    }, 500);
+                    setTimeout(() => overlay.remove(), 500);
                 }, 2000);
-            }
-
-            // Function to reset form
-            function resetForm() {
-                const form = document.getElementById('nasabahForm');
-                if (form) {
-                    form.reset();
-                    document.getElementById('kelas_id').innerHTML = '<option value="">Pilih Kelas</option>';
-                    document.getElementById('jurusan_id').value = '';
-                }
             }
 
             // Loading effect for forms

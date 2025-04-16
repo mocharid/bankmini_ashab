@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id, email) 
                 VALUES (?, ?, 'siswa', ?, ?, ?, ?)";
         $stmt = $conn->prepare($query);
-        $stmt->bind_param("ssssii", $username, $password_hash, $nama, $jurusan_id, $kelas_id, $email);
+        $stmt->bind_param("sssiss", $username, $password_hash, $nama, $jurusan_id, $kelas_id, $email);
         
         if ($stmt->execute()) {
             $user_id = $conn->insert_id;

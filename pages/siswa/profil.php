@@ -1022,7 +1022,7 @@ if (isset($_POST['update_username'])) {
             <h2>Profil Pengguna</h2>
             <p>Kelola informasi dan pengaturan akun Anda dengan mudah</p>
             <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
-                <i class="fas fa-arrow-left"></i>
+                <i class="fas fa-xmark"></i>
             </a>
         </div>
 

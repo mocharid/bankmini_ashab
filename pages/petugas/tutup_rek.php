@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $error = 'Nomor rekening tidak boleh kosong.';
     } else {
         // Fetch account details
-        $query = "SELECT r.id, r.saldo, r.user_id, u.nama, u.username, u.email, u.pin, u.jurusan_id, u.kelas_id, 
+        $query = "SELECT r.id AS rekening_id, r.saldo, r.user_id, u.nama, u.username, u.email, u.pin, u.jurusan_id, u.kelas_id, 
                         j.nama_jurusan, k.nama_kelas, r.no_rekening 
                  FROM rekening r 
                  JOIN users u ON r.user_id = u.id 
@@ -52,79 +52,77 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
             }
 
-            // Handle account deletion
+            // Handle account and user deletion
             if (isset($_POST['confirm'])) {
                 $pin_verified_from_form = isset($_POST['pin_verified']) && $_POST['pin_verified'] === '1';
                 if ($pin_verified || $pin_verified_from_form || empty($nasabah['pin'])) {
-                    $rekening_id = $nasabah['id'];
+                    $rekening_id = $nasabah['rekening_id'];
                     $user_id = $nasabah['user_id'];
+                    $admin_id = $_SESSION['user_id'];
+                    $saldo = $nasabah['saldo'];
 
                     $conn->begin_transaction();
                     try {
-                        // 1. Delete mutasi records (depends on transaksi)
+                        // 1. Log the action in log_aktivitas (before deleting user)
+                        $query = "INSERT INTO log_aktivitas (petugas_id, siswa_id, jenis_pemulihan, nilai_baru, alasan, alasan_pemulihan, waktu) 
+                                 VALUES (?, ?, ?, ?, ?, ?, NOW())";
+                        $stmt = $conn->prepare($query);
+                        $action = "pin";
+                        $nilai_baru = "";
+                        $alasan = "Penutupan rekening $no_rekening dan penghapusan pengguna oleh {$_SESSION['role']}";
+                        $alasan_pemulihan = $_POST['reason'] ?? "Penutupan rekening dan penghapusan pengguna tanpa alasan spesifik";
+                        if ($saldo > 0) {
+                            $alasan .= " dengan sisa saldo Rp " . number_format($saldo, 0, ',', '.') . " akan dibayarkan";
+                            $alasan_pemulihan .= " (Sisa saldo Rp " . number_format($saldo, 0, ',', '.') . " akan dibayarkan)";
+                        }
+                        $stmt->bind_param("iissss", $admin_id, $user_id, $action, $nilai_baru, $alasan, $alasan_pemulihan);
+                        $stmt->execute();
+
+                        // 2. Delete related mutasi
                         $query = "DELETE m FROM mutasi m 
-                                  JOIN transaksi t ON m.transaksi_id = t.id 
-                                  WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?";
+                                 JOIN transaksi t ON m.transaksi_id = t.id 
+                                 WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?";
                         $stmt = $conn->prepare($query);
                         $stmt->bind_param("ii", $rekening_id, $rekening_id);
                         $stmt->execute();
 
-                        // 2. Delete transaksi records
+                        // 3. Delete related transaksi
                         $query = "DELETE FROM transaksi WHERE rekening_id = ? OR rekening_tujuan_id = ?";
                         $stmt = $conn->prepare($query);
                         $stmt->bind_param("ii", $rekening_id, $rekening_id);
                         $stmt->execute();
 
-                        // 3. Handle transaksi.petugas_id (set to NULL if user is petugas)
-                        $query = "UPDATE transaksi SET petugas_id = NULL WHERE petugas_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $user_id);
-                        $stmt->execute();
-
-                        // 4. Delete notifications
-                        $query = "DELETE FROM notifications WHERE user_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $user_id);
-                        $stmt->execute();
-
-                        // 5. Delete active_sessions
-                        $query = "DELETE FROM active_sessions WHERE user_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $user_id);
-                        $stmt->execute();
-
-                        // 6. Delete log_recovery_attempts (petugas_id and siswa_id)
-                        $query = "DELETE FROM log_recovery_attempts WHERE petugas_id = ? OR siswa_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("ii", $user_id, $user_id);
-                        $stmt->execute();
-
-                        // 7. Delete log_aktivitas (petugas_id and siswa_id)
-                        $query = "DELETE FROM log_aktivitas WHERE petugas_id = ? OR siswa_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("ii", $user_id, $user_id);
-                        $stmt->execute();
-
-                        // 8. Delete rekening
+                        // 4. Delete rekening
                         $query = "DELETE FROM rekening WHERE id = ?";
                         $stmt = $conn->prepare($query);
                         $stmt->bind_param("i", $rekening_id);
                         $stmt->execute();
 
-                        // 9. Delete user
-                        $query = "DELETE FROM users WHERE id = ?";
+                        // 5. Delete related data from other tables
+                        $query = "DELETE FROM active_sessions WHERE user_id = ?";
                         $stmt = $conn->prepare($query);
                         $stmt->bind_param("i", $user_id);
                         $stmt->execute();
 
-                        // Optional: Log deletion for audit
-                        $log_query = "INSERT INTO log_aktivitas (petugas_id, siswa_id, jenis_pemulihan, alasan, waktu) 
-                                      VALUES (?, ?, ?, ?, NOW())";
-                        $stmt = $conn->prepare($log_query);
-                        $action = "delete_account";
-                        $admin_id = $_SESSION['user_id'];
-                        $reason = "Account deleted with no_rekening: $no_rekening";
-                        $stmt->bind_param("iiss", $admin_id, $user_id, $action, $reason);
+                        $query = "DELETE FROM notifications WHERE user_id = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("i", $user_id);
+                        $stmt->execute();
+
+                        $query = "DELETE FROM saldo_transfers WHERE petugas_id = ? OR admin_id = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("ii", $user_id, $user_id);
+                        $stmt->execute();
+
+                        $query = "DELETE FROM log_aktivitas WHERE siswa_id = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("i", $user_id);
+                        $stmt->execute();
+
+                        // 6. Delete user
+                        $query = "DELETE FROM users WHERE id = ?";
+                        $stmt = $conn->prepare($query);
+                        $stmt->bind_param("i", $user_id);
                         $stmt->execute();
 
                         $conn->commit();
@@ -133,8 +131,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $pin_verified = false;
                     } catch (Exception $e) {
                         $conn->rollback();
-                        $error = 'Gagal menghapus akun: ' . $e->getMessage();
-                        error_log("Account deletion error: " . $e->getMessage());
+                        $error = 'Gagal menutup rekening dan menghapus pengguna: ' . $e->getMessage();
+                        error_log("Account and user deletion error: " . $e->getMessage());
                     }
                 } else {
                     $error = 'PIN belum diverifikasi. Silakan masukkan PIN terlebih dahulu.';
@@ -152,7 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hapus Akun - SCHOBANK SYSTEM</title>
+    <title>Tutup Rekening dan Hapus Pengguna - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -390,6 +388,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             background-color: #d32f2f;
         }
 
+        .btn-confirm {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-confirm:hover {
+            background-color: var(--secondary-dark);
+        }
+
         .results-card {
             background: white;
             border-radius: 15px;
@@ -441,40 +447,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             text-align: left;
         }
 
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .alert-success {
-            background-color: #d1fae5;
-            color: #065f46;
-            border-left: 5px solid #34d399;
-        }
-
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 5px solid #fecaca;
-        }
-
-        .alert-warning {
-            background-color: #fff3e0;
-            color: #e65100;
-            border-left: 5px solid #ff9800;
-        }
-
         .modal {
             display: none;
             position: fixed;
@@ -516,6 +488,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             align-items: center;
         }
 
+        .modal-header.error {
+            background: linear-gradient(135deg, #b91c1c 0%, var(--danger-color) 100%);
+        }
+
+        .modal-header.warning {
+            background: linear-gradient(135deg, #e65100 0%, var(--accent-color) 100%);
+        }
+
         .modal-header h3 {
             margin: 0;
             font-size: clamp(1.3rem, 2.5vw, 1.5rem);
@@ -532,8 +512,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .modal-body i {
             font-size: 48px;
-            color: #34d399;
             margin-bottom: 15px;
+        }
+
+        .modal-body i.success {
+            color: #34d399;
+        }
+
+        .modal-body i.error {
+            color: var(--danger-color);
+        }
+
+        .modal-body i.warning {
+            color: var(--accent-color);
         }
 
         .modal-body h3 {
@@ -605,6 +596,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             40%, 80% { transform: translateX(5px); }
         }
 
+        textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
+            resize: vertical;
+            -webkit-text-size-adjust: none;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            transform: scale(1.02);
+        }
+
         @media (max-width: 768px) {
             .top-nav {
                 padding: 15px;
@@ -642,7 +651,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 font-size: clamp(1rem, 2.5vw, 1.1rem);
             }
 
-            input[type="tel"] {
+            input[type="tel"],
+            textarea {
                 padding: 10px 12px;
                 font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
@@ -656,8 +666,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             button {
                 padding: 10px 20px;
                 font-size: clamp(0.85rem, 2vw, 0.95rem);
-                width: 100%;
-                justify-content: center;
+                width: fit-content;
             }
 
             .detail-row {
@@ -692,11 +701,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             .modal-footer {
                 padding: 0 20px 20px;
-            }
-
-            .alert {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-                margin-top: 15px;
             }
         }
 
@@ -737,7 +741,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 font-size: clamp(0.9rem, 2.5vw, 1rem);
             }
 
-            input[type="tel"] {
+            input[type="tel"],
+            textarea {
                 padding: 8px 10px;
                 font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
@@ -780,11 +785,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             .modal-footer {
                 padding: 0 15px 15px;
             }
-
-            .alert {
-                font-size: clamp(0.75rem, 1.8vw, 0.85rem);
-                margin-top: 12px;
-            }
         }
     </style>
 </head>
@@ -799,17 +799,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-trash-alt"></i> Hapus Akun</h2>
-            <p>Hapus akun dan semua data terkait secara permanen</p>
-        </div>
-
-        <div id="alertContainer">
-            <?php if ($error): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span><?php echo htmlspecialchars($error); ?></span>
-                </div>
-            <?php endif; ?>
+            <h2><i class="fas fa-trash-alt"></i> Tutup Rekening dan Hapus Pengguna</h2>
+            <p>Nonaktifkan rekening dan hapus pengguna beserta semua data terkait dari sistem</p>
         </div>
 
         <div class="deposit-card">
@@ -829,7 +820,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         <?php if ($nasabah !== null): ?>
             <div class="results-card">
-                <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
+                <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Pengguna</h3>
                 <div class="detail-row">
                     <div class="detail-label">Nama:</div>
                     <div class="detail-value"><?php echo htmlspecialchars($nasabah['nama'] ?? '-'); ?></div>
@@ -874,19 +865,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     <input type="password" inputmode="numeric" class="pin-input" name="pin6" maxlength="1" pattern="[0-9]" required>
                                 </div>
                             </div>
-                            <button type="submit" name="verify_pin" id="verifyPinBtn">
+                            <button type="submit" name="verify_pin" id="verifyPinBtn" class="btn-confirm">
                                 <i class="fas fa-check"></i>
                                 <span>Verifikasi PIN</span>
                             </button>
                         </form>
                     <?php else: ?>
-                        <div class="alert alert-warning">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <span>PERHATIAN: Tindakan ini akan menghapus akun, semua data pengguna, riwayat transaksi, dan log aktivitas secara permanen.</span>
-                        </div>
                         <form id="closeAccountForm" action="" method="POST" class="deposit-form">
                             <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($nasabah['no_rekening']); ?>">
                             <input type="hidden" name="pin_verified" value="1">
+                            <div>
+                                <label for="reason">Alasan Penghapusan:</label>
+                                <textarea id="reason" name="reason" rows="4" placeholder="Masukkan alasan penghapusan pengguna dan rekening" required></textarea>
+                            </div>
                             <button type="submit" name="confirm" class="btn-danger" id="confirmBtn">
                                 <i class="fas fa-trash-alt"></i>
                                 <span>Konfirmasi Penghapusan</span>
@@ -894,13 +885,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </form>
                     <?php endif; ?>
                 <?php elseif ($pin_verified || (isset($_POST['pin_verified']) && $_POST['pin_verified'] === '1')): ?>
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <span>PERHATIAN: Tindakan ini akan menghapus akun, semua data pengguna, riwayat transaksi, dan log aktivitas secara permanen.</span>
-                    </div>
                     <form id="closeAccountForm" action="" method="POST" class="deposit-form">
                         <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($nasabah['no_rekening']); ?>">
                         <input type="hidden" name="pin_verified" value="1">
+                        <div>
+                            <label for="reason">Alasan Penghapusan:</label>
+                            <textarea id="reason" name="reason" rows="4" placeholder="Masukkan alasan penghapusan pengguna dan rekening" required></textarea>
+                        </div>
                         <button type="submit" name="confirm" class="btn-danger" id="confirmBtn">
                             <i class="fas fa-trash-alt"></i>
                             <span>Konfirmasi Penghapusan</span>
@@ -910,23 +901,90 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             </div>
         <?php endif; ?>
 
+        <!-- Success Modal -->
         <div id="successModal" class="modal<?php if ($success) echo ' show'; ?>">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3><i class="fas fa-check-circle"></i> Penutupan Akun Berhasil</h3>
+                    <h3><i class="fas fa-check-circle"></i> Penghapusan Berhasil</h3>
                 </div>
                 <div class="modal-body">
-                    <i class="fas fa-check-circle"></i>
-                    <h3>Akun Berhasil Dihapus</h3>
-                    <p>Akun, data pengguna, riwayat transaksi, dan semua data terkait telah dihapus sepenuhnya dari sistem.</p>
+                    <i class="fas fa-check-circle success"></i>
+                    <h3>Pengguna dan Rekening Berhasil Dihapus</h3>
+                    <p>Pengguna, rekening, dan semua data terkait telah dihapus dari sistem.
+                    <?php if (isset($saldo) && $saldo > 0): ?>
+                        Sisa saldo Rp <?php echo number_format($saldo, 0, ',', '.'); ?> akan dibayarkan.
+                    <?php endif; ?>
+                    </p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" id="modalCloseBtn">
+                    <button type="button" class="modal-close-btn">
                         <i class="fas fa-xmark"></i>
                     </button>
                 </div>
             </div>
         </div>
+
+        <!-- Error Modal -->
+        <div id="errorModal" class="modal<?php if ($error) echo ' show'; ?>">
+            <div class="modal-content">
+                <div class="modal-header error">
+                    <h3><i class="fas fa-exclamation-circle"></i> Kesalahan</h3>
+                </div>
+                <div class="modal-body">
+                    <i class="fas fa-exclamation-circle error"></i>
+                    <h3>Kesalahan</h3>
+                    <p><?php echo htmlspecialchars($error); ?></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="modal-close-btn">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Warning Modal (for deletion confirmation) -->
+        <?php if ($nasabah && !$pin_verified && !empty($nasabah['pin']) && isset($_POST['no_rekening']) && !isset($_POST['verify_pin'])): ?>
+            <div id="warningModal" class="modal show">
+                <div class="modal-content">
+                    <div class="modal-header warning">
+                        <h3><i class="fas fa-exclamation-triangle"></i> Perhatian</h3>
+                    </div>
+                    <div class="modal-body">
+                        <i class="fas fa-exclamation-triangle warning"></i>
+                        <h3>Verifikasi Diperlukan</h3>
+                        <p>Masukkan PIN untuk melanjutkan penghapusan rekening dan pengguna.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="modal-close-btn">
+                            <i class="fas fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        <?php elseif ($nasabah && ($pin_verified || (isset($_POST['pin_verified']) && $_POST['pin_verified'] === '1') || empty($nasabah['pin']))): ?>
+            <div id="warningModal" class="modal show">
+                <div class="modal-content">
+                    <div class="modal-header warning">
+                        <h3><i class="fas fa-exclamation-triangle"></i> Peringatan</h3>
+                    </div>
+                    <div class="modal-body">
+                        <i class="fas fa-exclamation-triangle warning"></i>
+                        <h3>Konfirmasi Penghapusan</h3>
+                        <p>Tindakan ini akan menghapus pengguna, rekening, dan semua data terkait secara permanen.
+                        <?php if ($nasabah['saldo'] > 0): ?>
+                            Sisa saldo Rp <?php echo number_format($nasabah['saldo'], 0, ',', '.'); ?> akan dibayarkan.
+                        <?php endif; ?>
+                        </p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="modal-close-btn">
+                            <i class="fas fa-xmark"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <script>
@@ -955,9 +1013,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             const confirmBtn = document.getElementById('confirmBtn');
             const inputNoRek = document.getElementById('no_rekening');
             const pinInputs = document.querySelectorAll('.pin-input');
-            const alertContainer = document.getElementById('alertContainer');
-            const modal = document.getElementById('successModal');
-            const modalCloseBtn = document.getElementById('modalCloseBtn');
+            const successModal = document.getElementById('successModal');
+            const errorModal = document.getElementById('errorModal');
+            const warningModal = document.getElementById('warningModal');
+            const modalCloseBtns = document.querySelectorAll('.modal-close-btn');
             const prefix = "REK";
 
             // Initialize account number input with prefix
@@ -1049,7 +1108,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     const rekening = inputNoRek.value.trim();
                     if (rekening === prefix) {
                         e.preventDefault();
-                        showAlert('Silakan masukkan nomor rekening lengkap', 'error');
+                        showModal('errorModal', 'Silakan masukkan nomor rekening lengkap', 'Kesalahan');
                         inputNoRek.classList.add('form-error');
                         setTimeout(() => inputNoRek.classList.remove('form-error'), 400);
                         inputNoRek.focus();
@@ -1067,7 +1126,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     const pinValues = Array.from(pinInputs).map(input => input.value);
                     if (pinValues.some(val => !val)) {
                         e.preventDefault();
-                        showAlert('PIN harus 6 digit', 'error');
+                        showModal('errorModal', 'PIN harus 6 digit', 'Kesalahan');
                         pinInputs.forEach(input => {
                             if (!input.value) {
                                 input.classList.add('form-error');
@@ -1086,7 +1145,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             if (closeAccountForm) {
                 closeAccountForm.addEventListener('submit', function(e) {
-                    if (!confirm('PERINGATAN: Anda akan menghapus akun ini secara permanen, termasuk semua data pengguna, riwayat transaksi, dan log aktivitas. Apakah Anda yakin ingin melanjutkan?')) {
+                    if (!confirm('PERINGATAN: Anda akan menghapus pengguna, rekening, dan semua data terkait secara permanen. ' +
+                                 '<?php if ($nasabah && $nasabah['saldo'] > 0): ?>Sisa saldo Rp <?php echo number_format($nasabah['saldo'], 0, ',', '.'); ?> akan dibayarkan. <?php endif; ?>' +
+                                 'Apakah Anda yakin ingin melanjutkan?')) {
                         e.preventDefault();
                         return;
                     }
@@ -1097,61 +1158,75 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 });
             }
 
-            // Alert handling
-            function showAlert(message, type) {
-                const existingAlerts = document.querySelectorAll('.alert');
-                existingAlerts.forEach(alert => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
-                });
-                const alertDiv = document.createElement('div');
-                alertDiv.className = `alert alert-${type}`;
-                let icon = 'info-circle';
-                if (type === 'success') icon = 'check-circle';
-                if (type === 'error') icon = 'exclamation-circle';
-                if (type === 'warning') icon = 'exclamation-triangle';
-                alertDiv.innerHTML = `
-                    <i class="fas fa-${icon}"></i>
-                    <span>${message}</span>
-                `;
-                alertContainer.appendChild(alertDiv);
-                setTimeout(() => {
-                    alertDiv.classList.add('hide');
-                    setTimeout(() => alertDiv.remove(), 500);
-                }, 5000);
-            }
-
-            // Auto-hide existing alerts
-            const alerts = document.querySelectorAll('.alert');
-            alerts.forEach(alert => {
-                setTimeout(() => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
-                }, 5000);
-            });
-
             // Modal handling
-            if (modal && modal.classList.contains('show')) {
+            function showModal(modalId, message, title) {
+                const modal = document.getElementById(modalId);
+                if (!modal) return;
+
+                const modalBody = modal.querySelector('.modal-body');
+                const modalTitle = modal.querySelector('.modal-header h3');
+                const modalMessage = modalBody.querySelector('p');
+                modalTitle.innerHTML = `<i class="fas fa-${modalId === 'errorModal' ? 'exclamation-circle' : modalId === 'warningModal' ? 'exclamation-triangle' : 'check-circle'}"></i> ${title}`;
+                modalMessage.textContent = message;
+
+                modal.classList.add('show');
                 document.body.style.overflow = 'hidden';
+
                 setTimeout(() => {
                     modal.classList.remove('show');
                     document.body.style.overflow = 'auto';
-                    window.location.href = 'dashboard.php';
+                    if (modalId === 'successModal') {
+                        window.location.href = 'dashboard.php';
+                    }
                 }, 5000);
-                window.addEventListener('click', function(event) {
-                    if (event.target === modal) {
-                        modal.classList.remove('show');
-                        document.body.style.overflow = 'auto';
+            }
+
+            // Close modals on button click or outside click
+            modalCloseBtns.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const modal = btn.closest('.modal');
+                    modal.classList.remove('show');
+                    document.body.style.overflow = 'auto';
+                    if (modal.id === 'successModal') {
                         window.location.href = 'dashboard.php';
                     }
                 });
-                if (modalCloseBtn) {
-                    modalCloseBtn.addEventListener('click', function() {
-                        modal.classList.remove('show');
-                        document.body.style.overflow = 'auto';
-                        window.location.href = 'dashboard.php';
+            });
+
+            [successModal, errorModal, warningModal].forEach(modal => {
+                if (modal) {
+                    modal.addEventListener('click', function(event) {
+                        if (event.target === modal) {
+                            modal.classList.remove('show');
+                            document.body.style.overflow = 'auto';
+                            if (modal.id === 'successModal') {
+                                window.location.href = 'dashboard.php';
+                            }
+                        }
                     });
                 }
+            });
+
+            // Handle existing modals on page load
+            if (successModal && successModal.classList.contains('show')) {
+                document.body.style.overflow = 'hidden';
+                setTimeout(() => {
+                    successModal.classList.remove('show');
+                    document.body.style.overflow = 'auto';
+                    window.location.href = 'dashboard.php';
+                }, 5000);
+            }
+
+            if (errorModal && errorModal.classList.contains('show')) {
+                document.body.style.overflow = 'hidden';
+                setTimeout(() => {
+                    errorModal.classList.remove('show');
+                    document.body.style.overflow = 'auto';
+                }, 5000);
+            }
+
+            if (warningModal && warningModal.classList.contains('show')) {
+                document.body.style.overflow = 'hidden';
             }
 
             // Focus input and handle Enter key
