@@ -9,12 +9,14 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $petugas_id = $_POST['petugas_id'] ?? '';
+    $petugas_id = filter_input(INPUT_POST, 'petugas_id', FILTER_VALIDATE_INT);
     $jumlah = str_replace(['.', ''], '', $_POST['jumlah'] ?? ''); // Remove formatting
 
     // Validasi input
-    if (empty($petugas_id) || empty($jumlah)) {
-        $error = "Semua kolom harus diisi!";
+    if (!$petugas_id || $petugas_id <= 0) {
+        $error = "Pilih petugas yang valid!";
+    } elseif (empty($jumlah)) {
+        $error = "Jumlah transfer harus diisi!";
     } elseif (!is_numeric($jumlah) || $jumlah <= 0) {
         $error = "Jumlah transfer harus angka positif!";
     } else {
@@ -29,30 +31,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = "Petugas tidak valid!";
         } else {
             // Cek saldo cukup
-            $query_saldo = "SELECT SUM(net_setoran) as total_saldo
-                            FROM (
-                                SELECT DATE(created_at) as tanggal,
-                                       SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) -
-                                       SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as net_setoran
-                                FROM transaksi
-                                WHERE status = 'approved' AND DATE(created_at) < CURDATE()
-                                GROUP BY DATE(created_at)
-                            ) as daily_net";
-            $result_saldo = $conn->query($query_saldo);
+            $query_saldo = "SELECT COALESCE((
+                              SELECT SUM(r.saldo)
+                              FROM rekening r
+                              WHERE r.id IS NOT NULL
+                          ), 0) -
+                          COALESCE((
+                              SELECT SUM(st.jumlah)
+                              FROM saldo_transfers st
+                              WHERE st.admin_id = ? AND st.tanggal <= CURDATE()
+                          ), 0) as total_saldo";
+            $stmt_saldo = $conn->prepare($query_saldo);
+            $stmt_saldo->bind_param("i", $admin_id);
+            $stmt_saldo->execute();
+            $result_saldo = $stmt_saldo->get_result();
             $total_saldo = $result_saldo->fetch_assoc()['total_saldo'] ?? 0;
 
             if ($jumlah > $total_saldo) {
-                $error = "Saldo tidak cukup untuk transfer!";
+                $error = "Saldo tidak cukup untuk transfer! Saldo saat ini: Rp " . number_format($total_saldo, 0, ',', '.');
             } else {
-                // Simpan transfer
-                $query = "INSERT INTO saldo_transfers (admin_id, petugas_id, jumlah, tanggal) VALUES (?, ?, ?, CURDATE())";
-                $stmt = $conn->prepare($query);
-                $stmt->bind_param("iii", $admin_id, $petugas_id, $jumlah);
+                // Cek apakah transfer serupa sudah ada hari ini untuk mencegah duplikat
+                $query_check = "SELECT COUNT(*) as count FROM saldo_transfers 
+                                WHERE admin_id = ? AND petugas_id = ? AND jumlah = ? AND tanggal = CURDATE()";
+                $stmt_check = $conn->prepare($query_check);
+                $stmt_check->bind_param("iii", $admin_id, $petugas_id, $jumlah);
+                $stmt_check->execute();
+                $result_check = $stmt_check->get_result();
+                $transfer_count = $result_check->fetch_assoc()['count'];
 
-                if ($stmt->execute()) {
-                    $success = "Transfer saldo berhasil!";
+                if ($transfer_count > 0) {
+                    $error = "Transfer dengan jumlah yang sama ke petugas ini sudah dilakukan hari ini!";
                 } else {
-                    $error = "Gagal menyimpan transfer: " . $conn->error;
+                    // Simpan transfer
+                    $query = "INSERT INTO saldo_transfers (admin_id, petugas_id, jumlah, tanggal, created_at) 
+                              VALUES (?, ?, ?, CURDATE(), NOW())";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("iii", $admin_id, $petugas_id, $jumlah);
+
+                    if ($stmt->execute()) {
+                        $success = "Transfer saldo berhasil! Jumlah: Rp " . number_format($jumlah, 0, ',', '.') . " ke petugas ID: $petugas_id";
+                    } else {
+                        $error = "Gagal menyimpan transfer: " . $conn->error;
+                    }
                 }
             }
         }
@@ -70,7 +90,7 @@ $query_transfers = "SELECT st.id, st.jumlah, st.tanggal, st.created_at,
                     FROM saldo_transfers st
                     JOIN users admin ON st.admin_id = admin.id
                     JOIN users petugas ON st.petugas_id = petugas.id
-                    ORDER BY st.created_at DESC";
+                    ORDER BY st.created_at DESC LIMIT 50";
 $result_transfers = $conn->query($query_transfers);
 
 // Fungsi format tanggal Indonesia

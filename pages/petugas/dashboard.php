@@ -1040,9 +1040,9 @@ function tanggal_indonesia($tanggal) {
                         <a href="data_siswa.php">
                             <i class="fas fa-user-plus"></i> Buka Rekening
                         </a>
-                        <a href="tutup_rek.php">
+                        <!-- <a href="tutup_rek.php">
                             <i class="fas fa-user-slash"></i> Tutup Rekening
-                        </a>
+                        </a> -->
                     </div>
                 </div>
 

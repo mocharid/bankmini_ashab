@@ -183,14 +183,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             $transaksi_id = $conn->insert_id;
 
-            // Update saldo rekening
-            $saldo_baru = $saldo_sekarang - $jumlah;
-            $query_update = "UPDATE rekening SET saldo = ? WHERE id = ?";
-            $stmt_update = $conn->prepare($query_update);
-            $stmt_update->bind_param('di', $saldo_baru, $rekening_id);
-            $stmt_update->execute();
+            // Tidak mengurangi saldo rekening langsung
+            $saldo_baru = $saldo_sekarang; // Saldo tetap sama
 
-            // Catat mutasi
+            // Catat mutasi (opsional, untuk pencatatan sementara)
             $query_mutasi = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) 
                             VALUES (?, ?, ?, ?)";
             $stmt_mutasi = $conn->prepare($query_mutasi);
@@ -198,7 +194,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt_mutasi->execute();
 
             // Kirim notifikasi
-            $message = "Penarikan tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " berhasil. Saldo baru: Rp " . number_format($saldo_baru, 0, ',', '.');
+            $message = "Penarikan tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah diproses oleh petugas. Saldo Anda akan diperbarui setelah rekonsiliasi.";
             $query_notifikasi = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
             $stmt_notifikasi = $conn->prepare($query_notifikasi);
             $stmt_notifikasi->bind_param('is', $user_id, $message);
@@ -221,8 +217,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $mail->addAddress($email, $nama_nasabah);
                 $mail->isHTML(true);
                 $mail->Subject = "Bukti Transaksi Penarikan Tunai - SCHOBANK SYSTEM";
-                $mail->Body = "<h2>Penarikan Tunai Berhasil</h2><p>Jumlah: Rp " . number_format($jumlah, 0, ',', '.') . "<br>Saldo Baru: Rp " . number_format($saldo_baru, 0, ',', '.') . "</p>";
-                $mail->AltBody = "Penarikan Tunai Berhasil\nJumlah: Rp " . number_format($jumlah, 0, ',', '.') . "\nSaldo Baru: Rp " . number_format($saldo_baru, 0, ',', '.');
+                $mail->Body = "<h2>Penarikan Tunai Berhasil</h2><p>Jumlah: Rp " . number_format($jumlah, 0, ',', '.') . "<br>Catatan: Saldo Anda akan diperbarui setelah rekonsiliasi oleh admin.</p>";
+                $mail->AltBody = "Penarikan Tunai Berhasil\nJumlah: Rp " . number_format($jumlah, 0, ',', '.') . "\nCatatan: Saldo Anda akan diperbarui setelah rekonsiliasi oleh admin.";
 
                 $mail->send();
                 $email_sent = true;
