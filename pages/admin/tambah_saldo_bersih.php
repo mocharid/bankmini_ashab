@@ -30,17 +30,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result->num_rows === 0) {
             $error = "Petugas tidak valid!";
         } else {
-            // Cek saldo cukup
-            $query_saldo = "SELECT COALESCE((
-                              SELECT SUM(r.saldo)
-                              FROM rekening r
-                              WHERE r.id IS NOT NULL
-                          ), 0) -
-                          COALESCE((
-                              SELECT SUM(st.jumlah)
-                              FROM saldo_transfers st
-                              WHERE st.admin_id = ? AND st.tanggal <= CURDATE()
-                          ), 0) as total_saldo";
+            // Cek saldo cukup (aligned with dashboard.php Total Saldo)
+            $query_saldo = "SELECT (
+                COALESCE((
+                    SELECT SUM(net_setoran)
+                    FROM (
+                        SELECT DATE(created_at) as tanggal,
+                               SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) -
+                               SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as net_setoran
+                        FROM transaksi
+                        WHERE status = 'approved' AND DATE(created_at) < CURDATE()
+                        GROUP BY DATE(created_at)
+                    ) as daily_net
+                ), 0) -
+                COALESCE((
+                    SELECT SUM(jumlah)
+                    FROM saldo_transfers
+                    WHERE admin_id = ?
+                ), 0)
+            ) as total_saldo";
             $stmt_saldo = $conn->prepare($query_saldo);
             $stmt_saldo->bind_param("i", $admin_id);
             $stmt_saldo->execute();
@@ -50,29 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($jumlah > $total_saldo) {
                 $error = "Saldo tidak cukup untuk transfer! Saldo saat ini: Rp " . number_format($total_saldo, 0, ',', '.');
             } else {
-                // Cek apakah transfer serupa sudah ada hari ini untuk mencegah duplikat
-                $query_check = "SELECT COUNT(*) as count FROM saldo_transfers 
-                                WHERE admin_id = ? AND petugas_id = ? AND jumlah = ? AND tanggal = CURDATE()";
-                $stmt_check = $conn->prepare($query_check);
-                $stmt_check->bind_param("iii", $admin_id, $petugas_id, $jumlah);
-                $stmt_check->execute();
-                $result_check = $stmt_check->get_result();
-                $transfer_count = $result_check->fetch_assoc()['count'];
+                // Simpan transfer
+                $query = "INSERT INTO saldo_transfers (admin_id, petugas_id, jumlah, tanggal, created_at) 
+                          VALUES (?, ?, ?, CURDATE(), NOW())";
+                $stmt = $conn->prepare($query);
+                $stmt->bind_param("iii", $admin_id, $petugas_id, $jumlah);
 
-                if ($transfer_count > 0) {
-                    $error = "Transfer dengan jumlah yang sama ke petugas ini sudah dilakukan hari ini!";
+                if ($stmt->execute()) {
+                    $success = "Transfer saldo berhasil! Jumlah: Rp " . number_format($jumlah, 0, ',', '.') . " ke petugas ID: $petugas_id";
                 } else {
-                    // Simpan transfer
-                    $query = "INSERT INTO saldo_transfers (admin_id, petugas_id, jumlah, tanggal, created_at) 
-                              VALUES (?, ?, ?, CURDATE(), NOW())";
-                    $stmt = $conn->prepare($query);
-                    $stmt->bind_param("iii", $admin_id, $petugas_id, $jumlah);
-
-                    if ($stmt->execute()) {
-                        $success = "Transfer saldo berhasil! Jumlah: Rp " . number_format($jumlah, 0, ',', '.') . " ke petugas ID: $petugas_id";
-                    } else {
-                        $error = "Gagal menyimpan transfer: " . $conn->error;
-                    }
+                    $error = "Gagal menyimpan transfer: " . $conn->error;
                 }
             }
         }
@@ -634,7 +629,7 @@ function formatRupiah($jumlah) {
 
             .top-nav {
                 padding: 10px;
-            }
+            )
 
             .welcome-banner {
                 padding: 20px;

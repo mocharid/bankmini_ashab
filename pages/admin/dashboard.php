@@ -49,17 +49,25 @@ $query = "SELECT COUNT(id) as total_siswa FROM users WHERE role = 'siswa'";
 $result = $conn->query($query);
 $total_siswa = $result->fetch_assoc()['total_siswa'] ?? 0;
 
-// Get total saldo (sum of saldo from active rekening minus total transfers)
-$query = "SELECT COALESCE((
-            SELECT SUM(r.saldo)
-            FROM rekening r
-            WHERE r.id IS NOT NULL
-        ), 0) -
-        COALESCE((
-            SELECT SUM(st.jumlah)
-            FROM saldo_transfers st
-            WHERE st.admin_id = ? AND st.tanggal <= CURDATE()
-        ), 0) as total_saldo";
+// Get total saldo (net setoran minus total transfers)
+$query = "SELECT (
+            COALESCE((
+                SELECT SUM(net_setoran)
+                FROM (
+                    SELECT DATE(created_at) as tanggal,
+                           SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) -
+                           SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as net_setoran
+                    FROM transaksi
+                    WHERE status = 'approved' AND DATE(created_at) < CURDATE()
+                    GROUP BY DATE(created_at)
+                ) as daily_net
+            ), 0) -
+            COALESCE((
+                SELECT SUM(jumlah)
+                FROM saldo_transfers
+                WHERE admin_id = ?
+            ), 0)
+          ) as total_saldo";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $admin_id);
 $stmt->execute();
@@ -1271,7 +1279,7 @@ $transfer_data = array_reverse($transfer_seven_days);
                             <i class="fas fa-chalkboard"></i> Tambah Kelas
                         </a>
                         <a href="tambah_nasabah.php">
-                            <i class="fas fa-user-plus"></i> Tambah Rekening Baru
+                            <i class="fas fa-user-plus"></i> Tambah Siswa
                         </a>
                         <a href="tambah_petugas.php">
                             <i class="fas fa-user-shield"></i> Tambah Petugas
@@ -1303,9 +1311,6 @@ $transfer_data = array_reverse($transfer_seven_days);
                 </div>
 
                 <div class="menu-item">
-                    <a href="tutup_rek.php">
-                        <i class="fas fa-user-slash"></i> Tutup Rekening Siswa
-                    </a>
                     <a href="pemulihan_akun.php">
                         <i class="fas fa-user-lock"></i> Pemulihan Akun Siswa
                     </a>
