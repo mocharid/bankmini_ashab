@@ -343,8 +343,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_id']) && !iss
 }
 
 // Fetch Data with Filters
-$filter_start = $_GET['filter_start'] ?? '';
-$filter_end = $_GET['filter_end'] ?? '';
+$filter_start = isset($_GET['filter_start']) && !empty($_GET['filter_start']) ? $_GET['filter_start'] : date('Y-m-d');
+$filter_end = isset($_GET['filter_end']) && !empty($_GET['filter_end']) ? $_GET['filter_end'] : date('Y-m-d');
 $limit = 10;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
@@ -577,9 +577,38 @@ date_default_timezone_set('Asia/Jakarta');
             border: 1px solid #ddd;
             border-radius: 8px;
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            line-height: 1.5;
+            min-height: 40px;
             transition: var(--transition);
             -webkit-user-select: text;
             user-select: text;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-color: #fff;
+        }
+
+        input[type="date"] {
+            position: relative;
+        }
+
+        /* Ensure date picker icon is visible in Safari */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            display: block;
+            width: 20px;
+            height: 20px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>') no-repeat center;
+            background-size: 20px;
+            cursor: pointer;
+            opacity: 0.7;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        input[type="date"]::-webkit-datetime-edit {
+            padding-right: 30px; /* Space for calendar icon */
         }
 
         input[type="text"]:focus,
@@ -827,6 +856,12 @@ date_default_timezone_set('Asia/Jakarta');
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .modal.visible {
+            opacity: 1;
         }
 
         .modal-content {
@@ -836,7 +871,14 @@ date_default_timezone_set('Asia/Jakarta');
             width: 90%;
             max-width: 450px;
             box-shadow: var(--shadow-md);
-            animation: slideIn 0.5s ease-out;
+            transform: scale(0.8);
+            opacity: 0;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+
+        .modal-content.visible {
+            transform: scale(1);
+            opacity: 1;
         }
 
         .modal-title {
@@ -872,17 +914,11 @@ date_default_timezone_set('Asia/Jakarta');
             align-items: center;
             z-index: 1000;
             opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
+            transition: opacity 0.3s ease-in-out;
         }
 
-        @keyframes fadeInOverlay {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes fadeOutOverlay {
-            from { opacity: 1; }
-            to { opacity: 0; }
+        .success-overlay.visible {
+            opacity: 1;
         }
 
         .success-modal {
@@ -895,35 +931,31 @@ date_default_timezone_set('Asia/Jakarta');
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
             position: relative;
             overflow: hidden;
-            transform: scale(0.5);
+            transform: scale(0.8);
             opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
         }
 
-        @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
+        .success-modal.visible {
+            transform: scale(1);
+            opacity: 1;
         }
 
         .success-icon {
             font-size: clamp(3rem, 6vw, 3.5rem);
             color: var(--secondary-color);
             margin-bottom: 20px;
-            animation: bounceIn 0.6s ease-out;
+            transition: transform 0.3s ease-out;
         }
 
-        @keyframes bounceIn {
-            0% { transform: scale(0); opacity: 0; }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); opacity: 1; }
+        .success-modal.visible .success-icon {
+            transform: scale(1.1);
         }
 
         .success-modal h3 {
             color: var(--primary-dark);
             margin-bottom: 10px;
             font-size: clamp(1.2rem, 2.5vw, 1.3rem);
-            animation: slideUpText 0.5s ease-out 0.2s both;
             font-weight: 600;
         }
 
@@ -931,13 +963,7 @@ date_default_timezone_set('Asia/Jakarta');
             color: var(--text-secondary);
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             margin-bottom: 20px;
-            animation: slideUpText 0.5s ease-out 0.3s both;
             line-height: 1.5;
-        }
-
-        @keyframes slideUpText {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
         }
 
         .confetti {
@@ -1148,6 +1174,11 @@ date_default_timezone_set('Asia/Jakarta');
             .success-modal p {
                 font-size: clamp(0.8rem, 1.6vw, 0.9rem);
             }
+
+            input[type="text"],
+            input[type="date"] {
+                min-height: 36px;
+            }
         }
     </style>
 </head>
@@ -1164,7 +1195,7 @@ date_default_timezone_set('Asia/Jakarta');
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2><i class="fas fa-calendar-alt"></i> Buat Jadwal Petugas</h2>
+            <h2>Buat Jadwal Petugas</h2>
             <p>Kelola Jadwal Petugas disini</p>
         </div>
 
@@ -1313,8 +1344,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         <!-- Confirmation Modal -->
         <?php if (isset($_GET['confirm']) && isset($_GET['tanggal']) && isset($_GET['petugas1_nama']) && isset($_GET['petugas2_nama'])): ?>
-            <div class="success-overlay" id="confirmModal">
-                <div class="success-modal">
+            <div class="success-overlay visible" id="confirmModal">
+                <div class="success-modal visible">
                     <div class="success-icon">
                         <i class="fas fa-calendar-check"></i>
                     </div>
@@ -1353,8 +1384,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         <!-- Success Modal -->
         <?php if (isset($_GET['success'])): ?>
-            <div class="success-overlay" id="successModal">
-                <div class="success-modal">
+            <div class="success-overlay visible" id="successModal">
+                <div class="success-modal visible">
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
@@ -1366,8 +1397,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         <!-- Edit Success Modal -->
         <?php if (isset($_GET['edit_success'])): ?>
-            <div class="success-overlay" id="editSuccessModal">
-                <div class="success-modal">
+            <div class="success-overlay visible" id="editSuccessModal">
+                <div class="success-modal visible">
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
@@ -1379,8 +1410,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         <!-- Delete Success Modal -->
         <?php if (isset($_GET['delete_success'])): ?>
-            <div class="success-overlay" id="deleteSuccessModal">
-                <div class="success-modal">
+            <div class="success-overlay visible" id="deleteSuccessModal">
+                <div class="success-modal visible">
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
@@ -1520,6 +1551,23 @@ date_default_timezone_set('Asia/Jakarta');
         function applyFilters() {
             const startDate = document.getElementById('filter_start').value;
             const endDate = document.getElementById('filter_end').value;
+            const today = new Date().toISOString().split('T')[0];
+
+            if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+                showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
+                return;
+            }
+
+            if (startDate && new Date(startDate) > new Date(today)) {
+                showAlert('Tanggal awal tidak boleh melebihi tanggal hari ini', 'error');
+                return;
+            }
+
+            if (endDate && new Date(endDate) > new Date(today)) {
+                showAlert('Tanggal akhir tidak boleh melebihi tanggal hari ini', 'error');
+                return;
+            }
+
             const url = new URL(window.location);
             if (startDate) url.searchParams.set('filter_start', startDate);
             else url.searchParams.delete('filter_start');
@@ -1530,28 +1578,65 @@ date_default_timezone_set('Asia/Jakarta');
         }
 
         // Edit Modal Functions
+        let isModalOpening = false;
+
         function showEditModal(id, tanggal, petugas1_nama, petugas2_nama) {
+            if (isModalOpening) return;
+            isModalOpening = true;
+
+            const modal = document.getElementById('editModal');
+            const modalContent = modal.querySelector('.modal-content');
+
             document.getElementById('edit_id').value = id;
             document.getElementById('edit_tanggal').value = tanggal;
             document.getElementById('edit_petugas1_nama').value = petugas1_nama;
             document.getElementById('edit_petugas2_nama').value = petugas2_nama;
-            document.getElementById('editModal').style.display = 'flex';
+
+            modal.style.display = 'none';
+            modal.classList.remove('visible');
+            modalContent.classList.remove('visible');
+
+            modal.offsetHeight; // Force reflow
+
+            modal.style.display = 'flex';
+            setTimeout(() => {
+                modal.classList.add('visible');
+                modalContent.classList.add('visible');
+            }, 10);
+
+            setTimeout(() => {
+                isModalOpening = false;
+            }, 600);
         }
 
         function hideEditModal() {
-            document.getElementById('editModal').style.display = 'none';
+            const modal = document.getElementById('editModal');
+            const modalContent = modal.querySelector('.modal-content');
+            modal.classList.remove('visible');
+            modalContent.classList.remove('visible');
+            setTimeout(() => {
+                modal.style.display = 'none';
+                isModalOpening = false;
+            }, 300);
         }
 
         function showEditConfirmation() {
+            if (isModalOpening) return false;
+            isModalOpening = true;
+
             const tanggal = document.getElementById('edit_tanggal').value;
             const petugas1_nama = document.getElementById('edit_petugas1_nama').value.trim();
             const petugas2_nama = document.getElementById('edit_petugas2_nama').value.trim();
             
             if (!tanggal || petugas1_nama.length < 3 || petugas2_nama.length < 3) {
                 showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
+                isModalOpening = false;
                 return false;
             }
             
+            const modal = document.getElementById('editConfirmModal');
+            const modalContent = modal.querySelector('.success-modal');
+
             document.getElementById('editConfirmId').value = document.getElementById('edit_id').value;
             document.getElementById('editConfirmTanggal').textContent = formatDate(tanggal);
             document.getElementById('editConfirmTanggalInput').value = tanggal;
@@ -1559,21 +1644,61 @@ date_default_timezone_set('Asia/Jakarta');
             document.getElementById('editConfirmPetugas1Input').value = petugas1_nama;
             document.getElementById('editConfirmPetugas2').textContent = petugas2_nama;
             document.getElementById('editConfirmPetugas2Input').value = petugas2_nama;
-            document.getElementById('editConfirmModal').style.display = 'flex';
+
+            modal.style.display = 'none';
+            modal.classList.remove('visible');
+            modalContent.classList.remove('visible');
+
+            modal.offsetHeight; // Force reflow
+
+            modal.style.display = 'flex';
+            setTimeout(() => {
+                modal.classList.add('visible');
+                modalContent.classList.add('visible');
+            }, 10);
+
             hideEditModal();
+
+            setTimeout(() => {
+                isModalOpening = false;
+            }, 600);
             return false;
         }
 
         function hideEditConfirmModal() {
-            document.getElementById('editConfirmModal').style.display = 'none';
+            const modal = document.getElementById('editConfirmModal');
+            const modalContent = modal.querySelector('.success-modal');
+            modal.classList.remove('visible');
+            modalContent.classList.remove('visible');
+            setTimeout(() => {
+                modal.style.display = 'none';
+                isModalOpening = false;
+            }, 300);
         }
 
         // Delete Modal Functions
         function deleteJadwal(id, tanggal) {
+            if (isModalOpening) return;
+            isModalOpening = true;
+
+            const modal = document.getElementById('deleteModal');
+            const modalContent = modal.querySelector('.modal-content');
+
             document.getElementById('delete_id').value = id;
             document.getElementById('delete_tanggal').textContent = tanggal;
-            document.getElementById('deleteModal').style.display = 'flex';
-            
+
+            modal.style.display = 'none';
+            modal.classList.remove('visible');
+            modalContent.classList.remove('visible');
+
+            modal.offsetHeight; // Force reflow
+
+            modal.style.display = 'flex';
+            setTimeout(() => {
+                modal.classList.add('visible');
+                modalContent.classList.add('visible');
+            }, 10);
+
             const deleteForm = document.getElementById('deleteForm');
             deleteForm.addEventListener('submit', function(e) {
                 e.preventDefault();
@@ -1587,134 +1712,145 @@ date_default_timezone_set('Asia/Jakarta');
                     deleteForm.submit();
                 }
             }, { once: true });
+
+            setTimeout(() => {
+                isModalOpening = false;
+            }, 600);
         }
 
         function hideDeleteModal() {
-            document.getElementById('deleteModal').style.display = 'none';
+            const modal = document.getElementById('deleteModal');
+            const modalContent = modal.querySelector('.modal-content');
+            modal.classList.remove('visible');
+            modalContent.classList.remove('visible');
+            setTimeout(() => {
+                modal.style.display = 'none';
+                isModalOpening = false;
+            }, 300);
         }
 
         // Event Listeners
         document.addEventListener('DOMContentLoaded', () => {
+            // Dynamic Date Constraints
+            const startDateInput = document.getElementById('filter_start');
+            const endDateInput = document.getElementById('filter_end');
+            const today = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD
+
+            // Set max date to today for both inputs
+            startDateInput.setAttribute('max', today);
+            endDateInput.setAttribute('max', today);
+
+            // Update constraints when filter_start changes
+            startDateInput.addEventListener('change', function() {
+                if (this.value) {
+                    endDateInput.setAttribute('min', this.value);
+                    // If end_date is before start_date, reset it
+                    if (endDateInput.value && endDateInput.value < this.value) {
+                        endDateInput.value = this.value;
+                    }
+                } else {
+                    endDateInput.removeAttribute('min');
+                }
+            });
+
+            // Update constraints when filter_end changes
+            endDateInput.addEventListener('change', function() {
+                if (this.value) {
+                    startDateInput.setAttribute('max', this.value);
+                    // If start_date is after end_date, reset it
+                    if (startDateInput.value && startDateInput.value > this.value) {
+                        startDateInput.value = this.value;
+                    }
+                } else {
+                    startDateInput.setAttribute('max', today);
+                }
+            });
+
             // Filter Button
             const filterButton = document.getElementById('filterButton');
             if (filterButton) {
-                filterButton.addEventListener('click', applyFilters);
+                filterButton.addEventListener('click', function() {
+                    if (filterButton.classList.contains('loading')) return;
+                    filterButton.classList.add('loading');
+                    filterButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                    applyFilters();
+                    setTimeout(() => {
+                        filterButton.classList.remove('loading');
+                        filterButton.innerHTML = '<i class="fas fa-filter"></i> Filter';
+                    }, 1000);
+                });
             }
 
             // Print Button
             const printButton = document.getElementById('printButton');
             if (printButton) {
-                printButton.addEventListener('click', () => {
-                    const startDate = document.getElementById('filter_start').value;
-                    const endDate = document.getElementById('filter_end').value;
-                    let url = '?export=pdf';
-                    if (startDate) url += `&start_date=${startDate}`;
-                    if (endDate) url += `&end_date=${endDate}`;
-                    window.open(url, '_blank');
-                });
-            }
+                printButton.addEventListener('click', function() {
+                    if (printButton.classList.contains('loading')) return;
+                    printButton.classList.add('loading');
+                    printButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
 
-            // Form Handling
-            const jadwalForm = document.getElementById('jadwal-form');
-            const submitBtn = document.getElementById('submit-btn');
-            if (jadwalForm && submitBtn) {
-                jadwalForm.addEventListener('submit', function(e) {
-                    const tanggal = document.getElementById('tanggal').value;
-                    const petugas1 = document.getElementById('petugas1_nama').value.trim();
-                    const petugas2 = document.getElementById('petugas2_nama').value.trim();
-                    if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
-                        e.preventDefault();
-                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
-                        submitBtn.classList.remove('loading');
-                        submitBtn.innerHTML = `<i class="fas fa-plus-circle"></i> ${<?php echo $id ? '"Update Jadwal"' : '"Tambah Jadwal"'; ?>}`;
-                    } else {
-                        submitBtn.classList.add('loading');
-                        submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                    const startDate = startDateInput.value;
+                    const endDate = endDateInput.value;
+
+                    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+                        showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
+                        printButton.classList.remove('loading');
+                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
+                        return;
                     }
-                });
-            }
 
-            // Edit Form Handling
-            const editForm = document.getElementById('editForm');
-            const editSubmitBtn = document.getElementById('edit-submit-btn');
-            if (editForm && editSubmitBtn) {
-                editForm.addEventListener('submit', function(e) {
-                    const tanggal = document.getElementById('edit_tanggal').value;
-                    const petugas1 = document.getElementById('edit_petugas1_nama').value.trim();
-                    const petugas2 = document.getElementById('edit_petugas2_nama').value.trim();
-                    if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
-                        e.preventDefault();
-                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
-                        editSubmitBtn.classList.remove('loading');
-                        editSubmitBtn.innerHTML = '<i class="fas fa-save"></i> Simpan';
-                    } else {
-                        editSubmitBtn.classList.add('loading');
-                        editSubmitBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
+                    if (startDate && new Date(startDate) > new Date(today)) {
+                        showAlert('Tanggal awal tidak boleh melebihi tanggal hari ini', 'error');
+                        printButton.classList.remove('loading');
+                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
+                        return;
                     }
-                });
-            }
 
-            // Delete Form Handling
-            const deleteForm = document.getElementById('deleteForm');
-            const deleteSubmitBtn = document.getElementById('delete-submit-btn');
-            if (deleteForm && deleteSubmitBtn) {
-                deleteForm.addEventListener('submit', function(e) {
-                    deleteSubmitBtn.classList.add('loading');
-                    deleteSubmitBtn.innerHTML = '<i class="fas fa-spinner"></i> Menghapus...';
-                });
-            }
-
-            // Confirm Form Handling
-            const confirmForm = document.getElementById('confirm-form');
-            const confirmBtn = document.getElementById('confirm-btn');
-            if (confirmForm && confirmBtn) {
-                confirmForm.addEventListener('submit', function(e) {
-                    confirmBtn.classList.add('loading');
-                    confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Mengkonfirmasi...';
-                });
-            }
-
-            // Edit Confirm Form Handling
-            const editConfirmForm = document.getElementById('editConfirmForm');
-            const editConfirmBtn = document.getElementById('edit-confirm-btn');
-            if (editConfirmForm && editConfirmBtn) {
-                editConfirmForm.addEventListener('submit', function(e) {
-                    editConfirmBtn.classList.add('loading');
-                    editConfirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Mengkonfirmasi...';
-                });
-            }
-
-            // Input Validation
-            const inputs = document.querySelectorAll('input[type="text"]');
-            inputs.forEach(input => {
-                input.addEventListener('input', () => {
-                    if (input.value.trim().length < 3 && input.value.trim()) {
-                        input.style.borderColor = '#f44336';
-                    } else {
-                        input.style.borderColor = '#ddd';
+                    if (endDate && new Date(endDate) > new Date(today)) {
+                        showAlert('Tanggal akhir tidak boleh melebihi tanggal hari ini', 'error');
+                        printButton.classList.remove('loading');
+                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
+                        return;
                     }
-                });
-            });
 
-            // Modal Close on Overlay Click
-            const modals = document.querySelectorAll('.modal, .success-overlay');
-            modals.forEach(modal => {
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) {
-                        if (modal.id === 'editModal') {
-                            hideEditModal();
-                        } else if (modal.id === 'deleteModal') {
-                            hideDeleteModal();
-                        } else if (modal.id === 'editConfirmModal') {
-                            hideEditConfirmModal();
-                        } else if (modal.id === 'confirmModal') {
-                            window.location.href = 'buat_jadwal.php';
+                    // Construct the PDF export URL
+                    const params = new URLSearchParams();
+                    params.set('export', 'pdf');
+                    if (startDate) params.set('start_date', startDate);
+                    if (endDate) params.set('end_date', endDate);
+
+                    const exportUrl = `${window.location.pathname}?${params.toString()}`;
+                    console.log('Export URL:', exportUrl); // Debugging
+
+                    // Attempt to open the PDF
+                    try {
+                        const pdfWindow = window.open(exportUrl);
+                        if (!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed === 'undefined') {
+                            showAlert('Gagal membuka PDF. Pastikan popup tidak diblokir oleh browser.', 'error');
+                        } else {
+                            // Monitor if the window loads successfully
+                            setTimeout(() => {
+                                if (pdfWindow.document.readyState === 'complete') {
+                                    console.log('PDF window loaded successfully');
+                                } else {
+                                    showAlert('Gagal memuat PDF. Silakan coba lagi.', 'error');
+                                }
+                            }, 1000);
                         }
+                    } catch (e) {
+                        console.error('Error opening PDF:', e);
+                        showAlert('Terjadi kesalahan saat membuka PDF.', 'error');
                     }
-                });
-            });
 
-            // Handle Alerts
+                    // Reset button state
+                    setTimeout(() => {
+                        printButton.classList.remove('loading');
+                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
+                    }, 1000);
+                });
+            }
+
+            // Auto-dismiss alerts after 5 seconds
             const alerts = document.querySelectorAll('.alert');
             alerts.forEach(alert => {
                 setTimeout(() => {
@@ -1723,74 +1859,119 @@ date_default_timezone_set('Asia/Jakarta');
                 }, 5000);
             });
 
-            // Handle Success Modals
-            const successModals = document.querySelectorAll('#successModal .success-modal, #editSuccessModal .success-modal, #deleteSuccessModal .success-modal');
+            // Auto-dismiss success modals after 3 seconds
+            const successModals = document.querySelectorAll('.success-overlay');
             successModals.forEach(modal => {
-                if (modal) {
-                    for (let i = 0; i < 30; i++) {
-                        const confetti = document.createElement('div');
-                        const delay = Math.random() * 1;
-                        const duration = Math.random() * 2 + 3;
-                        confetti.className = 'confetti';
-                        confetti.style.left = Math.random() * 100 + '%';
-                        confetti.style.animationDelay = `${delay}s`;
-                        confetti.style.animationDuration = `${duration}s`;
-                        modal.appendChild(confetti);
-                    }
+                setTimeout(() => {
+                    modal.classList.remove('visible');
+                    modal.querySelector('.success-modal').classList.remove('visible');
                     setTimeout(() => {
-                        const overlay = modal.closest('.success-overlay');
-                        overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                        setTimeout(() => {
-                            overlay.remove();
-                            window.location.href = 'buat_jadwal.php';
-                        }, 500);
-                    }, 3000);
+                        modal.style.display = 'none';
+                        // Redirect to clean URL after success
+                        if (modal.id === 'successModal' || modal.id === 'editSuccessModal' || modal.id === 'deleteSuccessModal') {
+                            const url = new URL(window.location);
+                            url.searchParams.delete('success');
+                            url.searchParams.delete('edit_success');
+                            url.searchParams.delete('delete_success');
+                            url.searchParams.delete('error');
+                            history.replaceState(null, '', url.toString());
+                        }
+                    }, 300);
+                }, 3000);
+            });
+
+            // Add confetti effect to success modals
+            const successModalContents = document.querySelectorAll('.success-modal');
+            successModalContents.forEach(content => {
+                for (let i = 0; i < 20; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = `${Math.random() * 100}%`;
+                    confetti.style.animationDelay = `${Math.random() * 2}s`;
+                    confetti.style.animationDuration = `${3 + Math.random() * 2}s`;
+                    content.appendChild(confetti);
                 }
             });
 
-            // Validasi Tanggal
-            const dateInputs = document.querySelectorAll('input[type="date"]');
-            dateInputs.forEach(input => {
-                input.addEventListener('change', () => {
-                    const today = new Date().toISOString().split('T')[0];
-                    if (input.value < today) {
-                        showAlert('Tanggal tidak boleh di masa lalu!', 'error');
-                        input.value = today;
+            // Prevent form resubmission on page refresh
+            if (window.history.replaceState) {
+                window.history.replaceState(null, null, window.location.href);
+            }
+
+            // Ensure modals close when clicking outside
+            document.querySelectorAll('.modal, .success-overlay').forEach(modal => {
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        if (modal.id === 'editModal') hideEditModal();
+                        else if (modal.id === 'deleteModal') hideDeleteModal();
+                        else if (modal.id === 'editConfirmModal') hideEditConfirmModal();
+                        else if (modal.classList.contains('success-overlay')) {
+                            modal.classList.remove('visible');
+                            modal.querySelector('.success-modal').classList.remove('visible');
+                            setTimeout(() => {
+                                modal.style.display = 'none';
+                            }, 300);
+                        }
                     }
                 });
             });
-        });
 
-        // Fungsi untuk memvalidasi form sebelum submit
-        function validateForm(formId) {
-            const form = document.getElementById(formId);
-            const inputs = form.querySelectorAll('input[type="text"], input[type="date"]');
-            let isValid = true;
-
-            inputs.forEach(input => {
-                if (input.type === 'text' && input.value.trim().length < 3) {
-                    showAlert('Nama petugas harus minimal 3 karakter!', 'error');
-                    input.style.borderColor = '#f44336';
-                    isValid = false;
-                } else if (input.type === 'date' && input.value < new Date().toISOString().split('T')[0]) {
-                    showAlert('Tanggal tidak boleh di masa lalu!', 'error');
-                    input.style.borderColor = '#f44336';
-                    isValid = false;
-                } else {
-                    input.style.borderColor = '#ddd';
+            // Handle keyboard events for accessibility
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    hideEditModal();
+                    hideDeleteModal();
+                    hideEditConfirmModal();
+                    document.querySelectorAll('.success-overlay.visible').forEach(modal => {
+                        modal.classList.remove('visible');
+                        modal.querySelector('.success-modal').classList.remove('visible');
+                        setTimeout(() => {
+                            modal.style.display = 'none';
+                        }, 300);
+                    });
                 }
             });
 
-            return isValid;
-        }
+            // Validate form inputs
+            const jadwalForm = document.getElementById('jadwal-form');
+            if (jadwalForm) {
+                jadwalForm.addEventListener('submit', function(e) {
+                    const tanggal = document.getElementById('tanggal').value;
+                    const petugas1 = document.getElementById('petugas1_nama').value.trim();
+                    const petugas2 = document.getElementById('petugas2_nama').value.trim();
+                    const today = new Date().toISOString().split('T')[0];
 
-        // Menangani submit form dengan validasi
-        ['jadwal-form', 'editForm', 'confirm-form', 'editConfirmForm'].forEach(formId => {
-            const form = document.getElementById(formId);
-            if (form) {
-                form.addEventListener('submit', (e) => {
-                    if (!validateForm(formId)) {
+                    if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
                         e.preventDefault();
+                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
+                        return;
+                    }
+
+                    if (new Date(tanggal) < new Date(today)) {
+                        e.preventDefault();
+                        showAlert('Tanggal tidak boleh di masa lalu!', 'error');
+                    }
+                });
+            }
+
+            // Validate edit form
+            const editForm = document.getElementById('editForm');
+            if (editForm) {
+                editForm.addEventListener('submit', function(e) {
+                    const tanggal = document.getElementById('edit_tanggal').value;
+                    const petugas1 = document.getElementById('edit_petugas1_nama').value.trim();
+                    const petugas2 = document.getElementById('edit_petugas2_nama').value.trim();
+                    const today = new Date().toISOString().split('T')[0];
+
+                    if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
+                        e.preventDefault();
+                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
+                        return;
+                    }
+
+                    if (new Date(tanggal) < new Date(today)) {
+                        e.preventDefault();
+                        showAlert('Tanggal tidak boleh di masa lalu!', 'error');
                     }
                 });
             }

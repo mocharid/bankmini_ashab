@@ -92,47 +92,44 @@ if (isset($_POST['edit_confirm'])) {
 
 // Handle form submission for new jurusan
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isset($_POST['edit_id']) && !isset($_POST['edit_confirm'])) {
-    if (isset($_POST['confirm'])) {
-        $nama_jurusan = trim($_POST['nama_jurusan']);
-        
-        if (empty($nama_jurusan)) {
-            header('Location: tambah_jurusan.php?error=' . urlencode("Nama jurusan tidak boleh kosong!"));
-            exit();
-        } else {
-            // Check for duplicate jurusan name
-            $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ?";
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("s", $nama_jurusan);
-            $check_stmt->execute();
-            $result = $check_stmt->get_result();
-            
-            if ($result->num_rows > 0) {
-                header('Location: tambah_jurusan.php?error=' . urlencode("Jurusan sudah ada!"));
-                exit();
-            } else {
-                $query = "INSERT INTO jurusan (nama_jurusan) VALUES (?)";
-                $stmt = $conn->prepare($query);
-                $stmt->bind_param("s", $nama_jurusan);
-                
-                if ($stmt->execute()) {
-                    header('Location: tambah_jurusan.php?success=1');
-                    exit();
-                } else {
-                    header('Location: tambah_jurusan.php?error=' . urlencode("Gagal menambahkan jurusan: " . $conn->error));
-                    exit();
-                }
-            }
-        }
+    $nama_jurusan = trim($_POST['nama_jurusan']);
+    
+    if (empty($nama_jurusan)) {
+        header('Location: tambah_jurusan.php?error=' . urlencode("Nama jurusan tidak boleh kosong!"));
+        exit();
+    } elseif (strlen($nama_jurusan) < 3) {
+        header('Location: tambah_jurusan.php?error=' . urlencode("Nama jurusan harus minimal 3 karakter!"));
+        exit();
+    }
+
+    if (!isset($_POST['confirm'])) {
+        // Show confirmation modal
+        header('Location: tambah_jurusan.php?confirm=1&nama=' . urlencode($nama_jurusan));
+        exit();
+    }
+
+    // Process confirmed submission
+    $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ?";
+    $check_stmt = $conn->prepare($check_query);
+    $check_stmt->bind_param("s", $nama_jurusan);
+    $check_stmt->execute();
+    $result = $check_stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        header('Location: tambah_jurusan.php?error=' . urlencode("Jurusan sudah ada!"));
+        exit();
+    }
+
+    $query = "INSERT INTO jurusan (nama_jurusan) VALUES (?)";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("s", $nama_jurusan);
+    
+    if ($stmt->execute()) {
+        header('Location: tambah_jurusan.php?success=1');
+        exit();
     } else {
-        $nama_jurusan = trim($_POST['nama_jurusan']);
-        if (empty($nama_jurusan)) {
-            header('Location: tambah_jurusan.php?error=' . urlencode("Nama jurusan tidak boleh kosong!"));
-            exit();
-        } else {
-            // Redirect to show confirmation modal
-            header('Location: tambah_jurusan.php?confirm=1&nama=' . urlencode($nama_jurusan));
-            exit();
-        }
+        header('Location: tambah_jurusan.php?error=' . urlencode("Gagal menambahkan jurusan: " . $conn->error));
+        exit();
     }
 }
 
@@ -377,7 +374,7 @@ $result = $stmt->get_result();
             padding: 10px 20px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
             transition: var(--transition);
         }
 
@@ -628,29 +625,6 @@ $result = $stmt->get_result();
         @keyframes slideUpText {
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
-        }
-
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
         }
 
         .modal-content-confirm {
@@ -1192,46 +1166,7 @@ $result = $stmt->get_result();
                         window.location.href = 'tambah_jurusan.php';
                     }, 500);
                 });
-
-                // Add confetti
-                const successModal = modal.querySelector('.success-modal');
-                if (successModal) {
-                    for (let i = 0; i < 30; i++) {
-                        const confetti = document.createElement('div');
-                        confetti.className = 'confetti';
-                        confetti.style.left = Math.random() * 100 + '%';
-                        confetti.style.animationDelay = Math.random() * 1 + 's';
-                        confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                        successModal.appendChild(confetti);
-                    }
-                }
             });
-
-            // Handle confirmation modal
-            const confirmModal = document.querySelector('#confirmModal .success-modal');
-            if (confirmModal) {
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    confirmModal.appendChild(confetti);
-                }
-            }
-
-            // Handle edit confirmation modal
-            const editConfirmModal = document.querySelector('#editConfirmModal .success-modal');
-            if (editConfirmModal) {
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    editConfirmModal.appendChild(confetti);
-                }
-            }
 
             // Form submission handling (Tambah Jurusan)
             const jurusanForm = document.getElementById('jurusan-form');
@@ -1259,16 +1194,30 @@ $result = $stmt->get_result();
             // Confirm form handling (Konfirmasi Tambah)
             const confirmForm = document.getElementById('confirm-form');
             const confirmBtn = document.getElementById('confirm-btn');
-            
+
             if (confirmForm && confirmBtn) {
                 confirmForm.addEventListener('submit', function(e) {
                     e.preventDefault();
+                    console.log('Confirm form submitted'); // Debugging
                     confirmBtn.classList.add('loading');
                     confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
-                    setTimeout(() => {
-                        confirmForm.submit();
-                        jurusanForm.reset(); // Clear form after successful submission
-                    }, 1500);
+                    const formData = new FormData(confirmForm);
+                    formData.append('confirm', '1'); // Ensure confirm is sent
+                    fetch('tambah_jurusan.php', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.text())
+                    .then(() => {
+                        document.getElementById('jurusan-form').reset(); // Clear form
+                        window.location.href = 'tambah_jurusan.php?success=1'; // Force success redirect
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showErrorModal('Terjadi kesalahan saat menyimpan!');
+                        confirmBtn.classList.remove('loading');
+                        confirmBtn.innerHTML = '<i class="fas fa-check"></i> Konfirmasi';
+                    });
                 });
             }
 

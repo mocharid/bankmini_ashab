@@ -210,7 +210,34 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
             border: 1px solid #ddd;
             border-radius: 10px;
             font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min-height: 44px;
             transition: var(--transition);
+            -webkit-user-select: text;
+            user-select: text;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-color: #fff;
+            position: relative;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            display: block;
+            width: 20px;
+            height: 20px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>') no-repeat center;
+            background-size: 20px;
+            cursor: pointer;
+            opacity: 0.7;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        input[type="date"]::-webkit-datetime-edit {
+            padding-right: 30px; /* Space for calendar icon */
         }
 
         input[type="date"]:focus {
@@ -445,6 +472,10 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
             .empty-state i {
                 font-size: clamp(1.8rem, 4vw, 2rem);
             }
+
+            input[type="date"] {
+                min-height: 40px;
+            }
         }
     </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -462,7 +493,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2><i class="fas fa-chart-line"></i> Laporan Transaksi</h2>
+            <h2>Transaksi Petugas</h2>
             <p>Periode: <?= htmlspecialchars(date('d/m/Y', strtotime($start_date))) ?> - <?= htmlspecialchars(date('d/m/Y', strtotime($end_date))) ?></p>
         </div>
 
@@ -527,7 +558,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Prevent zooming
+            // Prevent zooming and double-tap issues
             document.addEventListener('touchstart', function(event) {
                 if (event.touches.length > 1) {
                     event.preventDefault();
@@ -575,6 +606,19 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                 }, 5000);
             }
 
+            // Ensure date input consistency in Safari
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+            dateInputs.forEach(input => {
+                input.addEventListener('focus', function() {
+                    this.style.webkitAppearance = 'none';
+                    this.style.appearance = 'none';
+                });
+                input.addEventListener('blur', function() {
+                    this.style.webkitAppearance = 'none';
+                    this.style.appearance = 'none';
+                });
+            });
+
             // Filter form handling
             const filterForm = document.getElementById('filterForm');
             const filterButton = document.getElementById('filterButton');
@@ -583,15 +627,20 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
             if (filterForm && filterButton) {
                 filterForm.addEventListener('submit', function(e) {
                     e.preventDefault();
+                    if (filterForm.classList.contains('submitting')) return;
+                    filterForm.classList.add('submitting');
+
                     const startDate = document.getElementById('start_date').value;
                     const endDate = document.getElementById('end_date').value;
 
                     if (!startDate || !endDate) {
                         showAlert('Silakan pilih tanggal yang valid', 'error');
+                        filterForm.classList.remove('submitting');
                         return;
                     }
                     if (new Date(startDate) > new Date(endDate)) {
                         showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
+                        filterForm.classList.remove('submitting');
                         return;
                     }
 
@@ -607,6 +656,8 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 
             if (printButton) {
                 printButton.addEventListener('click', function() {
+                    if (printButton.classList.contains('loading')) return;
+
                     const startDate = document.getElementById('start_date').value;
                     const endDate = document.getElementById('end_date').value;
 
@@ -623,14 +674,38 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                     printButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
 
                     window.open(`download_laporan.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
-                    
-                    // Reset button state after a short delay
+
                     setTimeout(() => {
                         printButton.classList.remove('loading');
                         printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
                     }, 1000);
                 });
             }
+
+            // Prevent text selection on double-click
+            document.addEventListener('mousedown', function(e) {
+                if (e.detail > 1) {
+                    e.preventDefault();
+                }
+            });
+
+            // Keyboard accessibility
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
+                    filterForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
+            // Ensure responsive table scroll on mobile
+            const table = document.querySelector('.summary-table');
+            if (table) {
+                table.parentElement.style.overflowX = 'auto';
+            }
+
+            // Fix touch issues in Safari
+            document.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
         });
     </script>
 </body>

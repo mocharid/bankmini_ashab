@@ -1387,6 +1387,11 @@ $transfer_data = array_reverse($transfer_seven_days);
                         <i class="fas fa-user-lock"></i> Pemulihan Akun Siswa
                     </a>
                 </div>
+                <div class="menu-item">
+                    <a href="kode_akses_petugas.php">
+                        <i class="fas fa-key"></i> Kode Akses Petugas
+                    </a>
+                </div>
 
                 <div class="menu-label">Manajemen Saldo</div>
                 <div class="menu-item">

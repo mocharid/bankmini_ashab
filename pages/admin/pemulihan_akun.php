@@ -396,6 +396,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['confirm'])) {
             border-radius: 10px;
             font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-color: #fff;
         }
 
         select:focus, input[type="text"]:focus {
@@ -653,19 +657,135 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['confirm'])) {
         }
 
         /* Select2 Custom Styles */
-        .select2-container--default .select2-selection--single {
-            height: 46px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
+        .select2-container {
+            width: 100% !important;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .select2-container--default .select2-selection--single .select2-selection__arrow {
-            height: 44px;
+        .select2-container--default .select2-selection--single {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            height: 46px;
+            padding: 0 15px;
+            background-color: #fff;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+
+        .select2-container--default .select2-selection--single:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            transform: scale(1.02);
         }
 
         .select2-container--default .select2-selection--single .select2-selection__rendered {
-            line-height: 24px;
+            color: var(--text-primary);
+            line-height: 44px;
+            padding-right: 30px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__placeholder {
+            color: var(--text-secondary);
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 46px;
+            width: 30px;
+            position: absolute;
+            top: 0;
+            right: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow b {
+            display: none; /* Hide default arrow */
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow::after {
+            content: '';
+            display: block;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-top: 6px solid var(--text-secondary);
+            transition: var(--transition);
+        }
+
+        .select2-container--default.select2-container--open .select2-selection--single .select2-selection__arrow::after {
+            border-top: none;
+            border-bottom: 6px solid var(--primary-color);
+        }
+
+        .select2-container--default .select2-dropdown {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-shadow: var(--shadow-md);
+            background-color: #fff;
+            margin-top: 5px;
+            z-index: 1051;
+        }
+
+        .select2-container--default .select2-results__option {
+            padding: 10px 15px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            color: var(--text-primary);
+            transition: var(--transition);
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+        }
+
+        .select2-container--default .select2-results__option[aria-selected="true"] {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            margin: 10px;
+            width: calc(100% - 20px);
+            -webkit-appearance: none;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(12, 77, 162, 0.1);
+        }
+
+        .select2-container--default .select2-selection__clear {
+            color: var(--danger-color);
+            font-size: 1.2rem;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        /* Ensure consistency in Safari */
+        select::-webkit-outer-spin-button,
+        select::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        select {
+            -webkit-appearance: none !important;
+            -moz-appearance: none !important;
+            appearance: none !important;
         }
 
         /* Modal Styles */
@@ -875,6 +995,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['confirm'])) {
 
             .toggle-container {
                 justify-content: center;
+            }
+
+            .select2-container--default .select2-selection--single {
+                height: 42px;
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__rendered {
+                line-height: 40px;
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__arrow {
+                height: 42px;
             }
         }
 
@@ -1191,7 +1323,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['confirm'])) {
             alertDiv.className = `alert alert-${type}`;
             let icon = 'info-circle';
             if (type === 'success') icon = 'check-circle';
-            if (type === 'error') icon = 'exclamation-circle';
+            if (type == 'error') icon = 'exclamation-circle';
             alertDiv.innerHTML = `
                 <i class="fas fa-${icon}"></i>
                 <span>${message}</span>

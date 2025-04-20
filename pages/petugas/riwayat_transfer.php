@@ -32,10 +32,14 @@ date_default_timezone_set('Asia/Jakarta');
 
 // Get filter parameter - default to today's date
 $filter_date = isset($_GET['filter_date']) ? $_GET['filter_date'] : date('Y-m-d');
+// Validate date format to prevent SQL injection
+if (!preg_match("/^\d{4}-\d{2}-\d{2}$/", $filter_date) || !strtotime($filter_date)) {
+    $filter_date = date('Y-m-d');
+}
 
 // Pagination settings
 $limit = 10; // Records per page
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
 // Prepare the base query for counting total records
@@ -66,10 +70,20 @@ array_push($count_params, $filter_date);
 $count_types .= 's';
 
 $stmt_count = $conn->prepare($count_sql);
+if (!$stmt_count) {
+    error_log("Prepare failed: " . $conn->error);
+    die("Error preparing query.");
+}
+
 if ($count_params) {
     $stmt_count->bind_param($count_types, ...$count_params);
 }
-$stmt_count->execute();
+
+if (!$stmt_count->execute()) {
+    error_log("Execute failed: " . $stmt_count->error);
+    die("Error executing query.");
+}
+
 $total_records = $stmt_count->get_result()->fetch_assoc()['total'];
 $stmt_count->close();
 
@@ -106,11 +120,20 @@ array_push($params, $filter_date, $limit, $offset);
 $types .= 'sii';
 
 $stmt = $conn->prepare($sql);
+if (!$stmt) {
+    error_log("Prepare failed: " . $conn->error);
+    die("Error preparing query.");
+}
+
 if ($params) {
     $stmt->bind_param($types, ...$params);
 }
 
-$stmt->execute();
+if (!$stmt->execute()) {
+    error_log("Execute failed: " . $stmt->error);
+    die("Error executing query.");
+}
+
 $result = $stmt->get_result();
 $transfers = $result->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
@@ -292,7 +315,7 @@ $stmt->close();
             position: relative;
         }
 
-        input.date-picker {
+        input.date-picker, input.flatpickr-input, input.flatpickr-alt-input {
             width: 100%;
             padding: 12px 15px;
             border: 1px solid #ddd;
@@ -303,16 +326,21 @@ $stmt->close();
             background: white;
             cursor: pointer;
             color: var(--text-primary);
+            height: 44px;
+            line-height: 1.5;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
         }
 
-        input.date-picker:focus {
+        input.date-picker:focus, input.flatpickr-input:focus, input.flatpickr-alt-input:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
             transform: scale(1.02);
         }
 
-        input.date-picker::placeholder {
+        input.date-picker::placeholder, input.flatpickr-alt-input::placeholder {
             color: var(--text-secondary);
             opacity: 0.7;
         }
@@ -496,9 +524,10 @@ $stmt->close();
             border-radius: 12px;
             box-shadow: var(--shadow-md);
             background: white;
-            padding: 10px;
-            width: 300px;
+            padding: 15px;
+            width: 320px;
             border: 1px solid #e0e0e0;
+            -webkit-font-smoothing: antialiased;
         }
 
         .flatpickr-calendar.animate {
@@ -512,8 +541,11 @@ $stmt->close();
 
         .flatpickr-day {
             border-radius: 8px;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
+            padding: 8px;
+            height: 40px;
+            line-height: 24px;
         }
 
         .flatpickr-day.selected,
@@ -547,10 +579,11 @@ $stmt->close();
             font-family: 'Poppins', sans-serif;
             color: var(--primary-dark);
             font-weight: 500;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.95rem, 2vw, 1.05rem);
             background: transparent;
             border: none;
-            padding: 5px;
+            padding: 8px;
+            -webkit-appearance: none;
         }
 
         .flatpickr-monthDropdown-months:hover,
@@ -563,12 +596,13 @@ $stmt->close();
             display: flex;
             align-items: center;
             gap: 10px;
+            padding: 10px 0;
         }
 
         .flatpickr-prev-month,
         .flatpickr-next-month {
             color: var(--primary-color);
-            padding: 10px;
+            padding: 12px;
             border-radius: 50%;
             transition: var(--transition);
         }
@@ -580,13 +614,13 @@ $stmt->close();
         }
 
         .flatpickr-weekdays {
-            margin-bottom: 5px;
+            margin-bottom: 8px;
         }
 
         .flatpickr-weekday {
             color: var(--text-secondary);
             font-weight: 500;
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         .numInputWrapper {
@@ -594,7 +628,7 @@ $stmt->close();
         }
 
         .flatpickr-innerContainer {
-            padding: 10px;
+            padding: 12px;
         }
 
         .flatpickr-rContainer {
@@ -647,22 +681,30 @@ $stmt->close();
 
             .flatpickr-calendar {
                 width: 90vw;
-                max-width: 280px;
-                padding: 8px;
+                max-width: 300px;
+                padding: 12px;
             }
 
             .flatpickr-day {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+                font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+                height: 38px;
+                line-height: 22px;
             }
 
             .flatpickr-monthDropdown-months,
             .flatpickr-year {
-                font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+                font-size: clamp(0.9rem, 1.8vw, 1rem);
             }
 
             .pagination-btn {
                 width: 100%;
                 text-align: center;
+            }
+
+            input.date-picker, input.flatpickr-input, input.flatpickr-alt-input {
+                height: 40px;
+                font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+                padding: 10px 12px;
             }
         }
 
@@ -685,7 +727,12 @@ $stmt->close();
 
             .flatpickr-calendar {
                 width: 85vw;
-                max-width: 260px;
+                max-width: 280px;
+            }
+
+            .flatpickr-day {
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+                height: 36px;
             }
         }
     </style>
@@ -829,7 +876,8 @@ $stmt->close();
 
         // Initialize Flatpickr
         document.addEventListener('DOMContentLoaded', function() {
-            flatpickr("#filter_date", {
+            console.log('Initializing Flatpickr for #filter_date');
+            const fp = flatpickr("#filter_date", {
                 dateFormat: "Y-m-d",
                 defaultDate: "<?php echo htmlspecialchars($filter_date); ?>",
                 maxDate: "today",
@@ -843,31 +891,38 @@ $stmt->close();
                 clickOpens: true,
                 wrap: false,
                 onReady: function(selectedDates, dateStr, instance) {
-                    instance.altInput.classList.add('date-picker');
+                    console.log('Flatpickr ready:', dateStr);
+                    instance.altInput.classList.add('date-picker', 'flatpickr-alt-input');
                     instance.altInput.placeholder = "Pilih tanggal";
                     instance.altInput.readOnly = true;
                 },
                 onOpen: function(selectedDates, dateStr, instance) {
+                    console.log('Flatpickr opened');
                     instance.calendarContainer.classList.add('animate');
                 },
                 onClose: function(selectedDates, dateStr, instance) {
+                    console.log('Flatpickr closed, selected:', dateStr);
                     instance.calendarContainer.classList.remove('animate');
                     if (selectedDates.length) {
                         instance.altInput.form.submit();
                     }
+                },
+                onError: function(error) {
+                    console.error('Flatpickr error:', error);
                 }
             });
 
             // Prevent manual typing in the visible input
             const altInput = document.querySelector('.date-picker');
             altInput.addEventListener('input', function(e) {
+                console.log('Input event blocked on date-picker');
                 e.preventDefault();
                 this.blur();
             });
 
             // Add click to open calendar
             altInput.addEventListener('click', function() {
-                const fp = flatpickr("#filter_date");
+                console.log('Date picker clicked, opening calendar');
                 fp.open();
             });
         });

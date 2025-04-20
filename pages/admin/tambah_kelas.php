@@ -86,63 +86,51 @@ if (isset($_POST['edit_confirm'])) {
 
 // Handle form submission for new kelas
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isset($_POST['edit_id']) && !isset($_POST['edit_confirm'])) {
+    $nama_kelas = trim($_POST['nama_kelas']);
+    $jurusan_id = intval($_POST['jurusan_id']);
+    
+    if (empty($nama_kelas)) {
+        header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas tidak boleh kosong!"));
+        exit();
+    } elseif (strlen($nama_kelas) < 3) {
+        header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas harus minimal 3 karakter!"));
+        exit();
+    } elseif (empty($jurusan_id)) {
+        header('Location: tambah_kelas.php?error=' . urlencode("Silakan pilih jurusan!"));
+        exit();
+    }
+    
     if (isset($_POST['confirm'])) {
-        $nama_kelas = trim($_POST['nama_kelas']);
-        $jurusan_id = intval($_POST['jurusan_id']);
+        error_log("Confirming new kelas: nama_kelas=$nama_kelas, jurusan_id=$jurusan_id");
         
-        if (empty($nama_kelas)) {
-            header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas tidak boleh kosong!"));
-            exit();
-        } elseif (strlen($nama_kelas) < 3) {
-            header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas harus minimal 3 karakter!"));
-            exit();
-        } elseif (empty($jurusan_id)) {
-            header('Location: tambah_kelas.php?error=' . urlencode("Silakan pilih jurusan!"));
+        $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ?";
+        $check_stmt = $conn->prepare($check_query);
+        $check_stmt->bind_param("si", $nama_kelas, $jurusan_id);
+        $check_stmt->execute();
+        $result = $check_stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            header('Location: tambah_kelas.php?error=' . urlencode("Kelas sudah ada di jurusan ini!"));
             exit();
         } else {
-            $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ?";
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("si", $nama_kelas, $jurusan_id);
-            $check_stmt->execute();
-            $result = $check_stmt->get_result();
+            $query = "INSERT INTO kelas (nama_kelas, jurusan_id) VALUES (?, ?)";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("si", $nama_kelas, $jurusan_id);
             
-            if ($result->num_rows > 0) {
-                header('Location: tambah_kelas.php?error=' . urlencode("Kelas sudah ada di jurusan ini!"));
+            if ($stmt->execute()) {
+                error_log("Successfully added kelas: nama_kelas=$nama_kelas, jurusan_id=$jurusan_id");
+                header('Location: tambah_kelas.php?success=1');
                 exit();
             } else {
-                $query = "INSERT INTO kelas (nama_kelas, jurusan_id) VALUES (?, ?)";
-                $stmt = $conn->prepare($query);
-                $stmt->bind_param("si", $nama_kelas, $jurusan_id);
-                
-                if ($stmt->execute()) {
-                    header('Location: tambah_kelas.php?success=1');
-                    exit();
-                } else {
-                    // Ensure no output before header
-                    ob_start(); // Start output buffering to catch any unintended output
-                    $error_message = urlencode("Gagal menambahkan kelas: " . $stmt->error);
-                    header('Location: tambah_kelas.php?error=' . $error_message);
-                    ob_end_flush(); // Flush output buffer
-                    exit();
-                }
+                error_log("Failed to add kelas: " . $stmt->error);
+                header('Location: tambah_kelas.php?error=' . urlencode("Gagal menambahkan kelas: " . $stmt->error));
+                exit();
             }
         }
     } else {
-        $nama_kelas = trim($_POST['nama_kelas']);
-        $jurusan_id = intval($_POST['jurusan_id']);
-        if (empty($nama_kelas)) {
-            header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas tidak boleh kosong!"));
-            exit();
-        } elseif (strlen($nama_kelas) < 3) {
-            header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas harus minimal 3 karakter!"));
-            exit();
-        } elseif (empty($jurusan_id)) {
-            header('Location: tambah_kelas.php?error=' . urlencode("Silakan pilih jurusan!"));
-            exit();
-        } else {
-            header('Location: tambah_kelas.php?confirm=1&nama=' . urlencode($nama_kelas) . '&jurusan_id=' . $jurusan_id);
-            exit();
-        }
+        error_log("Showing confirmation for kelas: nama_kelas=$nama_kelas, jurusan_id=$jurusan_id");
+        header('Location: tambah_kelas.php?confirm=1&nama=' . urlencode($nama_kelas) . '&jurusan_id=' . $jurusan_id);
+        exit();
     }
 }
 
@@ -199,10 +187,6 @@ if ($result && $result->num_rows > 0) {
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
-            --setor-bg: #dcfce7;
-            --tarik-bg: #fee2e2;
-            --net-positive-bg: #dcfce7;
-            --net-negative-bg: #fee2e2;
         }
 
         * {
@@ -339,14 +323,36 @@ if ($result && $result->num_rows > 0) {
             font-size: clamp(0.8rem, 1.5vw, 0.9rem);
         }
 
-        input[type="text"],
-        select {
+        input[type="text"] {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #ddd;
             border-radius: 8px;
             font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            background-color: white;
             transition: var(--transition);
+            height: 40px;
+            line-height: 1.5;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px 36px 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            background-color: white;
+            transition: var(--transition);
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+            height: 40px;
+            line-height: 1.5;
+            cursor: pointer;
         }
 
         input[type="text"]:focus,
@@ -355,6 +361,16 @@ if ($result && $result->num_rows > 0) {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
             transform: scale(1.01);
+        }
+
+        @media not all and (min-resolution:.001dpcm) {
+            @supports (-webkit-appearance:none) {
+                select {
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    line-height: 1.5;
+                }
+            }
         }
 
         .btn {
@@ -666,29 +682,6 @@ if ($result && $result->num_rows > 0) {
             to { transform: translateY(0); opacity: 1; }
         }
 
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
-        }
-
         .modal-content-confirm {
             display: flex;
             flex-direction: column;
@@ -826,6 +819,17 @@ if ($result && $result->num_rows > 0) {
                 padding: 6px 10px;
                 font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
+
+            input[type="text"],
+            select {
+                height: 36px;
+                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+                padding: 8px 12px;
+            }
+
+            select {
+                padding-right: 36px;
+            }
         }
 
         @media (max-width: 480px) {
@@ -855,6 +859,12 @@ if ($result && $result->num_rows > 0) {
 
             .success-modal p {
                 font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            }
+
+            input[type="text"],
+            select {
+                height: 34px;
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
         }
     </style>
@@ -936,11 +946,11 @@ if ($result && $result->num_rows > 0) {
                                         <td>
                                             <div class="action-buttons">
                                                 <button class="btn btn-edit" 
-                                                        onclick="showEditModal(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars($row['nama_kelas'], ENT_QUOTES); ?>', <?php echo $row['jurusan_id']; ?>)">
+                                                        onclick="showEditModal(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars(addslashes($row['nama_kelas'])); ?>', <?php echo $row['jurusan_id']; ?>)">
                                                     <i class="fas fa-edit"></i> Edit
                                                 </button>
                                                 <button class="btn btn-delete" 
-                                                        onclick="deleteKelas(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars($row['nama_kelas'], ENT_QUOTES); ?>')">
+                                                        onclick="deleteKelas(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars(addslashes($row['nama_kelas'])); ?>')">
                                                     <i class="fas fa-trash"></i> Hapus
                                                 </button>
                                             </div>
@@ -1001,7 +1011,7 @@ if ($result && $result->num_rows > 0) {
                                 $jurusan_stmt->bind_param("i", $jurusan_id);
                                 $jurusan_stmt->execute();
                                 $jurusan_result = $jurusan_stmt->get_result()->fetch_assoc();
-                                echo htmlspecialchars($jurusan_result['nama_jurusan']);
+                                echo htmlspecialchars($jurusan_result['nama_jurusan'] ?? 'Unknown');
                                 ?>
                             </span>
                         </div>
@@ -1009,8 +1019,9 @@ if ($result && $result->num_rows > 0) {
                     <form action="" method="POST" id="confirm-form">
                         <input type="hidden" name="nama_kelas" value="<?php echo htmlspecialchars(urldecode($_GET['nama'])); ?>">
                         <input type="hidden" name="jurusan_id" value="<?php echo htmlspecialchars($_GET['jurusan_id']); ?>">
+                        <input type="hidden" name="confirm" value="1">
                         <div class="modal-buttons">
-                            <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
+                            <button type="submit" class="btn btn-confirm" id="confirm-btn">
                                 <i class="fas fa-check"></i> Konfirmasi
                             </button>
                             <button type="button" class="btn btn-cancel" onclick="window.location.href='tambah_kelas.php'">
@@ -1169,10 +1180,16 @@ if ($result && $result->num_rows > 0) {
     <script>
         // Edit Modal Functions
         function showEditModal(id, nama, jurusanId) {
-            document.getElementById('edit_id').value = id;
-            document.getElementById('edit_nama').value = nama;
-            document.getElementById('edit_jurusan').value = jurusanId;
-            document.getElementById('editModal').style.display = 'flex';
+            console.log('showEditModal called with:', { id, nama, jurusanId });
+            try {
+                document.getElementById('edit_id').value = id;
+                document.getElementById('edit_nama').value = nama;
+                document.getElementById('edit_jurusan').value = jurusanId;
+                document.getElementById('editModal').style.display = 'flex';
+            } catch (error) {
+                console.error('Error in showEditModal:', error);
+                showErrorModal('Gagal membuka modal edit!');
+            }
         }
 
         function hideEditModal() {
@@ -1184,38 +1201,20 @@ if ($result && $result->num_rows > 0) {
         }
 
         // Delete Modal Functions
-        function showDeleteModal(id, nama) {
-            document.getElementById('delete_id').value = id;
-            document.getElementById('delete_nama').textContent = nama;
-            document.getElementById('deleteModal').style.display = 'flex';
+        function deleteKelas(id, nama) {
+            console.log('deleteKelas called with:', { id, nama });
+            try {
+                document.getElementById('delete_id').value = id;
+                document.getElementById('delete_nama').textContent = nama;
+                document.getElementById('deleteModal').style.display = 'flex';
+            } catch (error) {
+                console.error('Error in deleteKelas:', error);
+                showErrorModal('Gagal membuka modal hapus!');
+            }
         }
 
         function hideDeleteModal() {
             document.getElementById('deleteModal').style.display = 'none';
-        }
-
-        // Delete Kelas with Animation
-        function deleteKelas(id, nama) {
-            showDeleteModal(id, nama);
-            const deleteForm = document.getElementById('deleteForm');
-            const deleteBtn = document.getElementById('delete-submit-btn');
-            
-            deleteForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                deleteBtn.classList.add('loading');
-                deleteBtn.innerHTML = '<i class="fas fa-spinner"></i> Menghapus...';
-                const row = document.getElementById(`row-${id}`);
-                if (row) {
-                    row.classList.add('deleting');
-                    setTimeout(() => {
-                        deleteForm.submit();
-                    }, 1500);
-                } else {
-                    setTimeout(() => {
-                        deleteForm.submit();
-                    }, 1500);
-                }
-            }, { once: true });
         }
 
         // Show Error Modal Function
@@ -1236,19 +1235,18 @@ if ($result && $result->num_rows > 0) {
                 modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                 setTimeout(() => modal.remove(), 500);
             }, 3000);
-            modal.addEventListener('click', () => {
-                modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                setTimeout(() => modal.remove(), 500);
-            });
         }
 
         // Close modals when clicking outside
         window.onclick = function(event) {
-            if (event.target.className === 'modal') {
+            if (event.target.classList.contains('modal')) {
                 event.target.style.display = 'none';
             }
-            if (event.target.className === 'success-overlay') {
-                event.target.style.display = 'none';
+            if (event.target.classList.contains('success-overlay')) {
+                event.target.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => {
+                    event.target.remove();
+                }, 500);
             }
         }
 
@@ -1259,58 +1257,9 @@ if ($result && $result->num_rows > 0) {
             modals.forEach(modal => {
                 setTimeout(() => {
                     modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => {
-                        modal.remove();
-                        window.location.href = 'tambah_kelas.php';
-                    }, 500);
+                    setTimeout(() => modal.remove(), 500);
                 }, 3000);
-                modal.addEventListener('click', () => {
-                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => {
-                        modal.remove();
-                        window.location.href = 'tambah_kelas.php';
-                    }, 500);
-                });
-
-                // Add confetti
-                const successModal = modal.querySelector('.success-modal');
-                if (successModal) {
-                    for (let i = 0; i < 30; i++) {
-                        const confetti = document.createElement('div');
-                        confetti.className = 'confetti';
-                        confetti.style.left = Math.random() * 100 + '%';
-                        confetti.style.animationDelay = Math.random() * 1 + 's';
-                        confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                        successModal.appendChild(confetti);
-                    }
-                }
             });
-
-            // Handle confirmation modal
-            const confirmModal = document.querySelector('#confirmModal .success-modal');
-            if (confirmModal) {
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    confetti.appendChild(confetti);
-                }
-            }
-
-            // Handle edit confirmation modal
-            const editConfirmModal = document.querySelector('#editConfirmModal .success-modal');
-            if (editConfirmModal) {
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    editConfirmModal.appendChild(confetti);
-                }
-            }
 
             // Form submission handling (Tambah Kelas)
             const kelasForm = document.getElementById('kelas-form');
@@ -1318,6 +1267,7 @@ if ($result && $result->num_rows > 0) {
             
             if (kelasForm && submitBtn) {
                 kelasForm.addEventListener('submit', function(e) {
+                    console.log('Submitting kelas-form');
                     const nama = document.getElementById('nama_kelas').value.trim();
                     const jurusan = document.getElementById('jurusan_id').value;
                     if (nama.length < 3) {
@@ -1347,12 +1297,12 @@ if ($result && $result->num_rows > 0) {
             
             if (confirmForm && confirmBtn) {
                 confirmForm.addEventListener('submit', function(e) {
+                    console.log('Submitting confirm-form');
                     e.preventDefault();
                     confirmBtn.classList.add('loading');
                     confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
                     setTimeout(() => {
                         confirmForm.submit();
-                        kelasForm.reset(); // Clear form after successful submission
                     }, 1500);
                 });
             }
@@ -1363,6 +1313,7 @@ if ($result && $result->num_rows > 0) {
             
             if (editForm && editSubmitBtn) {
                 editForm.addEventListener('submit', function(e) {
+                    console.log('Submitting editForm');
                     e.preventDefault();
                     const nama = document.getElementById('edit_nama').value.trim();
                     const jurusanId = document.getElementById('edit_jurusan').value;
@@ -1397,6 +1348,7 @@ if ($result && $result->num_rows > 0) {
             
             if (editConfirmForm && editConfirmBtn) {
                 editConfirmForm.addEventListener('submit', function(e) {
+                    console.log('Submitting editConfirmForm');
                     e.preventDefault();
                     editConfirmBtn.classList.add('loading');
                     editConfirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
@@ -1405,36 +1357,28 @@ if ($result && $result->num_rows > 0) {
                     }, 1500);
                 });
             }
+
+            // Delete form handling
+            const deleteForm = document.getElementById('deleteForm');
+            const deleteSubmitBtn = document.getElementById('delete-submit-btn');
+            
+            if (deleteForm && deleteSubmitBtn) {
+                deleteForm.addEventListener('submit', function(e) {
+                    console.log('Submitting deleteForm');
+                    e.preventDefault();
+                    deleteSubmitBtn.classList.add('loading');
+                    deleteSubmitBtn.innerHTML = '<i class="fas fa-spinner"></i> Menghapus...';
+                    const id = document.getElementById('delete_id').value;
+                    const row = document.getElementById(`row-${id}`);
+                    if (row) {
+                        row.classList.add('deleting');
+                    }
+                    setTimeout(() => {
+                        deleteForm.submit();
+                    }, 1500);
+                });
+            }
         });
-
-        // Prevent pinch zooming
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        // Prevent double-tap zooming
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', function(event) {
-            const now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                event.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, { passive: false });
-
-        // Prevent zoom on wheel with ctrl
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        // Prevent double-click zooming
-        document.addEventListener('dblclick', function(event) {
-            event.preventDefault();
-        }, { passive: false });
     </script>
 </body>
 </html>

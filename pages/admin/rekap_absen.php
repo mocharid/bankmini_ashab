@@ -9,8 +9,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 }
 
 // Set default values for filters and pagination
-$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
-$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
+$start_date = isset($_GET['start_date']) && !empty($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-d');
+$end_date = isset($_GET['end_date']) && !empty($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
 $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
 $rows_per_page = 10;
 $offset = ($page - 1) * $rows_per_page;
@@ -464,7 +464,34 @@ if (isset($_GET['export'])) {
             border: 1px solid #ddd;
             border-radius: 10px;
             font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min-height: 44px;
             transition: var(--transition);
+            -webkit-user-select: text;
+            user-select: text;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-color: #fff;
+            position: relative;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            display: block;
+            width: 20px;
+            height: 20px;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>') no-repeat center;
+            background-size: 20px;
+            cursor: pointer;
+            opacity: 0.7;
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        input[type="date"]::-webkit-datetime-edit {
+            padding-right: 30px; /* Space for calendar icon */
         }
 
         input[type="date"]:focus {
@@ -702,6 +729,10 @@ if (isset($_GET['export'])) {
             .pagination {
                 flex-wrap: wrap;
             }
+
+            input[type="date"] {
+                min-height: 40px;
+            }
         }
 
         @media (max-width: 480px) {
@@ -825,7 +856,7 @@ if (isset($_GET['export'])) {
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Prevent zooming
+            // Prevent zooming and double-tap issues
             document.addEventListener('touchstart', function(event) {
                 if (event.touches.length > 1) {
                     event.preventDefault();
@@ -873,6 +904,54 @@ if (isset($_GET['export'])) {
                 }, 5000);
             }
 
+            // Ensure date input consistency in Safari
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+            dateInputs.forEach(input => {
+                input.addEventListener('focus', function() {
+                    this.style.webkitAppearance = 'none';
+                    this.style.appearance = 'none';
+                });
+                input.addEventListener('blur', function() {
+                    this.style.webkitAppearance = 'none';
+                    this.style.appearance = 'none';
+                });
+            });
+
+            // Dynamic date constraints
+            const startDateInput = document.getElementById('start_date');
+            const endDateInput = document.getElementById('end_date');
+            const today = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD
+
+            // Set max date to today for both inputs
+            startDateInput.setAttribute('max', today);
+            endDateInput.setAttribute('max', today);
+
+            // Update constraints when start_date changes
+            startDateInput.addEventListener('change', function() {
+                if (this.value) {
+                    endDateInput.setAttribute('min', this.value);
+                    // If end_date is before start_date, reset it
+                    if (endDateInput.value && endDateInput.value < this.value) {
+                        endDateInput.value = this.value;
+                    }
+                } else {
+                    endDateInput.removeAttribute('min');
+                }
+            });
+
+            // Update constraints when end_date changes
+            endDateInput.addEventListener('change', function() {
+                if (this.value) {
+                    startDateInput.setAttribute('max', this.value);
+                    // If start_date is after end_date, reset it
+                    if (startDateInput.value && startDateInput.value > this.value) {
+                        startDateInput.value = this.value;
+                    }
+                } else {
+                    startDateInput.setAttribute('max', today);
+                }
+            });
+
             // Filter form handling
             const filterForm = document.getElementById('filterForm');
             const filterButton = document.getElementById('filterButton');
@@ -881,11 +960,27 @@ if (isset($_GET['export'])) {
             if (filterForm && filterButton) {
                 filterForm.addEventListener('submit', function(e) {
                     e.preventDefault();
-                    const startDate = document.getElementById('start_date').value;
-                    const endDate = document.getElementById('end_date').value;
+                    if (filterForm.classList.contains('submitting')) return;
+                    filterForm.classList.add('submitting');
+
+                    const startDate = startDateInput.value;
+                    const endDate = endDateInput.value;
 
                     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
                         showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
+                        filterForm.classList.remove('submitting');
+                        return;
+                    }
+
+                    if (startDate && new Date(startDate) > new Date(today)) {
+                        showAlert('Tanggal awal tidak boleh melebihi tanggal hari ini', 'error');
+                        filterForm.classList.remove('submitting');
+                        return;
+                    }
+
+                    if (endDate && new Date(endDate) > new Date(today)) {
+                        showAlert('Tanggal akhir tidak boleh melebihi tanggal hari ini', 'error');
+                        filterForm.classList.remove('submitting');
                         return;
                     }
 
@@ -904,11 +999,23 @@ if (isset($_GET['export'])) {
 
             if (printButton) {
                 printButton.addEventListener('click', function() {
-                    const startDate = document.getElementById('start_date').value;
-                    const endDate = document.getElementById('end_date').value;
+                    if (printButton.classList.contains('loading')) return;
+
+                    const startDate = startDateInput.value;
+                    const endDate = endDateInput.value;
 
                     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
                         showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
+                        return;
+                    }
+
+                    if (startDate && new Date(startDate) > new Date(today)) {
+                        showAlert('Tanggal awal tidak boleh melebihi tanggal hari ini', 'error');
+                        return;
+                    }
+
+                    if (endDate && new Date(endDate) > new Date(today)) {
+                        showAlert('Tanggal akhir tidak boleh melebihi tanggal hari ini', 'error');
                         return;
                     }
 
@@ -927,6 +1034,31 @@ if (isset($_GET['export'])) {
                     }, 1000);
                 });
             }
+
+            // Prevent text selection on double-click
+            document.addEventListener('mousedown', function(e) {
+                if (e.detail > 1) {
+                    e.preventDefault();
+                }
+            });
+
+            // Keyboard accessibility
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
+                    filterForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
+            // Ensure responsive table scroll on mobile
+            const table = document.querySelector('table');
+            if (table) {
+                table.parentElement.style.overflowX = 'auto';
+            }
+
+            // Fix touch issues in Safari
+            document.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
         });
     </script>
 </body>
