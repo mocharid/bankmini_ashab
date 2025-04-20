@@ -1,14 +1,14 @@
 <?php
 session_start();
 require_once '../../includes/db_connection.php';
-require '../../vendor/autoload.php'; // Sesuaikan path ke autoload PHPMailer
-date_default_timezone_set('Asia/Jakarta'); // Set timezone ke WIB
+require '../../vendor/autoload.php';
+date_default_timezone_set('Asia/Jakarta');
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
-    echo json_encode(['status' => 'error', 'message' => 'Akses ditolak.']);
+    echo json_encode(['status' => 'error', 'message' => 'Akses ditolak.', 'email_status' => 'none']);
     exit();
 }
 
@@ -16,37 +16,65 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $action = $_POST['action'] ?? '';
     $no_rekening = trim($_POST['no_rekening'] ?? '');
     $jumlah = floatval($_POST['jumlah'] ?? 0);
+    $petugas_id = intval($_POST['petugas_id'] ?? 0);
 
-    if ($action === 'cek') {
-        // Cek rekening
-        $query = "SELECT r.*, u.nama, u.email FROM rekening r 
-                  JOIN users u ON r.user_id = u.id 
-                  WHERE r.no_rekening = ?";
+    if ($action === 'cek_rekening') {
+        $query = "
+            SELECT r.no_rekening, u.nama, u.email, u.id as user_id, r.id as rekening_id, 
+                   j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
+            FROM rekening r 
+            JOIN users u ON r.user_id = u.id 
+            LEFT JOIN jurusan j ON u.jurusan_id = j.id
+            LEFT JOIN kelas k ON u.kelas_id = k.id
+            WHERE r.no_rekening = ?
+        ";
         $stmt = $conn->prepare($query);
         $stmt->bind_param('s', $no_rekening);
         $stmt->execute();
         $result = $stmt->get_result();
 
         if ($result->num_rows == 0) {
-            echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak ditemukan.']);
+            echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak ditemukan.', 'email_status' => 'none']);
         } else {
             $row = $result->fetch_assoc();
             echo json_encode([
                 'status' => 'success',
                 'no_rekening' => $row['no_rekening'],
                 'nama' => $row['nama'],
-                'saldo' => floatval($row['saldo']), // Pastikan saldo adalah angka
-                'email' => $row['email'] // Tambahkan email ke response
+                'jurusan' => $row['jurusan'] ?: '-',
+                'kelas' => $row['kelas'] ?: '-',
+                'email' => $row['email'] ?: '',
+                'user_id' => $row['user_id'],
+                'rekening_id' => $row['rekening_id'],
+                'email_status' => 'none'
             ]);
         }
-    } elseif ($action === 'setor') {
+        $stmt->close();
+    } elseif ($action === 'setor_tunai') {
+        if (empty($no_rekening)) {
+            echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak valid.', 'email_status' => 'none']);
+            exit();
+        }
+        if ($jumlah < 1000) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah setoran minimal Rp 1.000.', 'email_status' => 'none']);
+            exit();
+        }
+        if ($petugas_id <= 0) {
+            echo json_encode(['status' => 'error', 'message' => 'ID petugas tidak valid.', 'email_status' => 'none']);
+            exit();
+        }
+
         try {
             $conn->begin_transaction();
 
-            // Cek rekening
-            $query = "SELECT r.*, u.nama, u.email FROM rekening r 
-                      JOIN users u ON r.user_id = u.id 
-                      WHERE r.no_rekening = ?";
+            $query = "
+                SELECT r.id, r.user_id, r.saldo, u.nama, u.email, j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
+                FROM rekening r 
+                JOIN users u ON r.user_id = u.id 
+                LEFT JOIN jurusan j ON u.jurusan_id = j.id
+                LEFT JOIN kelas k ON u.kelas_id = k.id
+                WHERE r.no_rekening = ?
+            ";
             $stmt = $conn->prepare($query);
             $stmt->bind_param('s', $no_rekening);
             $stmt->execute();
@@ -60,57 +88,56 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $rekening_id = $row['id'];
             $saldo_sekarang = $row['saldo'];
             $nama_nasabah = $row['nama'];
-            $user_id = $row['user_id']; // ID siswa
-            $email = $row['email'] ?? ''; // Email siswa, with fallback to empty string if null
+            $user_id = $row['user_id'];
+            $email = $row['email'] ?? '';
+            $jurusan = $row['jurusan'] ?? '-';
+            $kelas = $row['kelas'] ?? '-';
+            $stmt->close();
 
-            // Generate nomor transaksi
-            $no_transaksi = 'TRX' . date('Ymd') . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+            $no_transaksi = 'TRXP' . date('Ymd') . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
 
-            // Insert transaksi
-            $query_transaksi = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, petugas_id, status) 
-                               VALUES (?, ?, 'setor', ?, ?, 'approved')";
+            $query_transaksi = "
+                INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, petugas_id, status, created_at)
+                VALUES (?, ?, 'setor', ?, ?, 'approved', NOW())
+            ";
             $stmt_transaksi = $conn->prepare($query_transaksi);
-            $petugas_id = $_SESSION['user_id'];
             $stmt_transaksi->bind_param('sidi', $no_transaksi, $rekening_id, $jumlah, $petugas_id);
-            
             if (!$stmt_transaksi->execute()) {
                 throw new Exception('Gagal menyimpan transaksi.');
             }
-
             $transaksi_id = $conn->insert_id;
+            $stmt_transaksi->close();
 
-            // Update saldo
             $saldo_baru = $saldo_sekarang + $jumlah;
-            $query_update = "UPDATE rekening SET saldo = ? WHERE id = ?";
+            $query_update = "UPDATE rekening SET saldo = ?, updated_at = NOW() WHERE id = ?";
             $stmt_update = $conn->prepare($query_update);
             $stmt_update->bind_param('di', $saldo_baru, $rekening_id);
-            
             if (!$stmt_update->execute()) {
-                throw new Exception('Gagal update saldo.');
+                throw new Exception('Gagal memperbarui saldo.');
             }
+            $stmt_update->close();
 
-            // Insert mutasi
-            $query_mutasi = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) 
-                            VALUES (?, ?, ?, ?)";
+            $query_mutasi = "
+                INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir, created_at)
+                VALUES (?, ?, ?, ?, NOW())
+            ";
             $stmt_mutasi = $conn->prepare($query_mutasi);
             $stmt_mutasi->bind_param('iidd', $transaksi_id, $rekening_id, $jumlah, $saldo_baru);
-            
             if (!$stmt_mutasi->execute()) {
                 throw new Exception('Gagal mencatat mutasi.');
             }
+            $stmt_mutasi->close();
 
-            // Kirim notifikasi ke siswa
-            $message = "Setoran tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " berhasil. Saldo baru: Rp " . number_format($saldo_baru, 0, ',', '.');
-            $query_notifikasi = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+            $message = "Transaksi setor tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh petugas.";
+            $query_notifikasi = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
             $stmt_notifikasi = $conn->prepare($query_notifikasi);
             $stmt_notifikasi->bind_param('is', $user_id, $message);
-            
             if (!$stmt_notifikasi->execute()) {
                 throw new Exception('Gagal mengirim notifikasi.');
             }
+            $stmt_notifikasi->close();
 
-            // Hanya kirim email jika alamat email ada dan valid
-            $email_sent = false;
+            $email_status = 'success';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $subject = "Bukti Transaksi Setor Tunai - SCHOBANK SYSTEM";
                 $message = "
@@ -144,13 +171,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             padding-bottom: 10px; 
                             margin-top: 0;
                             text-align: center;
-                        }
-                        .logo {
-                            text-align: center;
-                            margin-bottom: 20px;
-                        }
-                        .logo img {
-                            height: 60px;
                         }
                         .transaction-details {
                             background-color: #f9f9f9;
@@ -187,11 +207,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         .amount {
                             font-size: 1.2em;
                             color: #2980b9;
-                            font-weight: bold;
-                        }
-                        .new-balance {
-                            font-size: 1.1em;
-                            color:rgb(20, 6, 89);
                             font-weight: bold;
                         }
                         .btn { 
@@ -236,10 +251,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <body>
                     <div class=\"container\">
                         <h2>Bukti Transaksi Setor Tunai</h2>
-                        
-                        <p>Halo, <strong>{$nama_nasabah}</strong>!</p>
-                        <p>Setor tunai ke rekening Anda telah berhasil diproses. Berikut adalah rincian transaksi:</p>
-                        
+                        <p>Yth. {$nama_nasabah},</p>
+                        <p>Kami informasikan bahwa transaksi setor tunai ke rekening Anda telah berhasil diproses. Berikut rincian transaksi:</p>
                         <div class=\"transaction-details\">
                             <div class=\"transaction-row\">
                                 <div class=\"label\">Nomor Transaksi</div>
@@ -254,29 +267,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <div class=\"value\">{$nama_nasabah}</div>
                             </div>
                             <div class=\"transaction-row\">
-                                <div class=\"label\">Jumlah Setoran</div>
-                                <div class=\"value amount\">Rp " . number_format($jumlah, 0, ',', '.') . "</div>
+                                <div class=\"label\">Jurusan</div>
+                                <div class=\"value\">{$jurusan}</div>
                             </div>
                             <div class=\"transaction-row\">
-                                <div class=\"label\">Saldo Baru</div>
-                                <div class=\"value new-balance\">Rp " . number_format($saldo_baru, 0, ',', '.') . "</div>
+                                <div class=\"label\">Kelas</div>
+                                <div class=\"value\">{$kelas}</div>
+                            </div>
+                            <div class=\"transaction-row\">
+                                <div class=\"label\">Jumlah Setoran</div>
+                                <div class=\"value amount\">Rp " . number_format($jumlah, 0, ',', '.') . "</div>
                             </div>
                             <div class=\"transaction-row\">
                                 <div class=\"label\">Tanggal Transaksi</div>
                                 <div class=\"value\">" . date('d M Y H:i:s') . " WIB</div>
                             </div>
                         </div>
-                        
-                        <p>Terima kasih telah menggunakan layanan SCHOBANK. Untuk melihat riwayat transaksi lengkap, silakan kunjungi halaman akun Anda.</p>
-                        
+                        <p>Terima kasih telah menggunakan layanan SCHOBANK SYSTEM. Untuk informasi lebih lanjut, silakan kunjungi halaman akun Anda atau hubungi petugas kami.</p>
                         <div class=\"security-notice\">
-                            <strong>Perhatian Keamanan:</strong> Jangan pernah membagikan informasi rekening, kata sandi, atau detail transaksi Anda kepada siapapun. Petugas SCHOBANK tidak akan pernah meminta informasi tersebut melalui email atau telepon.
+                            <strong>Perhatian Keamanan:</strong> Jangan bagikan informasi rekening, kata sandi, atau detail transaksi kepada pihak lain. Petugas SCHOBANK tidak akan meminta informasi tersebut melalui email atau telepon.
                         </div>
-                        
                         <div class=\"footer\">
                             <p>Email ini dikirim otomatis oleh sistem, mohon tidak membalas email ini.</p>
-                            <p>Jika Anda memiliki pertanyaan, silakan datang langsung ke Bank Mini SMK Plus Ashabulyamin</p>
-                            <p>&copy; " . date('Y') . " SCHOBANK - Semua hak dilindungi undang-undang.</p>
+                            <p>Jika Anda memiliki pertanyaan, silakan hubungi Bank Mini SMK Plus Ashabulyamin.</p>
+                            <p>© " . date('Y') . " SCHOBANK SYSTEM - Hak cipta dilindungi.</p>
                         </div>
                     </div>
                 </body>
@@ -284,60 +298,54 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 ";
 
                 try {
-                    // Konfigurasi PHPMailer
                     $mail = new PHPMailer(true);
                     $mail->isSMTP();
-                    $mail->Host = 'smtp.gmail.com'; // Ganti dengan SMTP host Anda
+                    $mail->Host = 'smtp.gmail.com';
                     $mail->SMTPAuth = true;
-                    $mail->Username = 'mocharid.ip@gmail.com'; // Ganti dengan email pengirim
-                    $mail->Password = 'spjs plkg ktuu lcxh'; // Ganti dengan password email pengirim
+                    $mail->Username = 'mocharid.ip@gmail.com';
+                    $mail->Password = 'spjs plkg ktuu lcxh';
                     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                     $mail->Port = 587;
                     $mail->CharSet = 'UTF-8';
 
-                    // Pengirim dan penerima
-                    $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM'); // Konsisten dengan username
-                    $mail->addAddress($email, $nama_nasabah); // Email penerima
+                    $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+                    $mail->addAddress($email, $nama_nasabah);
+                    $mail->addReplyTo('no-reply@schobank.com', 'No Reply');
 
-                    // Konten email
                     $mail->isHTML(true);
                     $mail->Subject = $subject;
                     $mail->Body = $message;
-                    $mail->AltBody = strip_tags(str_replace('<br>', "\n", $message));
+                    $mail->AltBody = strip_tags($message);
 
-                    // Kirim email
                     $mail->send();
-                    $email_sent = true;
+                    $email_status = 'success';
                 } catch (Exception $e) {
-                    // Log error but don't stop transaction
                     error_log("Mail error: " . $mail->ErrorInfo);
-                    // We don't throw exception here to allow transaction to continue if email fails
+                    $email_status = 'failed';
                 }
             }
 
             $conn->commit();
 
-            $response_message = "Setoran tunai untuk nasabah {$nama_nasabah} berhasil. Saldo baru: Rp " . number_format($saldo_baru, 0, ',', '.');
-            
-            // Add email status to response message
-            if (empty($email)) {
-                $response_message .= " (Email tidak ditemukan, bukti transaksi tidak dikirim)";
-            } else if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $response_message .= " (Format email tidak valid, bukti transaksi tidak dikirim)";
-            } else if (!$email_sent) {
-                $response_message .= " (Bukti transaksi gagal dikirim ke email)";
-            } else {
-                $response_message .= " (Bukti transaksi dikirim ke email " . $email . ")";
+            $response_message = "Setoran tunai berhasil diproses.";
+            if ($email_status === 'failed') {
+                $response_message = "Transaksi berhasil, tetapi gagal mengirim bukti transaksi ke email.";
             }
 
             echo json_encode([
                 'status' => 'success',
-                'message' => $response_message
+                'message' => $response_message,
+                'email_status' => $email_status
             ]);
         } catch (Exception $e) {
             $conn->rollback();
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+            echo json_encode(['status' => 'error', 'message' => $e->getMessage(), 'email_status' => 'none']);
         }
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Aksi tidak valid.', 'email_status' => 'none']);
     }
+} else {
+    echo json_encode(['status' => 'error', 'message' => 'Metode request tidak valid.', 'email_status' => 'none']);
 }
+$conn->close();
 ?>

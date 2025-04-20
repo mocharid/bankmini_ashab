@@ -741,7 +741,7 @@ if (isset($_GET['export'])) {
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2><i class="fas fa-calendar-alt"></i> Rekap Absensi Petugas</h2>
+            <h2>Rekap Absensi Petugas</h2>
             <p>Rekap absensi petugas berdasarkan tanggal</p>
         </div>
 

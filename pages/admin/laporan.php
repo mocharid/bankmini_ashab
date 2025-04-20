@@ -11,14 +11,15 @@ $end_date = $_GET['end_date'] ?? date('Y-m-d');
 // Query untuk menghitung total
 $total_query = "SELECT 
     COUNT(*) as total_transactions,
-    SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) as total_setoran,
-    SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as total_penarikan
+    SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_setoran,
+    SUM(CASE WHEN jenis_transaksi = 'tarik' AND status = 'approved' THEN jumlah ELSE 0 END) as total_penarikan
     FROM transaksi t
     JOIN rekening r ON t.rekening_id = r.id
     JOIN users u ON r.user_id = u.id
     LEFT JOIN users p ON t.petugas_id = p.id
     WHERE DATE(t.created_at) BETWEEN ? AND ?
-    AND t.jenis_transaksi IN ('setor', 'tarik')";
+    AND t.jenis_transaksi IN ('setor', 'tarik')
+    AND t.petugas_id IS NOT NULL";
 $stmt_total = $conn->prepare($total_query);
 $stmt_total->bind_param("ss", $start_date, $end_date);
 $stmt_total->execute();

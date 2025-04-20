@@ -6,6 +6,12 @@ date_default_timezone_set('Asia/Jakarta');
 
 $admin_id = $_SESSION['user_id'] ?? 0;
 
+// Validasi admin_id
+if ($admin_id <= 0) {
+    header('Location: ../login.php');
+    exit();
+}
+
 // Fungsi untuk mengubah nama hari ke Bahasa Indonesia
 function getHariIndonesia($date) {
     $hari = date('l', strtotime($date));
@@ -49,7 +55,7 @@ $query = "SELECT COUNT(id) as total_siswa FROM users WHERE role = 'siswa'";
 $result = $conn->query($query);
 $total_siswa = $result->fetch_assoc()['total_siswa'] ?? 0;
 
-// Get total saldo (net setoran minus total transfers)
+// Get total saldo (net setoran hingga kemarin - penarikan admin hari ini - total transfers)
 $query = "SELECT (
             COALESCE((
                 SELECT SUM(net_setoran)
@@ -64,6 +70,12 @@ $query = "SELECT (
             ), 0) -
             COALESCE((
                 SELECT SUM(jumlah)
+                FROM transaksi
+                WHERE jenis_transaksi = 'tarik' AND status = 'approved' 
+                      AND DATE(created_at) = CURDATE() AND petugas_id IS NULL
+            ), 0) -
+            COALESCE((
+                SELECT SUM(jumlah)
                 FROM saldo_transfers
                 WHERE admin_id = ?
             ), 0)
@@ -74,55 +86,54 @@ $stmt->execute();
 $result = $stmt->get_result();
 $total_saldo = $result->fetch_assoc()['total_saldo'] ?? 0;
 
-// Get today's transactions for Net Setoran Harian (aligned with petugas)
-$query_setor = "SELECT SUM(jumlah) as total_setor 
-                FROM transaksi 
-                WHERE jenis_transaksi = 'setor' 
-                AND DATE(created_at) = CURDATE() 
-                AND (status = 'approved' OR status IS NULL)";
-$result_setor = $conn->query($query_setor);
-$total_setor = $result_setor->fetch_assoc()['total_setor'] ?? 0;
+// Get today's transactions for Net Setoran Harian (hanya transaksi oleh petugas)
+$query_saldo_harian = "
+    SELECT (
+        COALESCE(SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END), 0)
+    ) as saldo_harian
+    FROM transaksi
+    WHERE status = 'approved' 
+    AND DATE(created_at) = CURDATE()
+    AND petugas_id IS NOT NULL
+";
+$stmt_saldo_harian = $conn->prepare($query_saldo_harian);
+$stmt_saldo_harian->execute();
+$result_saldo_harian = $stmt_saldo_harian->get_result();
+$saldo_harian = floatval($result_saldo_harian->fetch_assoc()['saldo_harian'] ?? 0);
 
-$query_tarik = "SELECT SUM(jumlah) as total_tarik 
-                FROM transaksi 
-                WHERE jenis_transaksi = 'tarik' 
-                AND DATE(created_at) = CURDATE() 
-                AND status = 'approved'";
-$result_tarik = $conn->query($query_tarik);
-$total_tarik = $result_tarik->fetch_assoc()['total_tarik'] ?? 0;
-
-$query_transfers = "SELECT SUM(jumlah) as saldo_transferred 
-                   FROM saldo_transfers 
-                   WHERE tanggal = CURDATE()";
-$result_transfers = $conn->query($query_transfers);
-$saldo_transferred = $result_transfers->fetch_assoc()['saldo_transferred'] ?? 0;
-
-$saldo_harian = ($total_setor - $total_tarik) + $saldo_transferred;
-
-// Get net setoran for last 7 days (for pop-up, aligned with petugas)
-$query_net_setoran = "SELECT 
-                        dates.tanggal,
-                        (COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'setor' AND (t.status = 'approved' OR t.status IS NULL) THEN t.jumlah ELSE 0 END), 0) -
-                         COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'tarik' AND t.status = 'approved' THEN t.jumlah ELSE 0 END), 0) +
-                         COALESCE(SUM(st.jumlah), 0)) as net_setoran
-                      FROM (
-                          SELECT DATE(created_at) as tanggal
-                          FROM transaksi
-                          WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-                          GROUP BY DATE(created_at)
-                          UNION
-                          SELECT DATE(tanggal) as tanggal
-                          FROM saldo_transfers
-                          WHERE tanggal >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-                          GROUP BY DATE(tanggal)
-                      ) as dates
-                      LEFT JOIN transaksi t ON DATE(t.created_at) = dates.tanggal
-                          AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-                      LEFT JOIN saldo_transfers st ON DATE(st.tanggal) = dates.tanggal
-                          AND st.tanggal >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-                      GROUP BY dates.tanggal
-                      ORDER BY dates.tanggal DESC";
-$result_net_setoran = $conn->query($query_net_setoran);
+// Get net setoran for last 7 days (for pop-up, hanya transaksi oleh petugas)
+$query_net_setoran = "
+    SELECT 
+        dates.tanggal,
+        CASE 
+            WHEN dates.tanggal = CURDATE() THEN ?
+            ELSE (
+                COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'setor' AND t.status = 'approved' THEN t.jumlah ELSE 0 END), 0) -
+                COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'tarik' AND t.status = 'approved' THEN t.jumlah ELSE 0 END), 0)
+            )
+        END as net_setoran
+    FROM (
+        SELECT CURDATE() - INTERVAL n DAY as tanggal
+        FROM (
+            SELECT a.N + b.N * 10 + c.N * 100 as n
+            FROM 
+                (SELECT 0 AS N UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) a,
+                (SELECT 0 AS N) b,
+                (SELECT 0 AS N) c
+            ORDER BY n
+            LIMIT 7
+        ) numbers
+    ) as dates
+    LEFT JOIN transaksi t ON DATE(t.created_at) = dates.tanggal
+        AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        AND t.petugas_id IS NOT NULL
+    GROUP BY dates.tanggal
+    ORDER BY dates.tanggal DESC";
+$stmt = $conn->prepare($query_net_setoran);
+$stmt->bind_param("d", $saldo_harian);
+$stmt->execute();
+$result_net_setoran = $stmt->get_result();
 $net_setoran_data = [];
 while ($row = $result_net_setoran->fetch_assoc()) {
     $net_setoran_data[$row['tanggal']] = $row['net_setoran'];
@@ -205,12 +216,31 @@ $transfer_data = array_reverse($transfer_seven_days);
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
+            --accent-color: #ff9800;
+            --danger-color: #e74c3c;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f0f5ff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+            --scrollbar-track: #0a2e5c;
+            --scrollbar-thumb: #2a4a7a;
+            --scrollbar-thumb-hover: #3b5d92;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Poppins', sans-serif;
             -webkit-user-select: none;
             -ms-user-select: none;
             user-select: none;
@@ -226,8 +256,8 @@ $transfer_data = array_reverse($transfer_seven_days);
         }
         
         body {
-            background-color: #f0f5ff;
-            color: #333;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
             display: flex;
             transition: background-color 0.3s ease;
         }
@@ -235,7 +265,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         /* Sidebar Utama */
         .sidebar {
             width: 280px;
-            background: linear-gradient(180deg, #0a2e5c 0%, #154785 100%);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, #154785 100%);
             color: white;
             position: fixed;
             height: 100%;
@@ -249,7 +279,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         /* Sidebar Header (Fixed) */
         .sidebar-header {
             padding: 25px 20px;
-            background: #0a2e5c;
+            background: var(--primary-dark);
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             position: sticky;
             top: 0;
@@ -275,7 +305,7 @@ $transfer_data = array_reverse($transfer_seven_days);
 
         /* Sidebar Footer (Fixed) */
         .sidebar-footer {
-            background: #0a2e5c;
+            background: var(--primary-dark);
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             position: sticky;
             bottom: 0;
@@ -295,7 +325,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         .popup-content::-webkit-scrollbar-track,
         .saldo-content::-webkit-scrollbar-track,
         .transfer-content::-webkit-scrollbar-track {
-            background: #f8fafc;
+            background: var(--scrollbar-track);
             border-radius: 4px;
         }
 
@@ -303,16 +333,16 @@ $transfer_data = array_reverse($transfer_seven_days);
         .popup-content::-webkit-scrollbar-thumb,
         .saldo-content::-webkit-scrollbar-thumb,
         .transfer-content::-webkit-scrollbar-thumb {
-            background: #bfdbfe;
+            background: var(--scrollbar-thumb);
             border-radius: 4px;
-            border: 2px solid #f8fafc;
+            border: 2px solid var(--scrollbar-track);
         }
 
         .sidebar-content::-webkit-scrollbar-thumb:hover,
         .popup-content::-webkit-scrollbar-thumb:hover,
         .saldo-content::-webkit-scrollbar-thumb:hover,
         .transfer-content::-webkit-scrollbar-thumb:hover {
-            background: #93c5fd;
+            background: var(--scrollbar-thumb-hover);
         }
 
         /* Menu Items */
@@ -341,7 +371,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             padding: 14px 25px;
             color: rgba(255, 255, 255, 0.85);
             text-decoration: none;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             border-left: 4px solid transparent;
             font-weight: 500;
         }
@@ -372,7 +402,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             border: none;
             cursor: pointer;
             font-size: 16px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             border-left: 4px solid transparent;
             font-weight: 500;
         }
@@ -421,7 +451,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             align-items: center;
             color: rgba(255, 255, 255, 0.75);
             text-decoration: none;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             font-size: 14px;
             border-left: 4px solid transparent;
         }
@@ -443,13 +473,13 @@ $transfer_data = array_reverse($transfer_seven_days);
             flex: 1;
             margin-left: 280px;
             padding: 30px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             max-width: calc(100% - 280px);
         }
 
         /* Welcome Banner */
         .welcome-banner {
-            background: linear-gradient(135deg, #0a2e5c 0%, #2563eb 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, #2563eb 100%);
             color: white;
             padding: 30px;
             border-radius: 18px;
@@ -495,7 +525,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         .summary-header h2 {
             font-size: 24px;
             font-weight: 600;
-            color: #0a2e5c;
+            color: var(--primary-dark);
             margin-right: 15px;
             position: relative;
         }
@@ -507,7 +537,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             left: 0;
             width: 40px;
             height: 3px;
-            background: #3498db;
+            background: var(--secondary-color);
             border-radius: 2px;
         }
 
@@ -524,8 +554,8 @@ $transfer_data = array_reverse($transfer_seven_days);
             border-radius: 16px;
             padding: 25px;
             position: relative;
-            transition: all 0.3s ease;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+            transition: var(--transition);
+            box-shadow: var(--shadow-sm);
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -540,12 +570,12 @@ $transfer_data = array_reverse($transfer_seven_days);
             left: 0;
             width: 100%;
             height: 4px;
-            background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.3));
+            background: linear-gradient(90deg, var(--secondary-color), rgba(59, 130, 246, 0.3));
         }
 
         .stat-box:hover {
             transform: translateY(-5px);
-            box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-md);
         }
 
         .stat-icon {
@@ -557,9 +587,9 @@ $transfer_data = array_reverse($transfer_seven_days);
             justify-content: center;
             font-size: 24px;
             margin-bottom: 20px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             color: white;
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            background: linear-gradient(135deg, var(--secondary-color), #2563eb);
         }
 
         .stat-box:hover .stat-icon {
@@ -567,25 +597,28 @@ $transfer_data = array_reverse($transfer_seven_days);
         }
 
         .stat-title {
+            font-family: 'Poppins', sans-serif;
             font-size: 16px;
-            color: #64748b;
+            color: var(--text-secondary);
             margin-bottom: 10px;
             font-weight: 500;
         }
 
         .stat-value {
+            font-family: 'Poppins', sans-serif;
             font-size: 28px;
             font-weight: 700;
             margin-bottom: 10px;
-            color: #1a365d;
+            color: var(--primary-dark);
             letter-spacing: 0.5px;
         }
 
         .stat-trend {
+            font-family: 'Poppins', sans-serif;
             display: flex;
             align-items: center;
             font-size: 14px;
-            color: #64748b;
+            color: var(--text-secondary);
             margin-top: auto;
             padding-top: 10px;
         }
@@ -600,14 +633,15 @@ $transfer_data = array_reverse($transfer_seven_days);
             border-radius: 16px;
             padding: 25px;
             margin-bottom: 25px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+            box-shadow: var(--shadow-sm);
             animation: fadeIn 1s ease-in-out;
         }
 
         .chart-title {
+            font-family: 'Poppins', sans-serif;
             font-size: 20px;
             font-weight: 600;
-            color: #0a2e5c;
+            color: var(--primary-dark);
             margin-bottom: 20px;
         }
 
@@ -649,9 +683,10 @@ $transfer_data = array_reverse($transfer_seven_days);
         }
 
         .popup-content h2, .saldo-content h2, .transfer-content h2 {
+            font-family: 'Poppins', sans-serif;
             font-size: 24px;
             font-weight: 700;
-            color: #0a2e5c;
+            color: var(--primary-dark);
             margin-bottom: 20px;
             text-align: center;
             letter-spacing: 0.3px;
@@ -663,16 +698,17 @@ $transfer_data = array_reverse($transfer_seven_days);
             border-radius: 8px;
             overflow: hidden;
             background: #ffffff;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--shadow-sm);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
         .jurusan-card:hover {
             transform: scale(1.015);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: var(--shadow-md);
         }
 
         .jurusan-header {
+            font-family: 'Poppins', sans-serif;
             padding: 12px 15px;
             display: flex;
             align-items: center;
@@ -692,7 +728,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         }
 
         .jurusan-header:hover {
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            background: linear-gradient(135deg, var(--secondary-color), #2563eb);
         }
 
         .jurusan-header .logo {
@@ -740,7 +776,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             display: flex;
             align-items: center;
             justify-content: space-between;
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+            box-shadow: var(--shadow-sm);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
             border-left: 3px solid #2563eb;
         }
@@ -751,8 +787,8 @@ $transfer_data = array_reverse($transfer_seven_days);
 
         .kelas-card:hover {
             transform: scale(1.01);
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-            border-left-color: #3b82f6;
+            box-shadow: var(--shadow-md);
+            border-left-color: var(--secondary-color);
         }
 
         .kelas-card .logo {
@@ -767,12 +803,14 @@ $transfer_data = array_reverse($transfer_seven_days);
         }
 
         .kelas-card .kelas-name {
+            font-family: 'Poppins', sans-serif;
             font-size: 15px;
             color: #1e3a8a;
             flex: 1;
         }
 
         .kelas-card .jumlah-siswa {
+            font-family: 'Poppins', sans-serif;
             font-size: 15px;
             font-weight: 600;
             color: #2563eb;
@@ -784,16 +822,17 @@ $transfer_data = array_reverse($transfer_seven_days);
             border-radius: 8px;
             overflow: hidden;
             background: #ffffff;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            box-shadow: var(--shadow-sm);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
         .tanggal-card:hover {
             transform: scale(1.015);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: var(--shadow-md);
         }
 
         .tanggal-header {
+            font-family: 'Poppins', sans-serif;
             padding: 12px 15px;
             display: flex;
             align-items: center;
@@ -813,7 +852,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         }
 
         .tanggal-header:hover {
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            background: linear-gradient(135deg, var(--secondary-color), #2563eb);
         }
 
         .tanggal-header .logo {
@@ -854,6 +893,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         }
 
         .setoran-value, .transfer-value {
+            font-family: 'Poppins', sans-serif;
             font-size: 16px;
             font-weight: 600;
             color: #1e3a8a;
@@ -862,8 +902,9 @@ $transfer_data = array_reverse($transfer_seven_days);
 
         /* Empty State */
         .empty-state {
+            font-family: 'Poppins', sans-serif;
             text-align: center;
-            color: #64748b;
+            color: var(--text-secondary);
             font-size: 15px;
             padding: 20px;
             background: #f8fafc;
@@ -976,12 +1017,14 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .welcome-banner h2 {
+                font-family: 'Poppins', sans-serif;
                 font-size: 22px;
                 font-weight: 700;
                 margin-bottom: 8px;
             }
 
             .welcome-banner .date {
+                font-family: 'Poppins', sans-serif;
                 font-size: 12px;
                 font-weight: 500;
             }
@@ -994,11 +1037,13 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .popup-content h2, .saldo-content h2, .transfer-content h2 {
+                font-family: 'Poppins', sans-serif;
                 font-size: 20px;
                 margin-bottom: 15px;
             }
 
             .jurusan-header, .tanggal-header {
+                font-family: 'Poppins', sans-serif;
                 font-size: 15px;
                 padding: 10px 12px;
                 height: 44px;
@@ -1030,6 +1075,7 @@ $transfer_data = array_reverse($transfer_seven_days);
 
             .kelas-card .kelas-name,
             .kelas-card .jumlah-siswa {
+                font-family: 'Poppins', sans-serif;
                 font-size: 14px;
             }
 
@@ -1038,11 +1084,13 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .setoran-value, .transfer-value {
+                font-family: 'Poppins', sans-serif;
                 font-size: 14px;
             }
 
             /* Summary Section */
             .summary-header h2 {
+                font-family: 'Poppins', sans-serif;
                 font-size: 20px;
             }
 
@@ -1059,7 +1107,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             .stat-box {
                 padding: 18px;
                 border-radius: 12px;
-                box-shadow: 0 6px 15px rgba(0, 0, 0, 0.06);
+                box-shadow: var(--shadow-sm);
             }
 
             .stat-icon {
@@ -1070,16 +1118,19 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .stat-title {
+                font-family: 'Poppins', sans-serif;
                 font-size: 13px;
                 font-weight: 500;
             }
 
             .stat-value {
+                font-family: 'Poppins', sans-serif;
                 font-size: 22px;
                 font-weight: 700;
             }
 
             .stat-trend {
+                font-family: 'Poppins', sans-serif;
                 font-size: 12px;
             }
 
@@ -1090,6 +1141,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .chart-title {
+                font-family: 'Poppins', sans-serif;
                 font-size: 18px;
                 margin-bottom: 15px;
             }
@@ -1113,15 +1165,18 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .sidebar-header .bank-name {
+                font-family: 'Poppins', sans-serif;
                 font-size: 22px;
             }
 
             .menu-item a, .dropdown-btn {
+                font-family: 'Poppins', sans-serif;
                 padding: 12px 20px;
                 font-size: 14px;
             }
 
             .dropdown-container a {
+                font-family: 'Poppins', sans-serif;
                 padding: 10px 15px 10px 50px;
                 font-size: 13px;
             }
@@ -1140,10 +1195,12 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .welcome-banner h2 {
+                font-family: 'Poppins', sans-serif;
                 font-size: 18px;
             }
 
             .welcome-banner .date {
+                font-family: 'Poppins', sans-serif;
                 font-size: 11px;
             }
 
@@ -1154,6 +1211,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .popup-content h2, .saldo-content h2, .transfer-content h2 {
+                font-family: 'Poppins', sans-serif;
                 font-size: 18px;
                 margin-bottom: 12px;
             }
@@ -1163,6 +1221,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .jurusan-header, .tanggal-header {
+                font-family: 'Poppins', sans-serif;
                 font-size: 14px;
                 padding: 8px 10px;
                 height: 40px;
@@ -1194,6 +1253,7 @@ $transfer_data = array_reverse($transfer_seven_days);
 
             .kelas-card .kelas-name,
             .kelas-card .jumlah-siswa {
+                font-family: 'Poppins', sans-serif;
                 font-size: 13px;
             }
 
@@ -1202,10 +1262,12 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .setoran-value, .transfer-value {
+                font-family: 'Poppins', sans-serif;
                 font-size: 13px;
             }
 
             .summary-header h2 {
+                font-family: 'Poppins', sans-serif;
                 font-size: 18px;
             }
 
@@ -1225,14 +1287,17 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .stat-title {
+                font-family: 'Poppins', sans-serif;
                 font-size: 12px;
             }
 
             .stat-value {
+                font-family: 'Poppins', sans-serif;
                 font-size: 20px;
             }
 
             .stat-trend {
+                font-family: 'Poppins', sans-serif;
                 font-size: 11px;
             }
 
@@ -1241,6 +1306,7 @@ $transfer_data = array_reverse($transfer_seven_days);
             }
 
             .chart-title {
+                font-family: 'Poppins', sans-serif;
                 font-size: 16px;
             }
 
@@ -1279,7 +1345,7 @@ $transfer_data = array_reverse($transfer_seven_days);
                             <i class="fas fa-chalkboard"></i> Tambah Kelas
                         </a>
                         <a href="tambah_nasabah.php">
-                            <i class="fas fa-user-plus"></i> Tambah Siswa
+                            <i class="fas fa-user-plus"></i> Tambah Rekening
                         </a>
                         <a href="tambah_petugas.php">
                             <i class="fas fa-user-shield"></i> Tambah Petugas
@@ -1311,6 +1377,12 @@ $transfer_data = array_reverse($transfer_seven_days);
                 </div>
 
                 <div class="menu-item">
+                    <a href="tutup_rek.php">
+                        <i class="fas fa-user-slash"></i> Tutup Rekening
+                    </a>
+                </div>
+
+                <div class="menu-item">
                     <a href="pemulihan_akun.php">
                         <i class="fas fa-user-lock"></i> Pemulihan Akun Siswa
                     </a>
@@ -1318,8 +1390,8 @@ $transfer_data = array_reverse($transfer_seven_days);
 
                 <div class="menu-label">Manajemen Saldo</div>
                 <div class="menu-item">
-                    <a href="tambah_saldo_bersih.php">
-                        <i class="fas fa-hand-holding-usd"></i> Transfer Saldo ke Petugas
+                    <a href="tarik_saldo_admin.php">
+                        <i class="fas fa-hand-holding-usd"></i> Tarik Saldo Siswa
                     </a>
                 </div>
 
@@ -1365,11 +1437,11 @@ $transfer_data = array_reverse($transfer_seven_days);
                         <i class="fas fa-users"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Total Siswa</div>
+                        <div class="stat-title">Total Rekening</div>
                         <div class="stat-value"><?= number_format($total_siswa) ?></div>
                         <div class="stat-trend">
                             <i class="fas fa-user-graduate"></i>
-                            <span>Siswa Aktif</span>
+                            <span>Rekening Aktif</span>
                         </div>
                     </div>
                 </div>
@@ -1379,11 +1451,11 @@ $transfer_data = array_reverse($transfer_seven_days);
                         <i class="fas fa-wallet"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Total Saldo</div>
+                        <div class="stat-title">Total Saldo Semua</div>
                         <div class="stat-value">Rp <?= number_format($total_saldo, 0, ',', '.') ?></div>
                         <div class="stat-trend">
                             <i class="fas fa-chart-line"></i>
-                            <span>Total Dana Nasabah</span>
+                            <span>Total Dana Semua Rekening</span>
                         </div>
                     </div>
                 </div>
@@ -1393,11 +1465,11 @@ $transfer_data = array_reverse($transfer_seven_days);
                         <i class="fas fa-money-bill-wave"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Net Setoran Harian</div>
+                        <div class="stat-title">Setoran Harian Petugas</div>
                         <div class="stat-value">Rp <?= number_format($saldo_harian, 0, ',', '.') ?></div>
                         <div class="stat-trend">
                             <i class="fas fa-calendar-day"></i>
-                            <span>Net Setoran Hari Ini</span>
+                            <span>Total Saldo Bersih Petugas Hari ini</span>
                         </div>
                     </div>
                 </div>
@@ -1405,7 +1477,7 @@ $transfer_data = array_reverse($transfer_seven_days);
         </div>
         
         <div class="chart-container">
-            <h3 class="chart-title">Transaksi 7 Hari Terakhir</h3>
+            <h3 class="chart-title">Transaksi Terakhir Petugas</h3>
             <canvas id="transactionChart"></canvas>
         </div>
 
@@ -1521,13 +1593,23 @@ $transfer_data = array_reverse($transfer_seven_days);
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: 'Jumlah Transaksi'
+                                text: 'Jumlah Transaksi',
+                                font: {
+                                    family: 'Poppins',
+                                    size: 14,
+                                    weight: '500'
+                                }
                             }
                         },
                         x: {
                             title: {
                                 display: true,
-                                text: 'Tanggal'
+                                text: 'Tanggal',
+                                font: {
+                                    family: 'Poppins',
+                                    size: 14,
+                                    weight: '500'
+                                }
                             }
                         }
                     },

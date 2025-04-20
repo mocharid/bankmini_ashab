@@ -16,14 +16,20 @@ $result_jurusan = $conn->query($query_jurusan);
 $showConfirmation = false;
 $formData = [];
 $successMessage = null;
-$show_success_popup = false; // Flag untuk pop-up BERHASIL
+$show_success_popup = false;
+$error = null;
+$show_error_popup = false;
 
 function generateUsername($nama) {
     $username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nama));
     return $username;
 }
 
-function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password) {
+function maskString($string, $visibleStart = 0, $visibleEnd = 0) {
+    return '***';
+}
+
+function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name) {
     try {
         $mail = new PHPMailer(true);
         $mail->isSMTP();
@@ -42,29 +48,56 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
         $mail->Subject = 'Pembukaan Rekening Berhasil - SCHOBANK SYSTEM';
         
         $emailBody = "
-        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;'>
-            <div style='text-align: center; padding: 10px; background-color: #f5f5f5; margin-bottom: 20px;'>
-                <h2 style='color: #0a2e5c;'>SCHOBANK SYSTEM</h2>
-                <p style='font-size: 18px; font-weight: bold;'>Pembukaan Rekening Berhasil</p>
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;'>
+            <div style='text-align: center; padding: 15px; background-color: #0a2e5c; color: white; border-radius: 8px 8px 0 0;'>
+                <h2 style='margin: 0; font-size: 24px;'>SCHOBANK SYSTEM</h2>
             </div>
-            <p>Dear <strong>{$nama}</strong>,</p>
-            <p>Kami dengan senang hati menginformasikan bahwa rekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah rincian akun Anda:</p>
-            <div style='background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;'>
-                <p><strong>Nomor Rekening:</strong> {$no_rekening}</p>
-                <p><strong>Username:</strong> {$username}</p>
-                <p><strong>Password:</strong> {$password}</p>
-                <p><strong>Saldo Awal:</strong> Rp 0</p>
+            <div style='padding: 20px;'>
+                <h3 style='color: #0a2e5c; font-size: 20px; margin-bottom: 20px;'>Pembukaan Rekening Berhasil</h3>
+                <p style='color: #333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Yth. Bapak/Ibu {$nama},</p>
+                <p style='color: #333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Kami dengan senang hati menginformasikan bahwa rekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah rincian akun Anda:</p>
+                <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
+                    <tr style='background-color: #f9f9f9;'>
+                        <td style='padding: 10px; font-weight: bold; color: #333; width: 40%; border: 1px solid #e0e0e0;'>Nama</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>{$nama}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>Nomor Rekening</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>{$no_rekening}</td>
+                    </tr>
+                    <tr style='background-color: #f9f9f9;'>
+                        <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>Username</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>{$username}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>Password</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>{$password}</td>
+                    </tr>
+                    <tr style='background-color: #f9f9f9;'>
+                        <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>Jurusan</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>{$jurusan_name}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>Kelas</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>{$kelas_name}</td>
+                    </tr>
+                    <tr style='background-color: #f9f9f9;'>
+                        <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>Saldo Awal</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>Rp 0</td>
+                    </tr>
+                </table>
+                <p style='color: #d32f2f; font-size: 14px; font-weight: bold; margin-bottom: 20px;'>Penting: Harap ubah kata sandi Anda setelah login pertama untuk menjaga keamanan akun Anda.</p>
+                <p style='color: #333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Jika Anda memiliki pertanyaan, silakan hubungi tim kami melalui email atau telepon yang tersedia di situs resmi kami.</p>
+                <p style='color: #333; font-size: 16px; line-height: 1.6;'>Hormat kami,<br>Tim SCHOBANK SYSTEM</p>
             </div>
-            <p style='color: #d35400;'><strong>Catatan Penting:</strong> Harap ubah kata sandi Anda setelah login pertama untuk menjaga keamanan akun Anda.</p>
-            <p>Jika Anda memiliki pertanyaan, silakan hubungi tim kami.</p>
-            <div style='text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #777; font-size: 12px;'>
-                <p>Email ini dibuat secara otomatis. Mohon tidak membalas email ini.</p>
-                <p>© " . date('Y') . " SCHOBANK SYSTEM. All rights reserved.</p>
+            <div style='text-align: center; padding: 15px; background-color: #f5f5f5; border-radius: 0 0 8px 8px; color: #666; font-size: 12px;'>
+                <p style='margin: 0;'>Email ini dibuat secara otomatis. Mohon tidak membalas email ini.</p>
+                <p style='margin: 0;'>© " . date('Y') . " SCHOBANK SYSTEM. Hak cipta dilindungi.</p>
             </div>
         </div>";
         
         $mail->Body = $emailBody;
-        $mail->AltBody = "Pembukaan Rekening Berhasil\n\nDear {$nama},\n\nRekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah rincian akun Anda:\n\nNomor Rekening: {$no_rekening}\nUsername: {$username}\nPassword: {$password}\nSaldo Awal: Rp 0\n\nCatatan Penting: Harap ubah kata sandi Anda setelah login pertama untuk menjaga keamanan akun Anda.\n\nJika Anda memiliki pertanyaan, silakan hubungi tim kami.";
+        $mail->AltBody = "Yth. Bapak/Ibu {$nama},\n\nKami dengan senang hati menginformasikan bahwa rekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah rincian akun Anda:\n\nNama: {$nama}\nNomor Rekening: {$no_rekening}\nUsername: {$username}\nPassword: {$password}\nJurusan: {$jurusan_name}\nKelas: {$kelas_name}\nSaldo Awal: Rp 0\n\nPenting: Harap ubah kata sandi Anda setelah login pertama untuk menjaga keamanan akun Anda.\n\nJika Anda memiliki pertanyaan, silakan hubungi tim kami.\n\nHormat kami,\nTim SCHOBANK SYSTEM\n\nEmail ini dibuat secara otomatis. Mohon tidak membalas email ini.";
         
         $mail->send();
         return true;
@@ -83,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $jurusan_id = $_POST['jurusan_id'];
         $kelas_id = $_POST['kelas_id'];
         $no_rekening = $_POST['no_rekening'];
-        $email = isset($_POST['email']) ? trim($_POST['email']) : null;
+        $email = trim($_POST['email']);
         
         $check_query = "SELECT id FROM users WHERE username = ?";
         $check_stmt = $conn->prepare($check_query);
@@ -106,62 +139,124 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt_rekening->bind_param("si", $no_rekening, $user_id);
             
             if ($stmt_rekening->execute()) {
-                $email_sent = false;
-                if (!empty($email)) {
-                    $email_sent = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password);
-                }
+                $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
+                $stmt_jurusan = $conn->prepare($query_jurusan_name);
+                $stmt_jurusan->bind_param("i", $jurusan_id);
+                $stmt_jurusan->execute();
+                $result_jurusan_name = $stmt_jurusan->get_result();
+                $jurusan_name = $result_jurusan_name->fetch_assoc()['nama_jurusan'];
                 
-                $show_success_popup = true; // Set flag untuk pop-up BERHASIL
+                $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
+                $stmt_kelas = $conn->prepare($query_kelas_name);
+                $stmt_kelas->bind_param("i", $kelas_id);
+                $stmt_kelas->execute();
+                $result_kelas_name = $stmt_kelas->get_result();
+                $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
+                
+                $email_sent = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name);
+                
+                $show_success_popup = true;
                 header('refresh:3;url=data_siswa.php');
             } else {
                 $error = "Error saat membuat rekening!";
+                $show_error_popup = true;
             }
         } else {
             $error = "Error saat menambah user!";
+            $show_error_popup = true;
         }
     } elseif (isset($_POST['cancel'])) {
-        header('Location: dashboard.php');
+        header('Location: tambah_nasabah.php');
         exit();
     } else {
         $showConfirmation = true;
         $nama = trim($_POST['nama']);
         $username = generateUsername($nama);
-        $email = isset($_POST['email']) ? trim($_POST['email']) : null;
+        $email = trim($_POST['email']);
+        $jurusan_id = isset($_POST['jurusan_id']) ? $_POST['jurusan_id'] : '';
+        $kelas_id = isset($_POST['kelas_id']) ? $_POST['kelas_id'] : '';
         
-        $check_query = "SELECT id FROM users WHERE username = ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("s", $username);
-        $check_stmt->execute();
-        
-        if ($check_stmt->get_result()->num_rows > 0) {
-            $username = $username . rand(100, 999);
+        // Validate email uniqueness
+        $check_email_query = "SELECT id FROM users WHERE email = ?";
+        $check_email_stmt = $conn->prepare($check_email_query);
+        $check_email_stmt->bind_param("s", $email);
+        $check_email_stmt->execute();
+        if ($check_email_stmt->get_result()->num_rows > 0) {
+            $error = "Email sudah digunakan! Silakan gunakan email lain.";
+            $showConfirmation = false;
+            $show_error_popup = true;
+        } elseif (empty($email)) {
+            $error = "Email wajib diisi!";
+            $showConfirmation = false;
+            $show_error_popup = true;
+        } elseif (empty($jurusan_id)) {
+            $error = "Jurusan wajib dipilih!";
+            $showConfirmation = false;
+            $show_error_popup = true;
+        } elseif (empty($kelas_id)) {
+            $error = "Kelas wajib dipilih!";
+            $showConfirmation = false;
+            $show_error_popup = true;
+        } else {
+            $check_query = "SELECT id FROM users WHERE username = ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("s", $username);
+            $check_stmt->execute();
+            
+            if ($check_stmt->get_result()->num_rows > 0) {
+                $username = $username . rand(100, 999);
+            }
+            
+            $no_rekening = 'REK' . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+            
+            $formData = [
+                'nama' => $nama,
+                'username' => $username,
+                'password' => '12345',
+                'jurusan_id' => $jurusan_id,
+                'kelas_id' => $kelas_id,
+                'no_rekening' => $no_rekening,
+                'email' => $email
+            ];
+            
+            $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
+            $stmt_jurusan = $conn->prepare($query_jurusan_name);
+            if ($stmt_jurusan === false) {
+                $error = "Error preparing jurusan query: " . $conn->error;
+                $showConfirmation = false;
+                $show_error_popup = true;
+            } else {
+                $stmt_jurusan->bind_param("i", $jurusan_id);
+                $stmt_jurusan->execute();
+                $result_jurusan_name = $stmt_jurusan->get_result();
+                if ($result_jurusan_name->num_rows === 0) {
+                    $error = "Jurusan tidak ditemukan!";
+                    $showConfirmation = false;
+                    $show_error_popup = true;
+                } else {
+                    $jurusan_name = $result_jurusan_name->fetch_assoc()['nama_jurusan'];
+                    
+                    $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
+                    $stmt_kelas = $conn->prepare($query_kelas_name);
+                    if ($stmt_kelas === false) {
+                        $error = "Error preparing kelas query: " . $conn->error;
+                        $showConfirmation = false;
+                        $show_error_popup = true;
+                    } else {
+                        $stmt_kelas->bind_param("i", $kelas_id);
+                        $stmt_kelas->execute();
+                        $result_kelas_name = $stmt_kelas->get_result();
+                        if ($result_kelas_name->num_rows === 0) {
+                            $error = "Kelas tidak ditemukan!";
+                            $showConfirmation = false;
+                            $show_error_popup = true;
+                        } else {
+                            $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
+                        }
+                    }
+                }
+            }
         }
-        
-        $no_rekening = 'REK' . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
-        
-        $formData = [
-            'nama' => $nama,
-            'username' => $username,
-            'password' => '12345',
-            'jurusan_id' => $_POST['jurusan_id'],
-            'kelas_id' => $_POST['kelas_id'],
-            'no_rekening' => $no_rekening,
-            'email' => $email
-        ];
-        
-        $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
-        $stmt_jurusan = $conn->prepare($query_jurusan_name);
-        $stmt_jurusan->bind_param("i", $formData['jurusan_id']);
-        $stmt_jurusan->execute();
-        $result_jurusan_name = $stmt_jurusan->get_result();
-        $jurusan_name = $result_jurusan_name->fetch_assoc()['nama_jurusan'];
-        
-        $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
-        $stmt_kelas = $conn->prepare($query_kelas_name);
-        $stmt_kelas->bind_param("i", $formData['kelas_id']);
-        $stmt_kelas->execute();
-        $result_kelas_name = $stmt_kelas->get_result();
-        $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
     }
 }
 ?>
@@ -393,32 +488,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             background-color: #d32f2f;
         }
 
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-        }
-
-        .alert.hide {
-            animation: slideOut 0.5s ease-out forwards;
-        }
-
-        @keyframes slideOut {
-            from { transform: translateY(0); opacity: 1; }
-            to { transform: translateY(-20px); opacity: 0; }
-        }
-
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 5px solid #fecaca;
-        }
-
         .success-overlay {
             position: fixed;
             top: 0;
@@ -444,7 +513,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             to { opacity: 0; }
         }
 
-        .success-modal {
+        .success-modal, .error-modal {
             background: linear-gradient(145deg, #ffffff, #f0f4ff);
             border-radius: 20px;
             padding: 40px;
@@ -459,18 +528,29 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             animation: popInModal 0.7s ease-out forwards;
         }
 
+        .error-modal {
+            background: linear-gradient(145deg, #ffffff, #ffe6e6);
+        }
+
         @keyframes popInModal {
             0% { transform: scale(0.5); opacity: 0; }
             70% { transform: scale(1.05); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-icon {
+        .success-icon, .error-icon {
             font-size: clamp(4rem, 8vw, 4.5rem);
-            color: var(--secondary-color);
             margin-bottom: 25px;
             animation: bounceIn 0.6s ease-out;
             filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        .success-icon {
+            color: var(--secondary-color);
+        }
+
+        .error-icon {
+            color: var(--danger-color);
         }
 
         @keyframes bounceIn {
@@ -479,7 +559,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-modal h3 {
+        .success-modal h3, .error-modal h3 {
             color: var(--primary-dark);
             margin-bottom: 15px;
             font-size: clamp(1.4rem, 3vw, 1.6rem);
@@ -487,7 +567,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             font-weight: 600;
         }
 
-        .success-modal p {
+        .success-modal p, .error-modal p {
             color: var(--text-secondary);
             font-size: clamp(0.95rem, 2.2vw, 1.1rem);
             margin-bottom: 25px;
@@ -566,17 +646,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .loading-spinner {
-            width: 2.5rem;
-            height: 2.5rem;
-            border: 0.3rem solid var(--primary-light);
-            border-top: 0.3rem solid var(--primary-color);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            animation: dots 2s infinite steps(4, end);
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        @keyframes dots {
+            0% { content: '.'; }
+            25% { content: '..'; }
+            50% { content: '...'; }
+            75% { content: '....'; }
+            100% { content: '.'; }
         }
 
         @media (max-width: 768px) {
@@ -614,7 +694,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 flex-direction: column;
             }
 
-            .success-modal {
+            .success-modal, .error-modal {
                 width: 90%;
                 padding: 30px;
             }
@@ -633,11 +713,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 padding: 20px;
             }
 
-            .success-modal h3 {
+            .success-modal h3, .error-modal h3 {
                 font-size: clamp(1.2rem, 3vw, 1.4rem);
             }
 
-            .success-modal p {
+            .success-modal p, .error-modal p {
                 font-size: clamp(0.9rem, 2.2vw, 1rem);
             }
         }
@@ -661,17 +741,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <p>Layanan pembukaan rekening untuk siswa baru</p>
         </div>
 
-        <div id="alertContainer">
-            <?php if (!empty($error)): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <?php echo htmlspecialchars($error); ?>
-                </div>
-            <?php endif; ?>
-        </div>
-
         <!-- Input Form -->
-        <?php if (!$showConfirmation && !$show_success_popup): ?>
+        <?php if (!$showConfirmation && !$show_success_popup && !$show_error_popup): ?>
             <div class="deposit-card">
                 <form action="" method="POST" id="nasabahForm" class="deposit-form">
                     <div class="form-group">
@@ -679,8 +750,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <input type="text" id="nama" name="nama" required value="<?php echo isset($_POST['nama']) ? htmlspecialchars($_POST['nama']) : ''; ?>" placeholder="Masukkan nama lengkap">
                     </div>
                     <div class="form-group">
-                        <label for="email">Email (Opsional)</label>
-                        <input type="email" id="email" name="email" value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" placeholder="Masukkan email">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" placeholder="Masukkan email">
                     </div>
                     <div class="form-group">
                         <label for="jurusan_id">Jurusan</label>
@@ -704,7 +775,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <option value="">Pilih Kelas</option>
                         </select>
                         <div id="kelas-loading" class="loading" style="display: none;">
-                            <div class="loading-spinner"></div>
+                            <div class="loading-spinner">...</div>
                         </div>
                     </div>
                     <button type="submit" class="btn" id="submit-btn">
@@ -715,7 +786,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <?php endif; ?>
 
         <!-- Confirmation Modal -->
-        <?php if ($showConfirmation && !$show_success_popup): ?>
+        <?php if ($showConfirmation && !$show_success_popup && !$show_error_popup): ?>
             <div class="success-overlay" id="confirmModal">
                 <div class="success-modal">
                     <div class="success-icon">
@@ -729,18 +800,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </div>
                         <div class="modal-row">
                             <span class="modal-label">Username</span>
-                            <span class="modal-value"><?php echo htmlspecialchars($formData['username']); ?></span>
+                            <span class="modal-value"><?php echo maskString($formData['username']); ?></span>
                         </div>
                         <div class="modal-row">
                             <span class="modal-label">Password</span>
-                            <span class="modal-value"><?php echo htmlspecialchars($formData['password']); ?></span>
+                            <span class="modal-value"><?php echo maskString($formData['password']); ?></span>
                         </div>
-                        <?php if (!empty($formData['email'])): ?>
                         <div class="modal-row">
                             <span class="modal-label">Email</span>
                             <span class="modal-value"><?php echo htmlspecialchars($formData['email']); ?></span>
                         </div>
-                        <?php endif; ?>
                         <div class="modal-row">
                             <span class="modal-label">Jurusan</span>
                             <span class="modal-value"><?php echo htmlspecialchars($jurusan_name); ?></span>
@@ -751,7 +820,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </div>
                         <div class="modal-row">
                             <span class="modal-label">No Rekening</span>
-                            <span class="modal-value"><?php echo htmlspecialchars($formData['no_rekening']); ?></span>
+                            <span class="modal-value"><?php echo maskString($formData['no_rekening']); ?></span>
                         </div>
                     </div>
                     <form action="" method="POST" id="confirm-form">
@@ -760,14 +829,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <input type="hidden" name="jurusan_id" value="<?php echo htmlspecialchars($formData['jurusan_id']); ?>">
                         <input type="hidden" name="kelas_id" value="<?php echo htmlspecialchars($formData['kelas_id']); ?>">
                         <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($formData['no_rekening']); ?>">
-                        <?php if (!empty($formData['email'])): ?>
                         <input type="hidden" name="email" value="<?php echo htmlspecialchars($formData['email']); ?>">
-                        <?php endif; ?>
                         <div class="modal-buttons">
                             <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
                                 <i class="fas fa-check"></i> Konfirmasi
                             </button>
-                            <button type="button" class="btn btn-cancel" onclick="window.history.back();">
+                            <button type="submit" name="cancel" class="btn btn-cancel">
                                 <i class="fas fa-times"></i> Batal
                             </button>
                         </div>
@@ -783,8 +850,49 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
-                    <h3>BERHASIL</h3>
-                    <p>Pembukaan rekening berhasil!</p>
+                    <h3>Pembukaan Rekening Berhasil</h3>
+                    <div class="modal-content">
+                        <div class="modal-row">
+                            <span class="modal-label">Nama</span>
+                            <span class="modal-value"><?php echo htmlspecialchars($nama); ?></span>
+                        </div>
+                        <div class="modal-row">
+                            <span class="modal-label">Username</span>
+                            <span class="modal-value"><?php echo maskString($username); ?></span>
+                        </div>
+                        <div class="modal-row">
+                            <span class="modal-label">Email</span>
+                            <span class="modal-value"><?php echo htmlspecialchars($email); ?></span>
+                        </div>
+                        <div class="modal-row">
+                            <span class="modal-label">Jurusan</span>
+                            <span class="modal-value"><?php echo htmlspecialchars($jurusan_name); ?></span>
+                        </div>
+                        <div class="modal-row">
+                            <span class="modal-label">Kelas</span>
+                            <span class="modal-value"><?php echo htmlspecialchars($kelas_name); ?></span>
+                        </div>
+                        <div class="modal-row">
+                            <span class="modal-label">No Rekening</span>
+                            <span class="modal-value"><?php echo maskString($no_rekening); ?></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Error Modal -->
+        <?php if ($show_error_popup): ?>
+            <div class="success-overlay" id="errorModal">
+                <div class="error-modal">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <h3>Kesalahan</h3>
+                    <p><?php echo htmlspecialchars($error); ?></p>
+                    <button class="btn btn-cancel" onclick="window.location.href='tambah_nasabah.php'">
+                        <i class="fas fa-times"></i> Tutup
+                    </button>
                 </div>
             </div>
         <?php endif; ?>
@@ -818,15 +926,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 event.preventDefault();
             }, { passive: false });
 
-            // Alert auto-hide
-            const alerts = document.querySelectorAll('.alert');
-            alerts.forEach(alert => {
-                setTimeout(() => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
-                }, 5000);
-            });
-
             // Modal confetti for confirmation modal
             const confirmModal = document.querySelector('#confirmModal .success-modal');
             if (confirmModal) {
@@ -851,12 +950,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
                     successModal.appendChild(confetti);
                 }
-                // Auto-close success modal after 2 seconds
+                // Auto-close success modal after 3 seconds
                 setTimeout(() => {
                     const overlay = document.querySelector('#successModal');
                     overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => overlay.remove(), 500);
-                }, 2000);
+                }, 3000);
             }
 
             // Loading effect for forms
@@ -867,6 +966,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 nasabahForm.addEventListener('submit', function() {
                     submitBtn.classList.add('loading');
                     submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                    setTimeout(() => {}, 2000); // Simulate longer processing
                 });
             }
 
@@ -877,6 +977,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 confirmForm.addEventListener('submit', function() {
                     confirmBtn.classList.add('loading');
                     confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
+                    setTimeout(() => {}, 2000); // Simulate longer processing
                 });
             }
 
@@ -886,41 +987,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     const nama = document.getElementById('nama').value.trim();
                     if (nama.length < 3) {
                         e.preventDefault();
-                        const alertContainer = document.getElementById('alertContainer');
-                        const alertDiv = document.createElement('div');
-                        alertDiv.className = 'alert alert-error';
-                        alertDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Nama harus minimal 3 karakter!';
-                        alertContainer.appendChild(alertDiv);
+                        showErrorPopup('Nama harus minimal 3 karakter!');
                         document.getElementById('nama').focus();
                         submitBtn.classList.remove('loading');
                         submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Lanjutkan';
-                        setTimeout(() => {
-                            alertDiv.classList.add('hide');
-                            setTimeout(() => alertDiv.remove(), 500);
-                        }, 5000);
                         return;
                     }
 
                     const email = document.getElementById('email').value.trim();
-                    if (email !== '') {
-                        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                        if (!emailPattern.test(email)) {
-                            e.preventDefault();
-                            const alertContainer = document.getElementById('alertContainer');
-                            const alertDiv = document.createElement('div');
-                            alertDiv.className = 'alert alert-error';
-                            alertDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Format email tidak valid!';
-                            alertContainer.appendChild(alertDiv);
-                            document.getElementById('email').focus();
-                            submitBtn.classList.remove('loading');
-                            submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Lanjutkan';
-                            setTimeout(() => {
-                                alertDiv.classList.add('hide');
-                                setTimeout(() => alertDiv.remove(), 500);
-                            }, 5000);
-                        }
+                    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailPattern.test(email)) {
+                        e.preventDefault();
+                        showErrorPopup('Format email tidak valid!');
+                        document.getElementById('email').focus();
+                        submitBtn.classList.remove('loading');
+                        submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Lanjutkan';
                     }
                 });
+            }
+
+            // Function to show error popup
+            function showErrorPopup(message) {
+                const overlay = document.createElement('div');
+                overlay.className = 'success-overlay';
+                overlay.id = 'errorModal';
+                overlay.innerHTML = `
+                    <div class="error-modal">
+                        <div class="error-icon">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <h3>Kesalahan</h3>
+                        <p>${message}</p>
+                        <button class="btn btn-cancel" onclick="this.closest('.success-overlay').remove()">
+                            <i class="fas fa-times"></i> Tutup
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+                setTimeout(() => {
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => overlay.remove(), 500);
+                }, 5000);
             }
 
             // AJAX for kelas
@@ -942,17 +1049,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         },
                         error: function(xhr, status, error) {
                             console.error('Error:', error);
-                            const alertContainer = document.getElementById('alertContainer');
-                            const alertDiv = document.createElement('div');
-                            alertDiv.className = 'alert alert-error';
-                            alertDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Terjadi kesalahan saat mengambil data kelas!';
-                            alertContainer.appendChild(alertDiv);
+                            showErrorPopup('Terjadi kesalahan saat mengambil data kelas!');
                             kelasLoading.style.display = 'none';
                             kelasSelect.style.display = 'block';
-                            setTimeout(() => {
-                                alertDiv.classList.add('hide');
-                                setTimeout(() => alertDiv.remove(), 500);
-                            }, 5000);
                         }
                     });
                 } else {
@@ -961,7 +1060,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             // Inisialisasi kelas jika jurusan sudah dipilih
-            <?php if (isset($_POST['jurusan_id']) && !$showConfirmation): ?>
+            <?php if (isset($_POST['jurusan_id']) && !$showConfirmation && !$show_error_popup): ?>
                 getKelasByJurusan(<?php echo $_POST['jurusan_id']; ?>);
             <?php endif; ?>
 

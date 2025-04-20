@@ -98,46 +98,65 @@ $attendance_petugas2 = $stmt_attendance2->get_result()->fetch_assoc();
 
 // Handle attendance form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $success_message = '';
     if (isset($_POST['check_in_petugas1'])) {
         $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, waktu_masuk, petugas1_status) 
                  VALUES (?, 'petugas1', CURDATE(), NOW(), 'hadir')";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $petugas_id);
-        $stmt->execute();
-        header("Refresh:0");
+        if ($stmt->execute()) {
+            $success_message = 'Absen masuk Petugas 1 berhasil!';
+        }
+        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
+        exit();
     } elseif (isset($_POST['check_out_petugas1'])) {
         $query = "UPDATE absensi SET waktu_keluar = NOW() 
                  WHERE petugas_type = 'petugas1' AND tanggal = CURDATE()";
         $stmt = $conn->prepare($query);
-        $stmt->execute();
-        header("Refresh:0");
+        if ($stmt->execute()) {
+            $success_message = 'Absen pulang Petugas 1 berhasil!';
+        }
+        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
+        exit();
     } elseif (isset($_POST['check_in_petugas2'])) {
         $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, waktu_masuk, petugas2_status) 
                  VALUES (?, 'petugas2', CURDATE(), NOW(), 'hadir')";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $petugas_id);
-        $stmt->execute();
-        header("Refresh:0");
+        if ($stmt->execute()) {
+            $success_message = 'Absen masuk Petugas 2 berhasil!';
+        }
+        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
+        exit();
     } elseif (isset($_POST['check_out_petugas2'])) {
         $query = "UPDATE absensi SET waktu_keluar = NOW() 
                  WHERE petugas_type = 'petugas2' AND tanggal = CURDATE()";
         $stmt = $conn->prepare($query);
-        $stmt->execute();
-        header("Refresh:0");
+        if ($stmt->execute()) {
+            $success_message = 'Absen pulang Petugas 2 berhasil!';
+        }
+        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
+        exit();
     } elseif (isset($_POST['absent_petugas1'])) {
         $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas1_status) 
                  VALUES (?, 'petugas1', CURDATE(), 'tidak_hadir')";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $petugas_id);
-        $stmt->execute();
-        header("Refresh:0");
+        if ($stmt->execute()) {
+            $success_message = 'Petugas 1 ditandai tidak hadir!';
+        }
+        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
+        exit();
     } elseif (isset($_POST['absent_petugas2'])) {
         $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas2_status) 
                  VALUES (?, 'petugas2', CURDATE(), 'tidak_hadir')";
         $stmt = $conn->prepare($query);
         $stmt->bind_param("i", $petugas_id);
-        $stmt->execute();
-        header("Refresh:0");
+        if ($stmt->execute()) {
+            $success_message = 'Petugas 2 ditandai tidak hadir!';
+        }
+        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
+        exit();
     }
 }
 
@@ -193,12 +212,31 @@ function tanggal_indonesia($tanggal) {
     <title>Dashboard - SCHOBANK SYSTEM</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --secondary-color: #1e88e5;
+            --secondary-dark: #1565c0;
+            --accent-color: #ff9800;
+            --danger-color: #e74c3c;
+            --text-primary: #333;
+            --text-secondary: #666;
+            --bg-light: #f0f5ff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+            --scrollbar-track: #0a2e5c;
+            --scrollbar-thumb: #2a4a7a;
+            --scrollbar-thumb-hover: #3b5d92;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Poppins', sans-serif;
             -webkit-user-select: none;
             -ms-user-select: none;
             user-select: none;
@@ -214,16 +252,18 @@ function tanggal_indonesia($tanggal) {
         }
 
         body {
-            background-color: #f0f5ff;
-            color: #333;
+            background-color: var(--bg-light);
+            color: var(--text-primary);
             display: flex;
             transition: background-color 0.3s ease;
+            font-size: 0.95rem;
+            line-height: 1.6;
         }
 
         /* Sidebar Utama */
         .sidebar {
             width: 280px;
-            background: linear-gradient(180deg, #0a2e5c 0%, #154785 100%);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, #154785 100%);
             color: white;
             position: fixed;
             height: 100%;
@@ -237,7 +277,7 @@ function tanggal_indonesia($tanggal) {
         /* Sidebar Header (Fixed) */
         .sidebar-header {
             padding: 25px 20px;
-            background: #0a2e5c;
+            background: var(--primary-dark);
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             position: sticky;
             top: 0;
@@ -246,9 +286,9 @@ function tanggal_indonesia($tanggal) {
         }
 
         .sidebar-header .bank-name {
-            font-size: 26px;
-            font-weight: bold;
-            letter-spacing: 1px;
+            font-size: 1.6rem;
+            font-weight: 600;
+            letter-spacing: 1.2px;
             margin: 0;
             color: white;
         }
@@ -263,7 +303,7 @@ function tanggal_indonesia($tanggal) {
 
         /* Sidebar Footer (Fixed) */
         .sidebar-footer {
-            background: #0a2e5c;
+            background: var(--primary-dark);
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             position: sticky;
             bottom: 0;
@@ -277,18 +317,18 @@ function tanggal_indonesia($tanggal) {
         }
 
         .sidebar-content::-webkit-scrollbar-track {
-            background: #f8fafc;
+            background: var(--scrollbar-track);
             border-radius: 4px;
         }
 
         .sidebar-content::-webkit-scrollbar-thumb {
-            background: #bfdbfe;
+            background: var(--scrollbar-thumb);
             border-radius: 4px;
-            border: 2px solid #f8fafc;
+            border: 2px solid var(--scrollbar-track);
         }
 
         .sidebar-content::-webkit-scrollbar-thumb:hover {
-            background: #93c5fd;
+            background: var(--scrollbar-thumb-hover);
         }
 
         /* Menu Items */
@@ -298,11 +338,11 @@ function tanggal_indonesia($tanggal) {
 
         .menu-label {
             padding: 15px 25px 10px;
-            font-size: 13px;
+            font-size: 0.8rem;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             color: rgba(255, 255, 255, 0.6);
-            font-weight: 600;
+            font-weight: 500;
             margin-top: 10px;
         }
 
@@ -317,14 +357,15 @@ function tanggal_indonesia($tanggal) {
             padding: 14px 25px;
             color: rgba(255, 255, 255, 0.85);
             text-decoration: none;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             border-left: 4px solid transparent;
-            font-weight: 500;
+            font-weight: 400;
+            font-size: 0.9rem;
         }
 
         .menu-item a:hover, .menu-item a.active {
             background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
+            border-left-color: var(--secondary-color);
             color: white;
         }
 
@@ -332,7 +373,7 @@ function tanggal_indonesia($tanggal) {
             margin-right: 12px;
             width: 20px;
             text-align: center;
-            font-size: 18px;
+            font-size: 1.1rem;
         }
 
         /* Dropdown Menu */
@@ -347,15 +388,15 @@ function tanggal_indonesia($tanggal) {
             color: rgba(255, 255, 255, 0.85);
             border: none;
             cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s ease;
+            font-size: 0.9rem;
+            transition: var(--transition);
             border-left: 4px solid transparent;
-            font-weight: 500;
+            font-weight: 400;
         }
 
         .dropdown-btn:hover, .dropdown-btn.active {
             background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
+            border-left-color: var(--secondary-color);
             color: white;
         }
 
@@ -368,12 +409,12 @@ function tanggal_indonesia($tanggal) {
             margin-right: 12px;
             width: 20px;
             text-align: center;
-            font-size: 18px;
+            font-size: 1.1rem;
         }
 
         .dropdown-btn .arrow {
             transition: transform 0.3s ease;
-            font-size: 14px;
+            font-size: 0.8rem;
         }
 
         .dropdown-btn.active .arrow {
@@ -397,21 +438,21 @@ function tanggal_indonesia($tanggal) {
             align-items: center;
             color: rgba(255, 255, 255, 0.75);
             text-decoration: none;
-            transition: all 0.3s ease;
-            font-size: 14px;
+            transition: var(--transition);
+            font-size: 0.85rem;
             border-left: 4px solid transparent;
         }
 
         .dropdown-container a:hover, .dropdown-container a.active {
             background-color: rgba(255, 255, 255, 0.08);
-            border-left-color: #38bdf8;
+            border-left-color: var(--secondary-color);
             color: white;
         }
 
         /* Tombol Logout (Warna Merah) */
         .logout-btn {
-            color: #ff3b3b;
-            font-weight: 600;
+            color: var(--danger-color);
+            font-weight: 500;
         }
 
         /* Main Content */
@@ -419,18 +460,18 @@ function tanggal_indonesia($tanggal) {
             flex: 1;
             margin-left: 280px;
             padding: 30px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             max-width: calc(100% - 280px);
         }
 
         /* Welcome Banner */
         .welcome-banner {
-            background: linear-gradient(135deg, #0a2e5c 0%, #2563eb 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
             padding: 30px;
             border-radius: 18px;
             margin-bottom: 35px;
-            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.15);
+            box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
             display: flex;
@@ -441,13 +482,14 @@ function tanggal_indonesia($tanggal) {
 
         .welcome-banner h2 {
             margin-bottom: 10px;
-            font-size: 28px;
-            font-weight: 700;
+            font-size: 1.6rem;
+            font-weight: 600;
             letter-spacing: 0.5px;
         }
 
         .welcome-banner .date {
-            font-size: 15px;
+            font-size: 0.9rem;
+            font-weight: 400;
             opacity: 0.8;
             display: flex;
             align-items: center;
@@ -469,9 +511,9 @@ function tanggal_indonesia($tanggal) {
         }
 
         .summary-header h2 {
-            font-size: 24px;
+            font-size: 1.4rem;
             font-weight: 600;
-            color: #0a2e5c;
+            color: var(--primary-dark);
             margin-right: 15px;
             position: relative;
         }
@@ -483,7 +525,7 @@ function tanggal_indonesia($tanggal) {
             left: 0;
             width: 40px;
             height: 3px;
-            background: #3498db;
+            background: var(--secondary-color);
             border-radius: 2px;
         }
 
@@ -500,8 +542,8 @@ function tanggal_indonesia($tanggal) {
             border-radius: 16px;
             padding: 25px;
             position: relative;
-            transition: all 0.3s ease;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+            transition: var(--transition);
+            box-shadow: var(--shadow-sm);
             overflow: hidden;
             display: flex;
             flex-direction: column;
@@ -515,12 +557,12 @@ function tanggal_indonesia($tanggal) {
             left: 0;
             width: 100%;
             height: 4px;
-            background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(59, 130, 246, 0.3));
+            background: linear-gradient(90deg, var(--secondary-color), rgba(59, 130, 246, 0.3));
         }
 
         .stat-box:hover {
             transform: translateY(-5px);
-            box-shadow: 0 12px 25px rgba(0,0,0,0.1);
+            box-shadow: var(--shadow-md);
         }
 
         .stat-icon {
@@ -530,11 +572,11 @@ function tanggal_indonesia($tanggal) {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 1.5rem;
             margin-bottom: 20px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             color: white;
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
         }
 
         .stat-box:hover .stat-icon {
@@ -542,27 +584,28 @@ function tanggal_indonesia($tanggal) {
         }
 
         .stat-title {
-            font-size: 16px;
-            color: #64748b;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
             margin-bottom: 10px;
             font-weight: 500;
         }
 
         .stat-value {
-            font-size: 28px;
-            font-weight: 700;
+            font-size: 1.6rem;
+            font-weight: 600;
             margin-bottom: 10px;
-            color: #1a365d;
+            color: var(--primary-dark);
             letter-spacing: 0.5px;
         }
 
         .stat-trend {
             display: flex;
             align-items: center;
-            font-size: 14px;
-            color: #64748b;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
             margin-top: auto;
             padding-top: 10px;
+            font-weight: 400;
         }
 
         .stat-trend i {
@@ -575,14 +618,14 @@ function tanggal_indonesia($tanggal) {
             border-radius: 16px;
             padding: 25px;
             margin-bottom: 25px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+            box-shadow: var(--shadow-sm);
             animation: fadeIn 1s ease-in-out;
         }
 
         .attendance-title {
-            font-size: 20px;
+            font-size: 1.2rem;
             font-weight: 600;
-            color: #0a2e5c;
+            color: var(--primary-dark);
             margin-bottom: 20px;
         }
 
@@ -591,7 +634,7 @@ function tanggal_indonesia($tanggal) {
             border-collapse: separate;
             border-spacing: 0;
             margin-top: 20px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            box-shadow: var(--shadow-sm);
             border-radius: 8px;
             overflow: hidden;
         }
@@ -601,14 +644,17 @@ function tanggal_indonesia($tanggal) {
             padding: 15px;
             text-align: center;
             border-bottom: 1px solid #e9ecef;
+            font-size: 0.9rem;
+            font-weight: 400;
         }
 
         .attendance-table th {
-            background-color: #0a2e5c;
+            background-color: var(--primary-dark);
             color: white;
             text-transform: uppercase;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             letter-spacing: 0.5px;
+            font-weight: 500;
         }
 
         .attendance-table tr:last-child td {
@@ -628,19 +674,21 @@ function tanggal_indonesia($tanggal) {
         .present-status {
             background-color: #e6f7ed;
             color: #2ecc71;
-            font-weight: 600;
+            font-weight: 500;
             padding: 5px 10px;
             border-radius: 15px;
             display: inline-block;
+            font-size: 0.85rem;
         }
 
         .absent-status {
             background-color: #fdeaea;
-            color: #e74c3c;
-            font-weight: 600;
+            color: var(--danger-color);
+            font-weight: 500;
             padding: 5px 10px;
             border-radius: 15px;
             display: inline-block;
+            font-size: 0.85rem;
         }
 
         /* Buttons */
@@ -648,15 +696,17 @@ function tanggal_indonesia($tanggal) {
             padding: 8px 15px;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
             margin: 3px;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             font-weight: 500;
+            font-size: 0.9rem;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background-color: #3b82f6;
+            background-color: var(--secondary-color);
+            box-shadow: var(--shadow-sm);
         }
 
         .btn i {
@@ -664,34 +714,56 @@ function tanggal_indonesia($tanggal) {
         }
 
         .btn:hover {
-            background-color: #2563eb;
+            background-color: var(--secondary-dark);
             transform: translateY(-2px);
-            box-shadow: 0 3px 8px rgba(59, 130, 246, 0.3);
+            box-shadow: var(--shadow-md);
         }
 
         .btn-danger {
-            background-color: #e74c3c;
+            background-color: var(--danger-color);
         }
 
         .btn-danger:hover {
             background-color: #c0392b;
             transform: translateY(-2px);
-            box-shadow: 0 3px 8px rgba(231, 76, 60, 0.3);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-confirm {
+            background-color: var(--secondary-color);
+        }
+
+        .btn-confirm:hover {
+            background-color: var(--secondary-dark);
+            transform: translateY(-2px);
+        }
+
+        .btn-cancel {
+            background-color: #f0f0f0;
+            color: var(--text-secondary);
+            border: none;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-cancel:hover {
+            background-color: #e0e0e0;
+            transform: translateY(-2px);
         }
 
         /* Empty Message */
         .empty-state {
             text-align: center;
-            color: #64748b;
-            font-size: 15px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
             padding: 20px;
             background: #f8fafc;
             border-radius: 8px;
             border: 1px solid #e2e8f0;
+            font-weight: 400;
         }
 
         .empty-state i {
-            font-size: 2.5rem;
+            font-size: 2rem;
             color: #95a5a6;
             margin-bottom: 15px;
             display: block;
@@ -701,7 +773,7 @@ function tanggal_indonesia($tanggal) {
         .menu-toggle {
             display: none;
             color: white;
-            font-size: 24px;
+            font-size: 1.5rem;
             cursor: pointer;
             transition: transform 0.3s ease;
         }
@@ -719,6 +791,182 @@ function tanggal_indonesia($tanggal) {
         @keyframes slideIn {
             from { transform: translateY(20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes cardFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Success Modal Animations */
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
+        }
+
+        /* Success Modal Styling */
+        .success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
+        }
+
+        .success-modal {
+            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            border-radius: 16px;
+            padding: 30px 25px;
+            text-align: center;
+            max-width: 90%;
+            width: 400px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+            transform: scale(0.5);
+            opacity: 0;
+            animation: popInModal 0.7s ease-out forwards;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .success-icon {
+            font-size: 3.5rem;
+            color: var(--secondary-color);
+            margin-bottom: 15px;
+            animation: bounceIn 0.6s ease-out;
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        .success-modal h3 {
+            color: var(--primary-dark);
+            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            animation: slideUpText 0.5s ease-out 0.2s both;
+        }
+
+        .success-modal p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            font-weight: 400;
+            margin: 0;
+            line-height: 1.5;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+            max-width: 80%;
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            opacity: 0.8;
+            animation: confettiFall 4s ease-out forwards;
+            transform-origin: center;
+        }
+
+        .confetti:nth-child(odd) {
+            background: var(--accent-color);
+        }
+
+        .confetti:nth-child(even) {
+            background: var(--secondary-color);
+        }
+
+        .modal-content-confirm {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .modal-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 15px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+        }
+
+        .modal-row:last-child {
+            border-bottom: none;
+        }
+
+        .modal-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .modal-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .loading i {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         /* Responsive Design for Tablets (max-width: 768px) */
@@ -776,7 +1024,7 @@ function tanggal_indonesia($tanggal) {
             .welcome-banner {
                 padding: 20px;
                 border-radius: 12px;
-                box-shadow: 0 6px 15px rgba(37, 99, 235, 0.2);
+                box-shadow: var(--shadow-md);
                 position: relative;
                 display: flex;
                 flex-direction: row;
@@ -791,19 +1039,18 @@ function tanggal_indonesia($tanggal) {
             }
 
             .welcome-banner h2 {
-                font-size: 22px;
-                font-weight: 700;
-                margin-bottom: 8px;
+                font-size: 1.4rem;
+                font-weight: 600;
             }
 
             .welcome-banner .date {
-                font-size: 12px;
-                font-weight: 500;
+                font-size: 0.85rem;
+                font-weight: 400;
             }
 
             /* Summary Section */
             .summary-header h2 {
-                font-size: 20px;
+                font-size: 1.2rem;
             }
 
             .summary-header h2::after {
@@ -819,43 +1066,49 @@ function tanggal_indonesia($tanggal) {
             .stat-box {
                 padding: 18px;
                 border-radius: 12px;
-                box-shadow: 0 6px 15px rgba(0, 0, 0, 0.06);
+                box-shadow: var(--shadow-sm);
             }
 
             .stat-icon {
                 width: 48px;
                 height: 48px;
-                font-size: 22px;
+                font-size: 1.3rem;
                 border-radius: 10px;
             }
 
             .stat-title {
-                font-size: 13px;
+                font-size: 0.85rem;
                 font-weight: 500;
             }
 
             .stat-value {
-                font-size: 22px;
-                font-weight: 700;
+                font-size: 1.4rem;
+                font-weight: 600;
             }
 
             .stat-trend {
-                font-size: 12px;
+                font-size: 0.8rem;
             }
 
             /* Attendance Container */
             .attendance-container {
                 padding: 15px;
                 border-radius: 12px;
+                background: #ffffff;
+                box-shadow: var(--shadow-sm);
             }
 
             .attendance-title {
-                font-size: 18px;
-                margin-bottom: 15px;
+                font-size: 1.1rem;
+                margin-bottom: 20px;
+                color: var(--primary-dark);
+                font-weight: 600;
+                text-align: center;
             }
 
             .attendance-table {
-                border: 0;
+                display: block;
+                margin-top: 0;
                 box-shadow: none;
             }
 
@@ -863,49 +1116,147 @@ function tanggal_indonesia($tanggal) {
                 display: none;
             }
 
+            .attendance-table tbody {
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+
             .attendance-table tr {
-                display: block;
-                margin-bottom: 20px;
+                display: flex;
+                flex-direction: column;
+                background: #ffffff;
+                border: 1px solid #e0e0e0;
                 border-radius: 8px;
-                box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
-                overflow: hidden;
+                padding: 15px;
+                box-shadow: var(--shadow-sm);
+                transition: var(--transition);
+                animation: cardFadeIn 0.6s ease-out forwards;
+                opacity: 0;
+            }
+
+            .attendance-table tr:nth-child(1) {
+                animation-delay: 0.1s;
+            }
+
+            .attendance-table tr:nth-child(2) {
+                animation-delay: 0.2s;
+            }
+
+            .attendance-table tr:hover {
+                box-shadow: var(--shadow-md);
+                transform: translateY(-2px);
             }
 
             .attendance-table td {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                text-align: right;
-                padding: 12px 15px;
-                border-bottom: 1px solid #e9ecef;
+                padding: 8px 0;
+                border-bottom: none;
+                font-size: 0.9rem;
+                color: var(--text-primary);
+                font-weight: 400;
             }
 
-            .attendance-table td:before {
+            .attendance-table td::before {
                 content: attr(data-label);
-                font-weight: 600;
-                text-align: left;
-                color: #34495e;
+                font-weight: 500;
+                color: var(--primary-dark);
+                text-transform: uppercase;
+                font-size: 0.8rem;
+                letter-spacing: 0.5px;
             }
 
-            .attendance-table td:last-child {
-                border-bottom: 0;
+            .attendance-table td[data-label="Absensi"] {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+                padding: 10px 0;
             }
 
-            .btn {
+            .attendance-table .present-status, 
+            .attendance-table .absent-status {
+                padding: 6px 12px;
+                font-size: 0.85rem;
+                border-radius: 4px;
+                font-weight: 500;
+                border: 1px solid #ccc;
+            }
+
+            .attendance-table .present-status {
+                background: #e6f7ed;
+                color: #2ecc71;
+                border-color: #2ecc71;
+            }
+
+            .attendance-table .absent-status {
+                background: #fdeaea;
+                color: var(--danger-color);
+                border-color: var(--danger-color);
+            }
+
+            .attendance-table .btn {
                 width: 100%;
-                margin: 3px 0;
+                padding: 10px;
+                font-size: 0.9rem;
+                border-radius: 8px;
+                background: var(--primary-dark);
+                color: #ffffff;
+                border: 1px solid var(--primary-dark);
+                box-shadow: var(--shadow-sm);
+                transition: var(--transition);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                font-weight: 500;
+            }
+
+            .attendance-table .btn:hover {
+                background: #0f1e3d;
+                border-color: #0f1e3d;
+                transform: scale(1.02);
+                box-shadow: var(--shadow-md);
+            }
+
+            .attendance-table .btn-danger {
+                background: var(--danger-color);
+                border-color: var(--danger-color);
+            }
+
+            .attendance-table .btn-danger:hover {
+                background: #c0392b;
+                border-color: #c0392b;
+                transform: scale(1.02);
+                box-shadow: var(--shadow-md);
             }
 
             form[style="display: inline;"] {
                 display: block !important;
-                margin-bottom: 5px;
+                width: 100%;
+            }
+
+            .success-modal {
+                width: 90%;
+                padding: 25px;
+            }
+
+            .success-icon {
+                font-size: 3rem;
+            }
+
+            .success-modal h3 {
+                font-size: 1.25rem;
+            }
+
+            .success-modal p {
+                font-size: 0.9rem;
             }
         }
 
         /* Responsive Design for Small Phones (max-width: 480px) */
         @media (max-width: 480px) {
             .menu-toggle {
-                font-size: 20px;
+                font-size: 1.3rem;
                 left: 15px;
                 top: 50%;
                 transform: translateY(-50%);
@@ -916,17 +1267,17 @@ function tanggal_indonesia($tanggal) {
             }
 
             .sidebar-header .bank-name {
-                font-size: 22px;
+                font-size: 1.4rem;
             }
 
             .menu-item a, .dropdown-btn {
                 padding: 12px 20px;
-                font-size: 14px;
+                font-size: 0.85rem;
             }
 
             .dropdown-container a {
                 padding: 10px 15px 10px 50px;
-                font-size: 13px;
+                font-size: 0.8rem;
             }
 
             .main-content {
@@ -944,16 +1295,16 @@ function tanggal_indonesia($tanggal) {
             }
 
             .welcome-banner h2 {
-                font-size: 18px;
+                font-size: 1.2rem;
             }
 
             .welcome-banner .date {
-                font-size: 11px;
+                font-size: 0.8rem;
             }
 
             /* Summary Section */
             .summary-header h2 {
-                font-size: 18px;
+                font-size: 1.1rem;
             }
 
             .summary-header h2::after {
@@ -968,19 +1319,19 @@ function tanggal_indonesia($tanggal) {
             .stat-icon {
                 width: 42px;
                 height: 42px;
-                font-size: 20px;
+                font-size: 1.2rem;
             }
 
             .stat-title {
-                font-size: 12px;
+                font-size: 0.8rem;
             }
 
             .stat-value {
-                font-size: 20px;
+                font-size: 1.3rem;
             }
 
             .stat-trend {
-                font-size: 11px;
+                font-size: 0.75rem;
             }
 
             /* Attendance Container */
@@ -989,12 +1340,29 @@ function tanggal_indonesia($tanggal) {
             }
 
             .attendance-title {
-                font-size: 16px;
+                font-size: 1rem;
+            }
+
+            .success-modal {
+                padding: 20px;
+            }
+
+            .success-icon {
+                font-size: 2.5rem;
+            }
+
+            .success-modal h3 {
+                font-size: 1.15rem;
+            }
+
+            .success-modal p {
+                font-size: 0.85rem;
             }
         }
     </style>
 </head>
 <body>
+    <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h1 class="bank-name">SCHOBANK</h1>
@@ -1040,9 +1408,6 @@ function tanggal_indonesia($tanggal) {
                         <a href="data_siswa.php">
                             <i class="fas fa-user-plus"></i> Buka Rekening
                         </a>
-                        <!-- <a href="tutup_rek.php">
-                            <i class="fas fa-user-slash"></i> Tutup Rekening
-                        </a> -->
                     </div>
                 </div>
 
@@ -1099,6 +1464,7 @@ function tanggal_indonesia($tanggal) {
         </div>
     </div>
 
+    <!-- Main Content -->
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <span class="menu-toggle" id="menuToggle">
@@ -1159,6 +1525,20 @@ function tanggal_indonesia($tanggal) {
                         </div>
                     </div>
                 </div>
+                
+                <!-- <div class="stat-box admin-transfer">
+                    <div class="stat-icon">
+                        <i class="fas fa-user-plus"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-title">Penambahan Saldo oleh Admin</div>
+                        <div class="stat-value">Rp <?= number_format($saldo_tambahan, 0, ',', '.') ?></div>
+                        <div class="stat-trend">
+                            <i class="fas fa-hand-holding-usd"></i>
+                            <span>Transfer Admin</span>
+                        </div>
+                    </div>
+                </div> -->
                 
                 <div class="stat-box balance">
                     <div class="stat-icon">
@@ -1223,23 +1603,17 @@ function tanggal_indonesia($tanggal) {
                             </td>
                             <td data-label="Absensi">
                                 <?php if (!$attendance_petugas1): ?>
-                                    <form method="post" style="display: inline;">
-                                        <button type="submit" name="check_in_petugas1" class="btn">
-                                            <i class="fas fa-fingerprint"></i> Hadir
-                                        </button>
-                                    </form>
-                                    <form method="post" style="display: inline;">
-                                        <button type="submit" name="absent_petugas1" class="btn btn-danger">
-                                            <i class="fas fa-times"></i> Tidak Hadir
-                                        </button>
-                                    </form>
+                                    <button type="button" class="btn" onclick="showAttendanceModal('check_in_petugas1', 'Absen Masuk Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
+                                        <i class="fas fa-fingerprint"></i> Hadir
+                                    </button>
+                                    <button type="button" class="btn btn-danger" onclick="showAttendanceModal('absent_petugas1', 'Tandai Tidak Hadir Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
+                                        <i class="fas fa-times"></i> Tidak Hadir
+                                    </button>
                                 <?php elseif ($attendance_petugas1 && !$attendance_petugas1['waktu_keluar'] && 
                                             $attendance_petugas1['petugas1_status'] == 'hadir'): ?>
-                                    <form method="post">
-                                        <button type="submit" name="check_out_petugas1" class="btn">
-                                            <i class="fas fa-sign-out-alt"></i> Absen Pulang
-                                        </button>
-                                    </form>
+                                    <button type="button" class="btn" onclick="showAttendanceModal('check_out_petugas1', 'Absen Pulang Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
+                                        <i class="fas fa-sign-out-alt"></i> Absen Pulang
+                                    </button>
                                 <?php else: ?>
                                     <span>Selesai</span>
                                 <?php endif; ?>
@@ -1277,23 +1651,17 @@ function tanggal_indonesia($tanggal) {
                             </td>
                             <td data-label="Absensi">
                                 <?php if (!$attendance_petugas2): ?>
-                                    <form method="post" style="display: inline;">
-                                        <button type="submit" name="check_in_petugas2" class="btn">
-                                            <i class="fas fa-fingerprint"></i> Hadir
-                                        </button>
-                                    </form>
-                                    <form method="post" style="display: inline;">
-                                        <button type="submit" name="absent_petugas2" class="btn btn-danger">
-                                            <i class="fas fa-times"></i> Tidak Hadir
-                                        </button>
-                                    </form>
+                                    <button type="button" class="btn" onclick="showAttendanceModal('check_in_petugas2', 'Absen Masuk Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
+                                        <i class="fas fa-fingerprint"></i> Hadir
+                                    </button>
+                                    <button type="button" class="btn btn-danger" onclick="showAttendanceModal('absent_petugas2', 'Tandai Tidak Hadir Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
+                                        <i class="fas fa-times"></i> Tidak Hadir
+                                    </button>
                                 <?php elseif ($attendance_petugas2 && !$attendance_petugas2['waktu_keluar'] && 
                                             $attendance_petugas2['petugas2_status'] == 'hadir'): ?>
-                                    <form method="post">
-                                        <button type="submit" name="check_out_petugas2" class="btn">
-                                            <i class="fas fa-sign-out-alt"></i> Absen Pulang
-                                        </button>
-                                    </form>
+                                    <button type="button" class="btn" onclick="showAttendanceModal('check_out_petugas2', 'Absen Pulang Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
+                                        <i class="fas fa-sign-out-alt"></i> Absen Pulang
+                                    </button>
                                 <?php else: ?>
                                     <span>Selesai</span>
                                 <?php endif; ?>
@@ -1306,6 +1674,50 @@ function tanggal_indonesia($tanggal) {
                     <i class="fas fa-info-circle"></i> Belum ada jadwal petugas untuk hari ini.
                 </div>
             <?php endif; ?>
+        </div>
+
+        <!-- Success Modal for Attendance -->
+        <?php if (isset($_GET['attendance_success'])): ?>
+            <div class="success-overlay" id="attendanceSuccessModal">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>BERHASIL</h3>
+                    <p><?= htmlspecialchars(urldecode($_GET['attendance_success'])) ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Confirmation Modal for Attendance -->
+        <div class="success-overlay" id="attendanceConfirmModal" style="display: none;">
+            <div class="success-modal">
+                <div class="success-icon">
+                    <i class="fas fa-fingerprint"></i>
+                </div>
+                <h3 id="modalTitle">Konfirmasi Absensi</h3>
+                <div class="modal-content-confirm">
+                    <div class="modal-row">
+                        <span class="modal-label">Nama Petugas</span>
+                        <span class="modal-value" id="modalPetugasName"></span>
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-label">Aksi</span>
+                        <span class="modal-value" id="modalAction"></span>
+                    </div>
+                </div>
+                <form action="" method="POST" id="attendanceConfirmForm">
+                    <input type="hidden" name="action" id="modalActionInput">
+                    <div class="modal-buttons">
+                        <button type="submit" class="btn btn-confirm" id="confirm-btn">
+                            <i class="fas fa-check"></i> Konfirmasi
+                        </button>
+                        <button type="button" class="btn btn-cancel" onclick="hideAttendanceModal()">
+                            <i class="fas fa-times"></i> Batal
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -1359,7 +1771,66 @@ function tanggal_indonesia($tanggal) {
                     }
                 });
             });
+
+            // Success modal handling
+            const successModal = document.querySelector('#attendanceSuccessModal .success-modal');
+            if (successModal) {
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    const delay = Math.random() * 1;
+                    const duration = Math.random() * 2 + 3;
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = `${delay}s`;
+                    confetti.style.animationDuration = `${duration}s`;
+                    successModal.appendChild(confetti);
+                }
+                setTimeout(() => {
+                    const overlay = successModal.closest('.success-overlay');
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => {
+                        overlay.remove();
+                        window.location.href = 'dashboard.php';
+                    }, 500);
+                }, 2000);
+            }
+
+            // Confirmation modal handling
+            const confirmModal = document.querySelector('#attendanceConfirmModal .success-modal');
+            if (confirmModal) {
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    confirmModal.appendChild(confetti);
+                }
+            }
+
+            // Confirm form handling
+            const confirmForm = document.getElementById('attendanceConfirmForm');
+            const confirmBtn = document.getElementById('confirm-btn');
+            if (confirmForm && confirmBtn) {
+                confirmForm.addEventListener('submit', function() {
+                    confirmBtn.classList.add('loading');
+                    confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
+                });
+            }
         });
+
+        // Attendance Modal Functions
+        function showAttendanceModal(action, title, petugasName) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalPetugasName').textContent = petugasName;
+            document.getElementById('modalAction').textContent = title;
+            document.getElementById('modalActionInput').name = action;
+            document.getElementById('attendanceConfirmModal').style.display = 'flex';
+        }
+
+        function hideAttendanceModal() {
+            document.getElementById('attendanceConfirmModal').style.display = 'none';
+        }
     </script>
 </body>
 </html>

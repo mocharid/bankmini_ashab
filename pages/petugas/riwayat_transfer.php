@@ -701,7 +701,7 @@ $stmt->close();
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-history"></i> Riwayat Transfer oleh Petugas</h2>
+            <h2>Riwayat Transfer oleh Petugas</h2>
             <p>Transaksi Transfer yang diproses oleh petugas</p>
         </div>
 

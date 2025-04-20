@@ -2,6 +2,20 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
+// Check for Composer autoloader (for PHPMailer)
+$autoload_path = '../../vendor/autoload.php';
+$phpmailer_available = false;
+if (file_exists($autoload_path)) {
+    require_once $autoload_path;
+    $phpmailer_available = true;
+} else {
+    error_log("Composer autoloader not found at $autoload_path. Email sending will be disabled.");
+}
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+// Session check
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin'])) {
     header('Location: ../login.php');
     exit();
@@ -10,137 +24,274 @@ if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin
 $error = '';
 $success = false;
 $nasabah = null;
-$pin_verified = false;
+$email_status = '';
+
+// Check for session messages
+if (isset($_SESSION['success_message'])) {
+    $success = true;
+    $email_status = $_SESSION['email_status'] ?? '';
+    unset($_SESSION['success_message'], $_SESSION['email_status']);
+}
+if (isset($_SESSION['error_message'])) {
+    $error = $_SESSION['error_message'];
+    unset($_SESSION['error_message']);
+}
+if (isset($_SESSION['nasabah'])) {
+    $nasabah = $_SESSION['nasabah'];
+    unset($_SESSION['nasabah']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $no_rekening = $_POST['no_rekening'] ?? '';
     
-    if (empty($no_rekening) || $no_rekening === 'REK') {
-        $error = 'Nomor rekening tidak boleh kosong.';
-    } else {
-        // Fetch account details
-        $query = "SELECT r.id AS rekening_id, r.saldo, r.user_id, u.nama, u.username, u.email, u.pin, u.jurusan_id, u.kelas_id, 
-                        j.nama_jurusan, k.nama_kelas, r.no_rekening 
-                 FROM rekening r 
-                 JOIN users u ON r.user_id = u.id 
-                 LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                 LEFT JOIN kelas k ON u.kelas_id = k.id
-                 WHERE r.no_rekening = ?";
-        
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("s", $no_rekening);
-        $stmt->execute();
-        $result = $stmt->get_result();
+    // Validate account number (must be REK + 6 digits)
+    if (empty($no_rekening) || $no_rekening === 'REK' || !preg_match('/^REK[0-9]{6}$/', $no_rekening)) {
+        $_SESSION['error_message'] = 'Nomor rekening harus terdiri dari prefix REK diikuti 6 digit angka.';
+        header('Location: tutup_rek.php');
+        exit();
+    }
 
-        if ($result->num_rows > 0) {
-            $nasabah = $result->fetch_assoc();
-            
-            // Verify PIN if provided
-            if (isset($_POST['verify_pin']) && !empty($nasabah['pin'])) {
-                $pin = implode('', [
-                    $_POST['pin1'] ?? '',
-                    $_POST['pin2'] ?? '',
-                    $_POST['pin3'] ?? '',
-                    $_POST['pin4'] ?? '',
-                    $_POST['pin5'] ?? '',
-                    $_POST['pin6'] ?? ''
-                ]);
-                if ($pin === $nasabah['pin']) {
-                    $pin_verified = true;
-                } else {
-                    $error = 'PIN salah. Silakan coba lagi.';
-                }
+    // Fetch account details
+    $query = "SELECT r.id AS rekening_id, r.saldo, r.user_id, u.nama, u.username, u.email, u.jurusan_id, u.kelas_id, 
+                     j.nama_jurusan, k.nama_kelas, r.no_rekening 
+              FROM rekening r 
+              JOIN users u ON r.user_id = u.id 
+              LEFT JOIN jurusan j ON u.jurusan_id = j.id
+              LEFT JOIN kelas k ON u.kelas_id = k.id
+              WHERE r.no_rekening = ?";
+    
+    $stmt = $conn->prepare($query);
+    if (!$stmt) {
+        $_SESSION['error_message'] = 'Gagal mempersiapkan query pencarian rekening: ' . $conn->error;
+        error_log("Prepare failed for account lookup: " . $conn->error);
+        header('Location: tutup_rek.php');
+        exit();
+    }
+
+    $stmt->bind_param("s", $no_rekening);
+    if (!$stmt->execute()) {
+        $_SESSION['error_message'] = 'Gagal menjalankan query pencarian rekening: ' . $stmt->error;
+        error_log("Execute failed for account lookup: " . $stmt->error);
+        header('Location: tutup_rek.php');
+        exit();
+    }
+
+    $result = $stmt->get_result();
+    if ($result->num_rows > 0) {
+        $nasabah = $result->fetch_assoc();
+        $_SESSION['nasabah'] = $nasabah; // Store in session for display after redirect
+
+        // Handle account and user deletion
+        if (isset($_POST['confirm'])) {
+            $rekening_id = $nasabah['rekening_id'];
+            $user_id = $nasabah['user_id'];
+            $admin_id = $_SESSION['user_id'];
+            $saldo = $nasabah['saldo'];
+            $email = $nasabah['email'];
+
+            // Validate input data
+            if (!is_numeric($rekening_id) || !is_numeric($user_id) || !is_numeric($admin_id)) {
+                $_SESSION['error_message'] = 'Data tidak valid: ID rekening, pengguna, atau admin tidak valid.';
+                error_log("Invalid input data: rekening_id=$rekening_id, user_id=$user_id, admin_id=$admin_id");
+                header('Location: tutup_rek.php');
+                exit();
+            } elseif ($saldo > 0) {
+                $_SESSION['error_message'] = 'Penghapusan rekening tidak dapat dilakukan karena masih terdapat sisa saldo Rp ' . number_format($saldo, 0, ',', '.') . '. Harap kosongkan saldo terlebih dahulu.';
+                header('Location: tutup_rek.php');
+                exit();
             }
 
-            // Handle account and user deletion
-            if (isset($_POST['confirm'])) {
-                $pin_verified_from_form = isset($_POST['pin_verified']) && $_POST['pin_verified'] === '1';
-                if ($pin_verified || $pin_verified_from_form || empty($nasabah['pin'])) {
-                    $rekening_id = $nasabah['rekening_id'];
-                    $user_id = $nasabah['user_id'];
-                    $admin_id = $_SESSION['user_id'];
-                    $saldo = $nasabah['saldo'];
+            $conn->begin_transaction();
+            try {
+                // // Log deletion to file
+                // $log_message = date('Y-m-d H:i:s') . " - Account deletion: no_rekening=$no_rekening, user_id=$user_id, admin_id=$admin_id, reason=" . ($_POST['reason'] ?? 'No reason provided') . "\n";
+                // file_put_contents('deletion_log.txt', $log_message, FILE_APPEND);
 
-                    $conn->begin_transaction();
-                    try {
-                        // 1. Log the action in log_aktivitas (before deleting user)
-                        $query = "INSERT INTO log_aktivitas (petugas_id, siswa_id, jenis_pemulihan, nilai_baru, alasan, alasan_pemulihan, waktu) 
-                                 VALUES (?, ?, ?, ?, ?, ?, NOW())";
-                        $stmt = $conn->prepare($query);
-                        $action = "pin";
-                        $nilai_baru = "";
-                        $alasan = "Penutupan rekening $no_rekening dan penghapusan pengguna oleh {$_SESSION['role']}";
-                        $alasan_pemulihan = $_POST['reason'] ?? "Penutupan rekening dan penghapusan pengguna tanpa alasan spesifik";
-                        if ($saldo > 0) {
-                            $alasan .= " dengan sisa saldo Rp " . number_format($saldo, 0, ',', '.') . " akan dibayarkan";
-                            $alasan_pemulihan .= " (Sisa saldo Rp " . number_format($saldo, 0, ',', '.') . " akan dibayarkan)";
-                        }
-                        $stmt->bind_param("iissss", $admin_id, $user_id, $action, $nilai_baru, $alasan, $alasan_pemulihan);
-                        $stmt->execute();
+                // 1. Delete related mutasi
+                $query = "DELETE m FROM mutasi m 
+                         JOIN transaksi t ON m.transaksi_id = t.id 
+                         WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?";
+                $stmt = $conn->prepare($query);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed for mutasi deletion: " . $conn->error);
+                }
+                $stmt->bind_param("ii", $rekening_id, $rekening_id);
+                if (!$stmt->execute()) {
+                    throw new Exception("Execute failed for mutasi deletion: " . $stmt->error);
+                }
+                $stmt->close();
 
-                        // 2. Delete related mutasi
-                        $query = "DELETE m FROM mutasi m 
-                                 JOIN transaksi t ON m.transaksi_id = t.id 
-                                 WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("ii", $rekening_id, $rekening_id);
-                        $stmt->execute();
+                // 2. Delete related transaksi
+                $query = "DELETE FROM transaksi WHERE rekening_id = ? OR rekening_tujuan_id = ?";
+                $stmt = $conn->prepare($query);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed for transaksi deletion: " . $conn->error);
+                }
+                $stmt->bind_param("ii", $rekening_id, $rekening_id);
+                if (!$stmt->execute()) {
+                    throw new Exception("Execute failed for transaksi deletion: " . $stmt->error);
+                }
+                $stmt->close();
 
-                        // 3. Delete related transaksi
-                        $query = "DELETE FROM transaksi WHERE rekening_id = ? OR rekening_tujuan_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("ii", $rekening_id, $rekening_id);
-                        $stmt->execute();
+                // 3. Delete rekening
+                $query = "DELETE FROM rekening WHERE id = ?";
+                $stmt = $conn->prepare($query);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed for rekening deletion: " . $conn->error);
+                }
+                $stmt->bind_param("i", $rekening_id);
+                if (!$stmt->execute()) {
+                    throw new Exception("Execute failed for rekening deletion: " . $stmt->error);
+                }
+                $stmt->close();
 
-                        // 4. Delete rekening
-                        $query = "DELETE FROM rekening WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $rekening_id);
-                        $stmt->execute();
+                // 4. Delete related user data
+                $tables = [
+                    'active_sessions' => ['column' => 'user_id', 'id' => $user_id],
+                    'password_reset' => ['column' => 'user_id', 'id' => $user_id],
+                    'absensi' => ['column' => 'user_id', 'id' => $user_id],
+                    'notifications' => ['column' => 'user_id', 'id' => $user_id],
+                    'log_aktivitas' => ['column' => 'siswa_id', 'id' => $user_id],
+                    'saldo_transfers' => ['column' => 'petugas_id', 'id' => $user_id],
+                ];
 
-                        // 5. Delete related data from other tables
-                        $query = "DELETE FROM active_sessions WHERE user_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $user_id);
-                        $stmt->execute();
+                foreach ($tables as $table => $info) {
+                    // Verify table exists
+                    $result = $conn->query("SHOW TABLES LIKE '$table'");
+                    if ($result->num_rows === 0) {
+                        error_log("Table $table does not exist. Skipping deletion.");
+                        continue;
+                    }
 
-                        $query = "DELETE FROM notifications WHERE user_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $user_id);
-                        $stmt->execute();
+                    $query = "DELETE FROM $table WHERE {$info['column']} = ?";
+                    $stmt = $conn->prepare($query);
+                    if (!$stmt) {
+                        throw new Exception("Prepare failed for $table deletion: " . $conn->error);
+                    }
+                    $stmt->bind_param("i", $info['id']);
+                    if (!$stmt->execute()) {
+                        throw new Exception("Execute failed for $table deletion: " . $stmt->error);
+                    }
+                    $stmt->close();
+                }
 
-                        $query = "DELETE FROM saldo_transfers WHERE petugas_id = ? OR admin_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("ii", $user_id, $user_id);
-                        $stmt->execute();
+                // 5. Delete user
+                $query = "DELETE FROM users WHERE id = ?";
+                $stmt = $conn->prepare($query);
+                if (!$stmt) {
+                    throw new Exception("Prepare failed for users deletion: " . $conn->error);
+                }
+                $stmt->bind_param("i", $user_id);
+                if (!$stmt->execute()) {
+                    throw new Exception("Execute failed for users deletion: " . $stmt->error);
+                }
+                $stmt->close();
 
-                        $query = "DELETE FROM log_aktivitas WHERE siswa_id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $user_id);
-                        $stmt->execute();
-
-                        // 6. Delete user
-                        $query = "DELETE FROM users WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $user_id);
-                        $stmt->execute();
-
-                        $conn->commit();
-                        $success = true;
-                        $nasabah = null;
-                        $pin_verified = false;
-                    } catch (Exception $e) {
-                        $conn->rollback();
-                        $error = 'Gagal menutup rekening dan menghapus pengguna: ' . $e->getMessage();
-                        error_log("Account and user deletion error: " . $e->getMessage());
+                // 6. Send email notification
+                if ($phpmailer_available && !empty($email)) {
+                    if (sendEmailNotification($email, $nasabah['nama'], $no_rekening, $saldo)) {
+                        $email_status = 'success';
+                    } else {
+                        $email_status = 'failed';
+                        error_log("Email sending failed for $email");
                     }
                 } else {
-                    $error = 'PIN belum diverifikasi. Silakan masukkan PIN terlebih dahulu.';
+                    $email_status = $phpmailer_available ? 'no_email' : 'phpmailer_unavailable';
+                    if (!$phpmailer_available) {
+                        error_log("PHPMailer not available for sending email.");
+                    }
                 }
+
+                $conn->commit();
+                $_SESSION['success_message'] = true;
+                $_SESSION['email_status'] = $email_status;
+                unset($_SESSION['nasabah']); // Clear nasabah data
+            } catch (Exception $e) {
+                $conn->rollback();
+                $_SESSION['error_message'] = 'Gagal menutup rekening dan menghapus pengguna: ' . $e->getMessage();
+                error_log("Account and user deletion error: " . $e->getMessage());
             }
+            header('Location: tutup_rek.php');
+            exit();
         } else {
-            $error = 'Nomor rekening tidak ditemukan.';
+            // Redirect after successful search
+            header('Location: tutup_rek.php');
+            exit();
         }
+    } else {
+        $_SESSION['error_message'] = 'Nomor rekening tidak ditemukan.';
+        header('Location: tutup_rek.php');
+        exit();
+    }
+    $stmt->close();
+}
+
+function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
+    global $phpmailer_available;
+    if (!$phpmailer_available) {
+        error_log("PHPMailer not available. Skipping email sending.");
+        return false;
+    }
+
+    try {
+        $mail = new PHPMailer(true);
+        $mail->isSMTP();
+        $mail->Host = 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'mocharid.ip@gmail.com';
+        $mail->Password = 'spjs plkg ktuu lcxh'; // Ensure this is a valid App Password
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = 587;
+        $mail->CharSet = 'UTF-8';
+        
+        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+        $mail->addAddress($email, $nama);
+        $mail->addReplyTo('no-reply@schobank.com', 'No Reply');
+        
+        $mail->isHTML(true);
+        $mail->Subject = 'Penutupan Rekening - SCHOBANK SYSTEM';
+        
+        $saldo_text = $saldo > 0 ? "Sisa saldo Rp " . number_format($saldo, 0, ',', '.') . " akan dibayarkan sesuai prosedur." : "Tidak ada sisa saldo.";
+        
+        $emailBody = "
+        <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;'>
+            <div style='text-align: center; padding: 15px; background-color: #f5f5f5; border-radius: 8px 8px 0 0;'>
+                <h2 style='color: #0a2e5c; margin: 0; font-size: 24px;'>SCHOBANK SYSTEM</h2>
+            </div>
+            <div style='padding: 20px;'>
+                <p style='font-size: 16px; color: #333; margin-bottom: 20px;'>Yth. Bapak/Ibu <strong>{$nama}</strong>,</p>
+                <p style='font-size: 14px; color: #333; line-height: 1.6; margin-bottom: 20px;'>
+                    Kami menginformasikan bahwa rekening Anda dengan nomor <strong>{$no_rekening}</strong> telah ditutup dan akun Anda telah dihapus dari sistem SCHOBANK SYSTEM. Tindakan ini bersifat permanen dan tidak dapat dikembalikan.
+                </p>
+                <table style='width: 100%; border-collapse: collapse; margin-bottom: 20px;'>
+                    <tr>
+                        <td style='padding: 8px; font-size: 14px; color: #333; width: 40%;'>Nomor Rekening</td>
+                        <td style='padding: 8px; font-size: 14px; color: #333;'>: {$no_rekening}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px; font-size: 14px; color: #333;'>Status Saldo</td>
+                        <td style='padding: 8px; font-size: 14px; color: #333;'>: {$saldo_text}</td>
+                    </tr>
+                </table>
+                <p style='font-size: 14px; color: #333; line-height: 1.6; margin-bottom: 20px;'>
+                    Jika Anda memiliki pertanyaan atau memerlukan informasi lebih lanjut, silakan hubungi tim kami melalui kanal resmi SCHOBANK SYSTEM.
+                </p>
+                <p style='font-size: 14px; color: #333; margin-bottom: 20px;'>Hormat kami,<br><strong>Tim SCHOBANK SYSTEM</strong></p>
+            </div>
+            <div style='text-align: center; padding: 15px; background-color: #f5f5f5; border-radius: 0 0 8px 8px; font-size: 12px; color: #777;'>
+                <p style='margin: 0;'>Email ini dibuat secara otomatis. Mohon tidak membalas email ini.</p>
+                <p style='margin: 0;'>© " . date('Y') . " SCHOBANK SYSTEM. Hak cipta dilindungi.</p>
+            </div>
+        </div>";
+        
+        $mail->Body = $emailBody;
+        $mail->AltBody = strip_tags("Yth. Bapak/Ibu {$nama},\n\nKami menginformasikan bahwa rekening Anda dengan nomor {$no_rekening} telah ditutup dan akun Anda telah dihapus dari sistem SCHOBANK SYSTEM. Tindakan ini bersifat permanen dan tidak dapat dikembalikan.\n\nNomor Rekening: {$no_rekening}\nStatus Saldo: {$saldo_text}\n\nJika Anda memiliki pertanyaan atau memerlukan informasi lebih lanjut, silakan hubungi tim kami melalui kanal resmi SCHOBANK SYSTEM.\n\nHormat kami,\nTim SCHOBANK SYSTEM\n\n© " . date('Y') . " SCHOBANK SYSTEM. Hak cipta dilindungi.");
+        
+        $mail->send();
+        return true;
+    } catch (Exception $e) {
+        error_log("Email sending failed for $email: " . $mail->ErrorInfo);
+        return false;
     }
 }
 ?>
@@ -324,37 +475,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             transform: scale(1.02);
         }
 
-        .pin-input-container {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin: 15px 0;
-        }
-
-        .pin-input {
-            width: 50px;
-            height: 50px;
-            text-align: center;
-            font-size: clamp(1.1rem, 2.5vw, 1.3rem);
-            border: 2px solid #ddd;
-            border-radius: 50%;
-            transition: var(--transition);
-            -webkit-text-size-adjust: none;
-            background-color: #fff;
-            color: var(--text-primary);
-        }
-
-        .pin-input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.05);
-        }
-
-        .pin-input.filled {
-            border-color: var(--primary-color);
-            background-color: var(--primary-light);
-        }
-
         button {
             background-color: var(--primary-color);
             color: white;
@@ -386,14 +506,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .btn-danger:hover {
             background-color: #d32f2f;
-        }
-
-        .btn-confirm {
-            background-color: var(--secondary-color);
-        }
-
-        .btn-confirm:hover {
-            background-color: var(--secondary-dark);
         }
 
         .results-card {
@@ -555,26 +667,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             pointer-events: none;
         }
 
-        .btn-loading span {
+        .btn-loading > * {
             visibility: hidden;
         }
 
         .btn-loading::after {
-            content: "";
+            content: "....";
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: rotate 0.8s linear infinite;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            animation: pulseDots 2s infinite;
         }
 
-        @keyframes rotate {
-            to { transform: rotate(360deg); }
+        @keyframes pulseDots {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
         }
 
         .section-title {
@@ -645,6 +756,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             .deposit-form {
                 gap: 15px;
+                justify-items: center;
+            }
+
+            .deposit-form button#searchBtn {
+                margin: 0 auto;
             }
 
             .section-title {
@@ -655,12 +771,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             textarea {
                 padding: 10px 12px;
                 font-size: clamp(0.85rem, 2vw, 0.95rem);
-            }
-
-            .pin-input {
-                width: 42px;
-                height: 42px;
-                font-size: clamp(1rem, 2vw, 1.1rem);
             }
 
             button {
@@ -747,12 +857,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
-            .pin-input {
-                width: 36px;
-                height: 36px;
-                font-size: clamp(0.9rem, 2vw, 1rem);
-            }
-
             button {
                 padding: 8px 15px;
                 font-size: clamp(0.8rem, 2vw, 0.9rem);
@@ -799,17 +903,38 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-trash-alt"></i> Tutup Rekening dan Hapus Pengguna</h2>
+            <h2>Tutup Rekening dan Hapus Pengguna</h2>
             <p>Nonaktifkan rekening dan hapus pengguna beserta semua data terkait dari sistem</p>
         </div>
+
+        <?php if (!$phpmailer_available): ?>
+            <div id="alertContainer">
+                <div class="modal show">
+                    <div class="modal-content">
+                        <div class="modal-header error">
+                            <h3><i class="fas fa-exclamation-circle"></i> PHPMailer Tidak Tersedia</h3>
+                        </div>
+                        <div class="modal-body">
+                            <i class="fas fa-exclamation-circle error"></i>
+                            <h3>PHPMailer Tidak Tersedia</h3>
+                            <p>Email konfirmasi penutupan rekening tidak akan dikirim. Silakan instal Composer dan PHPMailer.</p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="modal-close-btn">
+                                <i class="fas fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <div class="deposit-card">
             <h3 class="section-title"><i class="fas fa-search"></i> Cari Rekening</h3>
             <form id="searchForm" action="" method="POST" class="deposit-form">
                 <div>
                     <label for="no_rekening">Nomor Rekening:</label>
-                    <input type="tel" id="no_rekening" name="no_rekening" inputmode="numeric" placeholder="REK..." required autofocus
-                           value="<?php echo isset($no_rekening) && $no_rekening !== 'REK' ? htmlspecialchars($no_rekening) : 'REK'; ?>">
+                    <input type="tel" id="no_rekening" name="no_rekening" inputmode="numeric" placeholder="REK123456" required autofocus value="REK">
                 </div>
                 <button type="submit" id="searchBtn">
                     <i class="fas fa-search"></i>
@@ -826,16 +951,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="detail-value"><?php echo htmlspecialchars($nasabah['nama'] ?? '-'); ?></div>
                 </div>
                 <div class="detail-row">
-                    <div class="detail-label">Username:</div>
-                    <div class="detail-value"><?php echo htmlspecialchars($nasabah['username'] ?? '-'); ?></div>
+                    <div class="detail-label">Nomor Rekening:</div>
+                    <div class="detail-value"><?php echo htmlspecialchars($nasabah['no_rekening'] ?? '-'); ?></div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-label">Email:</div>
                     <div class="detail-value"><?php echo htmlspecialchars($nasabah['email'] ?? '-'); ?></div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Nomor Rekening:</div>
-                    <div class="detail-value"><?php echo htmlspecialchars($nasabah['no_rekening'] ?? '-'); ?></div>
                 </div>
                 <div class="detail-row">
                     <div class="detail-label">Jurusan:</div>
@@ -845,59 +966,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="detail-label">Kelas:</div>
                     <div class="detail-value"><?php echo htmlspecialchars($nasabah['nama_kelas'] ?? '-'); ?></div>
                 </div>
-                <div class="detail-row">
-                    <div class="detail-label">Saldo:</div>
-                    <div class="detail-value">Rp <?php echo number_format($nasabah['saldo'], 0, ',', '.'); ?></div>
-                </div>
+                <br>
 
-                <?php if (!$pin_verified && !isset($_POST['confirm'])): ?>
-                    <?php if (!empty($nasabah['pin'])): ?>
-                        <form id="pinForm" action="" method="POST" class="deposit-form">
-                            <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($nasabah['no_rekening']); ?>">
-                            <div>
-                                <label>Masukkan PIN untuk Verifikasi:</label>
-                                <div class="pin-input-container">
-                                    <input type="password" inputmode="numeric" class="pin-input" name="pin1" maxlength="1" pattern="[0-9]" required autofocus>
-                                    <input type="password" inputmode="numeric" class="pin-input" name="pin2" maxlength="1" pattern="[0-9]" required>
-                                    <input type="password" inputmode="numeric" class="pin-input" name="pin3" maxlength="1" pattern="[0-9]" required>
-                                    <input type="password" inputmode="numeric" class="pin-input" name="pin4" maxlength="1" pattern="[0-9]" required>
-                                    <input type="password" inputmode="numeric" class="pin-input" name="pin5" maxlength="1" pattern="[0-9]" required>
-                                    <input type="password" inputmode="numeric" class="pin-input" name="pin6" maxlength="1" pattern="[0-9]" required>
-                                </div>
-                            </div>
-                            <button type="submit" name="verify_pin" id="verifyPinBtn" class="btn-confirm">
-                                <i class="fas fa-check"></i>
-                                <span>Verifikasi PIN</span>
-                            </button>
-                        </form>
-                    <?php else: ?>
-                        <form id="closeAccountForm" action="" method="POST" class="deposit-form">
-                            <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($nasabah['no_rekening']); ?>">
-                            <input type="hidden" name="pin_verified" value="1">
-                            <div>
-                                <label for="reason">Alasan Penghapusan:</label>
-                                <textarea id="reason" name="reason" rows="4" placeholder="Masukkan alasan penghapusan pengguna dan rekening" required></textarea>
-                            </div>
-                            <button type="submit" name="confirm" class="btn-danger" id="confirmBtn">
-                                <i class="fas fa-trash-alt"></i>
-                                <span>Konfirmasi Penghapusan</span>
-                            </button>
-                        </form>
-                    <?php endif; ?>
-                <?php elseif ($pin_verified || (isset($_POST['pin_verified']) && $_POST['pin_verified'] === '1')): ?>
-                    <form id="closeAccountForm" action="" method="POST" class="deposit-form">
-                        <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($nasabah['no_rekening']); ?>">
-                        <input type="hidden" name="pin_verified" value="1">
-                        <div>
-                            <label for="reason">Alasan Penghapusan:</label>
-                            <textarea id="reason" name="reason" rows="4" placeholder="Masukkan alasan penghapusan pengguna dan rekening" required></textarea>
-                        </div>
-                        <button type="submit" name="confirm" class="btn-danger" id="confirmBtn">
-                            <i class="fas fa-trash-alt"></i>
-                            <span>Konfirmasi Penghapusan</span>
-                        </button>
-                    </form>
-                <?php endif; ?>
+                <form id="closeAccountForm" action="" method="POST" class="deposit-form">
+                    <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($nasabah['no_rekening']); ?>">
+                    <input type="hidden" name="confirm" value="1">
+                    <div>
+                        <label for="reason">Alasan Penghapusan:</label>
+                        <textarea id="reason" name="reason" rows="4" placeholder="Masukkan alasan penghapusan pengguna dan rekening" required></textarea>
+                    </div>
+                    <button type="button" class="btn-danger" id="confirmBtn" onclick="confirmDeletion(<?php echo $nasabah['saldo']; ?>)">
+                        <i class="fas fa-trash-alt"></i>
+                        <span>Konfirmasi Penghapusan</span>
+                    </button>
+                </form>
             </div>
         <?php endif; ?>
 
@@ -911,8 +993,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <i class="fas fa-check-circle success"></i>
                     <h3>Pengguna dan Rekening Berhasil Dihapus</h3>
                     <p>Pengguna, rekening, dan semua data terkait telah dihapus dari sistem.
-                    <?php if (isset($saldo) && $saldo > 0): ?>
-                        Sisa saldo Rp <?php echo number_format($saldo, 0, ',', '.'); ?> akan dibayarkan.
+                    <?php if ($email_status === 'success'): ?>
+                        <br>Email konfirmasi telah dikirim.
+                    <?php elseif ($email_status === 'failed'): ?>
+                        <br>Gagal mengirim email konfirmasi. Silakan hubungi pengguna secara manual.
+                    <?php elseif ($email_status === 'no_email'): ?>
+                        <br>Tidak ada email pengguna untuk dikirim.
+                    <?php elseif ($email_status === 'phpmailer_unavailable'): ?>
+                        <br>PHPMailer tidak tersedia, email tidak dikirim.
                     <?php endif; ?>
                     </p>
                 </div>
@@ -925,7 +1013,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         </div>
 
         <!-- Error Modal -->
-        <div id="errorModal" class="modal<?php if ($error) echo ' show'; ?>">
+        <div id="errorModal" class="modal<?php if (!empty($error)) echo ' show'; ?>">
             <div class="modal-content">
                 <div class="modal-header error">
                     <h3><i class="fas fa-exclamation-circle"></i> Kesalahan</h3>
@@ -942,80 +1030,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>
             </div>
         </div>
-
-        <!-- Warning Modal (for deletion confirmation) -->
-        <?php if ($nasabah && !$pin_verified && !empty($nasabah['pin']) && isset($_POST['no_rekening']) && !isset($_POST['verify_pin'])): ?>
-            <div id="warningModal" class="modal show">
-                <div class="modal-content">
-                    <div class="modal-header warning">
-                        <h3><i class="fas fa-exclamation-triangle"></i> Perhatian</h3>
-                    </div>
-                    <div class="modal-body">
-                        <i class="fas fa-exclamation-triangle warning"></i>
-                        <h3>Verifikasi Diperlukan</h3>
-                        <p>Masukkan PIN untuk melanjutkan penghapusan rekening dan pengguna.</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="modal-close-btn">
-                            <i class="fas fa-xmark"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        <?php elseif ($nasabah && ($pin_verified || (isset($_POST['pin_verified']) && $_POST['pin_verified'] === '1') || empty($nasabah['pin']))): ?>
-            <div id="warningModal" class="modal show">
-                <div class="modal-content">
-                    <div class="modal-header warning">
-                        <h3><i class="fas fa-exclamation-triangle"></i> Peringatan</h3>
-                    </div>
-                    <div class="modal-body">
-                        <i class="fas fa-exclamation-triangle warning"></i>
-                        <h3>Konfirmasi Penghapusan</h3>
-                        <p>Tindakan ini akan menghapus pengguna, rekening, dan semua data terkait secara permanen.
-                        <?php if ($nasabah['saldo'] > 0): ?>
-                            Sisa saldo Rp <?php echo number_format($nasabah['saldo'], 0, ',', '.'); ?> akan dibayarkan.
-                        <?php endif; ?>
-                        </p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="modal-close-btn">
-                            <i class="fas fa-xmark"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        <?php endif; ?>
     </div>
 
     <script>
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        document.addEventListener('gesturestart', function(event) {
-            event.preventDefault();
-        });
-
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
         document.addEventListener('DOMContentLoaded', function() {
             const searchForm = document.getElementById('searchForm');
-            const pinForm = document.getElementById('pinForm');
             const closeAccountForm = document.getElementById('closeAccountForm');
             const searchBtn = document.getElementById('searchBtn');
-            const verifyPinBtn = document.getElementById('verifyPinBtn');
             const confirmBtn = document.getElementById('confirmBtn');
             const inputNoRek = document.getElementById('no_rekening');
-            const pinInputs = document.querySelectorAll('.pin-input');
             const successModal = document.getElementById('successModal');
             const errorModal = document.getElementById('errorModal');
-            const warningModal = document.getElementById('warningModal');
             const modalCloseBtns = document.querySelectorAll('.modal-close-btn');
             const prefix = "REK";
 
@@ -1024,29 +1049,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 inputNoRek.value = prefix;
             }
 
-            // Restrict account number to numbers only
+            // Restrict account number to exactly 6 digits after REK
             inputNoRek.addEventListener('input', function(e) {
                 let value = this.value;
                 if (!value.startsWith(prefix)) {
-                    this.value = prefix + value.replace(prefix, '');
+                    this.value = prefix;
                 }
-                let userInput = value.slice(prefix.length).replace(/[^0-9]/g, '');
+                let userInput = value.slice(prefix.length).replace(/[^0-9]/g, '').slice(0, 6);
                 this.value = prefix + userInput;
             });
 
             inputNoRek.addEventListener('keydown', function(e) {
                 let cursorPos = this.selectionStart;
+                let userInput = this.value.slice(prefix.length);
                 if ((e.key === 'Backspace' || e.key === 'Delete') && cursorPos <= prefix.length) {
+                    e.preventDefault();
+                }
+                if (userInput.length >= 6 && e.key.match(/[0-9]/) && cursorPos > prefix.length) {
                     e.preventDefault();
                 }
             });
 
             inputNoRek.addEventListener('paste', function(e) {
                 e.preventDefault();
-                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-                let currentValue = this.value.slice(prefix.length);
-                let newValue = prefix + (currentValue + pastedData);
-                this.value = newValue;
+                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+                this.value = prefix + pastedData;
             });
 
             inputNoRek.addEventListener('focus', function() {
@@ -1061,100 +1088,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
             });
 
-            // PIN input handling
-            if (pinInputs.length > 0) {
-                pinInputs.forEach((input, index) => {
-                    input.addEventListener('input', function(e) {
-                        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 1);
-                        if (this.value) {
-                            this.classList.add('filled');
-                            if (index < pinInputs.length - 1) {
-                                pinInputs[index + 1].focus();
-                            } else {
-                                verifyPinBtn.focus();
-                            }
-                        } else {
-                            this.classList.remove('filled');
-                        }
-                    });
-
-                    input.addEventListener('keydown', function(e) {
-                        if (e.key === 'Backspace' && !this.value && index > 0) {
-                            pinInputs[index - 1].focus();
-                            pinInputs[index - 1].value = '';
-                            pinInputs[index - 1].classList.remove('filled');
-                        }
-                    });
-
-                    input.addEventListener('paste', function(e) {
-                        e.preventDefault();
-                        let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-                        for (let i = 0; i < pastedData.length && i < pinInputs.length; i++) {
-                            pinInputs[i].value = pastedData[i];
-                            pinInputs[i].classList.add('filled');
-                        }
-                        if (pastedData.length < pinInputs.length) {
-                            pinInputs[pastedData.length].focus();
-                        } else {
-                            pinInputs[pinInputs.length - 1].focus();
-                        }
-                    });
-                });
-            }
-
-            // Form submission handling
+            // Form submission handling for search
             if (searchForm) {
                 searchForm.addEventListener('submit', function(e) {
                     const rekening = inputNoRek.value.trim();
-                    if (rekening === prefix) {
+                    if (rekening === prefix || rekening.length !== prefix.length + 6) {
                         e.preventDefault();
-                        showModal('errorModal', 'Silakan masukkan nomor rekening lengkap', 'Kesalahan');
+                        showModal('errorModal', 'Nomor rekening harus terdiri dari REK diikuti 6 digit angka', 'Kesalahan');
                         inputNoRek.classList.add('form-error');
                         setTimeout(() => inputNoRek.classList.remove('form-error'), 400);
                         inputNoRek.focus();
                         return;
                     }
+                    // Apply loading animation
                     searchBtn.classList.add('btn-loading');
+                    // Simulate processing with a 1.5-second delay
                     setTimeout(() => {
                         searchBtn.classList.remove('btn-loading');
-                    }, 800);
-                });
-            }
-
-            if (pinForm) {
-                pinForm.addEventListener('submit', function(e) {
-                    const pinValues = Array.from(pinInputs).map(input => input.value);
-                    if (pinValues.some(val => !val)) {
-                        e.preventDefault();
-                        showModal('errorModal', 'PIN harus 6 digit', 'Kesalahan');
-                        pinInputs.forEach(input => {
-                            if (!input.value) {
-                                input.classList.add('form-error');
-                                setTimeout(() => input.classList.remove('form-error'), 400);
-                            }
-                        });
-                        pinInputs[pinValues.findIndex(val => !val) || 0].focus();
-                        return;
-                    }
-                    verifyPinBtn.classList.add('btn-loading');
-                    setTimeout(() => {
-                        verifyPinBtn.classList.remove('btn-loading');
-                    }, 800);
-                });
-            }
-
-            if (closeAccountForm) {
-                closeAccountForm.addEventListener('submit', function(e) {
-                    if (!confirm('PERINGATAN: Anda akan menghapus pengguna, rekening, dan semua data terkait secara permanen. ' +
-                                 '<?php if ($nasabah && $nasabah['saldo'] > 0): ?>Sisa saldo Rp <?php echo number_format($nasabah['saldo'], 0, ',', '.'); ?> akan dibayarkan. <?php endif; ?>' +
-                                 'Apakah Anda yakin ingin melanjutkan?')) {
-                        e.preventDefault();
-                        return;
-                    }
-                    confirmBtn.classList.add('btn-loading');
-                    setTimeout(() => {
-                        confirmBtn.classList.remove('btn-loading');
-                    }, 800);
+                    }, 1500);
                 });
             }
 
@@ -1166,19 +1117,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 const modalBody = modal.querySelector('.modal-body');
                 const modalTitle = modal.querySelector('.modal-header h3');
                 const modalMessage = modalBody.querySelector('p');
-                modalTitle.innerHTML = `<i class="fas fa-${modalId === 'errorModal' ? 'exclamation-circle' : modalId === 'warningModal' ? 'exclamation-triangle' : 'check-circle'}"></i> ${title}`;
+                modalTitle.innerHTML = `<i class="fas fa-${modalId === 'errorModal' ? 'exclamation-circle' : 'check-circle'}"></i> ${title}`;
                 modalMessage.textContent = message;
 
                 modal.classList.add('show');
                 document.body.style.overflow = 'hidden';
-
-                setTimeout(() => {
-                    modal.classList.remove('show');
-                    document.body.style.overflow = 'auto';
-                    if (modalId === 'successModal') {
-                        window.location.href = 'tutup_rek.php';
-                    }
-                }, 5000);
             }
 
             // Close modals on button click or outside click
@@ -1193,7 +1136,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 });
             });
 
-            [successModal, errorModal, warningModal].forEach(modal => {
+            [successModal, errorModal].forEach(modal => {
                 if (modal) {
                     modal.addEventListener('click', function(event) {
                         if (event.target === modal) {
@@ -1225,10 +1168,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }, 5000);
             }
 
-            if (warningModal && warningModal.classList.contains('show')) {
-                document.body.style.overflow = 'hidden';
-            }
-
             // Focus input and handle Enter key
             inputNoRek.focus();
             if (inputNoRek.value === prefix) {
@@ -1239,11 +1178,80 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 if (e.key === 'Enter' && searchForm) searchBtn.click();
             });
 
-            if (pinInputs.length > 0) {
-                pinInputs[0].addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter' && pinForm) verifyPinBtn.click();
-                });
-            }
+            // Deletion confirmation handling
+            window.confirmDeletion = function(saldo) {
+                console.log('confirmDeletion called with saldo:', saldo);
+                const reason = document.getElementById('reason').value.trim();
+                if (!reason) {
+                    showModal('errorModal', 'Alasan penghapusan harus diisi.', 'Kesalahan');
+                    return;
+                }
+
+                if (saldo > 0) {
+                    showModal('errorModal', `Penghapusan gagal karena masih terdapat sisa saldo. Harap kosongkan saldo terlebih dahulu.`, 'Kesalahan');
+                    return;
+                }
+
+                // Apply loading animation to confirmBtn
+                confirmBtn.classList.add('btn-loading');
+                setTimeout(() => {
+                    confirmBtn.classList.remove('btn-loading');
+                    // Show confirmation modal
+                    const confirmModal = document.createElement('div');
+                    confirmModal.className = 'modal show';
+                    confirmModal.id = 'confirmModal';
+                    confirmModal.innerHTML = `
+                        <div class="modal-content">
+                            <div class="modal-header warning">
+                                <h3><i class="fas fa-exclamation-triangle"></i> Konfirmasi Penghapusan</h3>
+                            </div>
+                            <div class="modal-body">
+                                <i class="fas fa-exclamation-triangle warning"></i>
+                                <h3>Konfirmasi Penghapusan</h3>
+                                <p>PERINGATAN: Anda akan menghapus pengguna, rekening, dan semua data terkait secara permanen. Apakah Anda yakin ingin melanjutkan?</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="modal-close-btn" onclick="closeConfirmModal()">
+                                    <i class="fas fa-xmark"></i> Batal
+                                </button>
+                                <button type="button" class="btn-danger" id="submitDeletionBtn">
+                                    <i class="fas fa-trash-alt"></i>
+                                    <span>Ya, Hapus</span>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    document.body.appendChild(confirmModal);
+                    document.body.style.overflow = 'hidden';
+
+                    // Add event listener for the submit button
+                    document.getElementById('submitDeletionBtn').addEventListener('click', function() {
+                        console.log('Ya, Hapus clicked');
+                        this.classList.add('btn-loading'); // Apply loading animation
+                        submitDeletion();
+                    });
+                }, 1500); // 1.5-second loading animation
+            };
+
+            // Close confirmation modal
+            window.closeConfirmModal = function() {
+                const confirmModal = document.getElementById('confirmModal');
+                if (confirmModal) {
+                    confirmModal.remove();
+                    document.body.style.overflow = 'auto';
+                }
+            };
+
+            // Submit deletion form
+            window.submitDeletion = function() {
+                console.log('submitDeletion called');
+                if (closeAccountForm) {
+                    closeAccountForm.submit(); // Form submission triggers server-side processing
+                } else {
+                    console.error('closeAccountForm not found');
+                    showModal('errorModal', 'Formulir tidak ditemukan. Silakan coba lagi.', 'Kesalahan');
+                }
+            };
         });
     </script>
 </body>

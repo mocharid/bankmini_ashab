@@ -5,19 +5,41 @@ require_once '../../includes/db_connection.php';
 // Initialize variables
 $error = null;
 
+// Pagination settings
+$items_per_page = 10;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? intval($_GET['page']) : 1;
+$offset = ($page - 1) * $items_per_page;
+
+// Get total number of jurusan for pagination
+$total_query = "SELECT COUNT(*) as total FROM jurusan";
+$total_result = $conn->query($total_query);
+$total_rows = $total_result->fetch_assoc()['total'];
+$total_pages = ceil($total_rows / $items_per_page);
+
 // Handle delete request
 if (isset($_POST['delete_id'])) {
     $id = intval($_POST['delete_id']);
     
     // Check if jurusan has associated students
-    $check_query = "SELECT COUNT(*) as count FROM users WHERE jurusan_id = ?";
-    $check_stmt = $conn->prepare($check_query);
-    $check_stmt->bind_param("i", $id);
-    $check_stmt->execute();
-    $check_result = $check_stmt->get_result()->fetch_assoc();
+    $check_users_query = "SELECT COUNT(*) as count FROM users WHERE jurusan_id = ?";
+    $check_users_stmt = $conn->prepare($check_users_query);
+    $check_users_stmt->bind_param("i", $id);
+    $check_users_stmt->execute();
+    $check_users_result = $check_users_stmt->get_result()->fetch_assoc();
     
-    if ($check_result['count'] > 0) {
-        $error = "Tidak dapat menghapus jurusan karena masih memiliki siswa!";
+    // Check if jurusan has associated kelas
+    $check_kelas_query = "SELECT COUNT(*) as count FROM kelas WHERE jurusan_id = ?";
+    $check_kelas_stmt = $conn->prepare($check_kelas_query);
+    $check_kelas_stmt->bind_param("i", $id);
+    $check_kelas_stmt->execute();
+    $check_kelas_result = $check_kelas_stmt->get_result()->fetch_assoc();
+    
+    if ($check_users_result['count'] > 0) {
+        header('Location: tambah_jurusan.php?error=' . urlencode("Tidak dapat menghapus jurusan karena masih memiliki siswa!"));
+        exit();
+    } elseif ($check_kelas_result['count'] > 0) {
+        header('Location: tambah_jurusan.php?error=' . urlencode("Tidak dapat menghapus jurusan karena masih memiliki kelas terkait!"));
+        exit();
     } else {
         $delete_query = "DELETE FROM jurusan WHERE id = ?";
         $delete_stmt = $conn->prepare($delete_query);
@@ -27,7 +49,8 @@ if (isset($_POST['delete_id'])) {
             header('Location: tambah_jurusan.php?delete_success=1');
             exit();
         } else {
-            $error = "Gagal menghapus jurusan: " . $conn->error;
+            header('Location: tambah_jurusan.php?error=' . urlencode("Gagal menghapus jurusan: " . $conn->error));
+            exit();
         }
     }
 }
@@ -38,7 +61,8 @@ if (isset($_POST['edit_confirm'])) {
     $nama = trim($_POST['edit_nama']);
     
     if (empty($nama)) {
-        $error = "Nama jurusan tidak boleh kosong!";
+        header('Location: tambah_jurusan.php?error=' . urlencode("Nama jurusan tidak boleh kosong!"));
+        exit();
     } else {
         // Check for duplicate jurusan name
         $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ? AND id != ?";
@@ -48,7 +72,8 @@ if (isset($_POST['edit_confirm'])) {
         $result = $check_stmt->get_result();
         
         if ($result->num_rows > 0) {
-            $error = "Jurusan dengan nama tersebut sudah ada!";
+            header('Location: tambah_jurusan.php?error=' . urlencode("Jurusan dengan nama tersebut sudah ada!"));
+            exit();
         } else {
             $update_query = "UPDATE jurusan SET nama_jurusan = ? WHERE id = ?";
             $update_stmt = $conn->prepare($update_query);
@@ -58,7 +83,8 @@ if (isset($_POST['edit_confirm'])) {
                 header('Location: tambah_jurusan.php?edit_success=1');
                 exit();
             } else {
-                $error = "Gagal mengupdate jurusan: " . $conn->error;
+                header('Location: tambah_jurusan.php?error=' . urlencode("Gagal mengupdate jurusan: " . $conn->error));
+                exit();
             }
         }
     }
@@ -70,7 +96,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
         $nama_jurusan = trim($_POST['nama_jurusan']);
         
         if (empty($nama_jurusan)) {
-            $error = "Nama jurusan tidak boleh kosong!";
+            header('Location: tambah_jurusan.php?error=' . urlencode("Nama jurusan tidak boleh kosong!"));
+            exit();
         } else {
             // Check for duplicate jurusan name
             $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ?";
@@ -80,7 +107,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
             $result = $check_stmt->get_result();
             
             if ($result->num_rows > 0) {
-                $error = "Jurusan sudah ada!";
+                header('Location: tambah_jurusan.php?error=' . urlencode("Jurusan sudah ada!"));
+                exit();
             } else {
                 $query = "INSERT INTO jurusan (nama_jurusan) VALUES (?)";
                 $stmt = $conn->prepare($query);
@@ -90,14 +118,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
                     header('Location: tambah_jurusan.php?success=1');
                     exit();
                 } else {
-                    $error = "Gagal menambahkan jurusan: " . $conn->error;
+                    header('Location: tambah_jurusan.php?error=' . urlencode("Gagal menambahkan jurusan: " . $conn->error));
+                    exit();
                 }
             }
         }
     } else {
         $nama_jurusan = trim($_POST['nama_jurusan']);
         if (empty($nama_jurusan)) {
-            $error = "Nama jurusan tidak boleh kosong!";
+            header('Location: tambah_jurusan.php?error=' . urlencode("Nama jurusan tidak boleh kosong!"));
+            exit();
         } else {
             // Redirect to show confirmation modal
             header('Location: tambah_jurusan.php?confirm=1&nama=' . urlencode($nama_jurusan));
@@ -106,13 +136,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
     }
 }
 
-// Fetch existing jurusan with total students
+// Fetch existing jurusan with total students for the current page
 $query_list = "SELECT j.*, COUNT(u.id) as total_siswa 
                FROM jurusan j 
                LEFT JOIN users u ON j.id = u.jurusan_id 
                GROUP BY j.id 
-               ORDER BY j.nama_jurusan ASC";
-$result = $conn->query($query_list);
+               ORDER BY j.nama_jurusan ASC 
+               LIMIT ? OFFSET ?";
+$stmt = $conn->prepare($query_list);
+$stmt->bind_param("ii", $items_per_page, $offset);
+$stmt->execute();
+$result = $stmt->get_result();
 ?>
 
 <!DOCTYPE html>
@@ -160,32 +194,32 @@ $result = $conn->query($query_list);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
-            padding: 15px 30px;
+            padding: 12px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            font-size: clamp(1.1rem, 2vw, 1.25rem);
         }
 
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 10px;
+            padding: 8px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             transition: var(--transition);
         }
 
@@ -196,7 +230,7 @@ $result = $conn->query($query_list);
 
         .main-content {
             flex: 1;
-            padding: 20px;
+            padding: 15px;
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
@@ -205,9 +239,9 @@ $result = $conn->query($query_list);
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
-            padding: 25px;
-            border-radius: 15px;
-            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
@@ -237,21 +271,21 @@ $result = $conn->query($query_list);
         }
 
         .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.5rem, 3vw, 1.8rem);
+            margin-bottom: 8px;
+            font-size: clamp(1.3rem, 2.5vw, 1.6rem);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             position: relative;
             z-index: 1;
         }
 
         .form-card {
             background: white;
-            border-radius: 15px;
-            padding: 25px;
+            border-radius: 12px;
+            padding: 20px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
+            margin-bottom: 25px;
             animation: slideIn 0.5s ease-out;
         }
 
@@ -263,27 +297,27 @@ $result = $conn->query($query_list);
         form {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 15px;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
 
         label {
             font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
         }
 
         input[type="text"] {
             width: 100%;
-            padding: 12px 15px;
+            padding: 10px 12px;
             border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            border-radius: 8px;
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
             transition: var(--transition);
         }
 
@@ -291,24 +325,24 @@ $result = $conn->query($query_list);
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.02);
+            transform: scale(1.01);
         }
 
         .btn {
             background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 12px 25px;
-            border-radius: 10px;
+            padding: 10px 20px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             transition: var(--transition);
             width: auto;
-            max-width: 200px;
+            max-width: 180px;
         }
 
         .btn:hover {
@@ -340,10 +374,10 @@ $result = $conn->query($query_list);
             background-color: #f0f0f0;
             color: var(--text-secondary);
             border: none;
-            padding: 12px 25px;
-            border-radius: 10px;
+            padding: 10px 20px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
             transition: var(--transition);
         }
 
@@ -360,42 +394,10 @@ $result = $conn->query($query_list);
             background-color: var(--secondary-dark);
         }
 
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-        }
-
-        .alert.hide {
-            animation: slideOut 0.5s ease-out forwards;
-        }
-
-        @keyframes slideOut {
-            from { transform: translateY(0); opacity: 1; }
-            to { transform: translateY(-20px); opacity: 0; }
-        }
-
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 5px solid #fecaca;
-        }
-
-        .alert-success {
-            background-color: var(--primary-light);
-            color: var(--primary-dark);
-            border-left: 5px solid var(--primary-color);
-        }
-
         .jurusan-list {
             background: white;
-            border-radius: 15px;
-            padding: 25px;
+            border-radius: 12px;
+            padding: 20px;
             box-shadow: var(--shadow-sm);
             transition: var(--transition);
         }
@@ -406,12 +408,12 @@ $result = $conn->query($query_list);
         }
 
         .jurusan-list h3 {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             color: var(--primary-dark);
-            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            font-size: clamp(1rem, 2vw, 1.15rem);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         table {
@@ -420,10 +422,10 @@ $result = $conn->query($query_list);
         }
 
         th, td {
-            padding: 12px 15px;
+            padding: 10px 12px;
             text-align: left;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            min-width: 80px;
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            min-width: 70px;
             border-bottom: 1px solid #eee;
         }
 
@@ -453,15 +455,54 @@ $result = $conn->query($query_list);
         .total-siswa {
             background: var(--primary-light);
             color: var(--primary-dark);
-            padding: 5px 10px;
-            border-radius: 12px;
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            padding: 4px 8px;
+            border-radius: 10px;
+            font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             font-weight: 500;
         }
 
         .action-buttons {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-top: 20px;
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+        }
+
+        .pagination a {
+            text-decoration: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: var(--text-primary);
+            background-color: #f0f0f0;
+            transition: var(--transition);
+        }
+
+        .pagination a:hover {
+            background-color: var(--primary-light);
+            color: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+
+        .pagination .current-page {
+            padding: 8px 12px;
+            border-radius: 8px;
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 500;
+        }
+
+        .pagination a.disabled {
+            color: var(--text-secondary);
+            background-color: #e0e0e0;
+            cursor: not-allowed;
+            pointer-events: none;
         }
 
         .modal {
@@ -479,32 +520,32 @@ $result = $conn->query($query_list);
 
         .modal-content {
             background: white;
-            padding: 25px;
-            border-radius: 15px;
+            padding: 20px;
+            border-radius: 12px;
             width: 90%;
-            max-width: 500px;
+            max-width: 450px;
             box-shadow: var(--shadow-md);
             animation: slideIn 0.5s ease-out;
         }
 
         .modal-title {
-            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            font-size: clamp(1rem, 2vw, 1.15rem);
             color: var(--primary-dark);
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .modal p {
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
             color: var(--text-secondary);
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .modal-buttons {
             display: flex;
-            gap: 10px;
+            gap: 8px;
             justify-content: flex-end;
         }
 
@@ -535,11 +576,11 @@ $result = $conn->query($query_list);
 
         .success-modal {
             background: linear-gradient(145deg, #ffffff, #f0f4ff);
-            border-radius: 20px;
-            padding: 40px;
+            border-radius: 16px;
+            padding: 30px;
             text-align: center;
             max-width: 90%;
-            width: 450px;
+            width: 400px;
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
             position: relative;
             overflow: hidden;
@@ -555,9 +596,9 @@ $result = $conn->query($query_list);
         }
 
         .success-icon {
-            font-size: clamp(4rem, 8vw, 4.5rem);
+            font-size: clamp(3rem, 6vw, 4rem);
             color: var(--secondary-color);
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             animation: bounceIn 0.6s ease-out;
             filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
         }
@@ -570,16 +611,16 @@ $result = $conn->query($query_list);
 
         .success-modal h3 {
             color: var(--primary-dark);
-            margin-bottom: 15px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            margin-bottom: 12px;
+            font-size: clamp(1.25rem, 2.5vw, 1.4rem);
             animation: slideUpText 0.5s ease-out 0.2s both;
             font-weight: 600;
         }
 
         .success-modal p {
             color: var(--text-secondary);
-            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
-            margin-bottom: 25px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            margin-bottom: 20px;
             animation: slideUpText 0.5s ease-out 0.3s both;
             line-height: 1.5;
         }
@@ -591,8 +632,8 @@ $result = $conn->query($query_list);
 
         .confetti {
             position: absolute;
-            width: 12px;
-            height: 12px;
+            width: 10px;
+            height: 10px;
             opacity: 0.8;
             animation: confettiFall 4s ease-out forwards;
             transform-origin: center;
@@ -615,14 +656,14 @@ $result = $conn->query($query_list);
         .modal-content-confirm {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 12px;
         }
 
         .modal-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
+            padding: 8px 0;
             border-bottom: 1px solid #eee;
         }
 
@@ -633,18 +674,20 @@ $result = $conn->query($query_list);
         .modal-label {
             font-weight: 500;
             color: var(--text-secondary);
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
         }
 
         .modal-value {
             font-weight: 600;
             color: var(--text-primary);
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
         }
 
         .modal-buttons {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             justify-content: center;
-            margin-top: 20px;
+            margin-top: 15px;
         }
 
         .loading {
@@ -653,7 +696,7 @@ $result = $conn->query($query_list);
         }
 
         .loading i {
-            animation: spin 1s linear infinite;
+            animation: spin 1.5s linear infinite;
         }
 
         @keyframes spin {
@@ -663,47 +706,49 @@ $result = $conn->query($query_list);
 
         .no-data {
             text-align: center;
-            padding: 30px;
+            padding: 25px;
             color: var(--text-secondary);
             animation: slideIn 0.5s ease-out;
         }
 
         .no-data i {
-            font-size: clamp(2rem, 4vw, 2.5rem);
+            font-size: clamp(1.8rem, 3.5vw, 2rem);
             color: #d1d5db;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
         }
 
         .no-data p {
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
         }
 
         @media (max-width: 768px) {
             .top-nav {
-                padding: 15px;
-                font-size: clamp(1rem, 2.5vw, 1.2rem);
+                padding: 12px;
+                font-size: clamp(1rem, 2vw, 1.15rem);
             }
 
             .main-content {
-                padding: 15px;
+                padding: 12px;
             }
 
             .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.6rem);
+                font-size: clamp(1.2rem, 2.5vw, 1.4rem);
             }
 
             .form-card, .jurusan-list {
-                padding: 20px;
+                padding: 15px;
             }
 
             form {
-                gap: 15px;
+                gap: 12px;
             }
 
             .btn {
                 width: 100%;
                 max-width: none;
                 justify-content: center;
+                padding: 8px 15px;
+                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
             }
 
             table {
@@ -713,19 +758,19 @@ $result = $conn->query($query_list);
             }
 
             th, td {
-                padding: 10px;
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+                padding: 8px 10px;
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
 
             .action-buttons {
                 flex-direction: column;
-                gap: 5px;
+                gap: 4px;
             }
 
             .modal-content {
-                margin: 15px;
-                width: calc(100% - 30px);
-                padding: 20px;
+                margin: 12px;
+                width: calc(100% - 24px);
+                padding: 15px;
             }
 
             .modal-buttons {
@@ -734,13 +779,22 @@ $result = $conn->query($query_list);
 
             .success-modal {
                 width: 90%;
-                padding: 30px;
+                padding: 25px;
+            }
+
+            .pagination {
+                gap: 6px;
+            }
+
+            .pagination a, .pagination .current-page {
+                padding: 6px 10px;
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
         }
 
         @media (max-width: 480px) {
             body {
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
+                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
             }
 
             .top-nav {
@@ -748,23 +802,23 @@ $result = $conn->query($query_list);
             }
 
             .welcome-banner {
-                padding: 20px;
+                padding: 15px;
             }
 
             .jurusan-list h3 {
-                font-size: clamp(1rem, 2.5vw, 1.1rem);
+                font-size: clamp(0.95rem, 2vw, 1.05rem);
             }
 
             .no-data i {
-                font-size: clamp(1.8rem, 4vw, 2rem);
+                font-size: clamp(1.6rem, 3.5vw, 1.8rem);
             }
 
             .success-modal h3 {
-                font-size: clamp(1.2rem, 3vw, 1.4rem);
+                font-size: clamp(1.15rem, 2.5vw, 1.25rem);
             }
 
             .success-modal p {
-                font-size: clamp(0.9rem, 2.2vw, 1rem);
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
         }
     </style>
@@ -783,28 +837,6 @@ $result = $conn->query($query_list);
         <!-- Welcome Banner -->
         <div class="welcome-banner">
             <h2><i class="fas fa-plus-circle"></i> Tambah Jurusan</h2>
-        </div>
-
-        <!-- Alerts -->
-        <div id="alertContainer">
-            <?php if (isset($error)): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <?php echo htmlspecialchars($error); ?>
-                </div>
-            <?php endif; ?>
-            <?php if (isset($_GET['edit_success'])): ?>
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i>
-                    Jurusan berhasil diupdate!
-                </div>
-            <?php endif; ?>
-            <?php if (isset($_GET['delete_success'])): ?>
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i>
-                    Jurusan berhasil dihapus!
-                </div>
-            <?php endif; ?>
         </div>
 
         <!-- Form Section -->
@@ -837,7 +869,7 @@ $result = $conn->query($query_list);
                     </thead>
                     <tbody id="jurusan-table">
                         <?php 
-                        $no = 1;
+                        $no = ($page - 1) * $items_per_page + 1;
                         while ($row = $result->fetch_assoc()): 
                         ?>
                             <tr id="row-<?php echo $row['id']; ?>">
@@ -866,6 +898,20 @@ $result = $conn->query($query_list);
                         <?php endwhile; ?>
                     </tbody>
                 </table>
+                <!-- Pagination -->
+                <div class="pagination">
+                    <?php if ($page > 1): ?>
+                        <a href="?page=<?php echo $page - 1; ?>">« Previous</a>
+                    <?php else: ?>
+                        <a class="disabled">« Previous</a>
+                    <?php endif; ?>
+                    <span class="current-page"><?php echo $page; ?></span>
+                    <?php if ($page < $total_pages): ?>
+                        <a href="?page=<?php echo $page + 1; ?>">Next »</a>
+                    <?php else: ?>
+                        <a class="disabled">Next »</a>
+                    <?php endif; ?>
+                </div>
             <?php else: ?>
                 <div class="no-data">
                     <i class="fas fa-info-circle"></i>
@@ -941,6 +987,19 @@ $result = $conn->query($query_list);
                 </div>
             </div>
         <?php endif; ?>
+
+        <!-- Error Modal -->
+        <?php if (isset($_GET['error'])): ?>
+            <div class="success-overlay" id="errorModal">
+                <div class="success-modal">
+                    <div class="success-icon" style="color: var(--danger-color);">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <h3>GAGAL</h3>
+                    <p><?php echo htmlspecialchars(urldecode($_GET['error'])); ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <!-- Edit Modal -->
@@ -950,7 +1009,7 @@ $result = $conn->query($query_list);
                 <i class="fas fa-edit"></i>
                 Edit Jurusan
             </div>
-            <form id="editForm" method="POST" action="" onsubmit="return showEditConfirmation()">
+            <form id="editForm" method="POST" action="">
                 <input type="hidden" name="edit_id" id="edit_id">
                 <div class="form-group">
                     <label for="edit_nama">Nama Jurusan</label>
@@ -958,7 +1017,7 @@ $result = $conn->query($query_list);
                 </div>
                 <div class="modal-buttons">
                     <button type="button" class="btn-cancel" onclick="hideEditModal()">Batal</button>
-                    <button type="submit" class="btn btn-edit" id="edit-submit-btn">
+                    <button type="submit" class="btn btn-edit" id="edit-submit-btn" onclick="return showEditConfirmation()">
                         <i class="fas fa-save"></i>
                         Simpan
                     </button>
@@ -1032,18 +1091,20 @@ $result = $conn->query($query_list);
         function showEditConfirmation() {
             const nama = document.getElementById('edit_nama').value.trim();
             if (nama.length < 3) {
-                showAlert('Nama jurusan harus minimal 3 karakter!', 'error');
+                showErrorModal('Nama jurusan harus minimal 3 karakter!');
                 return false;
             }
             document.getElementById('editConfirmId').value = document.getElementById('edit_id').value;
             document.getElementById('editConfirmNama').textContent = nama;
             document.getElementById('editConfirmNamaInput').value = nama;
             document.getElementById('editConfirmModal').style.display = 'flex';
+            document.getElementById('editModal').style.display = 'none';
             return false; // Prevent form submission
         }
 
         function hideEditConfirmModal() {
             document.getElementById('editConfirmModal').style.display = 'none';
+            document.getElementById('editModal').style.display = 'flex';
         }
 
         // Delete Modal Functions
@@ -1065,40 +1126,44 @@ $result = $conn->query($query_list);
             
             deleteForm.addEventListener('submit', function(e) {
                 e.preventDefault();
+                deleteBtn.classList.add('loading');
+                deleteBtn.innerHTML = '<i class="fas fa-spinner"></i> Menghapus...';
                 const row = document.getElementById(`row-${id}`);
                 if (row) {
                     row.classList.add('deleting');
                     setTimeout(() => {
                         deleteForm.submit();
-                    }, 500); // Match animation duration
+                    }, 1500);
                 } else {
-                    deleteForm.submit();
+                    setTimeout(() => {
+                        deleteForm.submit();
+                    }, 1500);
                 }
             }, { once: true });
         }
 
-        // Show Alert Function
-        function showAlert(message, type) {
-            const alertContainer = document.getElementById('alertContainer');
-            const existingAlerts = document.querySelectorAll('.alert');
-            existingAlerts.forEach(alert => {
-                alert.classList.add('hide');
-                setTimeout(() => alert.remove(), 500);
-            });
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            let icon = 'info-circle';
-            if (type === 'success') icon = 'check-circle';
-            if (type === 'error') icon = 'exclamation-circle';
-            alertDiv.innerHTML = `
-                <i class="fas fa-${icon}"></i>
-                <span>${message}</span>
+        // Show Error Modal Function
+        function showErrorModal(message) {
+            const modal = document.createElement('div');
+            modal.className = 'success-overlay';
+            modal.innerHTML = `
+                <div class="success-modal">
+                    <div class="success-icon" style="color: var(--danger-color);">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <h3>GAGAL</h3>
+                    <p>${message}</p>
+                </div>
             `;
-            alertContainer.appendChild(alertDiv);
+            document.body.appendChild(modal);
             setTimeout(() => {
-                alertDiv.classList.add('hide');
-                setTimeout(() => alertDiv.remove(), 500);
-            }, 5000);
+                modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => modal.remove(), 500);
+            }, 3000);
+            modal.addEventListener('click', () => {
+                modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => modal.remove(), 500);
+            });
         }
 
         // Close modals when clicking outside
@@ -1108,15 +1173,38 @@ $result = $conn->query($query_list);
             }
         }
 
-        // Handle alert animations and other events
+        // Handle modal animations and other events
         document.addEventListener('DOMContentLoaded', () => {
-            // Handle alerts
-            const alerts = document.querySelectorAll('.alert');
-            alerts.forEach(alert => {
+            // Handle success and error modals
+            const modals = document.querySelectorAll('#successModal, #editSuccessModal, #deleteSuccessModal, #errorModal');
+            modals.forEach(modal => {
                 setTimeout(() => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
-                }, 5000);
+                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => {
+                        modal.remove();
+                        window.location.href = 'tambah_jurusan.php';
+                    }, 500);
+                }, 3000);
+                modal.addEventListener('click', () => {
+                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => {
+                        modal.remove();
+                        window.location.href = 'tambah_jurusan.php';
+                    }, 500);
+                });
+
+                // Add confetti
+                const successModal = modal.querySelector('.success-modal');
+                if (successModal) {
+                    for (let i = 0; i < 30; i++) {
+                        const confetti = document.createElement('div');
+                        confetti.className = 'confetti';
+                        confetti.style.left = Math.random() * 100 + '%';
+                        confetti.style.animationDelay = Math.random() * 1 + 's';
+                        confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                        successModal.appendChild(confetti);
+                    }
+                }
             });
 
             // Handle confirmation modal
@@ -1145,34 +1233,7 @@ $result = $conn->query($query_list);
                 }
             }
 
-            // Handle success modals (for add, edit, and delete)
-            const successModals = document.querySelectorAll('#successModal .success-modal, #editSuccessModal .success-modal, #deleteSuccessModal .success-modal');
-            successModals.forEach(modal => {
-                if (modal) {
-                    for (let i = 0; i < 30; i++) {
-                        const confetti = document.createElement('div');
-                        const delay = Math.random() * 1;
-                        const duration = Math.random() * 2 + 3;
-                        confetti.className = 'confetti';
-                        confetti.style.left = Math.random() * 100 + '%';
-                        confetti.style.animationDelay = `${delay}s`;
-                        confetti.style.animationDuration = `${duration}s`;
-                        modal.appendChild(confetti);
-                    }
-                    // Clear URL parameters after modal fades out
-                    setTimeout(() => {
-                        const overlay = modal.closest('.success-overlay');
-                        overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                        setTimeout(() => {
-                            overlay.remove();
-                            // Redirect to clean URL to prevent modal on refresh
-                            window.location.href = 'tambah_jurusan.php';
-                        }, 500);
-                    }, 2000);
-                }
-            });
-
-            // Form submission handling
+            // Form submission handling (Tambah Jurusan)
             const jurusanForm = document.getElementById('jurusan-form');
             const submitBtn = document.getElementById('submit-btn');
             
@@ -1181,47 +1242,64 @@ $result = $conn->query($query_list);
                     const nama = document.getElementById('nama_jurusan').value.trim();
                     if (nama.length < 3) {
                         e.preventDefault();
-                        showAlert('Nama jurusan harus minimal 3 karakter!', 'error');
+                        showErrorModal('Nama jurusan harus minimal 3 karakter!');
                         submitBtn.classList.remove('loading');
                         submitBtn.innerHTML = '<i class="fas fa-plus"></i> Tambah Jurusan';
                     } else {
+                        e.preventDefault();
                         submitBtn.classList.add('loading');
                         submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                        setTimeout(() => {
+                            jurusanForm.submit();
+                        }, 1500);
                     }
                 });
             }
 
-            // Confirm form handling
+            // Confirm form handling (Konfirmasi Tambah)
             const confirmForm = document.getElementById('confirm-form');
             const confirmBtn = document.getElementById('confirm-btn');
             
             if (confirmForm && confirmBtn) {
-                confirmForm.addEventListener('submit', function() {
+                confirmForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
                     confirmBtn.classList.add('loading');
                     confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
-                    jurusanForm.reset(); // Clear form after successful submission
+                    setTimeout(() => {
+                        confirmForm.submit();
+                        jurusanForm.reset(); // Clear form after successful submission
+                    }, 1500);
                 });
             }
 
-            // Edit form handling
+            // Edit form handling (Simpan Edit)
             const editForm = document.getElementById('editForm');
             const editSubmitBtn = document.getElementById('edit-submit-btn');
             
             if (editForm && editSubmitBtn) {
-                editForm.addEventListener('submit', function() {
-                    editSubmitBtn.classList.add('loading');
-                    editSubmitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                editForm.addEventListener('submit', function(e) {
+                    const nama = document.getElementById('edit_nama').value.trim();
+                    if (nama.length < 3) {
+                        e.preventDefault();
+                        showErrorModal('Nama jurusan harus minimal 3 karakter!');
+                        editSubmitBtn.classList.remove('loading');
+                        editSubmitBtn.innerHTML = '<i class="fas fa-save"></i> Simpan';
+                    }
                 });
             }
 
-            // Edit confirm form handling
+            // Edit confirm form handling (Konfirmasi Edit)
             const editConfirmForm = document.getElementById('editConfirmForm');
             const editConfirmBtn = document.getElementById('edit-confirm-btn');
             
             if (editConfirmForm && editConfirmBtn) {
-                editConfirmForm.addEventListener('submit', function() {
+                editConfirmForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
                     editConfirmBtn.classList.add('loading');
                     editConfirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
+                    setTimeout(() => {
+                        editConfirmForm.submit();
+                    }, 1500);
                 });
             }
         });

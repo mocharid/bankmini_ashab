@@ -1,13 +1,56 @@
 <?php
+// Enable error reporting for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
+// Restrict access to petugas and admin roles
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin'])) {
     header('Location: ../login.php');
     exit();
 }
 
 $username = $_SESSION['username'] ?? 'Petugas';
+
+// Handle form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['no_rekening'])) {
+    $no_rekening = $conn->real_escape_string($_POST['no_rekening']);
+    $query = "SELECT users.nama, rekening.no_rekening, rekening.saldo, rekening.created_at, 
+                     kelas.nama_kelas, jurusan.nama_jurusan
+              FROM rekening 
+              JOIN users ON rekening.user_id = users.id 
+              LEFT JOIN kelas ON users.kelas_id = kelas.id 
+              LEFT JOIN jurusan ON users.jurusan_id = jurusan.id 
+              WHERE rekening.no_rekening = ?";
+    $stmt = $conn->prepare($query);
+    if (!$stmt) {
+        error_log("Prepare failed: " . $conn->error);
+        $_SESSION['search_error'] = 'Terjadi kesalahan server. Silakan coba lagi.';
+        header('Location: cek_saldo.php');
+        exit();
+    }
+    $stmt->bind_param("s", $no_rekening);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result && $result->num_rows > 0) {
+        $_SESSION['search_result'] = $result->fetch_assoc();
+        $_SESSION['search_success'] = true;
+    } else {
+        error_log("No account found for no_rekening: $no_rekening");
+        $_SESSION['search_error'] = 'Rekening tidak ditemukan. Silakan periksa kembali nomor rekening.';
+    }
+    $stmt->close();
+
+    // Redirect to clear POST data
+    header('Location: cek_saldo.php');
+    exit();
+}
+
+$conn->close();
 ?>
 
 <!DOCTYPE html>
@@ -16,7 +59,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cek Saldo - SCHOBANK SYSTEM</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" onerror="console.error('Font Awesome failed to load')">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -51,8 +94,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            -webkit-text-size-adjust: none;
-            zoom: 1;
         }
 
         .top-nav {
@@ -145,7 +186,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .deposit-card {
+        .search-card, .results-card {
             background: white;
             border-radius: 15px;
             padding: 25px;
@@ -154,12 +195,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transition: var(--transition);
         }
 
-        .deposit-card:hover {
+        .search-card:hover, .results-card:hover {
             box-shadow: var(--shadow-md);
             transform: translateY(-5px);
         }
 
-        .deposit-form {
+        .search-form {
             display: grid;
             gap: 20px;
         }
@@ -172,21 +213,50 @@ $username = $_SESSION['username'] ?? 'Petugas';
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        input[type="text"] {
-            width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            transition: var(--transition);
-            -webkit-text-size-adjust: none;
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
-        input[type="text"]:focus {
+        .prefix {
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 600;
+            color: var(--text-primary);
+            padding: 12px 15px;
+            background: #f0f0f0;
+            border-radius: 10px 0 0 10px;
+            border: 1px solid #ddd;
+            border-right: none;
+        }
+
+        .digit-inputs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .digit-input {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            text-align: center;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: clamp(1rem, 2vw, 1.1rem);
+            transition: var(--transition);
+            background: white;
+        }
+
+        .digit-input:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.02);
+            transform: scale(1.05);
+        }
+
+        .digit-input:invalid {
+            border-color: var(--danger-color);
         }
 
         button {
@@ -214,24 +284,21 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transform: scale(0.95);
         }
 
-        .results-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
+        .modal-close-btn {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 15px;
+            font-size: clamp(0.85rem, 2vw, 0.95rem);
             transition: var(--transition);
-            animation: slideStep 0.5s ease-in-out;
         }
 
-        .results-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-5px);
-        }
-
-        @keyframes slideStep {
-            from { opacity: 0; transform: translateX(20px); }
-            to { opacity: 1; transform: translateX(0); }
+        .modal-close-btn:hover {
+            background-color: #d32f2f;
+            transform: translateY(-2px);
         }
 
         .detail-row {
@@ -313,65 +380,162 @@ $username = $_SESSION['username'] ?? 'Petugas';
             margin-top: 15px;
         }
 
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
+        .notification-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
             display: flex;
+            justify-content: center;
             align-items: center;
-            gap: 10px;
-            animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
         }
 
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+        .notification-modal {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            max-width: 90%;
+            width: 350px;
+            box-shadow: var(--shadow-md);
+            transform: scale(0.5);
+            opacity: 0;
+            animation: popInModal 0.5s ease-out forwards;
         }
 
-        .alert-info {
-            background-color: #e0f2fe;
-            color: #0369a1;
-            border-left: 5px solid #bae6fd;
+        .notification-modal.error {
+            border-left: 5px solid var(--danger-color);
+            background: #fff1f0;
         }
 
-        .alert-success {
-            background-color: var(--primary-light);
-            color: var(--primary-dark);
+        .notification-modal.success {
             border-left: 5px solid var(--primary-color);
+            background: var(--primary-light);
         }
 
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 5px solid #fecaca;
+        .notification-icon {
+            font-size: clamp(2.5rem, 5vw, 3rem);
+            margin-bottom: 15px;
         }
 
-        .btn-loading {
-            position: relative;
-            pointer-events: none;
+        .notification-icon.error {
+            color: var(--danger-color);
         }
 
-        .btn-loading span {
-            visibility: hidden;
+        .notification-icon.success {
+            color: var(--primary-color);
         }
 
-        .btn-loading::after {
-            content: "";
+        .notification-modal h3 {
+            color: var(--text-primary);
+            font-size: clamp(1.2rem, 2.5vw, 1.3rem);
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .notification-modal p {
+            color: var(--text-secondary);
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+        }
+
+        .success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.5); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal {
+            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 90%;
+            width: 450px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            transform: scale(0.5);
+            opacity: 0;
+            animation: popInModal 0.7s ease-out forwards;
+        }
+
+        .success-icon {
+            font-size: clamp(4rem, 8vw, 4.5rem);
+            color: var(--secondary-color);
+            margin-bottom: 25px;
+            animation: bounceIn 0.6s ease-out;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3 {
+            color: var(--primary-dark);
+            margin-bottom: 15px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            font-weight: 600;
+        }
+
+        .success-modal p {
+            color: var(--text-secondary);
+            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+
+        .confetti {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: rotate 0.8s linear infinite;
+            width: 12px;
+            height: 12px;
+            opacity: 0.8;
+            animation: confettiFall 4s ease-out forwards;
+            transform-origin: center;
         }
 
-        @keyframes rotate {
-            to { transform: rotate(360deg); }
+        .confetti:nth-child(odd) {
+            background: var(--accent-color);
+        }
+
+        .confetti:nth-child(even) {
+            background: var(--secondary-color);
+        }
+
+        @keyframes confettiFall {
+            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
         }
 
         .section-title {
@@ -393,6 +557,36 @@ $username = $_SESSION['username'] ?? 'Petugas';
             40%, 80% { transform: translateX(5px); }
         }
 
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+            min-width: 100px;
+        }
+
+        .btn-loading .btn-content {
+            visibility: hidden;
+        }
+
+        .btn-loading::after {
+            content: ". . .";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            animation: dots 1.5s infinite;
+            white-space: nowrap;
+        }
+
+        @keyframes dots {
+            0% { content: "."; }
+            33% { content: ". ."; }
+            66% { content: ". . ."; }
+            100% { content: "."; }
+        }
+
         @media (max-width: 768px) {
             .top-nav {
                 padding: 15px;
@@ -405,7 +599,10 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
             .welcome-banner {
                 padding: 20px;
-                margin-bottom: 20px;
+            }
+
+            .search-card, .results-card {
+                padding: 20px;
             }
 
             .welcome-banner h2 {
@@ -416,30 +613,24 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
-            .deposit-card,
-            .results-card {
-                padding: 20px;
-                margin-bottom: 20px;
-            }
-
-            .deposit-form {
-                gap: 15px;
-            }
-
             .section-title {
                 font-size: clamp(1rem, 2.5vw, 1.1rem);
             }
 
-            input[type="text"] {
-                padding: 10px 12px;
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            .search-form {
+                gap: 15px;
+            }
+
+            .digit-input {
+                width: 35px;
+                height: 35px;
+                font-size: clamp(0.9rem, 2vw, 1rem);
             }
 
             button {
-                padding: 10px 20px;
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
                 width: 100%;
                 justify-content: center;
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
             .detail-row {
@@ -460,79 +651,38 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 font-size: clamp(0.8rem, 1.8vw, 0.85rem);
             }
 
-            .alert {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-                margin-top: 15px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .top-nav {
-                padding: 12px;
-                font-size: clamp(0.9rem, 2.5vw, 1.1rem);
-            }
-
-            .main-content {
-                padding: 12px;
-            }
-
-            .welcome-banner {
+            .notification-modal {
+                width: 90%;
                 padding: 15px;
-                margin-bottom: 15px;
             }
 
-            .welcome-banner h2 {
-                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            .notification-icon {
+                font-size: clamp(2rem, 4vw, 2.5rem);
             }
 
-            .welcome-banner p {
-                font-size: clamp(0.75rem, 2vw, 0.85rem);
+            .notification-modal h3 {
+                font-size: clamp(1.1rem, 2.5vw, 1.2rem);
             }
 
-            .deposit-card,
-            .results-card {
-                padding: 15px;
-                margin-bottom: 15px;
-            }
-
-            .deposit-form {
-                gap: 12px;
-            }
-
-            .section-title {
-                font-size: clamp(0.9rem, 2.5vw, 1rem);
-            }
-
-            input[type="text"] {
-                padding: 8px 10px;
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
-            }
-
-            button {
-                padding: 8px 15px;
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
-            }
-
-            .detail-row {
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
-            }
-
-            .balance-label {
+            .notification-modal p {
                 font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
-            .balance-amount {
-                font-size: clamp(1.5rem, 3vw, 1.75rem);
-                padding: 5px 15px;
+            .success-modal {
+                width: 90%;
+                padding: 30px;
             }
 
-            .balance-info {
-                font-size: clamp(0.75rem, 1.8vw, 0.8rem);
+            .success-icon {
+                font-size: clamp(3.5rem, 7vw, 4rem);
             }
 
-            .alert {
-                font-size: clamp(0.75rem, 1.8vw, 0.85rem);
-                margin-top: 12px;
+            .success-modal h3 {
+                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            }
+
+            .success-modal p {
+                font-size: clamp(0.9rem, 2vw, 1rem);
             }
         }
     </style>
@@ -552,71 +702,82 @@ $username = $_SESSION['username'] ?? 'Petugas';
             <p>Cek saldo rekening nasabah dengan mudah dan cepat</p>
         </div>
 
-        <div class="deposit-card">
+        <div class="search-card">
             <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Rekening</h3>
-            <form id="searchForm" action="" method="GET" class="deposit-form">
+            <form id="searchForm" action="" method="POST" class="search-form">
                 <div>
                     <label for="no_rekening">No Rekening:</label>
-                    <input type="text" id="no_rekening" name="no_rekening" placeholder="REK..." required autofocus
-                           value="<?php echo isset($_GET['no_rekening']) ? htmlspecialchars($_GET['no_rekening']) : 'REK'; ?>">
+                    <div class="input-group">
+                        <span class="prefix">REK</span>
+                        <div class="digit-inputs">
+                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+                        </div>
+                        <input type="hidden" id="no_rekening" name="no_rekening">
+                    </div>
                 </div>
                 <button type="submit" id="searchBtn">
-                    <i class="fas fa-search"></i>
-                    <span>Cek Saldo</span>
+                    <span class="btn-content">
+                        <i class="fas fa-search"></i>
+                        <span>Cek Saldo</span>
+                    </span>
                 </button>
             </form>
         </div>
 
-        <div id="alertContainer"></div>
-
         <?php
-        if (isset($_GET['no_rekening'])) {
-            $no_rekening = $conn->real_escape_string($_GET['no_rekening']);
-            $query = "SELECT users.nama, rekening.no_rekening, rekening.saldo, rekening.created_at 
-                      FROM rekening 
-                      JOIN users ON rekening.user_id = users.id 
-                      WHERE rekening.no_rekening = '$no_rekening'";
-            $result = $conn->query($query);
-
-            if ($result && $result->num_rows > 0) {
-                $row = $result->fetch_assoc();
-                ?>
-                <div class="results-card" id="resultsContainer">
-                    <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
-                    <div class="detail-row">
-                        <div class="detail-label">Nama Nasabah:</div>
-                        <div class="detail-value"><?php echo htmlspecialchars($row['nama']); ?></div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">No. Rekening:</div>
-                        <div class="detail-value"><?php echo htmlspecialchars($row['no_rekening']); ?></div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Tanggal Pembukaan:</div>
-                        <div class="detail-value"><?php echo date('d/m/Y', strtotime($row['created_at'] ?? 'now')); ?></div>
-                    </div>
-                    <div class="balance-display">
-                        <div class="balance-label">Saldo Rekening Saat Ini</div>
-                        <div class="balance-amount">Rp <?php echo number_format($row['saldo'], 2, ',', '.'); ?></div>
-                        <div class="balance-info"><i class="fas fa-info-circle"></i> Saldo diperbarui per <?php echo date('d/m/Y H:i'); ?> WIB</div>
-                    </div>
+        if (isset($_SESSION['search_result'])) {
+            $row = $_SESSION['search_result'];
+            ?>
+            <div class="results-card" id="resultsContainer">
+                <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
+                <div class="detail-row">
+                    <div class="detail-label">Nama Nasabah:</div>
+                    <div class="detail-value"><?php echo htmlspecialchars($row['nama']); ?></div>
                 </div>
-                <?php
-            } else {
-                ?>
-                <div class="results-card" id="resultsContainer">
-                    <div class="alert alert-error" id="alertNotFound">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span>Rekening tidak ditemukan. Silakan periksa kembali nomor rekening.</span>
-                    </div>
+                <div class="detail-row">
+                    <div class="detail-label">No. Rekening:</div>
+                    <div class="detail-value"><?php echo htmlspecialchars($row['no_rekening']); ?></div>
                 </div>
-                <?php
-            }
+                <div class="detail-row">
+                    <div class="detail-label">Kelas:</div>
+                    <div class="detail-value"><?php echo htmlspecialchars($row['nama_kelas'] ?? 'N/A'); ?></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Jurusan:</div>
+                    <div class="detail-value"><?php echo htmlspecialchars($row['nama_jurusan'] ?? 'N/A'); ?></div>
+                </div>
+                <div class="detail-row">
+                    <div class="detail-label">Tanggal Pembukaan:</div>
+                    <div class="detail-value"><?php echo date('d/m/Y', strtotime($row['created_at'] ?? 'now')); ?></div>
+                </div>
+                <div class="balance-display">
+                    <div class="balance-label">Saldo Rekening Saat Ini</div>
+                    <div class="balance-amount">Rp <?php echo number_format($row['saldo'], 0, ',', '.'); ?></div>
+                    <div class="balance-info"><i class="fas fa-info-circle"></i> Saldo diperbarui per <?php echo date('d/m/Y H:i'); ?> WIB</div>
+                </div>
+            </div>
+            <?php
+            // Clear session data
+            unset($_SESSION['search_result']);
+            unset($_SESSION['search_success']);
         }
         ?>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script>
+        // Fallback for jQuery
+        if (typeof jQuery === 'undefined') {
+            console.error('jQuery not loaded, loading fallback');
+            document.write('<script src="/path/to/local/jquery.min.js"><\/script>');
+        }
+
+        // Prevent multi-touch zoom and gestures
         document.addEventListener('touchstart', function(event) {
             if (event.touches.length > 1) {
                 event.preventDefault();
@@ -634,112 +795,224 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }, { passive: false });
 
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing script');
             const searchForm = document.getElementById('searchForm');
             const searchBtn = document.getElementById('searchBtn');
-            const inputNoRek = document.getElementById('no_rekening');
-            const alertContainer = document.getElementById('alertContainer');
+            const digitInputs = document.querySelectorAll('.digit-input');
+            const noRekeningInput = document.getElementById('no_rekening');
+            const resultsContainer = document.getElementById('resultsContainer');
             const prefix = "REK";
 
-            // Initialize input with prefix
-            if (!inputNoRek.value) {
-                inputNoRek.value = prefix;
+            // Initialize digit inputs
+            digitInputs.forEach((input, index) => {
+                input.addEventListener('input', function(e) {
+                    const value = this.value.replace(/[^0-9]/g, '');
+                    this.value = value;
+                    if (value && index < digitInputs.length - 1) {
+                        digitInputs[index + 1].focus();
+                    }
+                    updateNoRekening();
+                });
+
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Backspace' && !this.value && index > 0) {
+                        digitInputs[index - 1].focus();
+                        digitInputs[index - 1].value = '';
+                        updateNoRekening();
+                    }
+                });
+
+                input.addEventListener('paste', function(e) {
+                    e.preventDefault();
+                    const pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+                    let currentIndex = index;
+                    for (let i = 0; i < pastedData.length && currentIndex < digitInputs.length; i++) {
+                        digitInputs[currentIndex].value = pastedData[i];
+                        currentIndex++;
+                    }
+                    if (currentIndex < digitInputs.length) {
+                        digitInputs[currentIndex].focus();
+                    }
+                    updateNoRekening();
+                });
+            });
+
+            // Update hidden no_rekening input
+            function updateNoRekening() {
+                let noRekening = prefix;
+                digitInputs.forEach(input => {
+                    noRekening += input.value || '';
+                });
+                noRekeningInput.value = noRekening;
             }
 
-            // Restrict account number to numbers only
-            inputNoRek.addEventListener('input', function(e) {
-                let value = this.value;
-                if (!value.startsWith(prefix)) {
-                    this.value = prefix + value.replace(prefix, '');
-                }
-                let userInput = value.slice(prefix.length).replace(/[^0-9]/g, '');
-                this.value = prefix + userInput;
-            });
+            // Clear inputs and reset focus
+            function clearInputs() {
+                console.log('Clearing inputs');
+                digitInputs.forEach(input => input.value = '');
+                noRekeningInput.value = prefix;
+                digitInputs[0].focus();
+            }
 
-            inputNoRek.addEventListener('keydown', function(e) {
-                let cursorPos = this.selectionStart;
-                if ((e.key === 'Backspace' || e.key === 'Delete') && cursorPos <= prefix.length) {
-                    e.preventDefault();
-                }
-            });
+            // Initialize hidden input
+            noRekeningInput.value = prefix;
 
-            inputNoRek.addEventListener('paste', function(e) {
-                e.preventDefault();
-                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-                let currentValue = this.value.slice(prefix.length);
-                let newValue = prefix + (currentValue + pastedData);
-                this.value = newValue;
-            });
-
-            inputNoRek.addEventListener('focus', function() {
-                if (this.value === prefix) {
-                    this.setSelectionRange(prefix.length, prefix.length);
-                }
-            });
-
-            inputNoRek.addEventListener('click', function(e) {
-                if (this.selectionStart < prefix.length) {
-                    this.setSelectionRange(prefix.length, prefix.length);
-                }
-            });
-
+            // Search form handling
             searchForm.addEventListener('submit', function(e) {
-                const rekening = inputNoRek.value.trim();
-                if (rekening === prefix) {
-                    e.preventDefault();
-                    showAlert('Silakan masukkan nomor rekening lengkap', 'error');
-                    inputNoRek.classList.add('form-error');
-                    setTimeout(() => inputNoRek.classList.remove('form-error'), 400);
-                    inputNoRek.focus();
+                e.preventDefault();
+                const noRekening = noRekeningInput.value;
+                console.log('Form submitted, no_rekening:', noRekening);
+                if (noRekening === prefix || noRekening.length < prefix.length + digitInputs.length) {
+                    console.log('Invalid input, showing error modal');
+                    showModal('Masukkan nomor rekening lengkap (6 digit)', 'error');
+                    digitInputs[0].classList.add('form-error');
+                    setTimeout(() => digitInputs.forEach(input => input.classList.remove('form-error')), 400);
+                    clearInputs();
                     return;
                 }
                 searchBtn.classList.add('btn-loading');
                 setTimeout(() => {
-                    searchBtn.classList.remove('btn-loading');
-                }, 800);
+                    searchForm.submit();
+                }, 1000);
             });
 
-            function showAlert(message, type) {
-                const existingAlerts = document.querySelectorAll('.alert');
-                existingAlerts.forEach(alert => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
+            // Show modal for error or success
+            function showModal(message, type) {
+                console.log('showModal called:', message, type);
+                // Remove existing modals
+                const existingModals = document.querySelectorAll('.notification-overlay, .success-overlay');
+                existingModals.forEach(modal => {
+                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => modal.remove(), 500);
                 });
-                const alertDiv = document.createElement('div');
-                alertDiv.className = `alert alert-${type}`;
-                let icon = 'info-circle';
-                if (type === 'success') icon = 'check-circle';
-                if (type === 'error') icon = 'exclamation-circle';
-                alertDiv.innerHTML = `
-                    <i class="fas fa-${icon}"></i>
-                    <span>${message}</span>
+
+                const overlay = document.createElement('div');
+                overlay.className = 'notification-overlay';
+                const icon = type === 'error' ? 'exclamation-circle' : 'check-circle';
+                const title = type === 'error' ? 'Error' : 'Berhasil';
+                overlay.innerHTML = `
+                    <div class="notification-modal ${type}">
+                        <div class="notification-icon ${type}">
+                            <i class="fas fa-${icon}"></i>
+                        </div>
+                        <h3>${title}</h3>
+                        <p>${message}</p>
+                        <button class="modal-close-btn" onclick="this.closest('.notification-overlay').click()">Tutup</button>
+                    </div>
                 `;
-                alertContainer.appendChild(alertDiv);
+                document.body.appendChild(overlay);
+
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay || e.target.classList.contains('modal-close-btn')) {
+                        console.log('Closing modal');
+                        overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        const modal = overlay.querySelector('.notification-modal');
+                        modal.style.animation = 'popInModal 0.5s ease-out reverse';
+                        setTimeout(() => overlay.remove(), 500);
+                    }
+                });
+
+                // Auto-close after 5 seconds
                 setTimeout(() => {
-                    alertDiv.classList.add('hide');
-                    setTimeout(() => alertDiv.remove(), 500);
+                    console.log('Auto-closing modal');
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    const modal = overlay.querySelector('.notification-modal');
+                    modal.style.animation = 'popInModal 0.5s ease-out reverse';
+                    setTimeout(() => overlay.remove(), 500);
                 }, 5000);
             }
 
-            // Auto-hide and remove the "Rekening tidak ditemukan" alert and its container
-            const alertNotFound = document.getElementById('alertNotFound');
-            if (alertNotFound) {
+            // Show success animation with confetti
+            function showSuccessAnimation(message) {
+                console.log('showSuccessAnimation called:', message);
+                // Remove existing modals
+                const existingModals = document.querySelectorAll('.notification-overlay, .success-overlay');
+                existingModals.forEach(modal => {
+                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => modal.remove(), 500);
+                });
+
+                const overlay = document.createElement('div');
+                overlay.className = 'success-overlay';
+                overlay.innerHTML = `
+                    <div class="success-modal">
+                        <div class="success-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h3>Pencarian Berhasil!</h3>
+                        <p>${message}</p>
+                        <button class="modal-close-btn" onclick="this.closest('.success-overlay').click()">Tutup</button>
+                    </div>
+                `;
+                document.body.appendChild(overlay);
+
+                const modal = overlay.querySelector('.success-modal');
+                for (let i = 0; i < 30; i++) {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.animationDelay = Math.random() * 1 + 's';
+                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
+                    modal.appendChild(confetti);
+                }
+
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay || e.target.classList.contains('modal-close-btn')) {
+                        console.log('Closing success modal');
+                        overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        modal.style.animation = 'popInModal 0.7s ease-out reverse';
+                        setTimeout(() => overlay.remove(), 500);
+                    }
+                });
+
+                // Auto-close after 5 seconds
                 setTimeout(() => {
-                    const resultsContainer = document.getElementById('resultsContainer');
-                    alertNotFound.classList.add('hide');
+                    console.log('Auto-closing success modal');
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
+                    setTimeout(() => overlay.remove(), 500);
+                }, 5000);
+            }
+
+            // Animate results container
+            if (resultsContainer) {
+                console.log('Animating results container');
+                resultsContainer.style.display = 'none';
+                setTimeout(() => {
+                    resultsContainer.style.display = 'block';
+                    resultsContainer.style.opacity = '0';
+                    resultsContainer.style.transform = 'translateY(20px)';
                     setTimeout(() => {
-                        if (resultsContainer) resultsContainer.remove();
-                    }, 500);
-                }, 5000);
+                        resultsContainer.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                        resultsContainer.style.opacity = '1';
+                        resultsContainer.style.transform = 'translateY(0)';
+                    }, 100);
+                }, 100);
             }
 
-            inputNoRek.focus();
-            if (inputNoRek.value === prefix) {
-                inputNoRek.setSelectionRange(prefix.length, prefix.length);
-            }
-
-            inputNoRek.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') searchBtn.click();
+            // Enter key support on last input
+            digitInputs[digitInputs.length - 1].addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && this.value) {
+                    console.log('Enter key pressed, submitting form');
+                    searchBtn.click();
+                }
             });
+
+            // Handle session-based modals
+            <?php if (isset($_SESSION['search_error'])): ?>
+                console.log('Showing error modal: <?php echo addslashes($_SESSION['search_error']); ?>');
+                showModal('<?php echo addslashes($_SESSION['search_error']); ?>', 'error');
+                clearInputs();
+                <?php unset($_SESSION['search_error']); ?>
+            <?php endif; ?>
+
+            <?php if (isset($_SESSION['search_success'])): ?>
+                console.log('Showing success modal');
+                showSuccessAnimation('Informasi saldo berhasil ditemukan');
+            <?php endif; ?>
+
+            // Focus first input on load
+            clearInputs();
         });
     </script>
 </body>

@@ -51,19 +51,24 @@ $username = $_SESSION['username'] ?? 'Petugas';
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            -webkit-text-size-adjust: none;
-            zoom: 1;
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
             padding: 15px 30px;
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
             font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+        }
+
+        .nav-left, .nav-right {
+            flex: 0 0 40px;
+            display: flex;
+            align-items: center;
         }
 
         .back-btn {
@@ -78,28 +83,45 @@ $username = $_SESSION['username'] ?? 'Petugas';
             justify-content: center;
             width: 40px;
             height: 40px;
-            transition: var(--transition);
+            box-sizing: border-box;
+            overflow: hidden;
+            aspect-ratio: 1/1;
+            clip-path: circle(50%);
+            transition: background 0.3s ease, margin-top 0.3s ease;
         }
 
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
+            margin-top: -2px;
+        }
+
+        .back-btn i {
+            transform: none !important;
+        }
+
+        .top-nav h1 {
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            margin: 0 auto;
+            text-align: center;
+            flex: 1;
         }
 
         .main-content {
             flex: 1;
-            padding: 20px;
+            padding: 15px;
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
-            padding: 25px;
-            border-radius: 15px;
-            margin-bottom: 30px;
+            padding: 20px;
+            border-radius: 12px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
@@ -129,11 +151,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.5rem, 3vw, 1.8rem);
+            margin-bottom: 8px;
+            font-size: clamp(1.3rem, 2.5vw, 1.6rem);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             position: relative;
             z-index: 1;
         }
@@ -142,15 +164,14 @@ $username = $_SESSION['username'] ?? 'Petugas';
             position: relative;
             z-index: 1;
             opacity: 0.9;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
         }
 
         .deposit-card {
             background: white;
-            border-radius: 15px;
-            padding: 25px;
+            border-radius: 12px;
+            padding: 20px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
             transition: var(--transition);
         }
 
@@ -160,49 +181,58 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .deposit-form {
-            display: grid;
-            gap: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .form-group {
+            width: 100%;
+            max-width: 300px;
         }
 
         label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             color: var(--text-secondary);
             font-weight: 500;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
         }
 
         input[type="text"] {
             width: 100%;
-            padding: 12px 15px;
+            max-width: 300px;
+            padding: 10px 12px;
             border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            border-radius: 8px;
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
             transition: var(--transition);
-            -webkit-text-size-adjust: none;
         }
 
         input[type="text"]:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.02);
+            transform: scale(1.01);
         }
 
         button {
             background-color: var(--primary-color);
             color: white;
             border: none;
-            padding: 12px 25px;
-            border-radius: 10px;
+            padding: 10px 20px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            gap: 6px;
             transition: var(--transition);
-            width: fit-content;
+            min-width: 120px;
+            height: 40px;
         }
 
         button:hover {
@@ -214,12 +244,44 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transform: scale(0.95);
         }
 
+        button:disabled {
+            background-color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        .btn-loading {
+            position: relative;
+            pointer-events: none;
+        }
+
+        .btn-loading i,
+        .btn-loading span {
+            opacity: 0;
+        }
+
+        .btn-loading::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: rotate 0.6s linear infinite;
+        }
+
+        @keyframes rotate {
+            to { transform: rotate(360deg); }
+        }
+
         .results-card {
             background: white;
-            border-radius: 15px;
-            padding: 25px;
+            border-radius: 12px;
+            padding: 20px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
             transition: var(--transition);
             animation: slideStep 0.5s ease-in-out;
         }
@@ -238,11 +300,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
             display: grid;
             grid-template-columns: 1fr 2fr;
             align-items: center;
-            border-bottom: 1px solid #eee;
-            padding: 12px 0;
-            gap: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            padding: 8px 0;
+            gap: 8px;
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
             transition: var(--transition);
+            border-bottom: 1px solid #f0f0f0;
         }
 
         .detail-row:hover {
@@ -265,57 +327,21 @@ $username = $_SESSION['username'] ?? 'Petugas';
             text-align: left;
         }
 
-        .transaction-info {
-            margin-top: 20px;
+        .detail-divider {
             border-top: 2px dashed #e0e9f5;
-            padding-top: 20px;
+            margin: 15px 0;
         }
 
-        .transaction-info h3 {
+        .detail-subheading {
             color: var(--primary-dark);
-            margin-bottom: 15px;
-            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .account-info {
-            background: #f0f7ff;
-            border-radius: 12px;
-            padding: 15px;
-        }
-
-        .account-box {
-            background: white;
-            border-radius: 12px;
-            padding: 15px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 15px;
-        }
-
-        .account-box:last-child {
-            margin-bottom: 0;
-        }
-
-        .account-box h4 {
-            color: var(--primary-dark);
-            margin-bottom: 10px;
+            font-size: clamp(0.95rem, 1.8vw, 1rem);
+            font-weight: 600;
             display: flex;
             align-items: center;
             gap: 8px;
-            font-size: clamp(0.95rem, 2vw, 1rem);
-        }
-
-        .account-box p {
-            font-size: clamp(0.9rem, 2vw, 0.95rem);
-            margin: 5px 0;
-        }
-
-        .transfer-details {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            margin: 10px 0;
+            border-left: 3px solid var(--primary-color);
+            padding-left: 8px;
         }
 
         .badge {
@@ -343,14 +369,14 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
         }
 
         @keyframes slideIn {
@@ -361,49 +387,22 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .alert-info {
             background-color: #e0f2fe;
             color: #0369a1;
-            border-left: 5px solid #bae6fd;
+            border-left: 4px solid #bae6fd;
         }
 
         .alert-error {
             background-color: #fee2e2;
             color: #b91c1c;
-            border-left: 5px solid #fecaca;
-        }
-
-        .btn-loading {
-            position: relative;
-            pointer-events: none;
-        }
-
-        .btn-loading span {
-            visibility: hidden;
-        }
-
-        .btn-loading::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: rotate 0.8s linear infinite;
-        }
-
-        @keyframes rotate {
-            to { transform: rotate(360deg); }
+            border-left: 4px solid #fecaca;
         }
 
         .section-title {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             color: var(--primary-dark);
-            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+            font-size: clamp(1rem, 2vw, 1.15rem);
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .form-error {
@@ -416,168 +415,149 @@ $username = $_SESSION['username'] ?? 'Petugas';
             40%, 80% { transform: translateX(5px); }
         }
 
-        @media (max-width: 768px) {
+        /* Desktop (≥769px) */
+        @media (min-width: 769px) {
+            .detail-row {
+                grid-template-columns: 1fr 2fr;
+            }
+            .form-group {
+                max-width: 300px;
+            }
+            input[type="text"] {
+                max-width: 300px;
+            }
+            button {
+                min-width: 120px;
+            }
+            .back-btn {
+                aspect-ratio: 1/1;
+                clip-path: circle(50%);
+            }
+            .back-btn:hover {
+                margin-top: -2px;
+            }
+            .top-nav h1 {
+                margin: 0 auto;
+                flex: 1;
+            }
+        }
+
+        /* Tablet (481px–768px) */
+        @media (min-width: 481px) and (max-width: 768px) {
             .top-nav {
                 padding: 15px;
                 font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
-
-            .main-content {
-                padding: 15px;
-            }
-
-            .welcome-banner {
-                padding: 20px;
-                margin-bottom: 20px;
-            }
-
-            .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.6rem);
-            }
-
-            .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
-            }
-
-            .deposit-card,
-            .results-card {
-                padding: 20px;
-                margin-bottom: 20px;
-            }
-
-            .deposit-form {
-                gap: 15px;
-            }
-
-            .section-title {
-                font-size: clamp(1rem, 2.5vw, 1.1rem);
-            }
-
-            input[type="text"] {
-                padding: 10px 12px;
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
-            }
-
-            button {
-                padding: 10px 20px;
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
-                width: 100%;
-                justify-content: center;
-            }
-
-            .detail-row {
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
-                grid-template-columns: 1fr 1.5fr;
-            }
-
-            .transaction-info h3 {
-                font-size: clamp(1rem, 2.5vw, 1.1rem);
-            }
-
-            .account-box h4 {
-                font-size: clamp(0.9rem, 2vw, 0.95rem);
-            }
-
-            .account-box p {
-                font-size: clamp(0.85rem, 2vw, 0.9rem);
-            }
-
-            .transfer-details {
-                grid-template-columns: 1fr;
-                gap: 15px;
-            }
-
-            .badge {
-                font-size: clamp(0.7rem, 1.5vw, 0.75rem);
-            }
-
-            .alert {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-                margin-top: 15px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .top-nav {
-                padding: 12px;
-                font-size: clamp(0.9rem, 2.5vw, 1.1rem);
-            }
-
             .main-content {
                 padding: 12px;
             }
-
             .welcome-banner {
                 padding: 15px;
-                margin-bottom: 15px;
             }
-
             .welcome-banner h2 {
-                font-size: clamp(1.2rem, 3vw, 1.4rem);
+                font-size: clamp(1.2rem, 2.5vw, 1.4rem);
             }
-
             .welcome-banner p {
-                font-size: clamp(0.75rem, 2vw, 0.85rem);
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
-
-            .deposit-card,
-            .results-card {
+            .deposit-card, .results-card {
                 padding: 15px;
-                margin-bottom: 15px;
             }
-
             .deposit-form {
                 gap: 12px;
             }
-
-            .section-title {
-                font-size: clamp(0.9rem, 2.5vw, 1rem);
-            }
-
-            input[type="text"] {
-                padding: 8px 10px;
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
-            }
-
-            button {
-                padding: 8px 15px;
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
-            }
-
             .detail-row {
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
+                grid-template-columns: 1fr 1.5fr;
+                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
             }
-
-            .transaction-info h3 {
-                font-size: clamp(0.9rem, 2.5vw, 1rem);
+            .form-group {
+                max-width: 250px;
             }
-
-            .account-box h4 {
-                font-size: clamp(0.85rem, 2vw, 0.9rem);
+            .back-btn {
+                width: 36px;
+                height: 36px;
+                padding: 8px;
+                box-sizing: border-box;
+                overflow: hidden;
             }
-
-            .account-box p {
-                font-size: clamp(0.8rem, 2vw, 0.85rem);
+            .top-nav h1 {
+                font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+                margin: 0 auto;
+                flex: 1;
             }
-
-            .badge {
-                font-size: clamp(0.65rem, 1.5vw, 0.7rem);
+            input[type="text"] {
+                max-width: 250px;
             }
+            button {
+                min-width: 100px;
+            }
+        }
 
-            .alert {
-                font-size: clamp(0.75rem, 1.8vw, 0.85rem);
-                margin-top: 12px;
+        /* Mobile (≤480px) */
+        @media (max-width: 480px) {
+            .top-nav {
+                padding: 15px;
+            }
+            .main-content {
+                padding: 10px;
+            }
+            .welcome-banner {
+                padding: 12px;
+            }
+            .welcome-banner h2 {
+                font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+            }
+            .welcome-banner p {
+                font-size: clamp(0.7rem, 1.5vw, 0.8rem);
+            }
+            .deposit-card, .results-card {
+                padding: 12px;
+            }
+            .deposit-form {
+                gap: 10px;
+            }
+            .detail-row {
+                grid-template-columns: 1fr 1.5fr;
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+            }
+            .section-title {
+                font-size: clamp(0.9rem, 2vw, 1rem);
+            }
+            .form-group {
+                max-width: 200px;
+            }
+            .back-btn {
+                width: 36px;
+                height: 36px;
+                padding: 8px;
+                box-sizing: border-box;
+                overflow: hidden;
+            }
+            .top-nav h1 {
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+                margin: 0 auto;
+                flex: 1;
+            }
+            input[type="text"] {
+                max-width: 200px;
+            }
+            button {
+                min-width: 100px;
             }
         }
     </style>
 </head>
 <body>
     <nav class="top-nav">
-        <button class="back-btn" onclick="window.location.href='dashboard.php'">
-            <i class="fas fa-xmark"></i>
-        </button>
+        <div class="nav-left">
+            <button class="back-btn" onclick="window.location.href='dashboard.php'">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
         <h1>SCHOBANK</h1>
-        <div style="width: 40px;"></div>
+        <div class="nav-right">
+            <div style="width: 40px;"></div>
+        </div>
     </nav>
 
     <div class="main-content">
@@ -589,7 +569,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         <div class="deposit-card">
             <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Transaksi</h3>
             <form id="searchForm" action="" method="GET" class="deposit-form">
-                <div>
+                <div class="form-group">
                     <label for="no_transaksi">No Transaksi:</label>
                     <input type="text" id="no_transaksi" name="no_transaksi" placeholder="TRX..." required autofocus
                            value="<?php echo isset($_GET['no_transaksi']) ? htmlspecialchars($_GET['no_transaksi']) : 'TRX'; ?>">
@@ -610,8 +590,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         t.*, 
                         r1.no_rekening AS rekening_asal, 
                         u1.nama AS nama_nasabah, 
+                        j1.nama_jurusan AS jurusan_asal, 
+                        k1.nama_kelas AS kelas_asal,
                         r2.no_rekening AS rekening_tujuan,
-                        u2.nama AS nama_penerima
+                        u2.nama AS nama_penerima,
+                        j2.nama_jurusan AS jurusan_tujuan,
+                        k2.nama_kelas AS kelas_tujuan,
+                        pt.petugas1_nama,
+                        pt.petugas2_nama,
+                        up.nama AS petugas_nama
                       FROM 
                         transaksi t
                       JOIN 
@@ -619,23 +606,33 @@ $username = $_SESSION['username'] ?? 'Petugas';
                       JOIN 
                         users u1 ON r1.user_id = u1.id
                       LEFT JOIN 
+                        jurusan j1 ON u1.jurusan_id = j1.id
+                      LEFT JOIN 
+                        kelas k1 ON u1.kelas_id = k1.id
+                      LEFT JOIN 
                         rekening r2 ON t.rekening_tujuan_id = r2.id
                       LEFT JOIN 
                         users u2 ON r2.user_id = u2.id
+                      LEFT JOIN 
+                        jurusan j2 ON u2.jurusan_id = j2.id
+                      LEFT JOIN 
+                        kelas k2 ON u2.kelas_id = k2.id
+                      LEFT JOIN 
+                        petugas_tugas pt ON DATE(t.created_at) = pt.tanggal
+                      LEFT JOIN 
+                        users up ON t.petugas_id = up.id
                       WHERE 
                         t.no_transaksi = '$no_transaksi'";
+            
             $result = $conn->query($query);
+            if (!$result) {
+                error_log("Query failed: " . $conn->error);
+                echo '<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> Error executing query. Please contact the administrator.</div>';
+                exit;
+            }
 
-            if ($result && $result->num_rows > 0) {
+            if ($result->num_rows > 0) {
                 $row = $result->fetch_assoc();
-                $transaksi_date = date('Y-m-d', strtotime($row['created_at']));
-                $query_petugas = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = '$transaksi_date'";
-                $result_petugas = $conn->query($query_petugas);
-                
-                $petugas_info = $result_petugas && $result_petugas->num_rows > 0
-                    ? $result_petugas->fetch_assoc()['petugas1_nama'] . ' dan ' . $result_petugas->fetch_assoc()['petugas2_nama']
-                    : 'Tidak ada data petugas';
-
                 $badgeClass = '';
                 $transactionIcon = '';
                 switch ($row['jenis_transaksi']) {
@@ -652,9 +649,31 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         $transactionIcon = '<i class="fas fa-exchange-alt"></i>';
                         break;
                 }
+                // Map status
+                $status_display = $row['status'];
+                if ($row['status'] === 'approved') {
+                    $status_display = 'Berhasil';
+                } elseif ($row['status'] === 'pending') {
+                    $status_display = 'Menunggu';
+                } elseif ($row['status'] === 'rejected') {
+                    $status_display = 'Ditolak';
+                }
+                // Combine petugas names from petugas_tugas
+                $petugas_display = '';
+                if (!empty($row['petugas1_nama']) && !empty($row['petugas2_nama'])) {
+                    $petugas_display = htmlspecialchars($row['petugas1_nama']) . ' dan ' . htmlspecialchars($row['petugas2_nama']);
+                } elseif (!empty($row['petugas1_nama'])) {
+                    $petugas_display = htmlspecialchars($row['petugas1_nama']);
+                } elseif (!empty($row['petugas2_nama'])) {
+                    $petugas_display = htmlspecialchars($row['petugas2_nama']);
+                } elseif (!empty($row['petugas_nama'])) {
+                    $petugas_display = htmlspecialchars($row['petugas_nama']);
+                } else {
+                    $petugas_display = 'Tidak ada data petugas';
+                }
                 ?>
                 <div class="results-card" id="resultsContainer">
-                    <h3 class="section-title"><i class="fas fa-receipt"></i> Detail Transaksi</h3>
+                    <h3 class="section-title"><?php echo $transactionIcon; ?> Detail Transaksi</h3>
                     <div class="detail-row">
                         <div class="detail-label">No Transaksi:</div>
                         <div class="detail-value"><?php echo htmlspecialchars($row['no_transaksi']); ?></div>
@@ -673,64 +692,50 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Petugas:</div>
-                        <div class="detail-value"><?php echo htmlspecialchars($petugas_info); ?></div>
+                        <div class="detail-value"><?php echo $petugas_display; ?></div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Status:</div>
-                        <div class="detail-value"><?php echo strtoupper($row['status']); ?></div>
+                        <div class="detail-value"><?php echo htmlspecialchars($status_display); ?></div>
                     </div>
-
-                    <div class="transaction-info">
-                        <?php
-                        switch ($row['jenis_transaksi']) {
-                            case 'setor':
-                                ?>
-                                <h3><?php echo $transactionIcon; ?> Detail Setoran</h3>
-                                <div class="account-info">
-                                    <div class="account-box">
-                                        <h4><i class="fas fa-user-circle"></i> Rekening Tujuan</h4>
-                                        <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_asal']); ?></p>
-                                        <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_nasabah']); ?></p>
-                                        <p><strong>Keterangan:</strong> Setoran tunai ke rekening</p>
-                                    </div>
-                                </div>
-                                <?php
-                                break;
-                            case 'tarik':
-                                ?>
-                                <h3><?php echo $transactionIcon; ?> Detail Penarikan</h3>
-                                <div class="account-info">
-                                    <div class="account-box">
-                                        <h4><i class="fas fa-user-circle"></i> Rekening Sumber</h4>
-                                        <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_asal']); ?></p>
-                                        <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_nasabah']); ?></p>
-                                        <p><strong>Keterangan:</strong> Penarikan tunai dari rekening</p>
-                                    </div>
-                                </div>
-                                <?php
-                                break;
-                            case 'transfer':
-                                ?>
-                                <h3><?php echo $transactionIcon; ?> Detail Transfer</h3>
-                                <div class="account-info">
-                                    <div class="transfer-details">
-                                        <div class="account-box">
-                                            <h4><i class="fas fa-user-circle"></i> Rekening Pengirim</h4>
-                                            <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_asal']); ?></p>
-                                            <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_nasabah']); ?></p>
-                                        </div>
-                                        <div class="account-box">
-                                            <h4><i class="fas fa-user-circle"></i> Rekening Penerima</h4>
-                                            <p><strong>No Rekening:</strong> <?php echo htmlspecialchars($row['rekening_tujuan']); ?></p>
-                                            <p><strong>Nama:</strong> <?php echo htmlspecialchars($row['nama_penerima']); ?></p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <?php
-                                break;
-                        }
-                        ?>
+                    <div class="detail-divider"></div>
+                    <div class="detail-subheading"><i class="fas fa-user-circle"></i> Rekening Sumber</div>
+                    <div class="detail-row">
+                        <div class="detail-label">No Rekening:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['rekening_asal']); ?></div>
                     </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['nama_nasabah']); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['jurusan_asal'] ?: '-'); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['kelas_asal'] ?: '-'); ?></div>
+                    </div>
+                    <?php if ($row['jenis_transaksi'] === 'transfer' && !empty($row['rekening_tujuan_id'])) { ?>
+                    <div class="detail-divider"></div>
+                    <div class="detail-subheading"><i class="fas fa-user-circle"></i> Rekening Tujuan</div>
+                    <div class="detail-row">
+                        <div class="detail-label">No Rekening:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['rekening_tujuan']); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['nama_penerima']); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['jurusan_tujuan'] ?: '-'); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($row['kelas_tujuan'] ?: '-'); ?></div>
+                    </div>
+                    <?php } ?>
                 </div>
                 <?php
             } else {
@@ -823,10 +828,14 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     inputNoTransaksi.focus();
                     return;
                 }
+                e.preventDefault();
                 searchBtn.classList.add('btn-loading');
+                searchBtn.disabled = true;
                 setTimeout(() => {
                     searchBtn.classList.remove('btn-loading');
-                }, 800);
+                    searchBtn.disabled = false;
+                    searchForm.submit();
+                }, 2000);
             });
 
             function showAlert(message, type) {
@@ -851,7 +860,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 }, 5000);
             }
 
-            // Auto-hide and remove the "Transaksi tidak ditemukan" alert and its container
             const alertNotFound = document.getElementById('alertNotFound');
             if (alertNotFound) {
                 setTimeout(() => {

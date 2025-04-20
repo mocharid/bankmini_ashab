@@ -1344,7 +1344,7 @@ $daily_quote = $quotes[$day_index];
     <div class="wrapper">
         <!-- Header -->
         <div class="header">
-            <h1>Dashboard Nasabah</h1>
+            <h1>Rekening Digital</h1>
             <div class="menu">
                 <div class="notification-dropdown">
                     <a href="#" class="notification-toggle">
