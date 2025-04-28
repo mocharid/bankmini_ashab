@@ -43,18 +43,7 @@ $stmt->execute();
 $result = $stmt->get_result();
 $uang_keluar = $result->fetch_assoc()['uang_keluar'] ?? 0;
 
-// Get additional balance from admin transfers
-$query = "SELECT SUM(jumlah) as saldo_tambahan 
-          FROM saldo_transfers 
-          WHERE petugas_id = ? 
-          AND tanggal = CURDATE()";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $petugas_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$saldo_tambahan = $result->fetch_assoc()['saldo_tambahan'] ?? 0;
-
-$saldo_bersih = ($uang_masuk - $uang_keluar) + $saldo_tambahan;
+$saldo_bersih = $uang_masuk - $uang_keluar;
 
 // Check if user is logged in
 $petugas_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
@@ -1432,7 +1421,6 @@ function tanggal_indonesia($tanggal) {
                 </div>
 
                 <div class="menu-label">Menu Lainnya</div>
-
                 <div class="menu-item">
                     <a href="riwayat_transfer.php">
                         <i class="fas fa-history"></i> Riwayat Transfer
@@ -1525,20 +1513,6 @@ function tanggal_indonesia($tanggal) {
                         </div>
                     </div>
                 </div>
-                
-                <!-- <div class="stat-box admin-transfer">
-                    <div class="stat-icon">
-                        <i class="fas fa-user-plus"></i>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-title">Penambahan Saldo oleh Admin</div>
-                        <div class="stat-value">Rp <?= number_format($saldo_tambahan, 0, ',', '.') ?></div>
-                        <div class="stat-trend">
-                            <i class="fas fa-hand-holding-usd"></i>
-                            <span>Transfer Admin</span>
-                        </div>
-                    </div>
-                </div> -->
                 
                 <div class="stat-box balance">
                     <div class="stat-icon">

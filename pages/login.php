@@ -4,7 +4,29 @@ require_once '../includes/db_connection.php';
 
 date_default_timezone_set('Asia/Jakarta');
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+// Handle AJAX request to check user role
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'check_role') {
+    $username = $_POST['username'];
+    $query = "SELECT role FROM users WHERE username = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        echo json_encode(['role' => $user['role']]);
+    } else {
+        echo json_encode(['role' => null]);
+    }
+    
+    $stmt->close();
+    exit();
+}
+
+$is_petugas = false; // Flag to determine if the user is a petugas
+
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['action'])) {
     $username = $_POST['username'];
     $password = $_POST['password'];
     $code = isset($_POST['code']) ? $_POST['code'] : '';
@@ -33,6 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $_SESSION['username'] = $username;
                 $_SESSION['password'] = $password;
                 $_SESSION['code'] = $code;
+                $_SESSION['is_petugas'] = true; // Keep is_petugas true for petugas role
                 header("Location: login.php");
                 exit();
             }
@@ -45,21 +68,35 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         header("Location: ../index.php");
         exit();
     } else {
+        // Check if the username exists to determine if it's a petugas
+        $query_role = "SELECT role FROM users WHERE username = ?";
+        $stmt_role = $conn->prepare($query_role);
+        $stmt_role->bind_param("s", $username);
+        $stmt_role->execute();
+        $result_role = $stmt_role->get_result();
+        if ($result_role->num_rows > 0) {
+            $user = $result_role->fetch_assoc();
+            $is_petugas = $user['role'] === 'petugas';
+        }
+
         $_SESSION['error_message'] = "Username atau password salah!";
         $_SESSION['username'] = $username;
         $_SESSION['password'] = $password;
         $_SESSION['code'] = $code;
+        $_SESSION['is_petugas'] = $is_petugas;
         header("Location: login.php");
         exit();
     }
 }
 
+// Retrieve session data
 $error_message = isset($_SESSION['error_message']) ? $_SESSION['error_message'] : null;
 $username = isset($_SESSION['username']) ? $_SESSION['username'] : '';
 $password = isset($_SESSION['password']) ? $_SESSION['password'] : '';
 $code = isset($_SESSION['code']) ? $_SESSION['code'] : '';
+$is_petugas = isset($_SESSION['is_petugas']) ? $_SESSION['is_petugas'] : false;
 $show_error_popup = !empty($error_message);
-unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], $_SESSION['code']);
+unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], $_SESSION['code'], $_SESSION['is_petugas']);
 ?>
 
 <!DOCTYPE html>
@@ -230,7 +267,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             font-size: 1.1rem;
         }
 
-        .input-group i.toggle-icon {
+        .input-group i.toggle-icon, .input-group i.info-icon {
             position: absolute;
             right: 14px;
             top: 50%;
@@ -241,7 +278,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             transition: color 0.3s ease;
         }
 
-        .input-group i.toggle-icon:hover {
+        .input-group i.toggle-icon:hover, .input-group i.info-icon:hover {
             color: var(--secondary-color);
         }
 
@@ -263,7 +300,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             background: linear-gradient(90deg, #ffffff 0%, #f0faff 100%);
         }
 
-        input[type="password"], input[type="text"]#code {
+        input[type="password"], input[type="tel"]#code {
             padding-right: 50px;
         }
 
@@ -290,7 +327,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             transform: translateY(0);
         }
 
-        .error-overlay {
+        .error-overlay, .info-overlay {
             position: fixed;
             top: 0;
             left: 0;
@@ -303,6 +340,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             z-index: 1000;
             opacity: 0;
             animation: fadeInOverlay 0.5s ease-in-out forwards;
+            cursor: pointer;
         }
 
         @keyframes fadeInOverlay {
@@ -315,7 +353,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             to { opacity: 0; }
         }
 
-        .error-modal {
+        .error-modal, .info-modal {
             background: linear-gradient(145deg, #ffffff, #ffe6e6);
             border-radius: 20px;
             padding: 40px;
@@ -330,18 +368,26 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             animation: popInModal 0.7s ease-out forwards;
         }
 
+        .info-modal {
+            background: linear-gradient(145deg, #ffffff, #e6f7ff);
+        }
+
         @keyframes popInModal {
             0% { transform: scale(0.5); opacity: 0; }
             70% { transform: scale(1.05); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .error-icon {
+        .error-icon, .info-icon {
             font-size: clamp(4rem, 8vw, 4.5rem);
             color: var(--danger-color);
             margin-bottom: 25px;
             animation: bounceIn 0.6s ease-out;
             filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        .info-icon {
+            color: var(--secondary-color);
         }
 
         @keyframes bounceIn {
@@ -350,33 +396,17 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .error-modal h3 {
+        .error-modal h3, .info-modal h3 {
             color: var(--primary-color);
             margin-bottom: 15px;
             font-size: clamp(1.4rem, 3vw, 1.6rem);
             font-weight: 600;
         }
 
-        .error-modal p {
+        .error-modal p, .info-modal p {
             color: var(--text-secondary);
             font-size: clamp(0.95rem, 2.2vw, 1.1rem);
-            margin-bottom: 25px;
             line-height: 1.5;
-        }
-
-        .btn-close {
-            background: var(--danger-color);
-            padding: 10px 20px;
-            border-radius: 6px;
-            color: white;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        .btn-close:hover {
-            background: #b91c1c;
         }
 
         .bank-tagline {
@@ -448,7 +478,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
                 padding: 10px 40px;
             }
 
-            input[type="password"], input[type="text"]#code {
+            input[type="password"], input[type="tel"]#code {
                 padding-right: 45px;
             }
 
@@ -461,7 +491,8 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             }
 
             .input-group i.icon,
-            .input-group i.toggle-icon {
+            .input-group i.toggle-icon,
+            .input-group i.info-icon {
                 font-size: 1rem;
             }
 
@@ -469,7 +500,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
                 font-size: 0.85rem;
             }
 
-            .error-modal {
+            .error-modal, .info-modal {
                 width: 90%;
                 padding: 30px;
             }
@@ -512,10 +543,10 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
                     <i class="fas fa-eye toggle-icon" id="togglePassword"></i>
                 </div>
                 
-                <div class="input-group" id="code-group">
+                <div class="input-group" id="code-group" style="display: <?= $is_petugas ? 'block' : 'none' ?>;">
                     <i class="fas fa-key icon"></i>
-                    <input type="text" name="code" id="code" placeholder="Kode Petugas (4 digit)" value="<?= htmlspecialchars($code) ?>" maxlength="4" pattern="\d{4}">
-                    <i class="fas fa-eye toggle-icon" id="toggleCode"></i>
+                    <input type="tel" name="code" id="code" placeholder="Kode Petugas (4 digit)" value="<?= htmlspecialchars($code) ?>" maxlength="4" pattern="\d{4}" inputmode="numeric" onkeypress="return (event.charCode !=8 && event.charCode ==0 || (event.charCode >= 48 && event.charCode <= 57))" <?= $is_petugas ? 'required' : '' ?>>
+                    <i class="fas fa-exclamation-circle info-icon" id="codeInfoIcon" title="Informasi Kode Petugas"></i>
                 </div>
                 
                 <div class="forgot-password">
@@ -542,12 +573,20 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
                 </div>
                 <h3>Kesalahan</h3>
                 <p><?= htmlspecialchars($error_message) ?></p>
-                <button class="btn-close" onclick="this.closest('.error-overlay').remove()">
-                    <i class="fas fa-times"></i> Tutup
-                </button>
             </div>
         </div>
     <?php endif; ?>
+
+    <!-- Info Modal -->
+    <div class="info-overlay" id="infoModal" style="display: none;">
+        <div class="info-modal">
+            <div class="info-icon">
+                <i class="fas fa-info-circle"></i>
+            </div>
+            <h3>Informasi</h3>
+            <p>Kode ini didapat dari admin.</p>
+        </div>
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -562,55 +601,129 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
                 }
             });
 
-            // Toggle visibility for password and code
-            const toggleIcons = document.querySelectorAll('.toggle-icon');
-            toggleIcons.forEach(icon => {
-                icon.addEventListener('click', function() {
-                    const input = this.previousElementSibling;
-                    const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
-                    input.setAttribute('type', type);
+            // Toggle visibility for password
+            const togglePassword = document.getElementById('togglePassword');
+            const passwordInput = document.getElementById('password');
+            
+            if (togglePassword && passwordInput) {
+                togglePassword.addEventListener('click', function() {
+                    const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                    passwordInput.setAttribute('type', type);
                     this.classList.toggle('fa-eye');
                     this.classList.toggle('fa-eye-slash');
                 });
-            });
+            }
 
-            // Show/hide code field based on username
+            // Code input validation
+            const codeInput = document.getElementById('code');
+            if (codeInput) {
+                // Prevent non-numeric input
+                codeInput.addEventListener('input', function() {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                    if (this.value.length > 4) {
+                        this.value = this.value.slice(0, 4);
+                    }
+                });
+            }
+
+            // Show/hide code field based on user role
             const usernameInput = document.getElementById('username');
             const codeGroup = document.getElementById('code-group');
-            const codeInput = document.getElementById('code');
-            usernameInput.addEventListener('input', function() {
-                if (this.value.trim().toLowerCase().startsWith('petugas')) {
+            const isPetugas = <?= $is_petugas ? 'true' : 'false' ?>; // Get initial state from PHP
+            
+            if (usernameInput && codeGroup) {
+                // Set initial state based on PHP
+                if (isPetugas) {
                     codeGroup.style.display = 'block';
                     codeInput.setAttribute('required', 'required');
-                } else {
-                    codeGroup.style.display = 'none';
-                    codeInput.removeAttribute('required');
                 }
-            });
 
-            // Restore code field visibility
-            <?php if ($username && strpos(strtolower($username), 'petugas') === 0): ?>
-                codeGroup.style.display = 'block';
-                codeInput.setAttribute('required', 'required');
-            <?php endif; ?>
+                usernameInput.addEventListener('input', function() {
+                    const username = this.value.trim();
+                    if (username.length > 0) {
+                        // Make AJAX request to check user role
+                        fetch('', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: 'action=check_role&username=' + encodeURIComponent(username)
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.role === 'petugas') {
+                                codeGroup.style.display = 'block';
+                                codeInput.setAttribute('required', 'required');
+                            } else if (!isPetugas) { // Only hide if not already set as petugas by PHP
+                                codeGroup.style.display = 'none';
+                                codeInput.removeAttribute('required');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error checking role:', error);
+                            if (!isPetugas) { // Only hide if not already set as petugas by PHP
+                                codeGroup.style.display = 'none';
+                                codeInput.removeAttribute('required');
+                            }
+                        });
+                    } else if (!isPetugas) { // Only hide if not already set as petugas by PHP
+                        codeGroup.style.display = 'none';
+                        codeInput.removeAttribute('required');
+                    }
+                });
+            }
+
+            // Code info icon click handler
+            const codeInfoIcon = document.getElementById('codeInfoIcon');
+            const infoModal = document.getElementById('infoModal');
+            if (codeInfoIcon && infoModal) {
+                codeInfoIcon.addEventListener('click', function() {
+                    infoModal.style.display = 'flex';
+                    // Auto-close after 5 seconds
+                    setTimeout(() => {
+                        infoModal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        setTimeout(() => {
+                            infoModal.style.display = 'none';
+                            infoModal.style.animation = ''; // Reset animation
+                        }, 500);
+                    }, 5000);
+                    // Close on click anywhere
+                    infoModal.addEventListener('click', function() {
+                        this.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        setTimeout(() => {
+                            this.style.display = 'none';
+                            this.style.animation = ''; // Reset animation
+                        }, 500);
+                    }, { once: true });
+                });
+            }
 
             // Form submission feedback
             const loginForm = document.getElementById('login-form');
             if (loginForm) {
                 loginForm.addEventListener('submit', function() {
                     const submitBtn = this.querySelector('button[type="submit"]');
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
-                    submitBtn.disabled = true;
+                    if (submitBtn) {
+                        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+                        submitBtn.disabled = true;
+                    }
                 });
             }
 
-            // Auto-close error popup
+            // Auto-close error popup and close on click
             const errorModal = document.getElementById('errorModal');
             if (errorModal) {
+                // Auto-close after 5 seconds
                 setTimeout(() => {
                     errorModal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => errorModal.remove(), 500);
                 }, 5000);
+
+                // Close on click anywhere
+                errorModal.addEventListener('click', function() {
+                    this.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => this.remove(), 500);
+                });
             }
         });
     </script>

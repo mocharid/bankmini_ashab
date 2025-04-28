@@ -98,13 +98,12 @@ $conn->close();
 
         .top-nav {
             background: var(--primary-dark);
-            padding: 15px 30px;
+            padding: 15px 20px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            position: relative;
         }
 
         .back-btn {
@@ -120,11 +119,20 @@ $conn->close();
             width: 40px;
             height: 40px;
             transition: var(--transition);
+            margin-right: 10px;
         }
 
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
+        }
+
+        .top-nav h1 {
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            margin: 0;
         }
 
         .main-content {
@@ -186,7 +194,7 @@ $conn->close();
             font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .search-card, .results-card {
+        .search-card {
             background: white;
             border-radius: 15px;
             padding: 25px;
@@ -195,7 +203,7 @@ $conn->close();
             transition: var(--transition);
         }
 
-        .search-card:hover, .results-card:hover {
+        .search-card:hover {
             box-shadow: var(--shadow-md);
             transform: translateY(-5px);
         }
@@ -211,12 +219,15 @@ $conn->close();
             color: var(--text-secondary);
             font-weight: 500;
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            text-align: center;
         }
 
         .input-group {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         .prefix {
@@ -272,7 +283,7 @@ $conn->close();
             align-items: center;
             gap: 8px;
             transition: var(--transition);
-            width: fit-content;
+            margin: 0 auto;
         }
 
         button:hover {
@@ -284,31 +295,14 @@ $conn->close();
             transform: scale(0.95);
         }
 
-        .modal-close-btn {
-            background-color: var(--danger-color);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-top: 15px;
-            font-size: clamp(0.85rem, 2vw, 0.95rem);
-            transition: var(--transition);
-        }
-
-        .modal-close-btn:hover {
-            background-color: #d32f2f;
-            transform: translateY(-2px);
-        }
-
         .detail-row {
             display: grid;
             grid-template-columns: 1fr 2fr;
             align-items: center;
             border-bottom: 1px solid #eee;
-            padding: 12px 0;
+            padding: 10px 0;
             gap: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             transition: var(--transition);
         }
 
@@ -333,12 +327,12 @@ $conn->close();
         }
 
         .balance-display {
-            padding: 25px;
+            padding: 20px;
             background: linear-gradient(to right, #f8faff, #f0f5ff);
             border-radius: 12px;
             text-align: center;
             box-shadow: inset 0 2px 10px rgba(0,0,0,0.03);
-            margin-top: 20px;
+            margin-top: 15px;
             position: relative;
             overflow: hidden;
         }
@@ -356,19 +350,19 @@ $conn->close();
 
         .balance-label {
             color: var(--text-secondary);
-            font-size: clamp(1rem, 2vw, 1.1rem);
-            margin-bottom: 15px;
+            font-size: clamp(0.95rem, 1.8vw, 1rem);
+            margin-bottom: 10px;
             font-weight: 500;
         }
 
         .balance-amount {
-            font-size: clamp(2rem, 4vw, 2.25rem);
+            font-size: clamp(1.75rem, 3.5vw, 2rem);
             color: var(--primary-color);
             font-weight: 700;
-            margin: 15px 0;
+            margin: 10px 0;
             position: relative;
             display: inline-block;
-            padding: 8px 25px;
+            padding: 6px 20px;
             border-radius: 50px;
             background: white;
             box-shadow: var(--shadow-sm);
@@ -376,8 +370,8 @@ $conn->close();
 
         .balance-info {
             color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.9rem);
-            margin-top: 15px;
+            font-size: clamp(0.8rem, 1.6vw, 0.85rem);
+            margin-top: 10px;
         }
 
         .notification-overlay {
@@ -393,15 +387,16 @@ $conn->close();
             z-index: 1000;
             opacity: 0;
             animation: fadeInOverlay 0.5s ease-in-out forwards;
+            cursor: pointer;
         }
 
         .notification-modal {
             background: white;
             border-radius: 15px;
-            padding: 20px;
+            padding: 15px;
             text-align: center;
-            max-width: 90%;
-            width: 350px;
+            max-width: 80%;
+            width: 300px;
             box-shadow: var(--shadow-md);
             transform: scale(0.5);
             opacity: 0;
@@ -413,38 +408,29 @@ $conn->close();
             background: #fff1f0;
         }
 
-        .notification-modal.success {
-            border-left: 5px solid var(--primary-color);
-            background: var(--primary-light);
-        }
-
         .notification-icon {
-            font-size: clamp(2.5rem, 5vw, 3rem);
-            margin-bottom: 15px;
+            font-size: clamp(2rem, 4vw, 2.5rem);
+            margin-bottom: 10px;
         }
 
         .notification-icon.error {
             color: var(--danger-color);
         }
 
-        .notification-icon.success {
-            color: var(--primary-color);
-        }
-
         .notification-modal h3 {
             color: var(--text-primary);
-            font-size: clamp(1.2rem, 2.5vw, 1.3rem);
-            margin-bottom: 10px;
+            font-size: clamp(1.1rem, 2.2vw, 1.2rem);
+            margin-bottom: 8px;
             font-weight: 600;
         }
 
         .notification-modal p {
             color: var(--text-secondary);
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.9rem);
             line-height: 1.5;
         }
 
-        .success-overlay {
+        .account-overlay {
             position: fixed;
             top: 0;
             left: 0;
@@ -457,6 +443,40 @@ $conn->close();
             z-index: 1000;
             opacity: 0;
             animation: fadeInOverlay 0.5s ease-in-out forwards;
+            cursor: pointer;
+        }
+
+        .account-modal {
+            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: left;
+            max-width: 80%;
+            width: 350px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transform: scale(0.5);
+            opacity: 0;
+            animation: popInModal 0.7s ease-out forwards;
+        }
+
+        .account-icon {
+            font-size: clamp(2.5rem, 5vw, 3rem);
+            color: var(--secondary-color);
+            margin-bottom: 15px;
+            text-align: center;
+            animation: bounceIn 0.6s ease-out;
+        }
+
+        .account-modal h3 {
+            color: var(--primary-dark);
+            margin-bottom: 15px;
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            font-weight: 600;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         @keyframes fadeInOverlay {
@@ -475,67 +495,10 @@ $conn->close();
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
-            border-radius: 20px;
-            padding: 40px;
-            text-align: center;
-            max-width: 90%;
-            width: 450px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
-        }
-
-        .success-icon {
-            font-size: clamp(4rem, 8vw, 4.5rem);
-            color: var(--secondary-color);
-            margin-bottom: 25px;
-            animation: bounceIn 0.6s ease-out;
-        }
-
         @keyframes bounceIn {
             0% { transform: scale(0); opacity: 0; }
             50% { transform: scale(1.2); }
             100% { transform: scale(1); opacity: 1; }
-        }
-
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: 15px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            font-weight: 600;
-        }
-
-        .success-modal p {
-            color: var(--text-secondary);
-            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
-            margin-bottom: 25px;
-            line-height: 1.5;
-        }
-
-        .confetti {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
         }
 
         .section-title {
@@ -589,7 +552,16 @@ $conn->close();
 
         @media (max-width: 768px) {
             .top-nav {
-                padding: 15px;
+                padding: 12px 15px;
+            }
+
+            .back-btn {
+                width: 36px;
+                height: 36px;
+                margin-right: 8px;
+            }
+
+            .top-nav h1 {
                 font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
@@ -601,7 +573,7 @@ $conn->close();
                 padding: 20px;
             }
 
-            .search-card, .results-card {
+            .search-card {
                 padding: 20px;
             }
 
@@ -634,55 +606,98 @@ $conn->close();
             }
 
             .detail-row {
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
                 grid-template-columns: 1fr 1.5fr;
             }
 
             .balance-label {
-                font-size: clamp(0.9rem, 2vw, 1rem);
+                font-size: clamp(0.9rem, 1.8vw, 0.95rem);
             }
 
             .balance-amount {
-                font-size: clamp(1.75rem, 3.5vw, 2rem);
-                padding: 6px 20px;
+                font-size: clamp(1.5rem, 3vw, 1.75rem);
+                padding: 5px 15px;
             }
 
             .balance-info {
-                font-size: clamp(0.8rem, 1.8vw, 0.85rem);
+                font-size: clamp(0.75rem, 1.6vw, 0.8rem);
             }
 
             .notification-modal {
                 width: 90%;
-                padding: 15px;
+                max-width: 280px;
+                padding: 12px;
             }
 
             .notification-icon {
-                font-size: clamp(2rem, 4vw, 2.5rem);
+                font-size: clamp(1.8rem, 3.5vw, 2rem);
             }
 
             .notification-modal h3 {
-                font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+                font-size: clamp(1rem, 2vw, 1.1rem);
             }
 
             .notification-modal p {
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
+                font-size: clamp(0.8rem, 1.6vw, 0.85rem);
             }
 
-            .success-modal {
+            .account-modal {
                 width: 90%;
-                padding: 30px;
+                max-width: 320px;
+                padding: 15px;
             }
 
-            .success-icon {
-                font-size: clamp(3.5rem, 7vw, 4rem);
+            .account-icon {
+                font-size: clamp(2rem, 4vw, 2.5rem);
             }
 
-            .success-modal h3 {
-                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            .account-modal h3 {
+                font-size: clamp(1.1rem, 2.2vw, 1.2rem);
             }
 
-            .success-modal p {
-                font-size: clamp(0.9rem, 2vw, 1rem);
+            .detail-row {
+                font-size: clamp(0.75rem, 1.6vw, 0.85rem);
+            }
+
+            .balance-amount {
+                font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .top-nav {
+                padding: 10px 12px;
+            }
+
+            .back-btn {
+                width: 32px;
+                height: 32px;
+                margin-right: 6px;
+            }
+
+            .top-nav h1 {
+                font-size: clamp(0.9rem, 2.2vw, 1.1rem);
+            }
+
+            .digit-input {
+                width: 32px;
+                height: 32px;
+                font-size: clamp(0.85rem, 1.8vw, 0.9rem);
+            }
+
+            .prefix {
+                padding: 10px 12px;
+                font-size: clamp(0.85rem, 1.8vw, 0.9rem);
+            }
+
+            .notification-modal {
+                max-width: 260px;
+                padding: 10px;
+            }
+
+            .account-modal {
+                max-width: 280px;
+                padding: 12px;
             }
         }
     </style>
@@ -693,7 +708,6 @@ $conn->close();
             <i class="fas fa-xmark"></i>
         </button>
         <h1>SCHOBANK</h1>
-        <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
@@ -728,45 +742,6 @@ $conn->close();
                 </button>
             </form>
         </div>
-
-        <?php
-        if (isset($_SESSION['search_result'])) {
-            $row = $_SESSION['search_result'];
-            ?>
-            <div class="results-card" id="resultsContainer">
-                <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Nasabah:</div>
-                    <div class="detail-value"><?php echo htmlspecialchars($row['nama']); ?></div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">No. Rekening:</div>
-                    <div class="detail-value"><?php echo htmlspecialchars($row['no_rekening']); ?></div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas:</div>
-                    <div class="detail-value"><?php echo htmlspecialchars($row['nama_kelas'] ?? 'N/A'); ?></div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan:</div>
-                    <div class="detail-value"><?php echo htmlspecialchars($row['nama_jurusan'] ?? 'N/A'); ?></div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Tanggal Pembukaan:</div>
-                    <div class="detail-value"><?php echo date('d/m/Y', strtotime($row['created_at'] ?? 'now')); ?></div>
-                </div>
-                <div class="balance-display">
-                    <div class="balance-label">Saldo Rekening Saat Ini</div>
-                    <div class="balance-amount">Rp <?php echo number_format($row['saldo'], 0, ',', '.'); ?></div>
-                    <div class="balance-info"><i class="fas fa-info-circle"></i> Saldo diperbarui per <?php echo date('d/m/Y H:i'); ?> WIB</div>
-                </div>
-            </div>
-            <?php
-            // Clear session data
-            unset($_SESSION['search_result']);
-            unset($_SESSION['search_success']);
-        }
-        ?>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
@@ -800,7 +775,6 @@ $conn->close();
             const searchBtn = document.getElementById('searchBtn');
             const digitInputs = document.querySelectorAll('.digit-input');
             const noRekeningInput = document.getElementById('no_rekening');
-            const resultsContainer = document.getElementById('resultsContainer');
             const prefix = "REK";
 
             // Initialize digit inputs
@@ -876,11 +850,11 @@ $conn->close();
                 }, 1000);
             });
 
-            // Show modal for error or success
+            // Show modal for error
             function showModal(message, type) {
                 console.log('showModal called:', message, type);
                 // Remove existing modals
-                const existingModals = document.querySelectorAll('.notification-overlay, .success-overlay');
+                const existingModals = document.querySelectorAll('.notification-overlay, .account-overlay');
                 existingModals.forEach(modal => {
                     modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => modal.remove(), 500);
@@ -897,19 +871,16 @@ $conn->close();
                         </div>
                         <h3>${title}</h3>
                         <p>${message}</p>
-                        <button class="modal-close-btn" onclick="this.closest('.notification-overlay').click()">Tutup</button>
                     </div>
                 `;
                 document.body.appendChild(overlay);
 
-                overlay.addEventListener('click', (e) => {
-                    if (e.target === overlay || e.target.classList.contains('modal-close-btn')) {
-                        console.log('Closing modal');
-                        overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                        const modal = overlay.querySelector('.notification-modal');
-                        modal.style.animation = 'popInModal 0.5s ease-out reverse';
-                        setTimeout(() => overlay.remove(), 500);
-                    }
+                overlay.addEventListener('click', () => {
+                    console.log('Closing modal');
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    const modal = overlay.querySelector('.notification-modal');
+                    modal.style.animation = 'popInModal 0.5s ease-out reverse';
+                    setTimeout(() => overlay.remove(), 500);
                 });
 
                 // Auto-close after 5 seconds
@@ -918,85 +889,74 @@ $conn->close();
                     overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     const modal = overlay.querySelector('.notification-modal');
                     modal.style.animation = 'popInModal 0.5s ease-out reverse';
-                    setTimeout(() => overlay.remove(), 500);
+                    setTimeout(() => modal.remove(), 500);
                 }, 5000);
             }
 
-            // Show success animation with confetti
-            function showSuccessAnimation(message) {
-                console.log('showSuccessAnimation called:', message);
+            // Show account details modal
+            function showAccountModal(data) {
+                console.log('showAccountModal called:', data);
                 // Remove existing modals
-                const existingModals = document.querySelectorAll('.notification-overlay, .success-overlay');
+                const existingModals = document.querySelectorAll('.notification-overlay, .account-overlay');
                 existingModals.forEach(modal => {
                     modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => modal.remove(), 500);
                 });
 
                 const overlay = document.createElement('div');
-                overlay.className = 'success-overlay';
+                overlay.className = 'account-overlay';
                 overlay.innerHTML = `
-                    <div class="success-modal">
-                        <div class="success-icon">
-                            <i class="fas fa-check-circle"></i>
+                    <div class="account-modal">
+                        <div class="account-icon">
+                            <i class="fas fa-user-circle"></i>
                         </div>
-                        <h3>Pencarian Berhasil!</h3>
-                        <p>${message}</p>
-                        <button class="modal-close-btn" onclick="this.closest('.success-overlay').click()">Tutup</button>
+                        <h3><i class="fas fa-info-circle"></i> Detail Rekening</h3>
+                        <div class="detail-row">
+                            <div class="detail-label">Nama Nasabah:</div>
+                            <div class="detail-value">${data.nama}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">No. Rekening:</div>
+                            <div class="detail-value">${data.no_rekening}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Kelas:</div>
+                            <div class="detail-value">${data.nama_kelas || 'N/A'}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Jurusan:</div>
+                            <div class="detail-value">${data.nama_jurusan || 'N/A'}</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Tanggal Pembukaan:</div>
+                            <div class="detail-value">${data.created_at}</div>
+                        </div>
+                        <div class="balance-display">
+                            <div class="balance-label">Saldo Rekening Saat Ini</div>
+                            <div class="balance-amount">Rp ${data.saldo}</div>
+                            <div class="balance-info"><i class="fas fa-info-circle"></i> Saldo diperbarui per ${data.update_time} WIB</div>
+                        </div>
                     </div>
                 `;
                 document.body.appendChild(overlay);
 
-                const modal = overlay.querySelector('.success-modal');
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    modal.appendChild(confetti);
-                }
-
-                overlay.addEventListener('click', (e) => {
-                    if (e.target === overlay || e.target.classList.contains('modal-close-btn')) {
-                        console.log('Closing success modal');
-                        overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                        modal.style.animation = 'popInModal 0.7s ease-out reverse';
-                        setTimeout(() => overlay.remove(), 500);
-                    }
+                overlay.addEventListener('click', () => {
+                    console.log('Closing account modal');
+                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    const modal = overlay.querySelector('.account-modal');
+                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
+                    setTimeout(() => overlay.remove(), 500);
                 });
 
                 // Auto-close after 5 seconds
                 setTimeout(() => {
-                    console.log('Auto-closing success modal');
+                    console.log('Auto-closing account modal');
                     overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    const modal = overlay.querySelector('.account-modal');
                     modal.style.animation = 'popInModal 0.7s ease-out reverse';
                     setTimeout(() => overlay.remove(), 500);
                 }, 5000);
             }
-
-            // Animate results container
-            if (resultsContainer) {
-                console.log('Animating results container');
-                resultsContainer.style.display = 'none';
-                setTimeout(() => {
-                    resultsContainer.style.display = 'block';
-                    resultsContainer.style.opacity = '0';
-                    resultsContainer.style.transform = 'translateY(20px)';
-                    setTimeout(() => {
-                        resultsContainer.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
-                        resultsContainer.style.opacity = '1';
-                        resultsContainer.style.transform = 'translateY(0)';
-                    }, 100);
-                }, 100);
-            }
-
-            // Enter key support on last input
-            digitInputs[digitInputs.length - 1].addEventListener('keypress', function(e) {
-                if (e.key === 'Enter' && this.value) {
-                    console.log('Enter key pressed, submitting form');
-                    searchBtn.click();
-                }
-            });
 
             // Handle session-based modals
             <?php if (isset($_SESSION['search_error'])): ?>
@@ -1006,9 +966,21 @@ $conn->close();
                 <?php unset($_SESSION['search_error']); ?>
             <?php endif; ?>
 
-            <?php if (isset($_SESSION['search_success'])): ?>
-                console.log('Showing success modal');
-                showSuccessAnimation('Informasi saldo berhasil ditemukan');
+            <?php if (isset($_SESSION['search_success']) && isset($_SESSION['search_result'])): ?>
+                console.log('Showing account modal');
+                showAccountModal({
+                    nama: '<?php echo addslashes($_SESSION['search_result']['nama']); ?>',
+                    no_rekening: '<?php echo addslashes($_SESSION['search_result']['no_rekening']); ?>',
+                    nama_kelas: '<?php echo addslashes($_SESSION['search_result']['nama_kelas'] ?? 'N/A'); ?>',
+                    nama_jurusan: '<?php echo addslashes($_SESSION['search_result']['nama_jurusan'] ?? 'N/A'); ?>',
+                    created_at: '<?php echo date('d/m/Y', strtotime($_SESSION['search_result']['created_at'] ?? 'now')); ?>',
+                    saldo: '<?php echo number_format($_SESSION['search_result']['saldo'], 0, ',', '.'); ?>',
+                    update_time: '<?php echo date('d/m/Y H:i'); ?>'
+                });
+                <?php
+                unset($_SESSION['search_result']);
+                unset($_SESSION['search_success']);
+                ?>
             <?php endif; ?>
 
             // Focus first input on load

@@ -137,8 +137,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         try {
             $conn->begin_transaction();
 
+            // Periksa status is_frozen
             $query = "
-                SELECT r.id, r.user_id, r.saldo, u.nama, u.email, j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
+                SELECT r.id, r.user_id, r.saldo, u.nama, u.email, u.is_frozen, 
+                       j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
                 FROM rekening r 
                 JOIN users u ON r.user_id = u.id 
                 LEFT JOIN jurusan j ON u.jurusan_id = j.id
@@ -155,6 +157,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             $row = $result->fetch_assoc();
+            if ($row['is_frozen']) {
+                throw new Exception('Akun ini sedang dibekukan dan tidak dapat melakukan penarikan.Hubungi Admin');
+            }
+
             $rekening_id = $row['id'];
             $saldo_sekarang = $row['saldo'];
             $nama_nasabah = $row['nama'];
@@ -407,8 +413,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $mail->isSMTP();
                     $mail->Host = 'smtp.gmail.com';
                     $mail->SMTPAuth = true;
-                    $mail->Username = 'mocharid.ip@gmail.com'; // Replace with your SMTP username
-                    $mail->Password = 'spjs plkg ktuu lcxh'; // Replace with your SMTP app-specific password
+                    $mail->Username = 'mocharid.ip@gmail.com';
+                    $mail->Password = 'spjs plkg ktuu lcxh';
                     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                     $mail->Port = 587;
                     $mail->CharSet = 'UTF-8';
@@ -449,4 +455,5 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 } else {
     echo json_encode(['status' => 'error', 'message' => 'Metode request tidak valid.', 'email_status' => 'none']);
 }
+$conn->close();
 ?>

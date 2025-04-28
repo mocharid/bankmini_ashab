@@ -55,7 +55,7 @@ $query = "SELECT COUNT(id) as total_siswa FROM users WHERE role = 'siswa'";
 $result = $conn->query($query);
 $total_siswa = $result->fetch_assoc()['total_siswa'] ?? 0;
 
-// Get total saldo (net setoran hingga kemarin - penarikan admin hari ini - total transfers)
+// Get total saldo (net setoran hingga kemarin + setoran admin hari ini - penarikan admin hari ini)
 $query = "SELECT (
             COALESCE((
                 SELECT SUM(net_setoran)
@@ -67,23 +67,21 @@ $query = "SELECT (
                     WHERE status = 'approved' AND DATE(created_at) < CURDATE()
                     GROUP BY DATE(created_at)
                 ) as daily_net
-            ), 0) -
+            ), 0) +
             COALESCE((
                 SELECT SUM(jumlah)
                 FROM transaksi
-                WHERE jenis_transaksi = 'tarik' AND status = 'approved' 
+                WHERE jenis_transaksi = 'setor' AND status = 'approved'
                       AND DATE(created_at) = CURDATE() AND petugas_id IS NULL
             ), 0) -
             COALESCE((
                 SELECT SUM(jumlah)
-                FROM saldo_transfers
-                WHERE admin_id = ?
+                FROM transaksi
+                WHERE jenis_transaksi = 'tarik' AND status = 'approved'
+                      AND DATE(created_at) = CURDATE() AND petugas_id IS NULL
             ), 0)
           ) as total_saldo";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $admin_id);
-$stmt->execute();
-$result = $stmt->get_result();
+$result = $conn->query($query);
 $total_saldo = $result->fetch_assoc()['total_saldo'] ?? 0;
 
 // Get today's transactions for Net Setoran Harian (hanya transaksi oleh petugas)
@@ -150,10 +148,11 @@ for ($i = 0; $i <= 6; $i++) {
 }
 $net_setoran_data = array_reverse($seven_days);
 
-// Query untuk data chart (7 hari terakhir)
+// Query untuk data chart (7 hari terakhir, semua transaksi admin dan petugas)
 $query_chart = "SELECT DATE(created_at) as tanggal, COUNT(id) as jumlah_transaksi 
                 FROM transaksi 
                 WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) 
+                AND status = 'approved'
                 GROUP BY DATE(created_at) 
                 ORDER BY DATE(created_at) ASC";
 $result_chart = $conn->query($query_chart);
@@ -181,32 +180,6 @@ while ($row = $result_students->fetch_assoc()) {
         'jumlah_siswa' => $row['jumlah_siswa']
     ];
 }
-
-// Query untuk riwayat transfer saldo ke petugas (7 hari terakhir)
-$query_transfers = "SELECT tanggal, SUM(jumlah) as total_transfer
-                    FROM saldo_transfers
-                    WHERE admin_id = ? AND tanggal >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
-                    GROUP BY tanggal
-                    ORDER BY tanggal DESC";
-$stmt = $conn->prepare($query_transfers);
-$stmt->bind_param("i", $admin_id);
-$stmt->execute();
-$result_transfers = $stmt->get_result();
-$transfer_data = [];
-while ($row = $result_transfers->fetch_assoc()) {
-    $transfer_data[$row['tanggal']] = $row['total_transfer'];
-}
-
-// Complete 7-day transfer data with zeros for missing dates
-$transfer_seven_days = [];
-for ($i = 0; $i <= 6; $i++) {
-    $date = date('Y-m-d', strtotime("-$i days"));
-    $transfer_seven_days[] = [
-        'tanggal' => $date,
-        'total_transfer' => isset($transfer_data[$date]) ? $transfer_data[$date] : 0
-    ];
-}
-$transfer_data = array_reverse($transfer_seven_days);
 ?>
 
 <!DOCTYPE html>
@@ -1326,32 +1299,24 @@ $transfer_data = array_reverse($transfer_seven_days);
             <div class="sidebar-menu">
                 <div class="menu-label">Menu Utama</div>
                 <div class="menu-item">
-                    <a href="dashboard.php" class="active">
-                        <i class="fas fa-home"></i> Dashboard
-                    </a>
-                </div>
-                <div class="menu-item">
                     <button class="dropdown-btn" id="dataDropdown">
                         <div class="menu-icon">
-                            <i class="fas fa-database"></i> Tambah Data
+                            <i class="fas fa-database"></i> Kelola Data
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
                     <div class="dropdown-container" id="dataDropdownContainer">
                         <a href="tambah_jurusan.php">
-                            <i class="fas fa-graduation-cap"></i> Tambah Jurusan
+                            <i class="fas fa-graduation-cap"></i> Kelola Jurusan
                         </a>
                         <a href="tambah_kelas.php">
-                            <i class="fas fa-chalkboard"></i> Tambah Kelas
-                        </a>
-                        <a href="tambah_nasabah.php">
-                            <i class="fas fa-user-plus"></i> Tambah Rekening
+                            <i class="fas fa-chalkboard"></i> Kelola Kelas
                         </a>
                         <a href="tambah_petugas.php">
-                            <i class="fas fa-user-shield"></i> Tambah Petugas
+                            <i class="fas fa-user-shield"></i> Kelola Akun Petugas
                         </a>
                         <a href="buat_jadwal.php">
-                            <i class="fas fa-user-cog"></i> Tambah Jadwal Petugas
+                            <i class="fas fa-user-cog"></i> Kelola Jadwal Petugas
                         </a>
                     </div>
                 </div>
@@ -1364,8 +1329,14 @@ $transfer_data = array_reverse($transfer_seven_days);
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
                     <div class="dropdown-container" id="rekapDropdownContainer">
+                        <a href="laporan_admin.php">
+                            <i class="fas fa-file-alt"></i> Rekap Transaksi Admin
+                        </a>
                         <a href="laporan.php">
                             <i class="fas fa-file-alt"></i> Rekap Transaksi Petugas
+                        </a>
+                        <a href="rekap_transaksi.php">
+                            <i class="fas fa-file-alt"></i> Rekap Seluruh Transaksi
                         </a>
                         <a href="rekap_absen.php">
                             <i class="fas fa-user-check"></i> Rekap Absen Petugas
@@ -1377,26 +1348,53 @@ $transfer_data = array_reverse($transfer_seven_days);
                 </div>
 
                 <div class="menu-item">
-                    <a href="tutup_rek.php">
-                        <i class="fas fa-user-slash"></i> Tutup Rekening
-                    </a>
+                    <button class="dropdown-btn" id="rekeningDropdown">
+                        <div class="menu-icon">
+                            <i class="fas fa-users"></i> Manajemen Rekening
+                        </div>
+                        <i class="fas fa-chevron-down arrow"></i>
+                    </button>
+                    <div class="dropdown-container" id="rekeningDropdownContainer">
+                        <a href="tambah_nasabah.php">
+                            <i class="fas fa-user-plus"></i> Buka Rekening
+                        </a>
+                        <a href="tutup_rek.php">
+                            <i class="fas fa-user-slash"></i> Tutup Rekening
+                        </a>
+                    </div>
                 </div>
 
                 <div class="menu-item">
-                    <a href="pemulihan_akun.php">
+                    <button class="dropdown-btn" id="saldoDropdown">
+                        <div class="menu-icon">
+                            <i class="fas fa-wallet"></i> Transaksi
+                        </div>
+                        <i class="fas fa-chevron-down arrow"></i>
+                    </button>
+                    <div class="dropdown-container" id="saldoDropdownContainer">
+                        <a href="setor_saldo_admin.php">
+                            <i class="fas fa-arrow-down"></i> Setor Saldo
+                        </a>
+                        <a href="tarik_saldo_admin.php">
+                            <i class="fas fa-arrow-up"></i> Tarik Saldo
+                        </a>
+                    </div>
+                </div>
+
+                <div class="menu-label">Lainnya</div>
+                <div class="menu-item">
+                    <a href="recover_account.php">
                         <i class="fas fa-user-lock"></i> Pemulihan Akun Siswa
+                    </a>
+                </div>
+                <div class="menu-item">
+                    <a href="freeze_account.php">
+                        <i class="fas fa-ban"></i> Nonaktifkan Akun Siswa
                     </a>
                 </div>
                 <div class="menu-item">
                     <a href="kode_akses_petugas.php">
                         <i class="fas fa-key"></i> Kode Akses Petugas
-                    </a>
-                </div>
-
-                <div class="menu-label">Manajemen Saldo</div>
-                <div class="menu-item">
-                    <a href="tarik_saldo_admin.php">
-                        <i class="fas fa-hand-holding-usd"></i> Tarik Saldo Siswa
                     </a>
                 </div>
 
@@ -1450,27 +1448,38 @@ $transfer_data = array_reverse($transfer_seven_days);
                         </div>
                     </div>
                 </div>
-                
                 <div class="stat-box balance">
                     <div class="stat-icon">
                         <i class="fas fa-wallet"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Total Saldo Semua</div>
-                        <div class="stat-value">Rp <?= number_format($total_saldo, 0, ',', '.') ?></div>
+                        <div class="stat-title">Perkiraan Total Kas Admin</div>
+                        <div class="stat-value">Rp <?= number_format($total_saldo + $saldo_harian, 0, ',', '.') ?></div>
                         <div class="stat-trend">
                             <i class="fas fa-chart-line"></i>
-                            <span>Total Dana Semua Rekening</span>
+                            <span>Perkiraan Total Saldo setelah setoran Petugas</span>
                         </div>
                     </div>
                 </div>
-                
+                <div class="stat-box balance">
+                    <div class="stat-icon">
+                        <i class="fas fa-wallet"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-title">Total Saldo di Kas Admin</div>
+                        <div class="stat-value">Rp <?= number_format($total_saldo, 0, ',', '.') ?></div>
+                        <div class="stat-trend">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Total Saldo di Kas Admin</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="stat-box setor">
                     <div class="stat-icon">
                         <i class="fas fa-money-bill-wave"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Setoran Harian Petugas</div>
+                        <div class="stat-title">Perkiraan Setoran Petugas</div>
                         <div class="stat-value">Rp <?= number_format($saldo_harian, 0, ',', '.') ?></div>
                         <div class="stat-trend">
                             <i class="fas fa-calendar-day"></i>
@@ -1479,91 +1488,66 @@ $transfer_data = array_reverse($transfer_seven_days);
                     </div>
                 </div>
             </div>
-        </div>
         
-        <div class="chart-container">
-            <h3 class="chart-title">Transaksi Terakhir Petugas</h3>
-            <canvas id="transactionChart"></canvas>
-        </div>
+            <div class="chart-container">
+                <h3 class="chart-title">Statik Semua Transaksi Terakhir</h3>
+                <canvas id="transactionChart"></canvas>
+            </div>
 
-        <!-- Pop-up for Students Breakdown -->
-        <div class="popup-overlay" id="studentsPopup">
-            <div class="popup-content">
-                <h2>Rincian Siswa per Kelas</h2>
-                <?php if (empty($students_by_jurusan)): ?>
-                    <div class="empty-state">Tidak ada data siswa tersedia.</div>
-                <?php else: ?>
-                    <?php foreach ($students_by_jurusan as $jurusan => $data): ?>
-                        <div class="jurusan-card">
-                            <div class="jurusan-header">
-                                <div>
-                                    <i class="fas fa-graduation-cap logo"></i>
-                                    <span><?= htmlspecialchars($jurusan) ?></span>
-                                </div>
-                                <i class="fas fa-chevron-down arrow"></i>
-                            </div>
-                            <div class="kelas-content">
-                                <?php foreach ($data['kelas_list'] as $kelas): ?>
-                                    <div class="kelas-card">
-                                        <i class="fas fa-chalkboard logo"></i>
-                                        <span class="kelas-name"><?= htmlspecialchars($kelas['kelas']) ?></span>
-                                        <span class="jumlah-siswa"><?= $kelas['jumlah_siswa'] ?> Siswa</span>
+            <!-- Pop-up for Students Breakdown -->
+            <div class="popup-overlay" id="studentsPopup">
+                <div class="popup-content">
+                    <h2>Rincian Siswa per Kelas</h2>
+                    <?php if (empty($students_by_jurusan)): ?>
+                        <div class="empty-state">Tidak ada data siswa tersedia.</div>
+                    <?php else: ?>
+                        <?php foreach ($students_by_jurusan as $jurusan => $data): ?>
+                            <div class="jurusan-card">
+                                <div class="jurusan-header">
+                                    <div>
+                                        <i class="fas fa-graduation-cap logo"></i>
+                                        <span><?= htmlspecialchars($jurusan) ?></span>
                                     </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Pop-up for Net Setoran Breakdown -->
-        <div class="saldo-popup" id="saldoPopup">
-            <div class="saldo-content">
-                <h2>Rincian Net Setoran 7 Hari</h2>
-                <?php if (empty($net_setoran_data)): ?>
-                    <div class="empty-state">Tidak ada data setoran tersedia.</div>
-                <?php else: ?>
-                    <?php foreach ($net_setoran_data as $data): ?>
-                        <div class="tanggal-card">
-                            <div class="tanggal-header">
-                                <div>
-                                    <i class="fas fa-wallet logo"></i>
-                                    <span><?= formatTanggalIndonesia($data['tanggal']) ?></span>
+                                    <i class="fas fa-chevron-down arrow"></i>
                                 </div>
-                                <i class="fas fa-chevron-down arrow"></i>
-                            </div>
-                            <div class="setoran-content">
-                                <div class="setoran-value">Rp <?= number_format($data['net_setoran'], 0, ',', '.') ?></div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Pop-up for Transfer Breakdown -->
-        <div class="transfer-popup" id="transferPopup">
-            <div class="transfer-content">
-                <h2>Rincian Transfer Saldo 7 Hari</h2>
-                <?php if (empty($transfer_data)): ?>
-                    <div class="empty-state">Tidak ada data transfer tersedia.</div>
-                <?php else: ?>
-                    <?php foreach ($transfer_data as $data): ?>
-                        <div class="tanggal-card">
-                            <div class="tanggal-header">
-                                <div>
-                                    <i class="fas fa-hand-holding-usd logo"></i>
-                                    <span><?= formatTanggalIndonesia($data['tanggal']) ?></span>
+                                <div class="kelas-content">
+                                    <?php foreach ($data['kelas_list'] as $kelas): ?>
+                                        <div class="kelas-card">
+                                            <i class="fas fa-chalkboard logo"></i>
+                                            <span class="kelas-name"><?= htmlspecialchars($kelas['kelas']) ?></span>
+                                            <span class="jumlah-siswa"><?= $kelas['jumlah_siswa'] ?> Siswa</span>
+                                        </div>
+                                    <?php endforeach; ?>
                                 </div>
-                                <i class="fas fa-chevron-down arrow"></i>
                             </div>
-                            <div class="transfer-content">
-                                <div class="transfer-value">Rp <?= number_format($data['total_transfer'], 0, ',', '.') ?></div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Pop-up for Net Setoran Breakdown -->
+            <div class="saldo-popup" id="saldoPopup">
+                <div class="saldo-content">
+                    <h2>Rincian Net Setoran 7 Hari</h2>
+                    <?php if (empty($net_setoran_data)): ?>
+                        <div class="empty-state">Tidak ada data setoran tersedia.</div>
+                    <?php else: ?>
+                        <?php foreach ($net_setoran_data as $data): ?>
+                            <div class="tanggal-card">
+                                <div class="tanggal-header">
+                                    <div>
+                                        <i class="fas fa-wallet logo"></i>
+                                        <span><?= formatTanggalIndonesia($data['tanggal']) ?></span>
+                                    </div>
+                                    <i class="fas fa-chevron-down arrow"></i>
+                                </div>
+                                <div class="setoran-content">
+                                    <div class="setoran-value">Rp <?= number_format($data['net_setoran'], 0, ',', '.') ?></div>
+                                </div>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php endif; ?>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -1727,31 +1711,6 @@ $transfer_data = array_reverse($transfer_seven_days);
                 }
             }
 
-            // Transfer Pop-up functionality
-            const transferBox = document.querySelector('.stat-box.clean-balance');
-            const transferPopup = document.getElementById('transferPopup');
-            if (transferBox && transferPopup) {
-                transferBox.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    transferPopup.classList.add('active');
-                    document.body.classList.add('popup-active');
-                });
-
-                transferPopup.addEventListener('click', function(e) {
-                    if (e.target === transferPopup) {
-                        transferPopup.classList.remove('active');
-                        document.body.classList.remove('popup-active');
-                    }
-                });
-
-                const transferContent = document.querySelector('.transfer-content');
-                if (transferContent) {
-                    transferContent.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                    });
-                }
-            }
-
             // Jurusan card toggle (single-open)
             const jurusanHeaders = document.querySelectorAll('.jurusan-header');
             jurusanHeaders.forEach(header => {
@@ -1775,7 +1734,7 @@ $transfer_data = array_reverse($transfer_seven_days);
                 });
             });
 
-            // Tanggal card toggle (single-open for saldo and transfer)
+            // Tanggal card toggle (single-open for saldo)
             const tanggalHeaders = document.querySelectorAll('.tanggal-header');
             tanggalHeaders.forEach(header => {
                 header.addEventListener('click', function(e) {
@@ -1786,7 +1745,7 @@ $transfer_data = array_reverse($transfer_seven_days);
 
                     tanggalCard.parentElement.querySelectorAll('.tanggal-card').forEach(card => {
                         card.classList.remove('active');
-                        card.querySelector('.setoran-content, .transfer-content').classList.remove('show');
+                        card.querySelector('.setoran-content').classList.remove('show');
                         card.querySelector('.tanggal-header').classList.remove('active');
                     });
 

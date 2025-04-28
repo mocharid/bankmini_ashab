@@ -13,8 +13,19 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
-// Fetch user details
-$query = "SELECT u.nama, u.username, j.nama_jurusan, k.nama_kelas 
+// Function to determine account status
+function getAccountStatus($user_data, $current_time) {
+    if ($user_data['is_frozen']) {
+        return 'dibekukan';
+    } elseif ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $current_time) {
+        return 'terblokir_sementara';
+    } else {
+        return 'aktif';
+    }
+}
+
+// Fetch user details including status fields
+$query = "SELECT u.nama, u.username, u.is_frozen, u.pin_block_until, j.nama_jurusan, k.nama_kelas 
           FROM users u 
           LEFT JOIN jurusan j ON u.jurusan_id = j.id 
           LEFT JOIN kelas k ON u.kelas_id = k.id 
@@ -24,6 +35,10 @@ $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $result = $stmt->get_result();
 $user_data = $result->fetch_assoc();
+
+// Determine account status
+$current_time = date('Y-m-d H:i:s');
+$account_status = getAccountStatus($user_data, $current_time);
 
 // Fetch balance and rekening ID
 $query = "SELECT r.id, r.saldo, r.no_rekening 
@@ -208,7 +223,7 @@ $daily_quote = $quotes[$day_index];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+                @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
@@ -1338,13 +1353,26 @@ $daily_quote = $quotes[$day_index];
         .header, .welcome-banner, .stats-container, .transactions-container {
             transition: all 0.3s ease;
         }
+        /* CSS untuk status akun */
+        .status-aktif {
+            color: #28a745;
+            font-weight: 500;
+        }
+        .status-dibekukan {
+            color: #dc3545;
+            font-weight: 500;
+        }
+        .status-terblokir_sementara {
+            color: #ffc107;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
     <div class="wrapper">
         <!-- Header -->
         <div class="header">
-            <h1>Rekening Digital</h1>
+            <h1>Rekening Digital by SchoBank</h1>
             <div class="menu">
                 <div class="notification-dropdown">
                     <a href="#" class="notification-toggle">
@@ -1384,6 +1412,12 @@ $daily_quote = $quotes[$day_index];
             <h2>Hai, <?= htmlspecialchars($user_data['nama']) ?>!</h2>
             <div class="welcome-info">
                 <i class="fas fa-user-graduate"></i> <?= htmlspecialchars($user_data['nama_kelas'] . ' - ' . $user_data['nama_jurusan']) ?>
+            </div>
+            <div class="welcome-info">
+                <i class="fas fa-shield-alt"></i> Status Akun: 
+                <span class="status-<?= strtolower($account_status) ?>">
+                    <?= ucfirst(str_replace('_', ' ', $account_status)) ?>
+                </span>
             </div>
             <div class="date">
                 <i class="far fa-calendar-alt"></i> <?= tanggal_indonesia(date('Y-m-d')) ?>

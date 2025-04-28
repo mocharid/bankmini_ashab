@@ -185,8 +185,8 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
 
         $petugas_info = "";
         if ($petugas_tugas) {
-            $petugas_info = "<tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold; color: #2c3e50; width: 40%;'>Petugas 1</td><td style='padding: 8px; border-bottom: 1px solid #eee; width: 60%;'>{$petugas_tugas['petugas1_nama']}</td></tr>
-                             <tr><td style='padding: 8px; border-bottom: 1px solid #eee; font-weight: bold; color: #2c3e50; width: 40%;'>Petugas 2</td><td style='padding: 8px; border-bottom: 1px solid #eee; width: 60%;'>{$petugas_tugas['petugas2_nama']}</td></tr>";
+            $petugas_info = "<tr><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; font-weight: 600; color: #1e3a8a; width: 40%;'>Petugas 1</td><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; width: 60%;'>{$petugas_tugas['petugas1_nama']}</td></tr>
+                             <tr><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; font-weight: 600; color: #1e3a8a; width: 40%;'>Petugas 2</td><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; width: 60%;'>{$petugas_tugas['petugas2_nama']}</td></tr>";
         }
 
         $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
@@ -200,57 +200,176 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
             <meta charset='UTF-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1.0'>
             <title>Konfirmasi Transfer Dana</title>
+            <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
             <style>
-                body { font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f4; margin: 0; padding: 20px; }
-                .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
-                .header { background-color: #0a2e5c; padding: 20px; text-align: center; color: #ffffff; }
-                .header h1 { margin: 0; font-size: 24px; font-weight: 500; }
-                .content { padding: 30px; }
-                .content p { margin: 0 0 15px; }
-                .transaction-details { width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; }
-                .transaction-details td { padding: 8px; border-bottom: 1px solid #e0e0e0; font-size: 14px; }
-                .transaction-details tr:last-child td { border-bottom: none; }
-                .transaction-details .label { font-weight: bold; color: #2c3e50; width: 40%; }
-                .transaction-details .value { width: 60%; }
-                .amount { color: #0a2e5c; font-weight: bold; font-size: 16px; }
-                .new-balance { color: #0a2e5c; font-weight: bold; font-size: 15px; }
-                .security-notice { background-color: #f8f8f8; border-left: 4px solid #0a2e5c; padding: 15px; margin: 20px 0; font-size: 13px; color: #555555; }
-                .footer { background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 12px; color: #777777; border-top: 1px solid #e0e0e0; }
+                body { 
+                    font-family: 'Poppins', Helvetica, Arial, sans-serif; 
+                    line-height: 1.6; 
+                    color: #1f2937; 
+                    background-color: #f3f4f6; 
+                    margin: 0; 
+                    padding: 25px; 
+                }
+                .container { 
+                    max-width: 650px; 
+                    margin: 0 auto; 
+                    background-color: #ffffff; 
+                    border-radius: 12px; 
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.08); 
+                    overflow: hidden; 
+                }
+                .header { 
+                    background-color: #1e3a8a; 
+                    background-image: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+                    padding: 28px 20px; 
+                    text-align: center; 
+                    color: #ffffff; 
+                }
+                .logo {
+                    margin-bottom: 10px;
+                }
+                .header h1 { 
+                    margin: 0; 
+                    font-size: 26px; 
+                    font-weight: 600; 
+                    letter-spacing: 0.5px;
+                }
+                .content { 
+                    padding: 35px; 
+                }
+                .content p { 
+                    margin: 0 0 20px; 
+                    font-size: 15px;
+                    font-weight: 400;
+                }
+                .greeting {
+                    font-size: 16px;
+                    font-weight: 500;
+                    margin-bottom: 24px;
+                }
+                .transaction-details { 
+                    width: 100%; 
+                    border-collapse: separate; 
+                    border-spacing: 0;
+                    margin: 25px 0; 
+                    background-color: #ffffff; 
+                    border: 1px solid #e5e7eb; 
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+                }
+                .transaction-details td { 
+                    padding: 12px 15px; 
+                    border-bottom: 1px solid #e5e7eb; 
+                    font-size: 14px; 
+                    vertical-align: middle;
+                }
+                .transaction-details tr:last-child td { 
+                    border-bottom: none; 
+                }
+                .transaction-details .label { 
+                    font-weight: 600; 
+                    color: #1e3a8a; 
+                    width: 40%;
+                    background-color: #f9fafb;
+                }
+                .transaction-details .value { 
+                    width: 60%; 
+                }
+                .amount { 
+                    color: #1e3a8a; 
+                    font-weight: 700; 
+                    font-size: 16px; 
+                }
+                .new-balance { 
+                    color: #1e3a8a; 
+                    font-weight: 600; 
+                    font-size: 15px; 
+                }
+                .security-notice { 
+                    background-color: #f3f4f6; 
+                    border-left: 4px solid #1e3a8a; 
+                    padding: 18px; 
+                    margin: 25px 0; 
+                    font-size: 14px; 
+                    color: #374151;
+                    border-radius: 0 8px 8px 0;
+                }
+                .security-notice strong {
+                    display: block;
+                    margin-bottom: 5px;
+                    color: #1e3a8a;
+                }
+                .contact {
+                    background-color: #f9fafb;
+                    padding: 18px;
+                    border-radius: 8px;
+                    margin-top: 25px;
+                    font-size: 14px;
+                }
+                .footer { 
+                    background-color: #f9fafb; 
+                    padding: 20px; 
+                    text-align: center; 
+                    font-size: 13px; 
+                    color: #6b7280; 
+                    border-top: 1px solid #e5e7eb; 
+                }
+                .footer p {
+                    margin: 5px 0;
+                }
                 @media screen and (max-width: 600px) {
-                    .container { width: 100%; padding: 10px; }
-                    .header h1 { font-size: 20px; }
-                    .content { padding: 20px; }
-                    .transaction-details td { font-size: 13px; display: block; width: 100%; box-sizing: border-box; }
-                    .transaction-details .label { width: 100%; padding-bottom: 0; }
-                    .transaction-details .value { width: 100%; padding-top: 0; }
+                    body {
+                        padding: 10px;
+                    }
+                    .container { 
+                        width: 100%; 
+                    }
+                    .header h1 { 
+                        font-size: 22px; 
+                    }
+                    .content { 
+                        padding: 20px; 
+                    }
+                    .transaction-details td { 
+                        padding: 10px; 
+                    }
+                    .security-notice {
+                        padding: 15px;
+                    }
                 }
             </style>
         </head>
         <body>
             <div class='container'>
                 <div class='header'>
+                    <div class='logo'>
+                        <!-- Logo dapat ditambahkan di sini jika diperlukan -->
+                    </div>
                     <h1>Konfirmasi Transfer Dana</h1>
                 </div>
                 <div class='content'>
-                    <p>Yth. Bapak/Ibu {$rek_asal['nama']},</p>
+                    <p class='greeting'>Yth. Bapak/Ibu {$rek_asal['nama']},</p>
                     <p>Kami menginformasikan bahwa transaksi transfer dana Anda telah berhasil diproses. Berikut adalah rincian transaksi:</p>
                     <table class='transaction-details'>
                         <tr><td class='label'>Nomor Transaksi</td><td class='value'>{$no_transaksi}</td></tr>
                         <tr><td class='label'>Rekening Asal</td><td class='value'>{$rek_asal['no_rekening']}</td></tr>
                         <tr><td class='label'>Rekening Tujuan</td><td class='value'>{$rek_tujuan['no_rekening']} - {$rek_tujuan['nama']}</td></tr>
                         <tr><td class='label'>Jumlah Transfer</td><td class='value amount'>Rp " . number_format($jumlah, 0, ',', '.') . "</td></tr>
-                        <tr><td class='label'>Saldo Akhir</td><td class='value new-balance'>Rp " . number_format($saldo_asal_baru, 0, ',', '.') . "</td></tr>
                         <tr><td class='label'>Tanggal Transaksi</td><td class='value'>" . date('d F Y H:i:s') . " WIB</td></tr>
                         {$petugas_info}
                     </table>
                     <div class='security-notice'>
-                        <strong>Informasi Keamanan:</strong> Harap jaga kerahasiaan informasi akun Anda dan jangan bagikan PIN atau detail transaksi kepada pihak lain.
+                        <strong>Informasi Keamanan:</strong>
+                        Harap jaga kerahasiaan informasi akun Anda dan jangan bagikan PIN atau detail transaksi kepada pihak lain. Periksa selalu rincian transaksi secara teliti.
                     </div>
-                    <p>Jika Anda memiliki pertanyaan, silakan hubungi kami melalui kanal resmi SCHOBANK SYSTEM.</p>
+                    <div class='contact'>
+                        <p>Jika Anda memiliki pertanyaan lebih lanjut, silakan hubungi kami melalui kanal resmi SCHOBANK SYSTEM atau kunjungi kantor cabang terdekat.</p>
+                    </div>
                 </div>
                 <div class='footer'>
                     <p>Email ini dibuat secara otomatis. Mohon tidak membalas email ini.</p>
-                    <p>© " . date('Y') . " SCHOBANK SYSTEM. Hak cipta dilindungi.</p>
+                    <p>© " . date('Y') . " SCHOBANK SYSTEM. Seluruh hak cipta dilindungi undang-undang.</p>
                 </div>
             </div>
         </body>
@@ -268,57 +387,176 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
             <meta charset='UTF-8'>
             <meta name='viewport' content='width=device-width, initial-scale=1.0'>
             <title>Konfirmasi Penerimaan Dana</title>
+            <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
             <style>
-                body { font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f4f4f4; margin: 0; padding: 20px; }
-                .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
-                .header { background-color: #0a2e5c; padding: 20px; text-align: center; color: #ffffff; }
-                .header h1 { margin: 0; font-size: 24px; font-weight: 500; }
-                .content { padding: 30px; }
-                .content p { margin: 0 0 15px; }
-                .transaction-details { width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; }
-                .transaction-details td { padding: 8px; border-bottom: 1px solid #e0e0e0; font-size: 14px; }
-                .transaction-details tr:last-child td { border-bottom: none; }
-                .transaction-details .label { font-weight: bold; color: #2c3e50; width: 40%; }
-                .transaction-details .value { width: 60%; }
-                .amount { color: #0a2e5c; font-weight: bold; font-size: 16px; }
-                .new-balance { color: #0a2e5c; font-weight: bold; font-size: 15px; }
-                .security-notice { background-color: #f8f8f8; border-left: 4px solid #0a2e5c; padding: 15px; margin: 20px 0; font-size: 13px; color: #555555; }
-                .footer { background-color: #f4f4f4; padding: 15px; text-align: center; font-size: 12px; color: #777777; border-top: 1px solid #e0e0e0; }
+                body { 
+                    font-family: 'Poppins', Helvetica, Arial, sans-serif; 
+                    line-height: 1.6; 
+                    color: #1f2937; 
+                    background-color: #f3f4f6; 
+                    margin: 0; 
+                    padding: 25px; 
+                }
+                .container { 
+                    max-width: 650px; 
+                    margin: 0 auto; 
+                    background-color: #ffffff; 
+                    border-radius: 12px; 
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.08); 
+                    overflow: hidden; 
+                }
+                .header { 
+                    background-color: #1e3a8a; 
+                    background-image: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+                    padding: 28px 20px; 
+                    text-align: center; 
+                    color: #ffffff; 
+                }
+                .logo {
+                    margin-bottom: 10px;
+                }
+                .header h1 { 
+                    margin: 0; 
+                    font-size: 26px; 
+                    font-weight: 600; 
+                    letter-spacing: 0.5px;
+                }
+                .content { 
+                    padding: 35px; 
+                }
+                .content p { 
+                    margin: 0 0 20px; 
+                    font-size: 15px;
+                    font-weight: 400;
+                }
+                .greeting {
+                    font-size: 16px;
+                    font-weight: 500;
+                    margin-bottom: 24px;
+                }
+                .transaction-details { 
+                    width: 100%; 
+                    border-collapse: separate; 
+                    border-spacing: 0;
+                    margin: 25px 0; 
+                    background-color: #ffffff; 
+                    border: 1px solid #e5e7eb; 
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+                }
+                .transaction-details td { 
+                    padding: 12px 15px; 
+                    border-bottom: 1px solid #e5e7eb; 
+                    font-size: 14px; 
+                    vertical-align: middle;
+                }
+                .transaction-details tr:last-child td { 
+                    border-bottom: none; 
+                }
+                .transaction-details .label { 
+                    font-weight: 600; 
+                    color: #1e3a8a; 
+                    width: 40%;
+                    background-color: #f9fafb;
+                }
+                .transaction-details .value { 
+                    width: 60%; 
+                }
+                .amount { 
+                    color: #1e3a8a; 
+                    font-weight: 700; 
+                    font-size: 16px; 
+                }
+                .new-balance { 
+                    color: #1e3a8a; 
+                    font-weight: 600; 
+                    font-size: 15px; 
+                }
+                .security-notice { 
+                    background-color: #f3f4f6; 
+                    border-left: 4px solid #1e3a8a; 
+                    padding: 18px; 
+                    margin: 25px 0; 
+                    font-size: 14px; 
+                    color: #374151;
+                    border-radius: 0 8px 8px 0;
+                }
+                .security-notice strong {
+                    display: block;
+                    margin-bottom: 5px;
+                    color: #1e3a8a;
+                }
+                .contact {
+                    background-color: #f9fafb;
+                    padding: 18px;
+                    border-radius: 8px;
+                    margin-top: 25px;
+                    font-size: 14px;
+                }
+                .footer { 
+                    background-color: #f9fafb; 
+                    padding: 20px; 
+                    text-align: center; 
+                    font-size: 13px; 
+                    color: #6b7280; 
+                    border-top: 1px solid #e5e7eb; 
+                }
+                .footer p {
+                    margin: 5px 0;
+                }
                 @media screen and (max-width: 600px) {
-                    .container { width: 100%; padding: 10px; }
-                    .header h1 { font-size: 20px; }
-                    .content { padding: 20px; }
-                    .transaction-details td { font-size: 13px; display: block; width: 100%; box-sizing: border-box; }
-                    .transaction-details .label { width: 100%; padding-bottom: 0; }
-                    .transaction-details .value { width: 100%; padding-top: 0; }
+                    body {
+                        padding: 10px;
+                    }
+                    .container { 
+                        width: 100%; 
+                    }
+                    .header h1 { 
+                        font-size: 22px; 
+                    }
+                    .content { 
+                        padding: 20px; 
+                    }
+                    .transaction-details td { 
+                        padding: 10px; 
+                    }
+                    .security-notice {
+                        padding: 15px;
+                    }
                 }
             </style>
         </head>
         <body>
             <div class='container'>
                 <div class='header'>
+                    <div class='logo'>
+                        <!-- Logo dapat ditambahkan di sini jika diperlukan -->
+                    </div>
                     <h1>Konfirmasi Penerimaan Dana</h1>
                 </div>
                 <div class='content'>
-                    <p>Yth. Bapak/Ibu {$rek_tujuan['nama']},</p>
+                    <p class='greeting'>Yth. Bapak/Ibu {$rek_tujuan['nama']},</p>
                     <p>Kami menginformasikan bahwa Anda telah menerima transfer dana. Berikut adalah rincian transaksi:</p>
                     <table class='transaction-details'>
                         <tr><td class='label'>Nomor Transaksi</td><td class='value'>{$no_transaksi}</td></tr>
                         <tr><td class='label'>Rekening Pengirim</td><td class='value'>{$rek_asal['no_rekening']} - {$rek_asal['nama']}</td></tr>
                         <tr><td class='label'>Rekening Tujuan</td><td class='value'>{$rek_tujuan['no_rekening']}</td></tr>
                         <tr><td class='label'>Jumlah Transfer</td><td class='value amount'>Rp " . number_format($jumlah, 0, ',', '.') . "</td></tr>
-                        <tr><td class='label'>Saldo Akhir</td><td class='value new-balance'>Rp " . number_format($saldo_tujuan_baru, 0, ',', '.') . "</td></tr>
                         <tr><td class='label'>Tanggal Transaksi</td><td class='value'>" . date('d F Y H:i:s') . " WIB</td></tr>
                         {$petugas_info}
                     </table>
                     <div class='security-notice'>
-                        <strong>Informasi Keamanan:</strong> Harap jaga kerahasiaan informasi akun Anda dan jangan bagikan PIN atau detail transaksi kepada pihak lain.
+                        <strong>Informasi Keamanan:</strong>
+                        Harap jaga kerahasiaan informasi akun Anda dan jangan bagikan PIN atau detail transaksi kepada pihak lain. Periksa selalu rincian transaksi secara teliti.
                     </div>
-                    <p>Jika Anda memiliki pertanyaan, silakan hubungi kami melalui kanal resmi SCHOBANK SYSTEM.</p>
+                    <div class='contact'>
+                        <p>Jika Anda memiliki pertanyaan lebih lanjut, silakan hubungi kami melalui kanal resmi SCHOBANK SYSTEM atau kunjungi kantor cabang terdekat.</p>
+                    </div>
                 </div>
                 <div class='footer'>
                     <p>Email ini dibuat secara otomatis. Mohon tidak membalas email ini.</p>
-                    <p>© " . date('Y') . " SCHOBANK SYSTEM. Hak cipta dilindungi.</p>
+                    <p>© " . date('Y') . " SCHOBANK SYSTEM. Seluruh hak cipta dilindungi undang-undang.</p>
                 </div>
             </div>
         </body>

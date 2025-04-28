@@ -31,15 +31,19 @@ if ($action != 'approve' && $action != 'reject') {
 }
 
 // Get transfer details
-$stmt = $koneksi->prepare("SELECT t.*, r1.no_rekening AS no_rekening_asal, r2.no_rekening AS no_rekening_tujuan, 
-                                  u1.nama AS nama_asal, u1.email AS email_asal, u2.nama AS nama_tujuan, u2.email AS email_tujuan, 
-                                  r1.user_id AS user_id_asal, r2.user_id AS user_id_tujuan, r1.saldo AS saldo_asal, r2.saldo AS saldo_tujuan 
-                          FROM transaksi t 
-                          JOIN rekening r1 ON t.rekening_id = r1.id 
-                          JOIN rekening r2 ON t.rekening_tujuan_id = r2.id 
-                          JOIN users u1 ON r1.user_id = u1.id 
-                          JOIN users u2 ON r2.user_id = u2.id 
-                          WHERE t.id = ? AND t.jenis_transaksi = 'transfer' AND t.status = 'pending'");
+$stmt = $koneksi->prepare("
+    SELECT t.*, r1.no_rekening AS no_rekening_asal, r2.no_rekening AS no_rekening_tujuan, 
+           u1.nama AS nama_asal, u1.email AS email_asal, u1.is_frozen AS frozen_asal,
+           u2.nama AS nama_tujuan, u2.email AS email_tujuan, u2.is_frozen AS frozen_tujuan,
+           r1.user_id AS user_id_asal, r2.user_id AS user_id_tujuan, 
+           r1.saldo AS saldo_asal, r2.saldo AS saldo_tujuan 
+    FROM transaksi t 
+    JOIN rekening r1 ON t.rekening_id = r1.id 
+    JOIN rekening r2 ON t.rekening_tujuan_id = r2.id 
+    JOIN users u1 ON r1.user_id = u1.id 
+    JOIN users u2 ON r2.user_id = u2.id 
+    WHERE t.id = ? AND t.jenis_transaksi = 'transfer' AND t.status = 'pending'
+");
 $stmt->bind_param("i", $transfer_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -66,6 +70,14 @@ $koneksi->begin_transaction();
 
 try {
     if ($action == 'approve') {
+        // Check if source or destination account is frozen
+        if ($transfer['frozen_asal']) {
+            throw new Exception("Akun pengirim sedang dibekukan dan tidak dapat melakukan transfer.");
+        }
+        if ($transfer['frozen_tujuan']) {
+            throw new Exception("Akun penerima sedang dibekukan dan tidak dapat menerima transfer.");
+        }
+
         // Check if source account has sufficient balance
         if ($transfer['saldo_asal'] < $transfer['jumlah']) {
             throw new Exception("Saldo tidak cukup untuk transfer.");

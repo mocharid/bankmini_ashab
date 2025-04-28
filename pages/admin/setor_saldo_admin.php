@@ -13,7 +13,7 @@ $username = $_SESSION['username'] ?? 'Admin';
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Tarik Saldo Siswa - SCHOBANK SYSTEM</title>
+    <title>Setor Saldo Siswa - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -383,52 +383,10 @@ $username = $_SESSION['username'] ?? 'Admin';
             animation: shake 0.4s ease;
         }
 
-        .pin-group {
-            text-align: center;
-            margin: 15px 0;
-        }
-
-        .pin-container {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            flex-wrap: nowrap;
-            max-width: 300px;
-            margin: 0 auto;
-        }
-
-        .pin-container.error {
-            animation: shake 0.4s ease;
-        }
-
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
             20%, 60% { transform: translateX(-5px); }
             40%, 80% { transform: translateX(5px); }
-        }
-
-        .pin-input {
-            width: 40px;
-            height: 40px;
-            text-align: center;
-            font-size: clamp(1rem, 2vw, 1.1rem);
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: #fff;
-            transition: var(--transition);
-            line-height: 40px;
-        }
-
-        .pin-input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.05);
-        }
-
-        .pin-input.filled {
-            border-color: var(--secondary-color);
-            background: var(--primary-light);
-            animation: bouncePin 0.3s ease;
         }
 
         @keyframes bouncePin {
@@ -635,7 +593,6 @@ $username = $_SESSION['username'] ?? 'Admin';
             gap: 8px;
         }
 
-        /* Wide Screen (Desktop) */
         @media (min-width: 769px) {
             .steps-container {
                 flex-direction: row;
@@ -667,7 +624,6 @@ $username = $_SESSION['username'] ?? 'Admin';
             }
         }
 
-        /* Tablet and Below */
         @media (max-width: 768px) {
             .top-nav {
                 padding: 12px;
@@ -757,18 +713,6 @@ $username = $_SESSION['username'] ?? 'Admin';
                 margin-right: 8px;
             }
 
-            .pin-container {
-                gap: 8px;
-                max-width: 320px;
-            }
-
-            .pin-input {
-                width: 42px;
-                height: 42px;
-                font-size: clamp(1rem, 2vw, 1.1rem);
-                line-height: 42px;
-            }
-
             .modal-content {
                 width: 90%;
                 padding: 15px;
@@ -784,7 +728,6 @@ $username = $_SESSION['username'] ?? 'Admin';
             }
         }
 
-        /* Small Mobile */
         @media (max-width: 480px) {
             body {
                 font-size: clamp(0.8rem, 1.5vw, 0.9rem);
@@ -827,18 +770,6 @@ $username = $_SESSION['username'] ?? 'Admin';
                 margin-right: 6px;
             }
 
-            .pin-container {
-                max-width: 280px;
-                gap: 6px;
-            }
-
-            .pin-input {
-                width: 38px;
-                height: 38px;
-                font-size: clamp(0.95rem, 1.8vw, 1rem);
-                line-height: 38px;
-            }
-
             .modal-content {
                 width: 95%;
                 padding: 12px;
@@ -856,8 +787,8 @@ $username = $_SESSION['username'] ?? 'Admin';
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-money-bill-wave"></i> Tarik Saldo Siswa</h2>
-            <p>Layanan penarikan saldo untuk siswa secara cepat dan aman</p>
+            <h2><i class="fas fa-money-bill-wave"></i> Setor Saldo Siswa</h2>
+            <p>Layanan penyetoran saldo untuk siswa secara cepat dan aman</p>
         </div>
 
         <div class="steps-container">
@@ -871,10 +802,6 @@ $username = $_SESSION['username'] ?? 'Admin';
             </div>
             <div class="step-item" id="step3-indicator">
                 <div class="step-number">3</div>
-                <div class="step-text">Verifikasi PIN</div>
-            </div>
-            <div class="step-item" id="step4-indicator">
-                <div class="step-number">4</div>
                 <div class="step-text">Konfirmasi</div>
             </div>
         </div>
@@ -923,9 +850,9 @@ $username = $_SESSION['username'] ?? 'Admin';
                     <div class="detail-label">Kelas:</div>
                     <div class="detail-value" id="displayKelas">-</div>
                 </div>
-                <form id="formPenarikan" class="deposit-form" style="margin-top: 20px;">
+                <form id="formPenyetoran" class="deposit-form" style="margin-top: 20px;">
                     <div class="currency-input">
-                        <label for="jumlah">Jumlah Penarikan (Rp):</label>
+                        <label for="jumlah">Jumlah Penyetoran (Rp):</label>
                         <span class="currency-prefix">Rp</span>
                         <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="10000" inputmode="numeric" pattern="[0-9]*" required>
                     </div>
@@ -942,58 +869,9 @@ $username = $_SESSION['username'] ?? 'Admin';
                 </form>
             </div>
 
-            <!-- Step 3: PIN Verification -->
-            <div class="account-details" id="pinDetails">
-                <h3 class="section-title"><i class="fas fa-lock"></i> Verifikasi PIN</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nomor Rekening:</div>
-                    <div class="detail-value" id="pinNoRek">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Pemilik:</div>
-                    <div class="detail-value" id="pinNama">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan:</div>
-                    <div class="detail-value" id="pinJurusan">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas:</div>
-                    <div class="detail-value" id="pinKelas">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jumlah Penarikan:</div>
-                    <div class="detail-value" id="pinJumlah">-</div>
-                </div>
-                <form id="formPin" class="deposit-form" style="margin-top: 20px;">
-                    <div class="pin-group">
-                        <label>Masukkan PIN (6 Digit):</label>
-                        <div class="pin-container">
-                            <input type="text" class="pin-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="6" inputmode="numeric" pattern="[0-9]*">
-                        </div>
-                        <input type="hidden" id="pin">
-                    </div>
-                    <div class="confirm-buttons">
-                        <button type="button" id="verifyPin" class="btn-confirm">
-                            <i class="fas fa-lock"></i>
-                            <span>Verifikasi</span>
-                        </button>
-                        <button type="button" id="backToAmount" class="btn-cancel">
-                            <i class="fas fa-arrow-left"></i>
-                            <span>Kembali</span>
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Step 4: Confirmation -->
+            <!-- Step 3: Confirmation -->
             <div class="account-details" id="confirmationDetails">
-                <h3 class="section-title"><i class="fas fa-receipt"></i> Konfirmasi Penarikan</h3>
+                <h3 class="section-title"><i class="fas fa-receipt"></i> Konfirmasi Penyetoran</h3>
                 <div class="detail-row">
                     <div class="detail-label">Nomor Rekening:</div>
                     <div class="detail-value" id="confirmNoRek">-</div>
@@ -1011,15 +889,15 @@ $username = $_SESSION['username'] ?? 'Admin';
                     <div class="detail-value" id="confirmKelas">-</div>
                 </div>
                 <div class="detail-row">
-                    <div class="detail-label">Jumlah Penarikan:</div>
+                    <div class="detail-label">Jumlah Penyetoran:</div>
                     <div class="detail-value" id="confirmJumlah">-</div>
                 </div>
                 <div class="confirm-buttons">
-                    <button type="button" id="processWithdrawal" class="btn-confirm">
+                    <button type="button" id="processDeposit" class="btn-confirm">
                         <i class="fas fa-check-circle"></i>
-                        <span>Proses Penarikan</span>
+                        <span>Proses Penyetoran</span>
                     </button>
-                    <button type="button" id="backToPin" class="btn-cancel">
+                    <button type="button" id="backToAmount" class="btn-cancel">
                         <i class="fas fa-arrow-left"></i>
                         <span>Kembali</span>
                     </button>
@@ -1048,23 +926,16 @@ $username = $_SESSION['username'] ?? 'Admin';
 
         document.addEventListener('DOMContentLoaded', function() {
             const cekForm = document.getElementById('cekRekening');
-            const penarikanForm = document.getElementById('formPenarikan');
-            const pinForm = document.getElementById('formPin');
+            const penyetoranForm = document.getElementById('formPenyetoran');
             const checkAccountStep = document.getElementById('checkAccountStep');
             const amountDetails = document.getElementById('amountDetails');
-            const pinDetails = document.getElementById('pinDetails');
             const confirmationDetails = document.getElementById('confirmationDetails');
 
             const step1Indicator = document.getElementById('step1-indicator');
             const step2Indicator = document.getElementById('step2-indicator');
             const step3Indicator = document.getElementById('step3-indicator');
-            const step4Indicator = document.getElementById('step4-indicator');
 
             const inputJumlah = document.getElementById('jumlah');
-            const pinInputs = document.querySelectorAll('.pin-input');
-            const pinContainer = document.querySelector('.pin-container');
-            const hiddenPin = document.getElementById('pin');
-
             const rekInputs = document.querySelectorAll('.rek-input');
             const rekContainer = document.querySelector('.rek-container');
             const hiddenNoRek = document.getElementById('no_rekening');
@@ -1072,31 +943,12 @@ $username = $_SESSION['username'] ?? 'Admin';
             const cekButton = document.getElementById('cekButton');
             const confirmAmount = document.getElementById('confirmAmount');
             const cancelAmount = document.getElementById('cancelAmount');
-            const verifyPin = document.getElementById('verifyPin');
+            const processDeposit = document.getElementById('processDeposit');
             const backToAmount = document.getElementById('backToAmount');
-            const processWithdrawal = document.getElementById('processWithdrawal');
-            const backToPin = document.getElementById('backToPin');
             const backBtn = document.getElementById('backBtn');
 
             let accountData = {};
             const prefix = "REK";
-
-            // Debug: Verify rek-container and rek-input sizes
-            console.log('rek-container computed style:', {
-                display: window.getComputedStyle(rekContainer).display,
-                visibility: window.getComputedStyle(rekContainer).visibility,
-                width: window.getComputedStyle(rekContainer).width,
-                maxWidth: window.getComputedStyle(rekContainer).maxWidth
-            });
-            rekInputs.forEach((input, index) => {
-                console.log(`rek-input[${index}] computed style:`, {
-                    display: window.getComputedStyle(input).display,
-                    visibility: window.getComputedStyle(input).visibility,
-                    width: window.getComputedStyle(input).width,
-                    height: window.getComputedStyle(input).height,
-                    fontSize: window.getComputedStyle(input).fontSize
-                });
-            });
 
             // Ensure rek-container is visible and inputs are properly sized
             rekContainer.style.display = 'flex';
@@ -1176,46 +1028,6 @@ $username = $_SESSION['username'] ?? 'Admin';
                 this.value = formatRupiahInput(value);
             });
 
-            // PIN Input Handling
-            pinInputs.forEach((input, index) => {
-                input.addEventListener('input', function() {
-                    let value = this.value.replace(/[^0-9]/g, '');
-                    if (value.length === 1) {
-                        this.classList.add('filled');
-                        this.dataset.originalValue = value;
-                        this.value = '*';
-                        if (index < 5) pinInputs[index + 1].focus();
-                    } else {
-                        this.classList.remove('filled');
-                        this.dataset.originalValue = '';
-                        this.value = '';
-                    }
-                    updateHiddenPin();
-                });
-
-                input.addEventListener('keydown', function(e) {
-                    if (e.key === 'Backspace' && !this.dataset.originalValue && index > 0) {
-                        pinInputs[index - 1].focus();
-                        pinInputs[index - 1].classList.remove('filled');
-                        pinInputs[index - 1].dataset.originalValue = '';
-                        pinInputs[index - 1].value = '';
-                        updateHiddenPin();
-                    }
-                });
-
-                input.addEventListener('focus', function() {
-                    if (this.classList.contains('filled')) {
-                        this.value = this.dataset.originalValue || '';
-                    }
-                });
-
-                input.addEventListener('blur', function() {
-                    if (this.value && this.dataset.originalValue) {
-                        this.value = '*';
-                    }
-                });
-            });
-
             function formatRupiahInput(value) {
                 value = parseInt(value) || 0;
                 return value.toLocaleString('id-ID', { minimumFractionDigits: 0 });
@@ -1229,7 +1041,6 @@ $username = $_SESSION['username'] ?? 'Admin';
                 step1Indicator.className = 'step-item';
                 step2Indicator.className = 'step-item';
                 step3Indicator.className = 'step-item';
-                step4Indicator.className = 'step-item';
 
                 if (activeStep >= 1) {
                     step1Indicator.className = activeStep > 1 ? 'step-item completed' : 'step-item active';
@@ -1237,26 +1048,18 @@ $username = $_SESSION['username'] ?? 'Admin';
                 if (activeStep >= 2) {
                     step2Indicator.className = activeStep > 2 ? 'step-item completed' : 'step-item active';
                 }
-                if (activeStep >= 3) {
-                    step3Indicator.className = activeStep > 3 ? 'step-item completed' : 'step-item active';
-                }
-                if (activeStep === 4) {
-                    step4Indicator.className = 'step-item active';
+                if (activeStep === 3) {
+                    step3Indicator.className = 'step-item active';
                 }
 
                 checkAccountStep.style.display = activeStep === 1 ? 'block' : 'none';
                 amountDetails.classList.toggle('visible', activeStep === 2);
-                pinDetails.classList.toggle('visible', activeStep === 3);
-                confirmationDetails.classList.toggle('visible', activeStep === 4);
+                confirmationDetails.classList.toggle('visible', activeStep === 3);
             }
 
             function updateHiddenNoRek() {
                 const digits = Array.from(rekInputs).map(i => i.dataset.originalValue || '').join('');
                 hiddenNoRek.value = digits.length === 6 ? prefix + digits : '';
-            }
-
-            function updateHiddenPin() {
-                hiddenPin.value = Array.from(pinInputs).map(i => i.dataset.originalValue || '').join('');
             }
 
             function clearRekInputs() {
@@ -1269,24 +1072,9 @@ $username = $_SESSION['username'] ?? 'Admin';
                 rekInputs[0].focus();
             }
 
-            function clearPinInputs() {
-                pinInputs.forEach(i => {
-                    i.value = '';
-                    i.classList.remove('filled');
-                    i.dataset.originalValue = '';
-                });
-                hiddenPin.value = '';
-                pinInputs[0].focus();
-            }
-
             function shakeRekContainer() {
                 rekContainer.classList.add('error');
                 setTimeout(() => rekContainer.classList.remove('error'), 400);
-            }
-
-            function shakePinContainer() {
-                pinContainer.classList.add('error');
-                setTimeout(() => pinContainer.classList.remove('error'), 400);
             }
 
             function startLoading(button) {
@@ -1332,7 +1120,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                     return;
                 }
                 startLoading(cekButton);
-                fetch('proses_tarik_admin.php', {
+                fetch('proses_setor_admin.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: `action=cek_rekening&no_rekening=${encodeURIComponent(rekening)}`
@@ -1347,11 +1135,6 @@ $username = $_SESSION['username'] ?? 'Admin';
                     stopLoading(cekButton, () => {
                         if (data.status === 'error') {
                             showModal(data.message, 'error');
-                            clearRekInputs();
-                            return;
-                        }
-                        if (data.email_status === 'failed') {
-                            showModal('Gagal mengirim email verifikasi', 'error');
                             clearRekInputs();
                             return;
                         }
@@ -1375,64 +1158,33 @@ $username = $_SESSION['username'] ?? 'Admin';
                 startLoading(confirmAmount);
                 let jumlah = inputJumlah.value.replace(/[^0-9]/g, '');
                 jumlah = parseFloat(jumlah);
-                if (isNaN(jumlah) || jumlah < 10000) {
+                if (isNaN(jumlah) || jumlah < 1000) {
                     stopLoading(confirmAmount);
-                    showModal('Jumlah penarikan minimal Rp 10.000', 'error');
+                    showModal('Jumlah penyetoran minimal Rp 10.000', 'error');
                     inputJumlah.focus();
                     return;
                 }
-
-                console.log('Sending check_balance request:', {
-                    action: 'check_balance',
-                    no_rekening: accountData.no_rekening,
-                    jumlah: jumlah
-                });
-
-                // Verify balance before proceeding
-                fetch('proses_tarik_admin.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=check_balance&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${jumlah}`
-                })
-                .then(response => {
-                    console.log('check_balance response status:', response.status);
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    console.log('check_balance response data:', data);
-                    stopLoading(confirmAmount, () => {
-                        if (data.status === 'error') {
-                            showModal(data.message, 'error');
-                            inputJumlah.focus();
-                            return;
-                        }
-                        accountData.jumlah = jumlah;
-                        document.getElementById('pinNoRek').textContent = accountData.no_rekening;
-                        document.getElementById('pinNama').textContent = accountData.nama;
-                        document.getElementById('pinJurusan').textContent = accountData.jurusan;
-                        document.getElementById('pinKelas').textContent = accountData.kelas;
-                        document.getElementById('pinJumlah').textContent = formatRupiah(jumlah);
-                        clearPinInputs();
-                        updateStepIndicators(3);
-                        pinInputs[0].focus();
-                    });
-                })
-                .catch(error => {
-                    console.error('check_balance error:', error);
+                if (jumlah > 99999999.99) {
                     stopLoading(confirmAmount);
-                    showModal('Terjadi kesalahan sistem: ' + error.message, 'error');
+                    showModal('Jumlah penyetoran maksimal Rp 99.999.999,99', 'error');
                     inputJumlah.focus();
-                });
+                    return;
+                }
+                accountData.jumlah = jumlah;
+                document.getElementById('confirmNoRek').textContent = accountData.no_rekening;
+                document.getElementById('confirmNama').textContent = accountData.nama;
+                document.getElementById('confirmJurusan').textContent = accountData.jurusan;
+                document.getElementById('confirmKelas').textContent = accountData.kelas;
+                document.getElementById('confirmJumlah').textContent = formatRupiah(jumlah);
+                updateStepIndicators(3);
+                stopLoading(confirmAmount);
             });
 
             cancelAmount.addEventListener('click', function() {
                 startLoading(cancelAmount);
                 stopLoading(cancelAmount, () => {
                     cekForm.reset();
-                    penarikanForm.reset();
+                    penyetoranForm.reset();
                     clearRekInputs();
                     inputJumlah.value = '';
                     amountDetails.classList.remove('visible');
@@ -1442,19 +1194,12 @@ $username = $_SESSION['username'] ?? 'Admin';
                 });
             });
 
-            verifyPin.addEventListener('click', function() {
-                startLoading(verifyPin);
-                const pin = hiddenPin.value;
-                if (pin.length !== 6) {
-                    stopLoading(verifyPin);
-                    shakePinContainer();
-                    showModal('PIN harus 6 digit', 'error');
-                    return;
-                }
-                fetch('proses_tarik_admin.php', {
+            processDeposit.addEventListener('click', function() {
+                startLoading(processDeposit);
+                fetch('proses_setor_admin.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=verify_pin&user_id=${accountData.user_id}&pin=${pin}`
+                    body: `action=setor_saldo&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${accountData.jumlah}`
                 })
                 .then(response => {
                     if (!response.ok) {
@@ -1463,58 +1208,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                     return response.json();
                 })
                 .then(data => {
-                    stopLoading(verifyPin, () => {
-                        if (data.status === 'error') {
-                            shakePinContainer();
-                            clearPinInputs();
-                            showModal(data.message, 'error');
-                            return;
-                        }
-                        if (data.email_status === 'failed') {
-                            shakePinContainer();
-                            clearPinInputs();
-                            showModal('Gagal mengirim email verifikasi PIN', 'error');
-                            return;
-                        }
-                        document.getElementById('confirmNoRek').textContent = accountData.no_rekening;
-                        document.getElementById('confirmNama').textContent = accountData.nama;
-                        document.getElementById('confirmJurusan').textContent = accountData.jurusan;
-                        document.getElementById('confirmKelas').textContent = accountData.kelas;
-                        document.getElementById('confirmJumlah').textContent = formatRupiah(accountData.jumlah);
-                        updateStepIndicators(4);
-                    });
-                })
-                .catch(error => {
-                    stopLoading(verifyPin);
-                    shakePinContainer();
-                    clearPinInputs();
-                    showModal('Terjadi kesalahan sistem: ' + error.message, 'error');
-                });
-            });
-
-            backToAmount.addEventListener('click', function() {
-                startLoading(backToAmount);
-                stopLoading(backToAmount, () => {
-                    updateStepIndicators(2);
-                    inputJumlah.focus();
-                });
-            });
-
-            processWithdrawal.addEventListener('click', function() {
-                startLoading(processWithdrawal);
-                fetch('proses_tarik_admin.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=tarik_saldo&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${accountData.jumlah}`
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    stopLoading(processWithdrawal, () => {
+                    stopLoading(processDeposit, () => {
                         if (data.status === 'error') {
                             showModal(data.message, 'error');
                             return;
@@ -1525,31 +1219,28 @@ $username = $_SESSION['username'] ?? 'Admin';
                         }
                         showModal(data.message, 'success', true);
                         cekForm.reset();
-                        penarikanForm.reset();
+                        penyetoranForm.reset();
                         clearRekInputs();
                         inputJumlah.value = '';
                         confirmationDetails.classList.remove('visible');
-                        pinDetails.classList.remove('visible');
                         amountDetails.classList.remove('visible');
                         checkAccountStep.style.display = 'block';
                         updateStepIndicators(1);
                         accountData = {};
                         rekInputs[0].focus();
                     });
-                    
                 })
                 .catch(error => {
-                    stopLoading(processWithdrawal);
+                    stopLoading(processDeposit);
                     showModal('Gagal memproses transaksi: ' + error.message, 'error');
                 });
             });
 
-            backToPin.addEventListener('click', function() {
-                startLoading(backToPin);
-                stopLoading(backToPin, () => {
-                    updateStepIndicators(3);
-                    clearPinInputs();
-                    pinInputs[0].focus();
+            backToAmount.addEventListener('click', function() {
+                startLoading(backToAmount);
+                stopLoading(backToAmount, () => {
+                    updateStepIndicators(2);
+                    inputJumlah.focus();
                 });
             });
         });

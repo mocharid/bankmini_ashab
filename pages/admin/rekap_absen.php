@@ -9,10 +9,10 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 }
 
 // Set default values for filters and pagination
-$start_date = isset($_GET['start_date']) && !empty($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-d');
-$end_date = isset($_GET['end_date']) && !empty($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
+$start_date = isset($_GET['start_date']) && !empty($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01'); // Default to 1st of current month
+$end_date = isset($_GET['end_date']) && !empty($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d'); // Default to today
 $page = isset($_GET['page']) ? intval($_GET['page']) : 1;
-$rows_per_page = 10;
+$rows_per_page = 10; // Show 10 dates per page
 $offset = ($page - 1) * $rows_per_page;
 
 // Modified query to handle ONLY_FULL_GROUP_BY mode
@@ -808,7 +808,7 @@ if (isset($_GET['export'])) {
             <?php if (empty($absensi)): ?>
                 <div class="empty-state">
                     <i class="fas fa-calendar-alt"></i>
-                    <p>Tidak ada data absensi dalam periode ini</p>
+                    <p>Tidak ada data absensi untuk periode ini</p>
                 </div>
             <?php else: ?>
                 <table>
@@ -823,11 +823,11 @@ if (isset($_GET['export'])) {
                     </thead>
                     <tbody>
                         <?php
-                        $no = $offset + 1;
-                        foreach ($absensi as $index => $record):
+                        $start_no = ($page - 1) * $rows_per_page + 1; // Calculate starting number for the page
+                        foreach ($absensi as $index => $record) {
                         ?>
                             <tr>
-                                <td rowspan="2"><?= $no ?></td>
+                                <td rowspan="2"><?= $start_no + $index ?></td>
                                 <td rowspan="2"><?= formatDate($record['tanggal']) ?></td>
                                 <td><?= htmlspecialchars($record['petugas1_nama'] ?? '-') ?></td>
                                 <td><?= htmlspecialchars($record['petugas1_masuk'] ?? '-') ?></td>
@@ -838,8 +838,7 @@ if (isset($_GET['export'])) {
                                 <td><?= htmlspecialchars($record['petugas2_masuk'] ?? '-') ?></td>
                                 <td><?= htmlspecialchars($record['petugas2_keluar'] ?? '-') ?></td>
                             </tr>
-                            <?php $no++; ?>
-                        <?php endforeach; ?>
+                        <?php } ?>
                     </tbody>
                 </table>
             <?php endif; ?>

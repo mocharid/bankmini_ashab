@@ -1,11 +1,24 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
+
+// Ensure TCPDF is included safely
+if (!file_exists('../../tcpdf/tcpdf.php')) {
+    die('[DEBUG] TCPDF library not found at ../../tcpdf/tcpdf.php');
+}
 require_once '../../tcpdf/tcpdf.php';
 
 if (!isLoggedIn() || $_SESSION['role'] !== 'admin') {
     header('Location: ../../index.php');
     exit();
+}
+
+// Function to mask no_rekening (e.g., REK789456 -> REK7****6)
+function maskNoRekening($no_rekening) {
+    if (empty($no_rekening) || strlen($no_rekening) < 5) {
+        return '-';
+    }
+    return substr($no_rekening, 0, 4) . '****' . substr($no_rekening, -1);
 }
 
 // Initialize filter parameters
@@ -18,6 +31,7 @@ $offset = ($page - 1) * $limit;
 // Fetch jurusan options
 $stmt_jurusan = $conn->prepare("SELECT id, nama_jurusan FROM jurusan ORDER BY nama_jurusan");
 if (!$stmt_jurusan->execute()) {
+    error_log('[DEBUG] Error fetching jurusan: ' . $conn->error);
     die("Error fetching jurusan: " . $conn->error);
 }
 $jurusan_options = $stmt_jurusan->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -59,6 +73,7 @@ if (!empty($params_display)) {
     $stmt_siswa->bind_param($types_display, ...$params_display);
 }
 if (!$stmt_siswa->execute()) {
+    error_log('[DEBUG] Error fetching siswa: ' . $conn->error);
     die("Error fetching siswa: " . $conn->error);
 }
 $siswa = $stmt_siswa->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -70,6 +85,7 @@ if (!empty($params)) {
     $stmt_count->bind_param($types, ...$params);
 }
 if (!$stmt_count->execute()) {
+    error_log('[DEBUG] Error counting records: ' . $conn->error);
     die("Error counting records: " . $conn->error);
 }
 $total_records = $stmt_count->get_result()->fetch_assoc()['total'];
@@ -98,8 +114,15 @@ if ($kelas_id > 0) {
 }
 
 // Handle exports
-if (isset($_GET['export'])) {
-    if ($_GET['export'] == 'pdf') {
+if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
+    try {
+        // Increase memory and execution time for PDF generation
+        ini_set('memory_limit', '256M');
+        ini_set('max_execution_time', 60);
+
+        // Clean output buffer to prevent corruption
+        ob_end_clean();
+
         class MYPDF extends TCPDF {
             public function trimText($text, $maxLength) {
                 return strlen($text) > $maxLength ? substr($text, 0, $maxLength - 3) . '...' : $text;
@@ -107,6 +130,13 @@ if (isset($_GET['export'])) {
             
             public function formatCurrency($amount) {
                 return 'Rp ' . number_format($amount, 2, ',', '.');
+            }
+
+            public function maskNoRekening($no_rekening) {
+                if (empty($no_rekening) || strlen($no_rekening) < 5) {
+                    return '-';
+                }
+                return substr($no_rekening, 0, 4) . '****' . substr($no_rekening, -1);
             }
 
             public function Header() {
@@ -170,7 +200,8 @@ if (isset($_GET['export'])) {
             $stmt_export->bind_param($types, ...$params);
         }
         if (!$stmt_export->execute()) {
-            die("Error exporting to PDF: " . $conn->error);
+            error_log('[DEBUG] Error exporting to PDF: ' . $conn->error);
+            throw new Exception("Error exporting to PDF: " . $conn->error);
         }
         $all_siswa = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt_export->close();
@@ -192,71 +223,78 @@ if (isset($_GET['export'])) {
             
             $pdf->Cell(10, 6, $no++, 1, 0, 'C');
             $pdf->Cell(50, 6, $pdf->trimText($row['nama'] ?? '-', 25), 1, 0, 'L');
-            $pdf->Cell(30, 6, $pdf->trimText($row['no_rekening'] ?? '-', 15), 1, 0, 'L');
+            $pdf->Cell(30, 6, $pdf->maskNoRekening($row['no_rekening']), 1, 0, 'L');
             $pdf->Cell(35, 6, $pdf->trimText($row['nama_jurusan'] ?? '-', 20), 1, 0, 'L');
             $pdf->Cell(25, 6, $pdf->trimText($row['nama_kelas'] ?? '-', 15), 1, 0, 'L');
             $pdf->Cell(30, 6, $pdf->formatCurrency($row['saldo'] ?? 0), 1, 1, 'R');
         }
 
+        // Output PDF
         $pdf->Output('data_siswa.pdf', 'D');
         exit();
-    } elseif ($_GET['export'] == 'excel') {
-        header('Content-Type: application/vnd.ms-excel');
-        header('Content-Disposition: attachment; filename="data_siswa.xls"');
-
-        // Fetch all students for export
-        $stmt_export = $conn->prepare($query . " ORDER BY u.nama");
-        if (!empty($params)) {
-            $stmt_export->bind_param($types, ...$params);
-        }
-        if (!$stmt_export->execute()) {
-            die("Error exporting to Excel: " . $conn->error);
-        }
-        $all_siswa = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
-        $stmt_export->close();
-
-        echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-        echo '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
-        echo '<style>
-                body { font-family: Poppins, sans-serif; }
-                .text-left { text-align: left; }
-                .text-center { text-align: center; }
-                .text-right { text-align: right; }
-                td, th { padding: 6px; border: 1px solid #ddd; }
-                .title { font-size: 16pt; font-weight: bold; text-align: center; }
-                .subtitle { font-size: 12pt; text-align: center; }
-                .section-header { background-color: #f0f4ff; font-weight: bold; text-align: center; }
-              </style></head><body>';
-
-        echo '<table border="0" cellpadding="5">';
-        echo '<tr><td colspan="6" class="title">DATA SISWA</td></tr>';
-        echo '<tr><td colspan="6" class="subtitle">Tanggal: ' . date('d/m/Y') . '</td></tr>';
-        echo '</table>';
-
-        echo '<table border="1" cellpadding="5">';
-        echo '<tr><th colspan="2" class="section-header">FILTER YANG DIPILIH</th></tr>';
-        echo '<tr><td class="text-left">Jurusan</td><td class="text-left">' . htmlspecialchars($filter_jurusan) . '</td></tr>';
-        echo '<tr><td class="text-left">Kelas</td><td class="text-left">' . htmlspecialchars($filter_kelas) . '</td></tr>';
-        echo '</table>';
-
-        echo '<table border="1" cellpadding="5">';
-        echo '<tr><th colspan="6" class="section-header">DAFTAR SISWA</th></tr>';
-        echo '<tr><th>No</th><th>Nama</th><th>No Rekening</th><th>Jurusan</th><th>Kelas</th><th>Saldo</th></tr>';
-
-        $no = 1;
-        foreach ($all_siswa as $row) {
-            echo '<tr>';
-            echo '<td class="text-center">' . $no++ . '</td>';
-            echo '<td class="text-left">' . htmlspecialchars($row['nama'] ?? '-') . '</td>';
-            echo '<td class="text-left">' . htmlspecialchars($row['no_rekening'] ?? '-') . '</td>';
-            echo '<td class="text-left">' . htmlspecialchars($row['nama_jurusan'] ?? '-') . '</td>';
-            echo '<td class="text-left">' . htmlspecialchars($row['nama_kelas'] ?? '-') . '</td>';
-            echo '<td class="text-right">Rp ' . number_format($row['saldo'] ?? 0, 2, ',', '.') . '</td>';
-            echo '</tr>';
-        }
-        echo '</table></body></html>';
+    } catch (Exception $e) {
+        error_log('[DEBUG] PDF Generation Error: ' . $e->getMessage());
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Failed to generate PDF: ' . $e->getMessage()]);
         exit();
     }
+} elseif (isset($_GET['export']) && $_GET['export'] == 'excel') {
+    header('Content-Type: application/vnd.ms-excel');
+    header('Content-Disposition: attachment; filename="data_siswa.xls"');
+
+    // Fetch all students for export
+    $stmt_export = $conn->prepare($query . " ORDER BY u.nama");
+    if (!empty($params)) {
+        $stmt_export->bind_param($types, ...$params);
+    }
+    if (!$stmt_export->execute()) {
+        error_log('[DEBUG] Error exporting to Excel: ' . $conn->error);
+        die("Error exporting to Excel: " . $conn->error);
+    }
+    $all_siswa = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt_export->close();
+
+    echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+    echo '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
+    echo '<style>
+            body { font-family: Poppins, sans-serif; }
+            .text-left { text-align: left; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            td, th { padding: 6px; border: 1px solid #ddd; }
+            .title { font-size: 16pt; font-weight: bold; text-align: center; }
+            .subtitle { font-size: 12pt; text-align: center; }
+            .section-header { background-color: #f0f4ff; font-weight: bold; text-align: center; }
+          </style></head><body>';
+
+    echo '<table border="0" cellpadding="5">';
+    echo '<tr><td colspan="6" class="title">DATA SISWA</td></tr>';
+    echo '<tr><td colspan="6" class="subtitle">Tanggal: ' . date('d/m/Y') . '</td></tr>';
+    echo '</table>';
+
+    echo '<table border="1" cellpadding="5">';
+    echo '<tr><th colspan="2" class="section-header">FILTER YANG DIPILIH</th></tr>';
+    echo '<tr><td class="text-left">Jurusan</td><td class="text-left">' . htmlspecialchars($filter_jurusan) . '</td></tr>';
+    echo '<tr><td class="text-left">Kelas</td><td class="text-left">' . htmlspecialchars($filter_kelas) . '</td></tr>';
+    echo '</table>';
+
+    echo '<table border="1" cellpadding="5">';
+    echo '<tr><th colspan="6" class="section-header">DAFTAR SISWA</th></tr>';
+    echo '<tr><th>No</th><th>Nama</th><th>No Rekening</th><th>Jurusan</th><th>Kelas</th><th>Saldo</th></tr>';
+
+    $no = 1;
+    foreach ($all_siswa as $row) {
+        echo '<tr>';
+        echo '<td class="text-center">' . $no++ . '</td>';
+        echo '<td class="text-left">' . htmlspecialchars($row['nama'] ?? '-') . '</td>';
+        echo '<td class="text-left">' . htmlspecialchars(maskNoRekening($row['no_rekening'])) . '</td>';
+        echo '<td class="text-left">' . htmlspecialchars($row['nama_jurusan'] ?? '-') . '</td>';
+        echo '<td class="text-left">' . htmlspecialchars($row['nama_kelas'] ?? '-') . '</td>';
+        echo '<td class="text-right">Rp ' . number_format($row['saldo'] ?? 0, 2, ',', '.') . '</td>';
+        echo '</tr>';
+    }
+    echo '</table></body></html>';
+    exit();
 }
 ?>
 
@@ -520,24 +558,6 @@ if (isset($_GET['export'])) {
             font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
-        .toggle-container {
-            margin-bottom: 15px;
-            display: flex;
-            justify-content: flex-end;
-        }
-
-        .table-container {
-            transition: all 0.5s ease;
-            overflow: hidden;
-        }
-
-        .table-container.hidden {
-            max-height: 0;
-            opacity: 0;
-            margin: 0;
-            padding: 0;
-        }
-
         table {
             width: 100%;
             border-collapse: collapse;
@@ -672,7 +692,6 @@ if (isset($_GET['export'])) {
             table { display: block; overflow-x: auto; white-space: nowrap; }
             th, td { padding: 10px; font-size: clamp(0.8rem, 1.8vw, 0.9rem); }
             .pagination { flex-wrap: wrap; }
-            .toggle-container { justify-content: center; }
         }
 
         @media (max-width: 480px) {
@@ -751,12 +770,7 @@ if (isset($_GET['export'])) {
 
         <div class="transactions-container">
             <h3 class="transactions-title">Daftar Siswa</h3>
-            <div class="toggle-container">
-                <button id="toggleTableButton" class="btn" title="Sembunyikan Tabel">
-                    <i class="fas fa-eye-slash"></i> Sembunyikan Tabel
-                </button>
-            </div>
-            <div id="tableContainer" class="table-container">
+            <div id="tableContainer">
                 <?php if (empty($siswa)): ?>
                     <div class="empty-state">
                         <i class="fas fa-users"></i>
@@ -779,7 +793,7 @@ if (isset($_GET['export'])) {
                                 <tr>
                                     <td><?= $no++ ?></td>
                                     <td><?= htmlspecialchars($row['nama'] ?? '-') ?></td>
-                                    <td><?= htmlspecialchars($row['no_rekening'] ?? '-') ?></td>
+                                    <td><?= htmlspecialchars(maskNoRekening($row['no_rekening'])) ?></td>
                                     <td><?= htmlspecialchars($row['nama_jurusan'] ?? '-') ?></td>
                                     <td><?= htmlspecialchars($row['nama_kelas'] ?? '-') ?></td>
                                     <td>Rp <?= number_format($row['saldo'] ?? 0, 2, ',', '.') ?></td>
@@ -841,16 +855,18 @@ if (isset($_GET['export'])) {
                 }, 5000);
             }
 
-            // Toggle table visibility
-            const toggleTableButton = document.getElementById('toggleTableButton');
-            const tableContainer = document.getElementById('tableContainer');
-            if (toggleTableButton && tableContainer) {
-                toggleTableButton.addEventListener('click', function() {
-                    tableContainer.classList.toggle('hidden');
-                    const isHidden = tableContainer.classList.contains('hidden');
-                    toggleTableButton.innerHTML = `<i class="fas fa-eye${isHidden ? '' : '-slash'}"></i> ${isHidden ? 'Tampilkan' : 'Sembunyikan'} Tabel`;
-                    toggleTableButton.title = isHidden ? 'Tampilkan Tabel' : 'Sembunyikan Tabel';
-                });
+            // Show loading spinner
+            function showLoadingSpinner(button) {
+                console.log('[DEBUG] Showing loading spinner for button:', button.id); // Debug log (remove after testing)
+                const originalContent = button.innerHTML;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+                button.classList.add('loading');
+                return {
+                    restore: () => {
+                        button.innerHTML = originalContent;
+                        button.classList.remove('loading');
+                    }
+                };
             }
 
             // Filter form handling
@@ -865,43 +881,72 @@ if (isset($_GET['export'])) {
             if (filterForm && filterButton) {
                 filterForm.addEventListener('submit', function(e) {
                     e.preventDefault();
-                    filterButton.classList.add('loading');
-                    filterButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
-                    setTimeout(() => filterForm.submit(), 500);
+                    const spinner = showLoadingSpinner(filterButton);
+                    setTimeout(() => {
+                        spinner.restore();
+                        filterForm.submit();
+                    }, 3000);
                 });
             }
 
             if (exportPdfButton) {
                 exportPdfButton.addEventListener('click', function() {
-                    exportPdfButton.classList.add('loading');
-                    exportPdfButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                    const spinner = showLoadingSpinner(exportPdfButton);
                     const jurusan_id = jurusanSelect.value;
                     const kelas_id = kelasSelect.value;
                     let url = '?export=pdf';
-                    if (jurusan_id) url += `&jurusan_id=${jurusan_id}`;
-                    if (kelas_id) url += `&kelas_id=${kelas_id}`;
-                    window.open(url, '_blank');
+                    if (jurusan_id) url += `&jurusan_id=${encodeURIComponent(jurusan_id)}`;
+                    if (kelas_id) url += `&kelas_id=${encodeURIComponent(kelas_id)}`;
+                    console.log('[DEBUG] PDF Export URL:', url); // Debug log (remove after testing)
                     setTimeout(() => {
-                        exportPdfButton.classList.remove('loading');
-                        exportPdfButton.innerHTML = '<i class="fas fa-file-pdf"></i> Ekspor PDF';
-                    }, 1000);
+                        try {
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('GET', url, true);
+                            xhr.responseType = 'blob';
+                            xhr.onload = function() {
+                                spinner.restore();
+                                if (xhr.status === 200) {
+                                    const blob = new Blob([xhr.response], { type: 'application/pdf' });
+                                    const link = document.createElement('a');
+                                    link.href = window.URL.createObjectURL(blob);
+                                    link.download = 'data_siswa.pdf';
+                                    link.click();
+                                    window.URL.revokeObjectURL(link.href);
+                                } else {
+                                    xhr.response.text().then(text => {
+                                        console.error('[DEBUG] PDF Export Error:', text); // Debug log (remove after testing)
+                                        showAlert('Gagal mengekspor PDF: ' + (text || 'Unknown error'), 'error');
+                                    });
+                                }
+                            };
+                            xhr.onerror = function() {
+                                spinner.restore();
+                                console.error('[DEBUG] PDF Export Network Error'); // Debug log (remove after testing)
+                                showAlert('Gagal mengekspor PDF: Network error', 'error');
+                            };
+                            xhr.send();
+                        } catch (e) {
+                            spinner.restore();
+                            console.error('[DEBUG] PDF Export Exception:', e.message); // Debug log (remove after testing)
+                            showAlert('Gagal mengekspor PDF: ' + e.message, 'error');
+                        }
+                    }, 3000);
                 });
             }
 
             if (exportExcelButton) {
                 exportExcelButton.addEventListener('click', function() {
-                    exportExcelButton.classList.add('loading');
-                    exportExcelButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                    const spinner = showLoadingSpinner(exportExcelButton);
                     const jurusan_id = jurusanSelect.value;
                     const kelas_id = kelasSelect.value;
                     let url = '?export=excel';
-                    if (jurusan_id) url += `&jurusan_id=${jurusan_id}`;
-                    if (kelas_id) url += `&kelas_id=${kelas_id}`;
-                    window.location.href = url;
+                    if (jurusan_id) url += `&jurusan_id=${encodeURIComponent(jurusan_id)}`;
+                    if (kelas_id) url += `&kelas_id=${encodeURIComponent(kelas_id)}`;
+                    console.log('[DEBUG] Excel Export URL:', url); // Debug log (remove after testing)
                     setTimeout(() => {
-                        exportExcelButton.classList.remove('loading');
-                        exportExcelButton.innerHTML = '<i class="fas fa-file-excel"></i> Ekspor Excel';
-                    }, 1000);
+                        spinner.restore();
+                        window.location.href = url;
+                    }, 3000);
                 });
             }
 
@@ -917,7 +962,8 @@ if (isset($_GET['export'])) {
                             kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>' + response;
                             kelasLoading.style.display = 'none';
                         },
-                        error: function() {
+                        error: function(xhr, status, error) {
+                            console.error('[DEBUG] Error fetching kelas:', status, error, xhr.responseText); // Debug log (remove after testing)
                             showAlert('Gagal memuat data kelas', 'error');
                             kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>';
                             kelasLoading.style.display = 'none';

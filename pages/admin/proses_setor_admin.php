@@ -16,12 +16,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $action = $_POST['action'] ?? '';
     $no_rekening = trim($_POST['no_rekening'] ?? '');
     $jumlah = isset($_POST['jumlah']) ? floatval(str_replace(',', '', $_POST['jumlah'])) : 0;
-    $user_id = intval($_POST['user_id'] ?? 0);
-    $pin = $_POST['pin'] ?? '';
 
     if ($action === 'cek_rekening') {
         $query = "
-            SELECT r.no_rekening, u.nama, u.email, u.has_pin, u.pin, u.id as user_id, r.id as rekening_id, r.saldo, 
+            SELECT r.no_rekening, u.nama, u.email, u.id as user_id, r.id as rekening_id, r.saldo, 
                    j.nama_jurusan AS jurusan, k.nama_kelas AS kelas, u.is_frozen
             FROM rekening r 
             JOIN users u ON r.user_id = u.id 
@@ -30,6 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             WHERE r.no_rekening = ? AND u.role = 'siswa'
         ";
         $stmt = $conn->prepare($query);
+        if (!$stmt) {
+            echo json_encode(['status' => 'error', 'message' => 'Gagal menyiapkan kueri: ' . $conn->error, 'email_status' => 'none']);
+            exit();
+        }
         $stmt->bind_param('s', $no_rekening);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -43,13 +45,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 echo json_encode(['status' => 'error', 'message' => 'Akun ini sedang dibekukan dan tidak dapat melakukan transaksi.', 'email_status' => 'none']);
                 exit();
             }
-            if (!empty($row['pin']) && !$row['has_pin']) {
-                $update_query = "UPDATE users SET has_pin = 1 WHERE id = ?";
-                $update_stmt = $conn->prepare($update_query);
-                $update_stmt->bind_param('i', $row['user_id']);
-                $update_stmt->execute();
-                $row['has_pin'] = 1;
-            }
             echo json_encode([
                 'status' => 'success',
                 'no_rekening' => $row['no_rekening'],
@@ -59,99 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'email' => $row['email'],
                 'user_id' => $row['user_id'],
                 'rekening_id' => $row['rekening_id'],
-                'has_pin' => (bool)$row['has_pin'],
                 'saldo' => floatval($row['saldo']),
                 'email_status' => 'none'
             ]);
         }
-    } elseif ($action === 'check_balance') {
-        if (empty($no_rekening)) {
-            echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak valid.', 'email_status' => 'none']);
-            exit();
-        }
-        if ($jumlah < 10000) {
-            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan minimal Rp 10.000.', 'email_status' => 'none']);
-            exit();
-        }
-
-        $query = "SELECT r.saldo, u.is_frozen 
-                  FROM rekening r 
-                  JOIN users u ON r.user_id = u.id 
-                  WHERE r.no_rekening = ? AND u.role = 'siswa'";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param('s', $no_rekening);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        if ($result->num_rows == 0) {
-            echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak ditemukan atau bukan milik siswa.', 'email_status' => 'none']);
-            exit();
-        }
-
-        $row = $result->fetch_assoc();
-        // Check if account is frozen
-        if ($row['is_frozen'] == 1) {
-            echo json_encode(['status' => 'error', 'message' => 'Akun ini sedang dibekukan dan tidak dapat melakukan transaksi.', 'email_status' => 'none']);
-            exit();
-        }
-        $saldo = floatval($row['saldo']);
-
-        if ($saldo < $jumlah) {
-            echo json_encode(['status' => 'error', 'message' => 'Saldo tidak mencukupi untuk penarikan sebesar Rp ' . number_format($jumlah, 0, ',', '.') . '.', 'email_status' => 'none']);
-            exit();
-        }
-
-        echo json_encode(['status' => 'success', 'message' => 'Saldo cukup untuk penarikan.', 'email_status' => 'none']);
-    } elseif ($action === 'verify_pin') {
-        if (empty($pin)) {
-            echo json_encode(['status' => 'error', 'message' => 'PIN harus diisi', 'email_status' => 'none']);
-            exit();
-        }
-
-        if (empty($user_id) || $user_id <= 0) {
-            echo json_encode(['status' => 'error', 'message' => 'ID User tidak valid', 'email_status' => 'none']);
-            exit();
-        }
-
-        $query = "SELECT pin, has_pin, is_frozen FROM users WHERE id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param('i', $user_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        if ($result->num_rows == 0) {
-            echo json_encode(['status' => 'error', 'message' => 'User tidak ditemukan', 'email_status' => 'none']);
-            exit();
-        }
-
-        $user = $result->fetch_assoc();
-        // Check if account is frozen
-        if ($user['is_frozen'] == 1) {
-            echo json_encode(['status' => 'error', 'message' => 'Akun ini sedang dibekukan dan tidak dapat melakukan transaksi.', 'email_status' => 'none']);
-            exit();
-        }
-
-        if (!empty($user['pin']) && !$user['has_pin']) {
-            $update_query = "UPDATE users SET has_pin = 1 WHERE id = ?";
-            $update_stmt = $conn->prepare($update_query);
-            $update_stmt->bind_param('i', $user_id);
-            $update_stmt->execute();
-            $user['has_pin'] = 1;
-        }
-
-        if (!$user['has_pin'] && empty($user['pin'])) {
-            echo json_encode(['status' => 'error', 'message' => 'User belum mengatur PIN', 'email_status' => 'none']);
-            exit();
-        }
-
-        // Assuming plain text PIN for compatibility with original code
-        if ($user['pin'] !== $pin) {
-            echo json_encode(['status' => 'error', 'message' => 'PIN yang Anda masukkan salah', 'email_status' => 'none']);
-            exit();
-        }
-
-        echo json_encode(['status' => 'success', 'message' => 'PIN valid', 'email_status' => 'none']);
-    } elseif ($action === 'tarik_saldo') {
+    } elseif ($action === 'setor_saldo') {
         try {
             $conn->begin_transaction();
 
@@ -159,11 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (empty($no_rekening)) {
                 throw new Exception('Nomor rekening tidak valid.');
             }
-            if ($jumlah <= 0 || $jumlah < 10000) {
-                throw new Exception('Jumlah penarikan minimal Rp 10.000 dan harus lebih dari 0.');
+            if ($jumlah <= 0 || $jumlah < 1000) {
+                throw new Exception('Jumlah penyetoran minimal Rp 10.000 dan harus lebih dari 0.');
             }
             if ($jumlah > 99999999.99) {
-                throw new Exception('Jumlah penarikan melebihi batas maksimum Rp 99.999.999,99.');
+                throw new Exception('Jumlah penyetoran melebihi batas maksimum Rp 99.999.999,99.');
             }
 
             // 2. Validasi rekening siswa dan status frozen
@@ -204,57 +111,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 throw new Exception('ID rekening tidak valid.');
             }
 
-            if ($saldo_sekarang < $jumlah) {
-                throw new Exception('Saldo siswa tidak mencukupi untuk penarikan sebesar Rp ' . number_format($jumlah, 0, ',', '.') . '. Saldo tersedia: Rp ' . number_format($saldo_sekarang, 0, ',', '.'));
-            }
-
-            // 3. Validasi saldo sistem (disesuaikan dengan petugas_id IS NULL)
-            $admin_id = $_SESSION['user_id'];
-            $query_saldo = "SELECT (
-                                COALESCE((
-                                    SELECT SUM(net_setoran)
-                                    FROM (
-                                        SELECT DATE(created_at) as tanggal,
-                                               SUM(CASE WHEN jenis_transaksi = 'setor' THEN jumlah ELSE 0 END) -
-                                               SUM(CASE WHEN jenis_transaksi = 'tarik' THEN jumlah ELSE 0 END) as net_setoran
-                                        FROM transaksi
-                                        WHERE status = 'approved' AND DATE(created_at) < CURDATE()
-                                        GROUP BY DATE(created_at)
-                                    ) as daily_net
-                                ), 0) -
-                                COALESCE((
-                                    SELECT SUM(jumlah)
-                                    FROM transaksi
-                                    WHERE jenis_transaksi = 'tarik' AND status = 'approved' 
-                                          AND DATE(created_at) = CURDATE() AND petugas_id IS NULL
-                                ), 0) -
-                                COALESCE((
-                                    SELECT SUM(jumlah)
-                                    FROM saldo_transfers
-                                    WHERE admin_id = ?
-                                ), 0)
-                            ) as saldo_bersih";
-            $stmt_saldo = $conn->prepare($query_saldo);
-            if (!$stmt_saldo) {
-                throw new Exception('Gagal menyiapkan kueri saldo: ' . $conn->error);
-            }
-            $stmt_saldo->bind_param("i", $admin_id);
-            $stmt_saldo->execute();
-            $result_saldo = $stmt_saldo->get_result();
-            $saldo_bersih = floatval($result_saldo->fetch_assoc()['saldo_bersih']);
-
-            if ($saldo_bersih < $jumlah) {
-                throw new Exception('Saldo sistem tidak mencukupi untuk penarikan sebesar Rp ' . number_format($jumlah, 0, ',', '.') . '. Saldo tersedia: Rp ' . number_format($saldo_bersih, 0, ',', '.'));
-            }
-
-            // 4. Catat transaksi dengan petugas_id = NULL
-            $no_transaksi = 'TRXA' . date('Ymd') . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
-            $petugas_id = null; // Gunakan NULL untuk penarikan admin
+            // 3. Catat transaksi dengan petugas_id = NULL
+            $no_transaksi = 'TRXS' . date('Ymd') . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+            $petugas_id = null; // Gunakan NULL untuk penyetoran admin
             $jumlah = round(floatval($jumlah), 2); // Pastikan jumlah sesuai DECIMAL(10,2)
 
             // Cek duplikasi no_transaksi
             $query_check_transaksi = "SELECT COUNT(*) as count FROM transaksi WHERE no_transaksi = ?";
             $stmt_check_transaksi = $conn->prepare($query_check_transaksi);
+            if (!$stmt_check_transaksi) {
+                throw new Exception('Gagal menyiapkan kueri cek transaksi: ' . $conn->error);
+            }
             $stmt_check_transaksi->bind_param('s', $no_transaksi);
             $stmt_check_transaksi->execute();
             $transaksi_count = $stmt_check_transaksi->get_result()->fetch_assoc()['count'];
@@ -266,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             error_log("Sebelum insert transaksi: no_transaksi=$no_transaksi (" . gettype($no_transaksi) . "), rekening_id=$rekening_id (" . gettype($rekening_id) . "), jumlah=$jumlah (" . gettype($jumlah) . "), petugas_id=" . ($petugas_id === null ? 'NULL' : $petugas_id) . " (" . gettype($petugas_id) . ")");
 
             $query_transaksi = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, petugas_id, status, created_at) 
-                               VALUES (?, ?, 'tarik', ?, ?, 'approved', NOW())";
+                               VALUES (?, ?, 'setor', ?, ?, 'approved', NOW())";
             $stmt_transaksi = $conn->prepare($query_transaksi);
             if (!$stmt_transaksi) {
                 throw new Exception('Gagal menyiapkan statement transaksi: ' . $conn->error);
@@ -277,8 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             $transaksi_id = $conn->insert_id;
 
-            // 5. Kurangi saldo siswa
-            $saldo_baru = $saldo_sekarang - $jumlah;
+            // 4. Tambah saldo siswa
+            $saldo_baru = $saldo_sekarang + $jumlah;
             $query_update_saldo = "UPDATE rekening SET saldo = ?, updated_at = NOW() WHERE id = ?";
             $stmt_update_saldo = $conn->prepare($query_update_saldo);
             if (!$stmt_update_saldo) {
@@ -289,7 +156,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 throw new Exception('Gagal memperbarui saldo siswa: ' . $stmt_update_saldo->error);
             }
 
-            // 6. Catat mutasi
+            // 5. Catat mutasi
             $query_mutasi = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir, created_at) 
                             VALUES (?, ?, ?, ?, NOW())";
             $stmt_mutasi = $conn->prepare($query_mutasi);
@@ -301,31 +168,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 throw new Exception('Gagal mencatat mutasi: ' . $stmt_mutasi->error);
             }
 
-            // 7. Catat notifikasi
-            $message = "Transaksi penarikan saldo sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh admin.";
+            // 6. Catat notifikasi
+            $message = "Transaksi penyetoran saldo sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh admin.";
             $query_notifikasi = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
             $stmt_notifikasi = $conn->prepare($query_notifikasi);
-            if ($stmt_notifikasi) {
+            if (!$stmt_notifikasi) {
+                error_log("Gagal menyiapkan notifikasi: " . $conn->error);
+            } else {
                 $stmt_notifikasi->bind_param('is', $user_id, $message);
                 if (!$stmt_notifikasi->execute()) {
                     error_log("Gagal menyimpan notifikasi untuk user_id: $user_id, no_transaksi: $no_transaksi, error: " . $stmt_notifikasi->error);
                 }
-            } else {
-                error_log("Gagal menyiapkan notifikasi: " . $conn->error);
             }
 
-            // 8. Kirim email
+            // 7. Kirim email
             $email_sent = false;
             $email_status = 'none';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $subject = "Bukti Transaksi Penarikan Saldo - SCHOBANK SYSTEM";
+                $subject = "Bukti Transaksi Penyetoran Saldo - SCHOBANK SYSTEM";
                 $message = "
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta charset=\"UTF-8\">
                     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-                    <title>Bukti Transaksi Penarikan Saldo - SCHOBANK SYSTEM</title>
+                    <title>Bukti Transaksi Penyetoran Saldo - SCHOBANK SYSTEM</title>
                     <style>
                         body { 
                             font-family: Arial, sans-serif; 
@@ -429,9 +296,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </head>
                 <body>
                     <div class=\"container\">
-                        <h2>Bukti Transaksi Penarikan Saldo</h2>
+                        <h2>Bukti Transaksi Penyetoran Saldo</h2>
                         <p>Yth. {$nama_nasabah},</p>
-                        <p>Kami informasikan bahwa transaksi penarikan saldo dari rekening Anda telah berhasil diproses oleh admin. Berikut rincian transaksi:</p>
+                        <p>Kami informasikan bahwa transaksi penyetoran saldo ke rekening Anda telah berhasil diproses oleh admin. Berikut rincian transaksi:</p>
                         <div class=\"transaction-details\">
                             <div class=\"transaction-row\">
                                 <div class=\"label\">Nomor Transaksi</div>
@@ -454,7 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <div class=\"value\">{$kelas}</div>
                             </div>
                             <div class=\"transaction-row\">
-                                <div class=\"label\">Jumlah Penarikan</div>
+                                <div class=\"label\">Jumlah Penyetoran</div>
                                 <div class=\"value amount\">Rp " . number_format($jumlah, 0, ',', '.') . "</div>
                             </div>
                             <div class=\"transaction-row\">
@@ -507,9 +374,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $conn->commit();
 
             // Log transaksi berhasil
-            error_log("Penarikan berhasil: no_transaksi=$no_transaksi, jumlah=$jumlah, no_rekening=$no_rekening, petugas_id=NULL, saldo_bersih=$saldo_bersih, email_status=$email_status");
+            error_log("Penyetoran berhasil: no_transaksi=$no_transaksi, jumlah=$jumlah, no_rekening=$no_rekening, petugas_id=NULL, email_status=$email_status");
 
-            $response_message = "Transaksi penarikan saldo untuk {$nama_nasabah} telah berhasil diproses.";
+            $response_message = "Transaksi penyetoran saldo untuk {$nama_nasabah} telah berhasil diproses.";
             if ($email_status === 'failed') {
                 $response_message .= " (Gagal mengirim bukti transaksi ke email)";
             } else if ($email_status === 'sent') {
@@ -533,7 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         } catch (Exception $e) {
             $conn->rollback();
             $error_message = $e->getMessage();
-            error_log("Penarikan gagal: no_rekening=$no_rekening, jumlah=$jumlah, error: $error_message");
+            error_log("Penyetoran gagal: no_rekening=$no_rekening, jumlah=$jumlah, error: $error_message");
             echo json_encode(['status' => 'error', 'message' => $error_message, 'email_status' => 'none']);
         }
     } else {

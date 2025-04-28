@@ -15,7 +15,6 @@ $result_jurusan = $conn->query($query_jurusan);
 
 $showConfirmation = false;
 $formData = [];
-$successMessage = null;
 $show_success_popup = false;
 $error = null;
 $show_error_popup = false;
@@ -29,7 +28,7 @@ function maskString($string, $visibleStart = 0, $visibleEnd = 0) {
     return '***';
 }
 
-function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name) {
+function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name, $no_wa = null) {
     try {
         $mail = new PHPMailer(true);
         $mail->isSMTP();
@@ -82,6 +81,10 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
                         <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>{$kelas_name}</td>
                     </tr>
                     <tr style='background-color: #f9f9f9;'>
+                        <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>No WhatsApp</td>
+                        <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>".($no_wa ? $no_wa : '-')."</td>
+                    </tr>
+                    <tr>
                         <td style='padding: 10px; font-weight: bold; color: #333; border: 1px solid #e0e0e0;'>Saldo Awal</td>
                         <td style='padding: 10px; color: #333; border: 1px solid #e0e0e0;'>Rp 0</td>
                     </tr>
@@ -97,7 +100,8 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
         </div>";
         
         $mail->Body = $emailBody;
-        $mail->AltBody = "Yth. Bapak/Ibu {$nama},\n\nKami dengan senang hati menginformasikan bahwa rekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah rincian akun Anda:\n\nNama: {$nama}\nNomor Rekening: {$no_rekening}\nUsername: {$username}\nPassword: {$password}\nJurusan: {$jurusan_name}\nKelas: {$kelas_name}\nSaldo Awal: Rp 0\n\nPenting: Harap ubah kata sandi Anda setelah login pertama untuk menjaga keamanan akun Anda.\n\nJika Anda memiliki pertanyaan, silakan hubungi tim kami.\n\nHormat kami,\nTim SCHOBANK SYSTEM\n\nEmail ini dibuat secara otomatis. Mohon tidak membalas email ini.";
+        $altBody = "Yth. Bapak/Ibu {$nama},\n\nKami dengan senang hati menginformasikan bahwa rekening Anda telah berhasil dibuat di SCHOBANK SYSTEM. Berikut adalah rincian akun Anda:\n\nNama: {$nama}\nNomor Rekening: {$no_rekening}\nUsername: {$username}\nPassword: {$password}\nJurusan: {$jurusan_name}\nKelas: {$kelas_name}\nNo WhatsApp: ".($no_wa ? $no_wa : '-')."\nSaldo Awal: Rp 0\n\nPenting: Harap ubah kata sandi Anda setelah login pertama untuk menjaga keamanan akun Anda.\n\nJika Anda memiliki pertanyaan, silakan hubungi tim kami.\n\nHormat kami,\nTim SCHOBANK SYSTEM\n\nEmail ini dibuat secara otomatis. Mohon tidak membalas email ini.";
+        $mail->AltBody = $altBody;
         
         $mail->send();
         return true;
@@ -108,7 +112,13 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    if (isset($_POST['confirm'])) {
+    if (isset($_POST['cancel'])) {
+        header('Location: data_siswa.php');
+        exit();
+    }
+
+    if (isset($_POST['confirmed'])) {
+        // Process confirmation
         $nama = trim($_POST['nama']);
         $username = $_POST['username'];
         $password = '12345';
@@ -117,76 +127,104 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $kelas_id = $_POST['kelas_id'];
         $no_rekening = $_POST['no_rekening'];
         $email = trim($_POST['email']);
+        $no_wa = !empty($_POST['no_wa']) ? trim($_POST['no_wa']) : null;
         
+        // Validate username uniqueness
         $check_query = "SELECT id FROM users WHERE username = ?";
         $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("s", $username);
-        $check_stmt->execute();
-        
-        if ($check_stmt->get_result()->num_rows > 0) {
-            $username = $username . rand(100, 999);
+        if (!$check_stmt) {
+            $error = "Error preparing username check: " . $conn->error;
+            $show_error_popup = true;
+        } else {
+            $check_stmt->bind_param("s", $username);
+            $check_stmt->execute();
+            if ($check_stmt->get_result()->num_rows > 0) {
+                $username = $username . rand(100, 999);
+            }
+            $check_stmt->close();
         }
 
-        $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id, email) 
-                VALUES (?, ?, 'siswa', ?, ?, ?, ?)";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("sssiss", $username, $password_hash, $nama, $jurusan_id, $kelas_id, $email);
-        
-        if ($stmt->execute()) {
-            $user_id = $conn->insert_id;
-            $query_rekening = "INSERT INTO rekening (no_rekening, user_id, saldo) VALUES (?, ?, 0)";
-            $stmt_rekening = $conn->prepare($query_rekening);
-            $stmt_rekening->bind_param("si", $no_rekening, $user_id);
-            
-            if ($stmt_rekening->execute()) {
-                $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
-                $stmt_jurusan = $conn->prepare($query_jurusan_name);
-                $stmt_jurusan->bind_param("i", $jurusan_id);
-                $stmt_jurusan->execute();
-                $result_jurusan_name = $stmt_jurusan->get_result();
-                $jurusan_name = $result_jurusan_name->fetch_assoc()['nama_jurusan'];
-                
-                $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
-                $stmt_kelas = $conn->prepare($query_kelas_name);
-                $stmt_kelas->bind_param("i", $kelas_id);
-                $stmt_kelas->execute();
-                $result_kelas_name = $stmt_kelas->get_result();
-                $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
-                
-                $email_sent = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name);
-                
-                $show_success_popup = true;
-                header('refresh:3;url=data_siswa.php');
-            } else {
-                $error = "Error saat membuat rekening!";
+        if (!$show_error_popup) {
+            // Insert user
+            $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id, email, no_wa) 
+                    VALUES (?, ?, 'siswa', ?, ?, ?, ?, ?)";
+            $stmt = $conn->prepare($query);
+            if (!$stmt) {
+                $error = "Error preparing user insert: " . $conn->error;
                 $show_error_popup = true;
+            } else {
+                $stmt->bind_param("sssisis", $username, $password_hash, $nama, $jurusan_id, $kelas_id, $email, $no_wa);
+                if ($stmt->execute()) {
+                    $user_id = $conn->insert_id;
+                    // Insert rekening
+                    $query_rekening = "INSERT INTO rekening (no_rekening, user_id, saldo) VALUES (?, ?, 0)";
+                    $stmt_rekening = $conn->prepare($query_rekening);
+                    if (!$stmt_rekening) {
+                        $error = "Error preparing rekening insert: " . $conn->error;
+                        $show_error_popup = true;
+                    } else {
+                        $stmt_rekening->bind_param("si", $no_rekening, $user_id);
+                        if ($stmt_rekening->execute()) {
+                            // Fetch jurusan and kelas names
+                            $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
+                            $stmt_jurusan = $conn->prepare($query_jurusan_name);
+                            $stmt_jurusan->bind_param("i", $jurusan_id);
+                            $stmt_jurusan->execute();
+                            $result_jurusan_name = $stmt_jurusan->get_result();
+                            $jurusan_name = $result_jurusan_name->fetch_assoc()['nama_jurusan'];
+                            
+                            $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
+                            $stmt_kelas = $conn->prepare($query_kelas_name);
+                            $stmt_kelas->bind_param("i", $kelas_id);
+                            $stmt_kelas->execute();
+                            $result_kelas_name = $stmt_kelas->get_result();
+                            $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
+                            
+                            // Send email
+                            $email_sent = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name, $no_wa);
+                            
+                            $show_success_popup = true;
+                            header('refresh:3;url=data_siswa.php');
+                        } else {
+                            $error = "Error saat membuat rekening: " . $stmt_rekening->error;
+                            $show_error_popup = true;
+                        }
+                        $stmt_rekening->close();
+                    }
+                } else {
+                    $error = "Error saat menambah user: " . $stmt->error;
+                    $show_error_popup = true;
+                }
+                $stmt->close();
             }
-        } else {
-            $error = "Error saat menambah user!";
-            $show_error_popup = true;
         }
-    } elseif (isset($_POST['cancel'])) {
-        header('Location: tambah_nasabah.php');
-        exit();
+        // Clear POST data to prevent reprocessing
+        $_POST = [];
     } else {
+        // Initial form submission
         $showConfirmation = true;
         $nama = trim($_POST['nama']);
         $username = generateUsername($nama);
         $email = trim($_POST['email']);
+        $no_wa = !empty($_POST['no_wa']) ? trim($_POST['no_wa']) : null;
         $jurusan_id = isset($_POST['jurusan_id']) ? $_POST['jurusan_id'] : '';
         $kelas_id = isset($_POST['kelas_id']) ? $_POST['kelas_id'] : '';
         
-        // Validate email uniqueness
-        $check_email_query = "SELECT id FROM users WHERE email = ?";
-        $check_email_stmt = $conn->prepare($check_email_query);
-        $check_email_stmt->bind_param("s", $email);
-        $check_email_stmt->execute();
-        if ($check_email_stmt->get_result()->num_rows > 0) {
-            $error = "Email sudah digunakan! Silakan gunakan email lain.";
+        // Validate inputs
+        if (strlen($nama) < 3) {
+            $error = "Nama harus minimal 3 karakter!";
             $showConfirmation = false;
             $show_error_popup = true;
         } elseif (empty($email)) {
             $error = "Email wajib diisi!";
+            $showConfirmation = false;
+            $show_error_popup = true;
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = "Format email tidak valid!";
+            $showConfirmation = false;
+            $show_error_popup = true;
+        } elseif ($no_wa && !preg_match('/^\+?\d{10,15}$/', $no_wa)) {
+            $error = "Nomor WhatsApp tidak valid!";
             $showConfirmation = false;
             $show_error_popup = true;
         } elseif (empty($jurusan_id)) {
@@ -198,62 +236,94 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $showConfirmation = false;
             $show_error_popup = true;
         } else {
-            $check_query = "SELECT id FROM users WHERE username = ?";
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("s", $username);
-            $check_stmt->execute();
-            
-            if ($check_stmt->get_result()->num_rows > 0) {
-                $username = $username . rand(100, 999);
-            }
-            
-            $no_rekening = 'REK' . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
-            
-            $formData = [
-                'nama' => $nama,
-                'username' => $username,
-                'password' => '12345',
-                'jurusan_id' => $jurusan_id,
-                'kelas_id' => $kelas_id,
-                'no_rekening' => $no_rekening,
-                'email' => $email
-            ];
-            
-            $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
-            $stmt_jurusan = $conn->prepare($query_jurusan_name);
-            if ($stmt_jurusan === false) {
-                $error = "Error preparing jurusan query: " . $conn->error;
+            // Validate email uniqueness
+            $check_email_query = "SELECT id FROM users WHERE email = ?";
+            $check_email_stmt = $conn->prepare($check_email_query);
+            $check_email_stmt->bind_param("s", $email);
+            $check_email_stmt->execute();
+            if ($check_email_stmt->get_result()->num_rows > 0) {
+                $error = "Email sudah digunakan! Silakan gunakan email lain.";
                 $showConfirmation = false;
                 $show_error_popup = true;
-            } else {
-                $stmt_jurusan->bind_param("i", $jurusan_id);
-                $stmt_jurusan->execute();
-                $result_jurusan_name = $stmt_jurusan->get_result();
-                if ($result_jurusan_name->num_rows === 0) {
-                    $error = "Jurusan tidak ditemukan!";
+            }
+            // Validate WhatsApp number uniqueness (if provided)
+            elseif ($no_wa) {
+                $check_wa_query = "SELECT id FROM users WHERE no_wa = ?";
+                $check_wa_stmt = $conn->prepare($check_wa_query);
+                $check_wa_stmt->bind_param("s", $no_wa);
+                $check_wa_stmt->execute();
+                if ($check_wa_stmt->get_result()->num_rows > 0) {
+                    $error = "Nomor WhatsApp sudah digunakan! Silakan gunakan nomor lain.";
+                    $showConfirmation = false;
+                    $show_error_popup = true;
+                }
+                $check_wa_stmt->close();
+            }
+            $check_email_stmt->close();
+
+            if (!$show_error_popup) {
+                // Validate username uniqueness
+                $check_query = "SELECT id FROM users WHERE username = ?";
+                $check_stmt = $conn->prepare($check_query);
+                $check_stmt->bind_param("s", $username);
+                $check_stmt->execute();
+                if ($check_stmt->get_result()->num_rows > 0) {
+                    $username = $username . rand(100, 999);
+                }
+                $check_stmt->close();
+                
+                $no_rekening = 'REK' . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+                
+                $formData = [
+                    'nama' => $nama,
+                    'username' => $username,
+                    'password' => '12345',
+                    'jurusan_id' => $jurusan_id,
+                    'kelas_id' => $kelas_id,
+                    'no_rekening' => $no_rekening,
+                    'email' => $email,
+                    'no_wa' => $no_wa
+                ];
+                
+                // Fetch jurusan and kelas names
+                $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
+                $stmt_jurusan = $conn->prepare($query_jurusan_name);
+                if (!$stmt_jurusan) {
+                    $error = "Error preparing jurusan query: " . $conn->error;
                     $showConfirmation = false;
                     $show_error_popup = true;
                 } else {
-                    $jurusan_name = $result_jurusan_name->fetch_assoc()['nama_jurusan'];
-                    
-                    $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
-                    $stmt_kelas = $conn->prepare($query_kelas_name);
-                    if ($stmt_kelas === false) {
-                        $error = "Error preparing kelas query: " . $conn->error;
+                    $stmt_jurusan->bind_param("i", $jurusan_id);
+                    $stmt_jurusan->execute();
+                    $result_jurusan_name = $stmt_jurusan->get_result();
+                    if ($result_jurusan_name->num_rows === 0) {
+                        $error = "Jurusan tidak ditemukan!";
                         $showConfirmation = false;
                         $show_error_popup = true;
                     } else {
-                        $stmt_kelas->bind_param("i", $kelas_id);
-                        $stmt_kelas->execute();
-                        $result_kelas_name = $stmt_kelas->get_result();
-                        if ($result_kelas_name->num_rows === 0) {
-                            $error = "Kelas tidak ditemukan!";
+                        $jurusan_name = $result_jurusan_name->fetch_assoc()['nama_jurusan'];
+                        
+                        $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
+                        $stmt_kelas = $conn->prepare($query_kelas_name);
+                        if (!$stmt_kelas) {
+                            $error = "Error preparing kelas query: " . $conn->error;
                             $showConfirmation = false;
                             $show_error_popup = true;
                         } else {
-                            $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
+                            $stmt_kelas->bind_param("i", $kelas_id);
+                            $stmt_kelas->execute();
+                            $result_kelas_name = $stmt_kelas->get_result();
+                            if ($result_kelas_name->num_rows === 0) {
+                                $error = "Kelas tidak ditemukan!";
+                                $showConfirmation = false;
+                                $show_error_popup = true;
+                            } else {
+                                $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
+                            }
+                            $stmt_kelas->close();
                         }
                     }
+                    $stmt_jurusan->close();
                 }
             }
         }
@@ -445,7 +515,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         select {
             appearance: none;
-            background: white url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="%23666"><polygon points="0,0 14,0 7,14"/></svg>') no-repeat right 15px center;
+            background: white;
+            position: relative;
+        }
+
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select-wrapper::after {
+            content: '\f078';
+            font-family: 'Font Awesome 5 Free';
+            font-weight: 900;
+            color: var(--text-secondary);
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
         }
 
         .btn {
@@ -466,6 +553,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .btn:hover {
             background-color: var(--primary-dark);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
         .btn:active {
@@ -474,6 +562,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .btn-confirm {
             background-color: var(--secondary-color);
+            padding: 14px 30px;
         }
 
         .btn-confirm:hover {
@@ -482,6 +571,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .btn-cancel {
             background-color: var(--danger-color);
+            padding: 14px 30px;
         }
 
         .btn-cancel:hover {
@@ -494,13 +584,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.65);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1000;
             opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
+            animation: fadeInOverlay 0.4s ease-in-out forwards;
         }
 
         @keyframes fadeInOverlay {
@@ -514,34 +604,46 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         .success-modal, .error-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
-            border-radius: 20px;
-            padding: 40px;
+            background: linear-gradient(145deg, #ffffff 0%, #f5f8ff 100%);
+            border-radius: 24px;
+            padding: clamp(30px, 6vw, 40px);
             text-align: center;
-            max-width: 90%;
-            width: 450px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            max-width: 95%;
+            width: clamp(360px, 80vw, 520px);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15);
             position: relative;
             overflow: hidden;
-            transform: scale(0.5);
+            transform: scale(0.7);
             opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
+            animation: popInModal 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            margin: 20px auto;
+        }
+
+        .success-modal::before, .error-modal::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
         }
 
         .error-modal {
-            background: linear-gradient(145deg, #ffffff, #ffe6e6);
+            background: linear-gradient(145deg, #ffffff 0%, #fff0f0 100%);
         }
 
         @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.03); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
         }
 
         .success-icon, .error-icon {
-            font-size: clamp(4rem, 8vw, 4.5rem);
-            margin-bottom: 25px;
-            animation: bounceIn 0.6s ease-out;
+            font-size: clamp(3.8rem, 8vw, 4.8rem);
+            margin: 0 auto 20px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
             filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
         }
 
@@ -555,66 +657,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         @keyframes bounceIn {
             0% { transform: scale(0); opacity: 0; }
-            50% { transform: scale(1.2); }
+            50% { transform: scale(1.25); }
             100% { transform: scale(1); opacity: 1; }
         }
 
         .success-modal h3, .error-modal h3 {
             color: var(--primary-dark);
-            margin-bottom: 15px;
+            margin: 0 0 20px;
             font-size: clamp(1.4rem, 3vw, 1.6rem);
-            animation: slideUpText 0.5s ease-out 0.2s both;
             font-weight: 600;
+            animation: slideUpText 0.5s ease-out 0.2s both;
         }
 
         .success-modal p, .error-modal p {
             color: var(--text-secondary);
-            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
-            margin-bottom: 25px;
+            font-size: clamp(0.95rem, 2.3vw, 1.05rem);
+            margin: 0 0 25px;
+            line-height: 1.6;
             animation: slideUpText 0.5s ease-out 0.3s both;
-            line-height: 1.5;
         }
 
         @keyframes slideUpText {
-            from { transform: translateY(20px); opacity: 0; }
+            from { transform: translateY(15px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
-        }
-
-        .confetti {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
         }
 
         .modal-content {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 14px;
+            background: rgba(255, 255, 255, 0.7);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 25px;
         }
 
         .modal-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #eee;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .modal-row:last-child {
@@ -624,11 +707,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .modal-label {
             font-weight: 500;
             color: var(--text-secondary);
+            font-size: clamp(0.9rem, 2.2vw, 1rem);
         }
 
         .modal-value {
             font-weight: 600;
             color: var(--text-primary);
+            font-size: clamp(0.9rem, 2.2vw, 1rem);
         }
 
         .modal-buttons {
@@ -648,15 +733,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         .loading-spinner {
             font-size: 1.5rem;
             color: var(--primary-color);
-            animation: dots 2s infinite steps(4, end);
+            animation: spin 1s linear infinite;
         }
 
-        @keyframes dots {
-            0% { content: '.'; }
-            25% { content: '..'; }
-            50% { content: '...'; }
-            75% { content: '....'; }
-            100% { content: '.'; }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         @media (max-width: 768px) {
@@ -692,11 +774,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             .modal-buttons {
                 flex-direction: column;
+                gap: 10px;
             }
 
             .success-modal, .error-modal {
-                width: 90%;
-                padding: 30px;
+                width: clamp(330px, 90vw, 440px);
+                padding: clamp(25px, 5vw, 35px);
+                margin: 15px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.5rem, 7vw, 4.5rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1.3rem, 2.8vw, 1.5rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.9rem, 2.2vw, 1rem);
             }
         }
 
@@ -713,12 +809,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 padding: 20px;
             }
 
+            .success-modal, .error-modal {
+                width: clamp(310px, 92vw, 380px);
+                padding: clamp(20px, 4vw, 30px);
+                margin: 10px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.2rem, 6.5vw, 4rem);
+            }
+
             .success-modal h3, .error-modal h3 {
-                font-size: clamp(1.2rem, 3vw, 1.4rem);
+                font-size: clamp(1.2rem, 2.7vw, 1.4rem);
             }
 
             .success-modal p, .error-modal p {
-                font-size: clamp(0.9rem, 2.2vw, 1rem);
+                font-size: clamp(0.85rem, 2.1vw, 0.95rem);
+            }
+
+            .modal-content {
+                padding: 12px;
+                gap: 12px;
+            }
+
+            .modal-row {
+                padding: 10px 0;
             }
         }
     </style>
@@ -754,28 +869,36 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <input type="email" id="email" name="email" required value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" placeholder="Masukkan email">
                     </div>
                     <div class="form-group">
+                        <label for="no_wa">Nomor WhatsApp (Opsional)</label>
+                        <input type="tel" id="no_wa" name="no_wa" value="<?php echo isset($_POST['no_wa']) ? htmlspecialchars($_POST['no_wa']) : ''; ?>" placeholder="Masukkan nomor WhatsApp">
+                    </div>
+                    <div class="form-group">
                         <label for="jurusan_id">Jurusan</label>
-                        <select id="jurusan_id" name="jurusan_id" required onchange="getKelasByJurusan(this.value)">
-                            <option value="">Pilih Jurusan</option>
-                            <?php 
-                            if($result_jurusan->num_rows > 0) {
-                                $result_jurusan->data_seek(0);
-                            }
-                            while ($row = $result_jurusan->fetch_assoc()): 
-                            ?>
-                                <option value="<?php echo $row['id']; ?>" <?php echo (isset($_POST['jurusan_id']) && $_POST['jurusan_id'] == $row['id']) ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($row['nama_jurusan']); ?>
-                                </option>
-                            <?php endwhile; ?>
-                        </select>
+                        <div class="select-wrapper">
+                            <select id="jurusan_id" name="jurusan_id" required onchange="getKelasByJurusan(this.value)">
+                                <option value="">Pilih Jurusan</option>
+                                <?php 
+                                if($result_jurusan->num_rows > 0) {
+                                    $result_jurusan->data_seek(0);
+                                }
+                                while ($row = $result_jurusan->fetch_assoc()): 
+                                ?>
+                                    <option value="<?php echo $row['id']; ?>" <?php echo (isset($_POST['jurusan_id']) && $_POST['jurusan_id'] == $row['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($row['nama_jurusan']); ?>
+                                    </option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="kelas_id">Kelas</label>
-                        <select id="kelas_id" name="kelas_id" required>
-                            <option value="">Pilih Kelas</option>
-                        </select>
+                        <div class="select-wrapper">
+                            <select id="kelas_id" name="kelas_id" required>
+                                <option value="">Pilih Kelas</option>
+                            </select>
+                        </div>
                         <div id="kelas-loading" class="loading" style="display: none;">
-                            <div class="loading-spinner">...</div>
+                            <div class="loading-spinner"><i class="fas fa-spinner"></i></div>
                         </div>
                     </div>
                     <button type="submit" class="btn" id="submit-btn">
@@ -811,6 +934,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <span class="modal-value"><?php echo htmlspecialchars($formData['email']); ?></span>
                         </div>
                         <div class="modal-row">
+                            <span class="modal-label">No WhatsApp</span>
+                            <span class="modal-value"><?php echo $formData['no_wa'] ? htmlspecialchars($formData['no_wa']) : '-'; ?></span>
+                        </div>
+                        <div class="modal-row">
                             <span class="modal-label">Jurusan</span>
                             <span class="modal-value"><?php echo htmlspecialchars($jurusan_name); ?></span>
                         </div>
@@ -830,6 +957,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         <input type="hidden" name="kelas_id" value="<?php echo htmlspecialchars($formData['kelas_id']); ?>">
                         <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($formData['no_rekening']); ?>">
                         <input type="hidden" name="email" value="<?php echo htmlspecialchars($formData['email']); ?>">
+                        <input type="hidden" name="no_wa" value="<?php echo htmlspecialchars($formData['no_wa'] ?? ''); ?>">
+                        <input type="hidden" name="confirmed" value="1">
                         <div class="modal-buttons">
                             <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
                                 <i class="fas fa-check"></i> Konfirmasi
@@ -865,6 +994,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <span class="modal-value"><?php echo htmlspecialchars($email); ?></span>
                         </div>
                         <div class="modal-row">
+                            <span class="modal-label">No WhatsApp</span>
+                            <span class="modal-value"><?php echo $no_wa ? htmlspecialchars($no_wa) : '-'; ?></span>
+                        </div>
+                        <div class="modal-row">
                             <span class="modal-label">Jurusan</span>
                             <span class="modal-value"><?php echo htmlspecialchars($jurusan_name); ?></span>
                         </div>
@@ -890,9 +1023,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     </div>
                     <h3>Kesalahan</h3>
                     <p><?php echo htmlspecialchars($error); ?></p>
-                    <button class="btn btn-cancel" onclick="window.location.href='tambah_nasabah.php'">
-                        <i class="fas fa-times"></i> Tutup
-                    </button>
+                    <div class="modal-buttons">
+                        <button class="btn btn-cancel" onclick="window.location.href='data_siswa.php'">
+                            <i class="fas fa-times"></i> Tutup
+                        </button>
+                    </div>
                 </div>
             </div>
         <?php endif; ?>
@@ -926,31 +1061,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 event.preventDefault();
             }, { passive: false });
 
-            // Modal confetti for confirmation modal
-            const confirmModal = document.querySelector('#confirmModal .success-modal');
-            if (confirmModal) {
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    confirmModal.appendChild(confetti);
-                }
-            }
-
-            // Modal confetti for success modal
-            const successModal = document.querySelector('#successModal .success-modal');
+            // Auto-close success modal after 3 seconds
+            const successModal = document.querySelector('#successModal');
             if (successModal) {
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    successModal.appendChild(confetti);
-                }
-                // Auto-close success modal after 3 seconds
                 setTimeout(() => {
                     const overlay = document.querySelector('#successModal');
                     overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
@@ -958,39 +1071,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }, 3000);
             }
 
-            // Loading effect for forms
+            // Form submission handling
             const nasabahForm = document.getElementById('nasabahForm');
             const submitBtn = document.getElementById('submit-btn');
             
             if (nasabahForm && submitBtn) {
-                nasabahForm.addEventListener('submit', function() {
-                    submitBtn.classList.add('loading');
-                    submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
-                    setTimeout(() => {}, 2000); // Simulate longer processing
-                });
-            }
-
-            const confirmForm = document.getElementById('confirm-form');
-            const confirmBtn = document.getElementById('confirm-btn');
-            
-            if (confirmForm && confirmBtn) {
-                confirmForm.addEventListener('submit', function() {
-                    confirmBtn.classList.add('loading');
-                    confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
-                    setTimeout(() => {}, 2000); // Simulate longer processing
-                });
-            }
-
-            // Form validation
-            if (nasabahForm) {
                 nasabahForm.addEventListener('submit', function(e) {
                     const nama = document.getElementById('nama').value.trim();
                     if (nama.length < 3) {
                         e.preventDefault();
                         showErrorPopup('Nama harus minimal 3 karakter!');
                         document.getElementById('nama').focus();
-                        submitBtn.classList.remove('loading');
-                        submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Lanjutkan';
                         return;
                     }
 
@@ -1000,14 +1091,41 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         e.preventDefault();
                         showErrorPopup('Format email tidak valid!');
                         document.getElementById('email').focus();
-                        submitBtn.classList.remove('loading');
-                        submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Lanjutkan';
+                        return;
+                    }
+
+                    const no_wa = document.getElementById('no_wa').value.trim();
+                    if (no_wa && !/^\+?\d{10,15}$/.test(no_wa)) {
+                        e.preventDefault();
+                        showErrorPopup('Nomor WhatsApp tidak valid!');
+                        document.getElementById('no_wa').focus();
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    submitBtn.classList.add('loading');
+                    submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                });
+            }
+
+            const confirmForm = document.getElementById('confirm-form');
+            const confirmBtn = document.getElementById('confirm-btn');
+            
+            if (confirmForm && confirmBtn) {
+                confirmForm.addEventListener('submit', function(e) {
+                    if (e.submitter.name === 'confirm') {
+                        confirmBtn.disabled = true;
+                        confirmBtn.classList.add('loading');
+                        confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
                     }
                 });
             }
 
             // Function to show error popup
             function showErrorPopup(message) {
+                const existingModal = document.querySelector('#errorModal');
+                if (existingModal) existingModal.remove();
+
                 const overlay = document.createElement('div');
                 overlay.className = 'success-overlay';
                 overlay.id = 'errorModal';
@@ -1018,9 +1136,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </div>
                         <h3>Kesalahan</h3>
                         <p>${message}</p>
-                        <button class="btn btn-cancel" onclick="this.closest('.success-overlay').remove()">
-                            <i class="fas fa-times"></i> Tutup
-                        </button>
+                        <div class="modal-buttons">
+                            <button class="btn btn-cancel" onclick="this.closest('.success-overlay').remove()">
+                                <i class="fas fa-times"></i> Tutup
+                            </button>
+                        </div>
                     </div>
                 `;
                 document.body.appendChild(overlay);
@@ -1059,12 +1179,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
             }
 
-            // Inisialisasi kelas jika jurusan sudah dipilih
+            // Initialize kelas if jurusan is selected
             <?php if (isset($_POST['jurusan_id']) && !$showConfirmation && !$show_error_popup): ?>
                 getKelasByJurusan(<?php echo $_POST['jurusan_id']; ?>);
             <?php endif; ?>
 
-            // Pasang event listener untuk jurusan
+            // Attach event listener for jurusan
             const jurusanSelect = document.getElementById('jurusan_id');
             if (jurusanSelect) {
                 jurusanSelect.addEventListener('change', function() {

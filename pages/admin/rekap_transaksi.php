@@ -2,33 +2,60 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
-$username = $_SESSION['username'] ?? 'Petugas';
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header('Location: ../login.php');
+    exit();
+}
 
-// Ambil data transaksi berdasarkan filter tanggal
-$start_date = $_GET['start_date'] ?? date('Y-m-01');
-$end_date = $_GET['end_date'] ?? date('Y-m-d');
+$username = $_SESSION['username'] ?? 'Admin';
 
-// Query untuk menghitung total
+// Validate and sanitize date inputs
+$start_date = isset($_GET['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['start_date']) 
+    ? $_GET['start_date'] 
+    : date('Y-m-01');
+$end_date = isset($_GET['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['end_date']) 
+    ? $_GET['end_date'] 
+    : date('Y-m-d');
+
+// Ensure start_date <= end_date
+if (strtotime($start_date) > strtotime($end_date)) {
+    $temp = $start_date;
+    $start_date = $end_date;
+    $end_date = $temp;
+}
+
+// Query for summary totals
 $total_query = "SELECT 
     COUNT(*) as total_transactions,
-    SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_setoran,
-    SUM(CASE WHEN jenis_transaksi = 'tarik' AND status = 'approved' THEN jumlah ELSE 0 END) as total_penarikan
+    SUM(CASE WHEN t.jenis_transaksi = 'setor' AND (t.status = 'approved' OR t.status IS NULL) THEN t.jumlah ELSE 0 END) as total_setoran,
+    SUM(CASE WHEN t.jenis_transaksi = 'tarik' AND t.status = 'approved' THEN t.jumlah ELSE 0 END) as total_penarikan
     FROM transaksi t
     JOIN rekening r ON t.rekening_id = r.id
     JOIN users u ON r.user_id = u.id
     LEFT JOIN users p ON t.petugas_id = p.id
     WHERE DATE(t.created_at) BETWEEN ? AND ?
     AND t.jenis_transaksi IN ('setor', 'tarik')
-    AND t.petugas_id IS NOT NULL";
-$stmt_total = $conn->prepare($total_query);
-$stmt_total->bind_param("ss", $start_date, $end_date);
-$stmt_total->execute();
-$totals_result = $stmt_total->get_result();
-$totals = $totals_result->fetch_assoc();
-$totals['total_transactions'] = $totals['total_transactions'] ?? 0;
-$totals['total_setoran'] = $totals['total_setoran'] ?? 0;
-$totals['total_penarikan'] = $totals['total_penarikan'] ?? 0;
-$totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
+    AND (
+        t.petugas_id IS NULL
+        OR (t.petugas_id IS NOT NULL AND p.role = 'petugas')
+    )";
+try {
+    $stmt_total = $conn->prepare($total_query);
+    $stmt_total->bind_param("ss", $start_date, $end_date);
+    $stmt_total->execute();
+    $totals_result = $stmt_total->get_result();
+    $totals = $totals_result->fetch_assoc();
+    
+    // Handle null values
+    $totals['total_transactions'] = $totals['total_transactions'] ?? 0;
+    $totals['total_setoran'] = $totals['total_setoran'] ?? 0;
+    $totals['total_penarikan'] = $totals['total_penarikan'] ?? 0;
+    $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
+} catch (Exception $e) {
+    // Log error (optional, uncomment if needed)
+    // error_log("Database error in rekap_transaksi.php: " . $e->getMessage());
+    $totals = ['total_transactions' => 0, 'total_setoran' => 0, 'total_penarikan' => 0, 'total_net' => 0];
+}
 ?>
 
 <!DOCTYPE html>
@@ -36,7 +63,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Laporan Transaksi - SCHOBANK SYSTEM</title>
+    <title>Rekapitulasi Transaksi - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -196,6 +223,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
             display: flex;
             flex-direction: column;
             gap: 8px;
+            position: relative;
         }
 
         label {
@@ -245,6 +273,25 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
             transform: scale(1.02);
+        }
+
+        .tooltip {
+            position: absolute;
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .form-group:hover .tooltip {
+            opacity: 1;
         }
 
         .filter-buttons {
@@ -387,6 +434,16 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 
         .empty-state p {
             font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .empty-state a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .empty-state a:hover {
+            text-decoration: underline;
         }
 
         .alert {
@@ -533,20 +590,18 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2>Transaksi Petugas</h2>
+            <h2>Rekapitulasi Transaksi</h2>
             <p>Periode: <?= htmlspecialchars(date('d/m/Y', strtotime($start_date))) ?> - <?= htmlspecialchars(date('d/m/Y', strtotime($end_date))) ?></p>
         </div>
 
         <div id="alertContainer"></div>
-
         <!-- Notes Section -->
         <div class="notes-container">
             <div class="notes-content">
                 <i class="fas fa-info-circle"></i>
-                <p>Catatan: Rekapitulasi ini hanya mencakup transaksi yang dilakukan oleh petugas. Untuk melihat daftar lengkap transaksi, silakan <a href="#" id="downloadLink">download laporan</a>.</p>
+                <p>Catatan: Rekapitulasi ini mencakup transaksi yang dilakukan oleh petugas dan admin. Untuk melihat daftar lengkap transaksi, silakan <a href="#" id="downloadLink">download laporan</a>.</p>
             </div>
         </div>
-
         <!-- Filter Section -->
         <div class="filter-section">
             <form id="filterForm" class="filter-form">
@@ -554,11 +609,13 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                     <label for="start_date">Dari Tanggal</label>
                     <input type="date" id="start_date" name="start_date" 
                            value="<?= htmlspecialchars($start_date) ?>" required>
+                    <span class="tooltip">Pilih tanggal mulai periode</span>
                 </div>
                 <div class="form-group">
                     <label for="end_date">Sampai Tanggal</label>
                     <input type="date" id="end_date" name="end_date" 
                            value="<?= htmlspecialchars($end_date) ?>" required>
+                    <span class="tooltip">Pilih tanggal akhir periode</span>
                 </div>
                 <div class="filter-buttons">
                     <button type="submit" id="filterButton" class="btn">
@@ -573,7 +630,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 
         <!-- Summary Section -->
         <div class="summary-container">
-            <h3 class="summary-title">Ringkasan Transaksi</h3>
+            <h3 class="summary-title">Ringkasan Rekapitulasi Transaksi</h3>
             <?php if ($totals['total_transactions'] > 0): ?>
                 <table class="summary-table">
                     <thead>
@@ -581,7 +638,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                             <th>Total Transaksi</th>
                             <th>Total Setoran</th>
                             <th>Total Penarikan</th>
-                            <th>Total Bersih</th>
+                            <th>Saldo Bersih</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -598,7 +655,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-receipt"></i>
-                    <p>Tidak ada transaksi dalam periode ini</p>
+                    <p>Tidak ada transaksi dalam periode ini. Coba ubah <a href="#" onclick="document.getElementById('start_date').focus();">periode tanggal</a>.</p>
                 </div>
             <?php endif; ?>
         </div>
@@ -722,7 +779,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                     printButton.classList.add('loading');
                     printButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
 
-                    window.open(`download_laporan.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
+                    window.open(`download_rekap_transaksi.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
 
                     setTimeout(() => {
                         printButton.classList.remove('loading');
@@ -749,7 +806,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                     downloadLink.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
                     downloadLink.style.pointerEvents = 'none';
 
-                    window.open(`download_laporan.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
+                    window.open(`download_rekap_transaksi.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
 
                     setTimeout(() => {
                         downloadLink.innerHTML = 'download laporan';

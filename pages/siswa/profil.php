@@ -11,7 +11,7 @@ $message = '';
 $error = '';
 
 // Ambil data user lengkap dan rekening
-$query = "SELECT u.username, u.nama, u.role, u.email, k.nama_kelas, j.nama_jurusan, 
+$query = "SELECT u.username, u.nama, u.role, u.email, u.no_wa, k.nama_kelas, j.nama_jurusan, 
           r.no_rekening, r.saldo, u.created_at as tanggal_bergabung, u.pin, u.jurusan_id, u.kelas_id
           FROM users u 
           LEFT JOIN rekening r ON u.id = r.user_id 
@@ -136,7 +136,6 @@ if (isset($_POST['update_username'])) {
             
             if ($update_stmt->execute()) {
                 $message = "Username berhasil diubah!";
-                // MODIFIED: Kirim email hanya jika email tersedia
                 if (!empty($user['email'])) {
                     $email_title = "Pemberitahuan Perubahan Username";
                     $email_greeting = "Yth. {$user['nama']},";
@@ -151,7 +150,7 @@ if (isset($_POST['update_username'])) {
                         $error = "Gagal mengirim email notifikasi!";
                     }
                 } else {
-                    logout(); // Lanjutkan logout jika email kosong
+                    logout();
                 }
             } else {
                 $error = "Gagal mengubah username!";
@@ -192,7 +191,6 @@ if (isset($_POST['update_username'])) {
                 
                 if ($update_stmt->execute()) {
                     $message = "Password berhasil diubah! Anda dapat menggunakan password baru untuk login selanjutnya.";
-                    // MODIFIED: Kirim email hanya jika email tersedia
                     if (!empty($user['email'])) {
                         $email_title = "Pemberitahuan Perubahan Password";
                         $email_greeting = "Yth. {$user['nama']},";
@@ -207,7 +205,7 @@ if (isset($_POST['update_username'])) {
                             $error = "Gagal mengirim email notifikasi!";
                         }
                     } else {
-                        logout(); // Lanjutkan logout jika email kosong
+                        logout();
                     }
                 } else {
                     $error = "Gagal mengubah password!";
@@ -240,7 +238,6 @@ if (isset($_POST['update_username'])) {
 
                 if ($update_stmt->execute()) {
                     $message = "PIN berhasil diubah!";
-                    // MODIFIED: Kirim email hanya jika email tersedia
                     if (!empty($user['email'])) {
                         $email_title = "Pemberitahuan Perubahan PIN";
                         $email_greeting = "Yth. {$user['nama']},";
@@ -265,7 +262,6 @@ if (isset($_POST['update_username'])) {
 
             if ($update_stmt->execute()) {
                 $message = "PIN berhasil dibuat!";
-                // MODIFIED: Kirim email hanya jika email tersedia
                 if (!empty($user['email'])) {
                     $email_title = "Pemberitahuan Pembuatan PIN";
                     $email_greeting = "Yth. {$user['nama']},";
@@ -299,7 +295,7 @@ if (isset($_POST['update_username'])) {
         $check_result = $check_stmt->get_result();
 
         if ($check_result->num_rows > 0) {
-            $error = "You've already got that email registered with another account!";
+            $error = "Email sudah terdaftar pada akun lain!";
         } else {
             $otp = rand(100000, 999999);
             $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes'));
@@ -350,7 +346,6 @@ if (isset($_POST['update_username'])) {
             $kelas_data = $kelas_result->fetch_assoc();
             $user['nama_kelas'] = $kelas_data['nama_kelas'];
 
-            // MODIFIED: Kirim email hanya jika email tersedia
             if (!empty($user['email'])) {
                 $email_title = "Pemberitahuan Perubahan Kelas";
                 $email_greeting = "Yth. {$user['nama']},";
@@ -365,6 +360,53 @@ if (isset($_POST['update_username'])) {
             }
         } else {
             $error = "Gagal mengubah kelas!";
+        }
+    }
+} elseif (isset($_POST['update_no_wa'])) {
+    $no_wa = trim($_POST['no_wa']);
+
+    if (!empty($no_wa)) {
+        if (!preg_match('/^08[0-9]{8,11}$/', $no_wa)) {
+            $error = "Nomor WhatsApp harus dimulai dengan '08' dan terdiri dari 10-13 digit angka!";
+        } else {
+            $check_query = "SELECT id FROM users WHERE no_wa = ? AND id != ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("si", $no_wa, $_SESSION['user_id']);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+
+            if ($check_result->num_rows > 0) {
+                $error = "Nomor WhatsApp sudah terdaftar pada akun lain!";
+            }
+        }
+    }
+
+    if (empty($error)) {
+        $update_query = "UPDATE users SET no_wa = ? WHERE id = ?";
+        $update_stmt = $conn->prepare($update_query);
+        $no_wa = empty($no_wa) ? null : $no_wa; // Set ke NULL jika kosong
+        $update_stmt->bind_param("si", $no_wa, $_SESSION['user_id']);
+
+        if ($update_stmt->execute()) {
+            $message = "Nomor WhatsApp berhasil diubah!";
+            $user['no_wa'] = $no_wa;
+
+            if (!empty($user['email'])) {
+                $email_title = "Pemberitahuan Perubahan Nomor WhatsApp";
+                $email_greeting = "Yth. {$user['nama']},";
+                $email_content = empty($no_wa) 
+                    ? "Kami informasikan bahwa nomor WhatsApp akun SCHOBANK Anda telah dihapus."
+                    : "Kami informasikan bahwa nomor WhatsApp akun SCHOBANK Anda telah diperbarui menjadi: <strong>{$no_wa}</strong>.";
+                $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
+                                   <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
+
+                if (!sendEmail($user['email'], $email_title, $email_body)) {
+                    $error = "Gagal mengirim email notifikasi!";
+                }
+            }
+        } else {
+            $error = "Gagal mengubah nomor WhatsApp!";
         }
     }
 }
@@ -402,10 +444,10 @@ if (isset($_POST['update_username'])) {
         }
 
         html, body {
-            touch-action: manipulation; /* Restricts pinch zooming */
-            -webkit-text-size-adjust: 100%; /* Prevents text scaling */
-            -webkit-user-select: none; /* Optional: Prevents text selection */
-            user-select: none; /* Optional: Prevents text selection */
+            touch-action: manipulation;
+            -webkit-text-size-adjust: 100%;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         body {
@@ -415,7 +457,7 @@ if (isset($_POST['update_username'])) {
             display: flex;
             flex-direction: column;
             overflow-x: hidden;
-            font-size: calc(0.95rem + 0.3vw); /* Responsive base font */
+            font-size: calc(0.95rem + 0.3vw);
         }
 
         .main-content {
@@ -1104,6 +1146,19 @@ if (isset($_POST['update_username'])) {
                     </div>
                     
                     <div class="info-item">
+                        <i class="fab fa-whatsapp"></i>
+                        <div class="text-container">
+                            <div class="label">Nomor WhatsApp</div>
+                            <div class="value">
+                                <?= !empty($user['no_wa']) ? htmlspecialchars($user['no_wa']) : 'Belum diatur' ?>
+                            </div>
+                        </div>
+                        <button class="edit-btn" data-target="no_wa">
+                            <i class="fas fa-pen-to-square"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="info-item">
                         <i class="fas fa-graduation-cap"></i>
                         <div class="text-container">
                             <div class="label">Jurusan</div>
@@ -1204,6 +1259,40 @@ if (isset($_POST['update_username'])) {
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_email" class="btn btn-primary" id="emailBtn">
+                            <i class="fas fa-save"></i> <span>Simpan</span>
+                        </button>
+                        <button type="button" class="btn btn-outline close-modal">
+                            <i class="fas fa-times"></i> <span>Batal</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Edit WhatsApp Number -->
+    <div id="no_waModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fab fa-whatsapp"></i> Ubah Nomor WhatsApp</h3>
+                <button class="close-modal">×</button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="" id="no_waForm">
+                    <div class="form-group">
+                        <label for="no_wa">Nomor WhatsApp</label>
+                        <div class="input-wrapper">
+                            <i class="fab fa-whatsapp input-icon"></i>
+                            <input type="text" id="no_wa" name="no_wa" placeholder="Masukkan nomor WhatsApp (contoh: 081234567890)" 
+                                   value="<?= !empty($user['no_wa']) ? htmlspecialchars($user['no_wa']) : '' ?>" 
+                                   pattern="^08[0-9]{8,11}$" maxlength="13">
+                        </div>
+                        <small style="font-size: calc(0.75rem + 0.1vw); color: var(--text-secondary);">
+                            Mulai dengan 08, 10-13 digit angka. Kosongkan untuk menghapus.
+                        </small>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" name="update_no_wa" class="btn btn-primary" id="no_waBtn">
                             <i class="fas fa-save"></i> <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
@@ -1512,7 +1601,7 @@ if (isset($_POST['update_username'])) {
             // Form submission loading state
             const forms = [
                 'usernameForm', 'passwordForm', 'pinForm', 
-                'emailForm', 'otpForm', 'kelasForm'
+                'emailForm', 'otpForm', 'kelasForm', 'no_waForm'
             ];
 
             forms.forEach(formId => {
@@ -1524,6 +1613,17 @@ if (isset($_POST['update_username'])) {
                     });
                 }
             });
+
+            // WhatsApp number validation
+            const noWaInput = document.getElementById('no_wa');
+            if (noWaInput) {
+                noWaInput.addEventListener('input', function() {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                    if (this.value.length > 0 && !this.value.startsWith('08')) {
+                        this.value = '08' + this.value.slice(this.value.length);
+                    }
+                });
+            }
 
             // Intersection Observer for animations
             const animatedElements = document.querySelectorAll('.profile-card, .welcome-banner');

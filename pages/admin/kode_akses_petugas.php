@@ -218,6 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             transition: var(--transition);
             width: auto;
             max-width: 180px;
+            position: relative;
+            justify-content: center;
         }
 
         .btn:hover {
@@ -253,6 +255,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             transform: translateY(-2px);
         }
 
+        .btn.loading, .btn-confirm.loading, .btn-cancel.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading i.fa-spinner, .btn-confirm.loading i.fa-spinner, .btn-cancel.loading i.fa-spinner {
+            display: inline-block !important;
+            animation: spin 1.5s linear infinite;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: clamp(1rem, 2vw, 1.2rem);
+        }
+
+        .btn i.fa-spinner, .btn-confirm i.fa-spinner, .btn-cancel i.fa-spinner {
+            display: none;
+        }
+
+        .btn.loading span, .btn-confirm.loading span, .btn-cancel.loading span,
+        .btn.loading i:not(.fa-spinner), .btn-confirm.loading i:not(.fa-spinner), .btn-cancel.loading i:not(.fa-spinner) {
+            opacity: 0;
+        }
+
         .success-overlay {
             position: fixed;
             top: 0;
@@ -265,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             align-items: center;
             z-index: 1000;
             opacity: 0;
-            transition: opacity 0.3s ease-in-out;
+            transition: opacity 0.4s ease;
         }
 
         .success-overlay.visible {
@@ -284,7 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             overflow: hidden;
             transform: scale(0.8);
             opacity: 0;
-            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+            transition: transform 0.4s ease, opacity 0.4s ease;
         }
 
         .success-modal.visible {
@@ -318,7 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
         }
 
         .code-display {
-            font-size: clamp(1.5rem, 4vw, 2rem);
+            font-size: clamp(2rem, 5vw, 2.5rem);
             font-weight: bold;
             color: var(--primary-dark);
             text-align: center;
@@ -333,38 +359,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             gap: 12px;
             justify-content: center;
             margin-top: 15px;
-        }
-
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
-        }
-
-        .loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .loading i {
-            animation: spin 1.5s linear infinite;
         }
 
         @keyframes spin {
@@ -407,7 +401,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             }
 
             .code-display {
-                font-size: clamp(1.25rem, 3.5vw, 1.75rem);
+                font-size: clamp(1.75rem, 4vw, 2rem);
                 padding: 8px;
             }
         }
@@ -434,7 +428,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             }
 
             .code-display {
-                font-size: clamp(1rem, 3vw, 1.5rem);
+                font-size: clamp(1.5rem, 3.5vw, 1.75rem);
             }
         }
     </style>
@@ -461,11 +455,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
             <form action="" method="POST" id="code-form">
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
                     <button type="submit" name="generate" class="btn" id="generate-btn">
-                        <i class="fas fa-plus"></i> <?php echo $existing_code ? 'Ganti Kode' : 'Buat Kode Baru'; ?>
+                        <i class="fas fa-plus"></i>
+                        <i class="fas fa-spinner"></i>
+                        <span><?php echo $existing_code ? 'Ganti Kode' : 'Buat Kode Baru'; ?></span>
                     </button>
                     <?php if ($existing_code): ?>
                         <button type="button" class="btn btn-confirm" id="view-code-btn">
-                            <i class="fas fa-eye"></i> Lihat Kode
+                            <i class="fas fa-eye"></i>
+                            <i class="fas fa-spinner"></i>
+                            <span>Lihat Kode</span>
                         </button>
                     <?php endif; ?>
                 </div>
@@ -484,10 +482,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
                     <form action="" method="POST" id="confirm-form">
                         <div class="modal-buttons">
                             <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
-                                <i class="fas fa-check"></i> Konfirmasi
-                            </button>
-                            <button type="button" class="btn btn-cancel" onclick="window.location.href='kode_akses_petugas.php'">
-                                <i class="fas fa-times"></i> Batal
+                                <i class="fas fa-check"></i>
+                                <i class="fas fa-spinner"></i>
+                                <span>Konfirmasi</span>
                             </button>
                         </div>
                     </form>
@@ -530,61 +527,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
                 </div>
                 <h3>Kode Akses Hari Ini</h3>
                 <div class="code-display" id="codeValue"></div>
-                <div class="modal-buttons">
-                    <button type="button" class="btn btn-cancel" onclick="hideCodeModal()">
-                        <i class="fas fa-times"></i> Tutup
-                    </button>
-                </div>
             </div>
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            // Handle loading animation for buttons (excluding back-btn)
+            const buttons = document.querySelectorAll('.btn, .btn-confirm, .btn-cancel');
+            buttons.forEach(button => {
+                button.addEventListener('click', () => {
+                    button.classList.add('loading');
+                    setTimeout(() => {
+                        button.classList.remove('loading');
+                    }, 1000); // Adjust timing as needed
+                });
+            });
+
             // Handle success and error modals
             const modals = document.querySelectorAll('#successModal, #errorModal');
             modals.forEach(modal => {
-                setTimeout(() => {
-                    modal.classList.remove('visible');
-                    setTimeout(() => {
-                        modal.remove();
-                        window.location.href = 'kode_akses_petugas.php';
-                    }, 300);
-                }, 3000);
                 modal.addEventListener('click', () => {
                     modal.classList.remove('visible');
                     setTimeout(() => {
                         modal.remove();
                         window.location.href = 'kode_akses_petugas.php';
-                    }, 300);
+                    }, 400); // Match transition duration
                 });
-
-                // Add confetti to success/error modals
-                const successModal = modal.querySelector('.success-modal');
-                if (successModal) {
-                    for (let i = 0; i < 10; i++) {
-                        const confetti = document.createElement('div');
-                        confetti.className = 'confetti';
-                        confetti.style.left = Math.random() * 100 + '%';
-                        confetti.style.animationDelay = Math.random() * 1 + 's';
-                        confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                        successModal.appendChild(confetti);
-                    }
-                }
             });
 
             // Handle confirmation modal
             const confirmModal = document.getElementById('confirmModal');
             if (confirmModal) {
-                const successModal = confirmModal.querySelector('.success-modal');
-                for (let i = 0; i < 10; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    successModal.appendChild(confetti);
-                }
+                confirmModal.addEventListener('click', (e) => {
+                    // Prevent closing when clicking inside modal content
+                    if (e.target.closest('.success-modal')) return;
+                    confirmModal.classList.remove('visible');
+                    setTimeout(() => {
+                        confirmModal.remove();
+                        window.location.href = 'kode_akses_petugas.php';
+                    }, 400); // Match transition duration
+                });
             }
 
             // Handle view code button
@@ -623,21 +606,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm'])) {
                 successModal.classList.add('visible');
             }, 10);
 
+            // Add click event to close modal
+            modal.addEventListener('click', (e) => {
+                // Prevent closing when clicking inside modal content
+                if (e.target.closest('.success-modal')) return;
+                modal.classList.remove('visible');
+                successModal.classList.remove('visible');
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    isModalOpening = false;
+                }, 400); // Match transition duration
+            });
+
             // Reset debounce flag
             setTimeout(() => {
                 isModalOpening = false;
             }, 600);
-        }
-
-        function hideCodeModal() {
-            const modal = document.getElementById('viewCodeModal');
-            const successModal = modal.querySelector('.success-modal');
-            modal.classList.remove('visible');
-            successModal.classList.remove('visible');
-            setTimeout(() => {
-                modal.style.display = 'none';
-                isModalOpening = false;
-            }, 300);
         }
 
         // Prevent pinch zooming

@@ -8,12 +8,13 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role
     exit;
 }
 
-$error = '';
+$error_message = '';
 $success = '';
 $tanggal = '';
 $petugas1_nama = '';
 $petugas2_nama = '';
 $id = null;
+$show_error_modal = false; // Flag to show error modal
 
 // CSRF token
 if (!isset($_SESSION['form_token'])) {
@@ -35,7 +36,8 @@ if (isset($_GET['edit'])) {
         $petugas1_nama = $row['petugas1_nama'];
         $petugas2_nama = $row['petugas2_nama'];
     } else {
-        $error = "Jadwal tidak ditemukan!";
+        $error_message = "Jadwal tidak ditemukan!";
+        $show_error_modal = true;
     }
 }
 
@@ -60,7 +62,8 @@ if (isset($_POST['delete_id']) && $_POST['token'] === $_SESSION['form_token']) {
         exit;
     } catch (Exception $e) {
         $conn->rollback();
-        $error = 'Gagal menghapus jadwal: ' . $e->getMessage();
+        $error_message = 'Gagal menghapus jadwal: ' . $e->getMessage();
+        $show_error_modal = true;
     }
 }
 
@@ -72,11 +75,14 @@ if (isset($_POST['edit_confirm']) && $_POST['token'] === $_SESSION['form_token']
     $petugas2_nama = trim($_POST['edit_petugas2_nama']);
 
     if (empty($tanggal) || empty($petugas1_nama) || empty($petugas2_nama)) {
-        $error = "Semua field harus diisi!";
+        $error_message = "Semua field harus diisi!";
+        $show_error_modal = true;
     } elseif (strlen($petugas1_nama) < 3 || strlen($petugas2_nama) < 3) {
-        $error = "Nama petugas harus minimal 3 karakter!";
+        $error_message = "Nama petugas harus minimal 3 karakter!";
+        $show_error_modal = true;
     } elseif (strtotime($tanggal) < strtotime(date('Y-m-d'))) {
-        $error = "Tanggal tidak boleh di masa lalu!";
+        $error_message = "Tanggal tidak boleh di masa lalu!";
+        $show_error_modal = true;
     } else {
         $check_query = "SELECT id FROM petugas_tugas WHERE tanggal = ? AND id != ?";
         $check_stmt = $conn->prepare($check_query);
@@ -85,7 +91,8 @@ if (isset($_POST['edit_confirm']) && $_POST['token'] === $_SESSION['form_token']
         $result = $check_stmt->get_result();
 
         if ($result->num_rows > 0) {
-            $error = "Tanggal sudah digunakan untuk jadwal lain!";
+            $error_message = "Tanggal ini sudah digunakan untuk jadwal lain!";
+            $show_error_modal = true;
         } else {
             $conn->begin_transaction();
             try {
@@ -113,38 +120,25 @@ if (isset($_POST['edit_confirm']) && $_POST['token'] === $_SESSION['form_token']
                 exit;
             } catch (Exception $e) {
                 $conn->rollback();
-                $error = 'Gagal mengupdate jadwal: ' . $e->getMessage();
+                $error_message = 'Gagal mengupdate jadwal: ' . $e->getMessage();
+                $show_error_modal = true;
             }
         }
+    }
+    // Preserve form inputs on error
+    if ($show_error_modal) {
+        $tanggal = $_POST['edit_tanggal'];
+        $petugas1_nama = $_POST['edit_petugas1_nama'];
+        $petugas2_nama = $_POST['edit_petugas2_nama'];
     }
 }
 
 // Handle Export Request
 if (isset($_GET['export']) && !empty($_GET['export'])) {
     $export_type = $_GET['export'];
-    $start_date = $_GET['start_date'] ?? '';
-    $end_date = $_GET['end_date'] ?? '';
 
-    $query = "SELECT * FROM petugas_tugas WHERE 1=1";
-    $params = [];
-    $types = '';
-
-    if (!empty($start_date)) {
-        $query .= " AND tanggal >= ?";
-        $params[] = $start_date;
-        $types .= 's';
-    }
-    if (!empty($end_date)) {
-        $query .= " AND tanggal <= ?";
-        $params[] = $end_date;
-        $types .= 's';
-    }
-    $query .= " ORDER BY tanggal DESC";
-
+    $query = "SELECT * FROM petugas_tugas ORDER BY tanggal DESC";
     $stmt = $conn->prepare($query);
-    if (!empty($params)) {
-        $stmt->bind_param($types, ...$params);
-    }
     $stmt->execute();
     $result = $stmt->get_result();
 
@@ -192,14 +186,6 @@ if (isset($_GET['export']) && !empty($_GET['export'])) {
             $pdf->Cell(0, 7, 'JADWAL PETUGAS', 0, 1, 'C');
 
             $filter_text = "Tanggal: " . date('d/m/y');
-            if (!empty($start_date) && !empty($end_date)) {
-                $filter_text = "Periode: " . date('d/m/y', strtotime($start_date)) . " s/d " . date('d/m/y', strtotime($end_date));
-            } elseif (!empty($start_date)) {
-                $filter_text = "Periode: Dari " . date('d/m/y', strtotime($start_date));
-            } elseif (!empty($end_date)) {
-                $filter_text = "Periode: Sampai " . date('d/m/y', strtotime($end_date));
-            }
-
             $pdf->SetFont('helvetica', '', 10);
             $pdf->Cell(0, 7, $filter_text, 0, 1, 'C');
             $pdf->Ln(5);
@@ -242,13 +228,6 @@ if (isset($_GET['export']) && !empty($_GET['export'])) {
             echo '<table border="0" cellpadding="3">';
             echo '<tr><td colspan="4" class="title">JADWAL PETUGAS</td></tr>';
             $filter_text = "Tanggal: " . date('d/m/y');
-            if (!empty($start_date) && !empty($end_date)) {
-                $filter_text = "Periode: " . date('d/m/y', strtotime($start_date)) . " s/d " . date('d/m/y', strtotime($end_date));
-            } elseif (!empty($start_date)) {
-                $filter_text = "Periode: Dari " . date('d/m/y', strtotime($start_date));
-            } elseif (!empty($end_date)) {
-                $filter_text = "Periode: Sampai " . date('d/m/y', strtotime($end_date));
-            }
             echo '<tr><td colspan="4" class="subtitle">' . htmlspecialchars($filter_text) . '</td></tr>';
             echo '</table>';
             echo '<table border="1" cellpadding="3">';
@@ -273,8 +252,8 @@ if (isset($_GET['export']) && !empty($_GET['export'])) {
             exit;
         }
     } else {
-        header("Location: " . $_SERVER['PHP_SELF'] . "?error=nodata");
-        exit;
+        $error_message = 'Tidak ada data untuk diekspor!';
+        $show_error_modal = true;
     }
 }
 
@@ -287,16 +266,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_id']) && !iss
         $petugas2_nama = trim($_POST['petugas2_nama']);
 
         if (empty($tanggal) || empty($petugas1_nama) || empty($petugas2_nama)) {
-            $error = "Semua field harus diisi!";
+            $error_message = "Semua field harus diisi!";
+            $show_error_modal = true;
         } elseif (strlen($petugas1_nama) < 3 || strlen($petugas2_nama) < 3) {
-            $error = "Nama petugas harus minimal 3 karakter!";
+            $error_message = "Nama petugas harus minimal 3 karakter!";
+            $show_error_modal = true;
         } elseif (strtotime($tanggal) < strtotime(date('Y-m-d'))) {
-            $error = "Tanggal tidak boleh di masa lalu!";
+            $error_message = "Tanggal tidak boleh di masa lalu!";
+            $show_error_modal = true;
         } else {
             $conn->begin_transaction();
             try {
                 if ($id) {
-                    $error = "Operasi tidak valid!";
+                    $error_message = "Operasi tidak valid!";
+                    $show_error_modal = true;
                 } else {
                     $query_check = "SELECT id FROM petugas_tugas WHERE tanggal = ?";
                     $stmt_check = $conn->prepare($query_check);
@@ -305,7 +288,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_id']) && !iss
                     $result_check = $stmt_check->get_result();
 
                     if ($result_check->num_rows > 0) {
-                        throw new Exception('Tanggal sudah ada dalam database!');
+                        $error_message = "Tanggal ini sudah digunakan untuk jadwal lain!";
+                        $show_error_modal = true;
+                        throw new Exception($error_message);
                     }
 
                     $query = "INSERT INTO petugas_tugas (tanggal, petugas1_nama, petugas2_nama) VALUES (?, ?, ?)";
@@ -320,8 +305,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_id']) && !iss
                 }
             } catch (Exception $e) {
                 $conn->rollback();
-                $error = $e->getMessage();
+                if (!$show_error_modal) {
+                    $error_message = $e->getMessage();
+                    $show_error_modal = true;
+                }
             }
+        }
+        // Preserve form inputs on error
+        if ($show_error_modal) {
+            $tanggal = $_POST['tanggal'];
+            $petugas1_nama = $_POST['petugas1_nama'];
+            $petugas2_nama = $_POST['petugas2_nama'];
         }
     } else {
         $id = isset($_POST['id']) ? (int)$_POST['id'] : null;
@@ -330,74 +324,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['delete_id']) && !iss
         $petugas2_nama = trim($_POST['petugas2_nama']);
 
         if (empty($tanggal) || empty($petugas1_nama) || empty($petugas2_nama)) {
-            $error = 'Semua field harus diisi!';
+            $error_message = 'Semua field harus diisi!';
+            $show_error_modal = true;
         } elseif (strlen($petugas1_nama) < 3 || strlen($petugas2_nama) < 3) {
-            $error = "Nama petugas harus minimal 3 karakter!";
+            $error_message = "Nama petugas harus minimal 3 karakter!";
+            $show_error_modal = true;
         } elseif (strtotime($tanggal) < strtotime(date('Y-m-d'))) {
-            $error = "Tanggal tidak boleh di masa lalu!";
+            $error_message = "Tanggal tidak boleh di masa lalu!";
+            $show_error_modal = true;
         } else {
-            header('Location: buat_jadwal.php?confirm=1&tanggal=' . urlencode($tanggal) . '&petugas1_nama=' . urlencode($petugas1_nama) . '&petugas2_nama=' . urlencode($petugas2_nama));
-            exit;
+            if (!$show_error_modal) {
+                header('Location: buat_jadwal.php?confirm=1&tanggal=' . urlencode($tanggal) . '&petugas1_nama=' . urlencode($petugas1_nama) . '&petugas2_nama=' . urlencode($petugas2_nama));
+                exit;
+            }
+        }
+        // Preserve form inputs on error
+        if ($show_error_modal) {
+            $tanggal = $_POST['tanggal'];
+            $petugas1_nama = $_POST['petugas1_nama'];
+            $petugas2_nama = $_POST['petugas2_nama'];
         }
     }
 }
 
-// Fetch Data with Filters
-$filter_start = isset($_GET['filter_start']) && !empty($_GET['filter_start']) ? $_GET['filter_start'] : date('Y-m-d');
-$filter_end = isset($_GET['filter_end']) && !empty($_GET['filter_end']) ? $_GET['filter_end'] : date('Y-m-d');
+// Fetch Data
 $limit = 10;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-$total_query = "SELECT COUNT(*) as total FROM petugas_tugas WHERE 1=1";
-$total_params = [];
-$total_types = "";
-
-if (!empty($filter_start)) {
-    $total_query .= " AND tanggal >= ?";
-    $total_params[] = $filter_start;
-    $total_types .= "s";
-}
-if (!empty($filter_end)) {
-    $total_query .= " AND tanggal <= ?";
-    $total_params[] = $filter_end;
-    $total_types .= "s";
-}
-
+$total_query = "SELECT COUNT(*) as total FROM petugas_tugas";
 $total_stmt = $conn->prepare($total_query);
-if (!empty($total_params)) {
-    $total_stmt->bind_param($total_types, ...$total_params);
-}
 $total_stmt->execute();
 $total_result = $total_stmt->get_result();
 $total_row = $total_result->fetch_assoc();
 $total_data = $total_row['total'];
 $total_pages = ceil($total_data / $limit);
 
-$jadwal_query = "SELECT * FROM petugas_tugas WHERE 1=1";
-$jadwal_params = [];
-$jadwal_types = "";
-
-if (!empty($filter_start)) {
-    $jadwal_query .= " AND tanggal >= ?";
-    $jadwal_params[] = $filter_start;
-    $jadwal_types .= "s";
-}
-if (!empty($filter_end)) {
-    $jadwal_query .= " AND tanggal <= ?";
-    $jadwal_params[] = $filter_end;
-    $jadwal_types .= "s";
-}
-
-$jadwal_query .= " ORDER BY tanggal DESC LIMIT ? OFFSET ?";
-$jadwal_params[] = $limit;
-$jadwal_params[] = $offset;
-$jadwal_types .= "ii";
-
+$jadwal_query = "SELECT * FROM petugas_tugas ORDER BY tanggal DESC LIMIT ? OFFSET ?";
 $jadwal_stmt = $conn->prepare($jadwal_query);
-if (!empty($jadwal_types)) {
-    $jadwal_stmt->bind_param($jadwal_types, ...$jadwal_params);
-}
+$jadwal_stmt->bind_param("ii", $limit, $offset);
 $jadwal_stmt->execute();
 $jadwal_result = $jadwal_stmt->get_result();
 
@@ -503,29 +468,6 @@ date_default_timezone_set('Asia/Jakarta');
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
-            animation: fadeInBanner 0.8s ease-out;
-        }
-
-        .welcome-banner::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
-            transform: rotate(30deg);
-            animation: shimmer 8s infinite linear;
-        }
-
-        @keyframes shimmer {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @keyframes fadeInBanner {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         .welcome-banner h2 {
@@ -544,12 +486,6 @@ date_default_timezone_set('Asia/Jakarta');
             padding: 20px;
             box-shadow: var(--shadow-sm);
             margin-bottom: 20px;
-            animation: slideIn 0.5s ease-out;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
         }
 
         form {
@@ -592,7 +528,6 @@ date_default_timezone_set('Asia/Jakarta');
             position: relative;
         }
 
-        /* Ensure date picker icon is visible in Safari */
         input[type="date"]::-webkit-calendar-picker-indicator {
             display: block;
             width: 20px;
@@ -608,7 +543,7 @@ date_default_timezone_set('Asia/Jakarta');
         }
 
         input[type="date"]::-webkit-datetime-edit {
-            padding-right: 30px; /* Space for calendar icon */
+            padding-right: 30px;
         }
 
         input[type="text"]:focus,
@@ -683,67 +618,6 @@ date_default_timezone_set('Asia/Jakarta');
             background-color: var(--secondary-dark);
         }
 
-        .alert {
-            padding: 12px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-        }
-
-        .alert.hide {
-            animation: slideOut 0.5s ease-out forwards;
-        }
-
-        @keyframes slideOut {
-            from { transform: translateY(0); opacity: 1; }
-            to { transform: translateY(-20px); opacity: 0; }
-        }
-
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 4px solid #fecaca;
-        }
-
-        .alert-success {
-            background-color: var(--primary-light);
-            color: var(--primary-dark);
-            border-left: 4px solid var(--primary-color);
-        }
-
-        .filter-card {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 20px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            align-items: flex-end;
-        }
-
-        .date-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            flex: 1;
-        }
-
-        .filter-group {
-            flex: 1;
-            min-width: 140px;
-        }
-
-        .filter-buttons {
-            display: flex;
-            gap: 12px;
-        }
-
         .jadwal-list {
             background: white;
             border-radius: 12px;
@@ -757,8 +631,14 @@ date_default_timezone_set('Asia/Jakarta');
             transform: translateY(-3px);
         }
 
-        .jadwal-list h3 {
+        .jadwal-list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             margin-bottom: 15px;
+        }
+
+        .jadwal-list h3 {
             color: var(--primary-dark);
             font-size: clamp(1rem, 2vw, 1.1rem);
             display: flex;
@@ -782,19 +662,6 @@ date_default_timezone_set('Asia/Jakarta');
             background: var(--primary-light);
             color: var(--text-secondary);
             font-weight: 600;
-        }
-
-        tr {
-            transition: opacity 0.3s ease;
-        }
-
-        tr.deleting {
-            animation: fadeOutRow 0.5s ease forwards;
-        }
-
-        @keyframes fadeOutRow {
-            from { opacity: 1; transform: translateX(0); }
-            to { opacity: 0; transform: translateX(-20px); }
         }
 
         tr:hover {
@@ -856,12 +723,6 @@ date_default_timezone_set('Asia/Jakarta');
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s ease-in-out;
-        }
-
-        .modal.visible {
-            opacity: 1;
         }
 
         .modal-content {
@@ -871,14 +732,12 @@ date_default_timezone_set('Asia/Jakarta');
             width: 90%;
             max-width: 450px;
             box-shadow: var(--shadow-md);
-            transform: scale(0.8);
-            opacity: 0;
-            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+            animation: popInModal 0.3s ease-out;
         }
 
-        .modal-content.visible {
-            transform: scale(1);
-            opacity: 1;
+        @keyframes popInModal {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
         .modal-title {
@@ -913,43 +772,35 @@ date_default_timezone_set('Asia/Jakarta');
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s ease-in-out;
+            animation: fadeInOverlay 0.3s ease-out;
         }
 
-        .success-overlay.visible {
-            opacity: 1;
+        @keyframes fadeInOverlay {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
         }
 
         .success-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            background: white;
             border-radius: 15px;
             padding: 30px;
             text-align: center;
             max-width: 90%;
             width: 400px;
             box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
-            position: relative;
-            overflow: hidden;
-            transform: scale(0.8);
-            opacity: 0;
-            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
-        }
-
-        .success-modal.visible {
-            transform: scale(1);
-            opacity: 1;
+            animation: popInModal 0.3s ease-out;
         }
 
         .success-icon {
             font-size: clamp(3rem, 6vw, 3.5rem);
             color: var(--secondary-color);
             margin-bottom: 20px;
-            transition: transform 0.3s ease-out;
         }
 
-        .success-modal.visible .success-icon {
-            transform: scale(1.1);
+        .error-icon {
+            font-size: clamp(3rem, 6vw, 3.5rem);
+            color: var(--danger-color);
+            margin-bottom: 20px;
         }
 
         .success-modal h3 {
@@ -964,29 +815,6 @@ date_default_timezone_set('Asia/Jakarta');
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             margin-bottom: 20px;
             line-height: 1.5;
-        }
-
-        .confetti {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
         }
 
         .modal-content-confirm {
@@ -1042,7 +870,6 @@ date_default_timezone_set('Asia/Jakarta');
             text-align: center;
             padding: 20px;
             color: var(--text-secondary);
-            animation: slideIn 0.5s ease-out;
         }
 
         .no-data i {
@@ -1073,7 +900,7 @@ date_default_timezone_set('Asia/Jakarta');
                 font-size: clamp(1.1rem, 2.2vw, 1.2rem);
             }
 
-            .form-card, .filter-card, .jadwal-list {
+            .form-card, .jadwal-list {
                 padding: 15px;
             }
 
@@ -1086,23 +913,10 @@ date_default_timezone_set('Asia/Jakarta');
                 justify-content: center;
             }
 
-            .filter-card {
+            .jadwal-list-header {
                 flex-direction: column;
-            }
-
-            .date-group {
-                flex-direction: column;
+                align-items: flex-start;
                 gap: 10px;
-                width: 100%;
-            }
-
-            .filter-group {
-                min-width: 100%;
-            }
-
-            .filter-buttons {
-                flex-direction: column;
-                width: 100%;
             }
 
             table {
@@ -1199,40 +1013,6 @@ date_default_timezone_set('Asia/Jakarta');
             <p>Kelola Jadwal Petugas disini</p>
         </div>
 
-        <!-- Alerts -->
-        <div id="alertContainer">
-            <?php if (!empty($error)): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <?php echo htmlspecialchars($error); ?>
-                </div>
-            <?php endif; ?>
-            <?php if (isset($_GET['success'])): ?>
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i>
-                    Jadwal berhasil ditambahkan!
-                </div>
-            <?php endif; ?>
-            <?php if (isset($_GET['edit_success'])): ?>
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i>
-                    Jadwal berhasil diupdate!
-                </div>
-            <?php endif; ?>
-            <?php if (isset($_GET['delete_success'])): ?>
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i>
-                    Jadwal berhasil dihapus!
-                </div>
-            <?php endif; ?>
-            <?php if (isset($_GET['error']) && $_GET['error'] == 'nodata'): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    Tidak ada data untuk diekspor!
-                </div>
-            <?php endif; ?>
-        </div>
-
         <!-- Form Section -->
         <div class="form-card">
             <form action="" method="POST" id="jadwal-form">
@@ -1263,27 +1043,12 @@ date_default_timezone_set('Asia/Jakarta');
             </form>
         </div>
 
-        <!-- Filter Section -->
-        <div class="filter-card">
-            <div class="date-group">
-                <div class="filter-group">
-                    <label for="filter_start">Dari Tanggal</label>
-                    <input type="date" id="filter_start" name="filter_start" value="<?php echo htmlspecialchars($filter_start); ?>">
-                </div>
-                <div class="filter-group">
-                    <label for="filter_end">Sampai Tanggal</label>
-                    <input type="date" id="filter_end" name="filter_end" value="<?php echo htmlspecialchars($filter_end); ?>">
-                </div>
-            </div>
-            <div class="filter-buttons">
-                <button id="filterButton" class="btn"><i class="fas fa-filter"></i> Filter</button>
-                <button id="printButton" class="btn btn-edit"><i class="fas fa-print"></i> Cetak</button>
-            </div>
-        </div>
-
         <!-- Jadwal List -->
         <div class="jadwal-list">
-            <h3><i class="fas fa-list"></i> Daftar Jadwal</h3>
+            <div class="jadwal-list-header">
+                <h3><i class="fas fa-list"></i> Daftar Jadwal</h3>
+                <button id="printButton" class="btn btn-edit"><i class="fas fa-print"></i> Cetak</button>
+            </div>
             <?php if (!empty($jadwal)): ?>
                 <table>
                     <thead>
@@ -1323,13 +1088,13 @@ date_default_timezone_set('Asia/Jakarta');
                 </table>
                 <div class="pagination">
                     <?php if ($page > 1): ?>
-                        <a href="?page=<?php echo $page - 1; ?><?php echo !empty($filter_start) ? '&filter_start=' . urlencode($filter_start) : ''; ?><?php echo !empty($filter_end) ? '&filter_end=' . urlencode($filter_end) : ''; ?>" class="pagination-link">« Previous</a>
+                        <a href="?page=<?php echo $page - 1; ?>" class="pagination-link">« Previous</a>
                     <?php else: ?>
                         <a class="pagination-link disabled">« Previous</a>
                     <?php endif; ?>
                     <span class="current-page"><?php echo $page; ?></span>
                     <?php if ($page < $total_pages): ?>
-                        <a href="?page=<?php echo $page + 1; ?><?php echo !empty($filter_start) ? '&filter_start=' . urlencode($filter_start) : ''; ?><?php echo !empty($filter_end) ? '&filter_end=' . urlencode($filter_end) : ''; ?>" class="pagination-link">Next »</a>
+                        <a href="?page=<?php echo $page + 1; ?>" class="pagination-link">Next »</a>
                     <?php else: ?>
                         <a class="pagination-link disabled">Next »</a>
                     <?php endif; ?>
@@ -1343,9 +1108,9 @@ date_default_timezone_set('Asia/Jakarta');
         </div>
 
         <!-- Confirmation Modal -->
-        <?php if (isset($_GET['confirm']) && isset($_GET['tanggal']) && isset($_GET['petugas1_nama']) && isset($_GET['petugas2_nama'])): ?>
-            <div class="success-overlay visible" id="confirmModal">
-                <div class="success-modal visible">
+        <?php if (isset($_GET['confirm']) && isset($_GET['tanggal']) && isset($_GET['petugas1_nama']) && isset($_GET['petugas2_nama']) && !$show_error_modal): ?>
+            <div class="success-overlay" id="confirmModal">
+                <div class="success-modal">
                     <div class="success-icon">
                         <i class="fas fa-calendar-check"></i>
                     </div>
@@ -1373,7 +1138,7 @@ date_default_timezone_set('Asia/Jakarta');
                             <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
                                 <i class="fas fa-check"></i> Konfirmasi
                             </button>
-                            <button type="button" class="btn btn-cancel" onclick="window.location.href='buat_jadwal.php'">
+                            <button type="button" class="btn btn-cancel" onclick="hideConfirmModal()">
                                 <i class="fas fa-times"></i> Batal
                             </button>
                         </div>
@@ -1384,8 +1149,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         <!-- Success Modal -->
         <?php if (isset($_GET['success'])): ?>
-            <div class="success-overlay visible" id="successModal">
-                <div class="success-modal visible">
+            <div class="success-overlay" id="successModal">
+                <div class="success-modal">
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
@@ -1397,8 +1162,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         <!-- Edit Success Modal -->
         <?php if (isset($_GET['edit_success'])): ?>
-            <div class="success-overlay visible" id="editSuccessModal">
-                <div class="success-modal visible">
+            <div class="success-overlay" id="editSuccessModal">
+                <div class="success-modal">
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
@@ -1410,13 +1175,31 @@ date_default_timezone_set('Asia/Jakarta');
 
         <!-- Delete Success Modal -->
         <?php if (isset($_GET['delete_success'])): ?>
-            <div class="success-overlay visible" id="deleteSuccessModal">
-                <div class="success-modal visible">
+            <div class="success-overlay" id="deleteSuccessModal">
+                <div class="success-modal">
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
                     <h3>BERHASIL</h3>
                     <p>Jadwal berhasil dihapus!</p>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Error Modal -->
+        <?php if ($show_error_modal): ?>
+            <div class="success-overlay" id="errorModal">
+                <div class="success-modal">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <h3>ERROR</h3>
+                    <p><?php echo htmlspecialchars($error_message); ?></p>
+                    <div class="modal-buttons">
+                        <button type="button" class="btn btn-cancel" onclick="hideErrorModal()">
+                            <i class="fas fa-times"></i> OK
+                        </button>
+                    </div>
                 </div>
             </div>
         <?php endif; ?>
@@ -1522,59 +1305,38 @@ date_default_timezone_set('Asia/Jakarta');
             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(-2)}`;
         }
 
-        // Menampilkan alert
-        function showAlert(message, type) {
-            const alertContainer = document.getElementById('alertContainer');
-            const existingAlerts = document.querySelectorAll('.alert');
-            existingAlerts.forEach(alert => {
-                alert.classList.add('hide');
-                setTimeout(() => alert.remove(), 500);
-            });
-
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            let icon = 'info-circle';
-            if (type === 'success') icon = 'check-circle';
-            if (type === 'error') icon = 'exclamation-circle';
-            alertDiv.innerHTML = `
-                <i class="fas fa-${icon}"></i>
-                <span>${message}</span>
-            `;
-            alertContainer.appendChild(alertDiv);
-            setTimeout(() => {
-                alertDiv.classList.add('hide');
-                setTimeout(() => alertDiv.remove(), 500);
-            }, 5000);
+        // Show popup alert
+        function showAlert(message) {
+            alert(message);
         }
 
-        // Menerapkan filter
-        function applyFilters() {
-            const startDate = document.getElementById('filter_start').value;
-            const endDate = document.getElementById('filter_end').value;
-            const today = new Date().toISOString().split('T')[0];
+        // Add loading state to button
+        function setButtonLoading(button, text, icon) {
+            button.classList.add('loading');
+            button.innerHTML = `<i class="fas fa-spinner"></i> Memproses...`;
+        }
 
-            if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-                showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
-                return;
+        // Remove loading state from button
+        function resetButton(button, text, icon) {
+            button.classList.remove('loading');
+            button.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+        }
+
+        // Close modal and clean up URL
+        function closeModal(modal, modalId) {
+            modal.style.display = 'none';
+            if (['successModal', 'editSuccessModal', 'deleteSuccessModal', 'confirmModal', 'errorModal'].includes(modalId)) {
+                const url = new URL(window.location);
+                url.searchParams.delete('success');
+                url.searchParams.delete('edit_success');
+                url.searchParams.delete('delete_success');
+                url.searchParams.delete('confirm');
+                url.searchParams.delete('tanggal');
+                url.searchParams.delete('petugas1_nama');
+                url.searchParams.delete('petugas2_nama');
+                url.searchParams.delete('error');
+                history.replaceState(null, '', url.toString());
             }
-
-            if (startDate && new Date(startDate) > new Date(today)) {
-                showAlert('Tanggal awal tidak boleh melebihi tanggal hari ini', 'error');
-                return;
-            }
-
-            if (endDate && new Date(endDate) > new Date(today)) {
-                showAlert('Tanggal akhir tidak boleh melebihi tanggal hari ini', 'error');
-                return;
-            }
-
-            const url = new URL(window.location);
-            if (startDate) url.searchParams.set('filter_start', startDate);
-            else url.searchParams.delete('filter_start');
-            if (endDate) url.searchParams.set('filter_end', endDate);
-            else url.searchParams.delete('filter_end');
-            url.searchParams.set('page', 1);
-            window.location.href = url.toString();
         }
 
         // Edit Modal Functions
@@ -1592,18 +1354,7 @@ date_default_timezone_set('Asia/Jakarta');
             document.getElementById('edit_petugas1_nama').value = petugas1_nama;
             document.getElementById('edit_petugas2_nama').value = petugas2_nama;
 
-            modal.style.display = 'none';
-            modal.classList.remove('visible');
-            modalContent.classList.remove('visible');
-
-            modal.offsetHeight; // Force reflow
-
             modal.style.display = 'flex';
-            setTimeout(() => {
-                modal.classList.add('visible');
-                modalContent.classList.add('visible');
-            }, 10);
-
             setTimeout(() => {
                 isModalOpening = false;
             }, 600);
@@ -1611,13 +1362,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         function hideEditModal() {
             const modal = document.getElementById('editModal');
-            const modalContent = modal.querySelector('.modal-content');
-            modal.classList.remove('visible');
-            modalContent.classList.remove('visible');
-            setTimeout(() => {
-                modal.style.display = 'none';
-                isModalOpening = false;
-            }, 300);
+            closeModal(modal, 'editModal');
+            isModalOpening = false;
         }
 
         function showEditConfirmation() {
@@ -1627,13 +1373,20 @@ date_default_timezone_set('Asia/Jakarta');
             const tanggal = document.getElementById('edit_tanggal').value;
             const petugas1_nama = document.getElementById('edit_petugas1_nama').value.trim();
             const petugas2_nama = document.getElementById('edit_petugas2_nama').value.trim();
-            
+            const today = new Date().toISOString().split('T')[0];
+
             if (!tanggal || petugas1_nama.length < 3 || petugas2_nama.length < 3) {
-                showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
+                showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!');
                 isModalOpening = false;
                 return false;
             }
-            
+
+            if (new Date(tanggal) < new Date(today)) {
+                showAlert('Tanggal tidak boleh di masa lalu!');
+                isModalOpening = false;
+                return false;
+            }
+
             const modal = document.getElementById('editConfirmModal');
             const modalContent = modal.querySelector('.success-modal');
 
@@ -1645,18 +1398,7 @@ date_default_timezone_set('Asia/Jakarta');
             document.getElementById('editConfirmPetugas2').textContent = petugas2_nama;
             document.getElementById('editConfirmPetugas2Input').value = petugas2_nama;
 
-            modal.style.display = 'none';
-            modal.classList.remove('visible');
-            modalContent.classList.remove('visible');
-
-            modal.offsetHeight; // Force reflow
-
             modal.style.display = 'flex';
-            setTimeout(() => {
-                modal.classList.add('visible');
-                modalContent.classList.add('visible');
-            }, 10);
-
             hideEditModal();
 
             setTimeout(() => {
@@ -1667,13 +1409,8 @@ date_default_timezone_set('Asia/Jakarta');
 
         function hideEditConfirmModal() {
             const modal = document.getElementById('editConfirmModal');
-            const modalContent = modal.querySelector('.success-modal');
-            modal.classList.remove('visible');
-            modalContent.classList.remove('visible');
-            setTimeout(() => {
-                modal.style.display = 'none';
-                isModalOpening = false;
-            }, 300);
+            closeModal(modal, 'editConfirmModal');
+            isModalOpening = false;
         }
 
         // Delete Modal Functions
@@ -1687,27 +1424,17 @@ date_default_timezone_set('Asia/Jakarta');
             document.getElementById('delete_id').value = id;
             document.getElementById('delete_tanggal').textContent = tanggal;
 
-            modal.style.display = 'none';
-            modal.classList.remove('visible');
-            modalContent.classList.remove('visible');
-
-            modal.offsetHeight; // Force reflow
-
             modal.style.display = 'flex';
-            setTimeout(() => {
-                modal.classList.add('visible');
-                modalContent.classList.add('visible');
-            }, 10);
 
             const deleteForm = document.getElementById('deleteForm');
             deleteForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const row = document.getElementById(`row-${id}`);
                 if (row) {
-                    row.classList.add('deleting');
+                    setButtonLoading(document.getElementById('delete-submit-btn'), 'Hapus', 'fa-trash');
                     setTimeout(() => {
                         deleteForm.submit();
-                    }, 500);
+                    }, 3000);
                 } else {
                     deleteForm.submit();
                 }
@@ -1720,177 +1447,132 @@ date_default_timezone_set('Asia/Jakarta');
 
         function hideDeleteModal() {
             const modal = document.getElementById('deleteModal');
-            const modalContent = modal.querySelector('.modal-content');
-            modal.classList.remove('visible');
-            modalContent.classList.remove('visible');
-            setTimeout(() => {
-                modal.style.display = 'none';
-                isModalOpening = false;
-            }, 300);
+            closeModal(modal, 'deleteModal');
+            isModalOpening = false;
+        }
+
+        // Confirmation Modal Functions
+        function hideConfirmModal() {
+            const modal = document.getElementById('confirmModal');
+            if (modal) {
+                closeModal(modal, 'confirmModal');
+            }
+            isModalOpening = false;
+        }
+
+        // Error Modal Functions
+        function hideErrorModal() {
+            const modal = document.getElementById('errorModal');
+            if (modal) {
+                closeModal(modal, 'errorModal');
+                hideConfirmModal();
+                hideEditConfirmModal();
+            }
+            isModalOpening = false;
         }
 
         // Event Listeners
         document.addEventListener('DOMContentLoaded', () => {
-            // Dynamic Date Constraints
-            const startDateInput = document.getElementById('filter_start');
-            const endDateInput = document.getElementById('filter_end');
-            const today = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD
-
-            // Set max date to today for both inputs
-            startDateInput.setAttribute('max', today);
-            endDateInput.setAttribute('max', today);
-
-            // Update constraints when filter_start changes
-            startDateInput.addEventListener('change', function() {
-                if (this.value) {
-                    endDateInput.setAttribute('min', this.value);
-                    // If end_date is before start_date, reset it
-                    if (endDateInput.value && endDateInput.value < this.value) {
-                        endDateInput.value = this.value;
-                    }
-                } else {
-                    endDateInput.removeAttribute('min');
-                }
-            });
-
-            // Update constraints when filter_end changes
-            endDateInput.addEventListener('change', function() {
-                if (this.value) {
-                    startDateInput.setAttribute('max', this.value);
-                    // If start_date is after end_date, reset it
-                    if (startDateInput.value && startDateInput.value > this.value) {
-                        startDateInput.value = this.value;
-                    }
-                } else {
-                    startDateInput.setAttribute('max', today);
-                }
-            });
-
-            // Filter Button
-            const filterButton = document.getElementById('filterButton');
-            if (filterButton) {
-                filterButton.addEventListener('click', function() {
-                    if (filterButton.classList.contains('loading')) return;
-                    filterButton.classList.add('loading');
-                    filterButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
-                    applyFilters();
-                    setTimeout(() => {
-                        filterButton.classList.remove('loading');
-                        filterButton.innerHTML = '<i class="fas fa-filter"></i> Filter';
-                    }, 1000);
-                });
-            }
-
             // Print Button
             const printButton = document.getElementById('printButton');
             if (printButton) {
                 printButton.addEventListener('click', function() {
                     if (printButton.classList.contains('loading')) return;
-                    printButton.classList.add('loading');
-                    printButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
+                    setButtonLoading(printButton, 'Cetak', 'fa-print');
 
-                    const startDate = startDateInput.value;
-                    const endDate = endDateInput.value;
-
-                    if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-                        showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
-                        printButton.classList.remove('loading');
-                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
-                        return;
-                    }
-
-                    if (startDate && new Date(startDate) > new Date(today)) {
-                        showAlert('Tanggal awal tidak boleh melebihi tanggal hari ini', 'error');
-                        printButton.classList.remove('loading');
-                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
-                        return;
-                    }
-
-                    if (endDate && new Date(endDate) > new Date(today)) {
-                        showAlert('Tanggal akhir tidak boleh melebihi tanggal hari ini', 'error');
-                        printButton.classList.remove('loading');
-                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
-                        return;
-                    }
-
-                    // Construct the PDF export URL
-                    const params = new URLSearchParams();
-                    params.set('export', 'pdf');
-                    if (startDate) params.set('start_date', startDate);
-                    if (endDate) params.set('end_date', endDate);
-
-                    const exportUrl = `${window.location.pathname}?${params.toString()}`;
-                    console.log('Export URL:', exportUrl); // Debugging
-
-                    // Attempt to open the PDF
+                    const exportUrl = `${window.location.pathname}?export=pdf`;
                     try {
                         const pdfWindow = window.open(exportUrl);
                         if (!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed === 'undefined') {
-                            showAlert('Gagal membuka PDF. Pastikan popup tidak diblokir oleh browser.', 'error');
-                        } else {
-                            // Monitor if the window loads successfully
-                            setTimeout(() => {
-                                if (pdfWindow.document.readyState === 'complete') {
-                                    console.log('PDF window loaded successfully');
-                                } else {
-                                    showAlert('Gagal memuat PDF. Silakan coba lagi.', 'error');
-                                }
-                            }, 1000);
+                            showAlert('Gagal membuka PDF. Pastikan popup tidak diblokir oleh browser.');
                         }
                     } catch (e) {
-                        console.error('Error opening PDF:', e);
-                        showAlert('Terjadi kesalahan saat membuka PDF.', 'error');
+                        showAlert('Terjadi kesalahan saat membuka PDF.');
                     }
 
-                    // Reset button state
                     setTimeout(() => {
-                        printButton.classList.remove('loading');
-                        printButton.innerHTML = '<i class="fas fa-print"></i> Cetak';
-                    }, 1000);
+                        resetButton(printButton, 'Cetak', 'fa-print');
+                    }, 3000);
                 });
             }
-
-            // Auto-dismiss alerts after 5 seconds
-            const alerts = document.querySelectorAll('.alert');
-            alerts.forEach(alert => {
-                setTimeout(() => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
-                }, 5000);
-            });
 
             // Auto-dismiss success modals after 3 seconds
             const successModals = document.querySelectorAll('.success-overlay');
             successModals.forEach(modal => {
-                setTimeout(() => {
-                    modal.classList.remove('visible');
-                    modal.querySelector('.success-modal').classList.remove('visible');
+                if (modal.id !== 'confirmModal' && modal.id !== 'editConfirmModal' && modal.id !== 'errorModal') {
                     setTimeout(() => {
-                        modal.style.display = 'none';
-                        // Redirect to clean URL after success
-                        if (modal.id === 'successModal' || modal.id === 'editSuccessModal' || modal.id === 'deleteSuccessModal') {
-                            const url = new URL(window.location);
-                            url.searchParams.delete('success');
-                            url.searchParams.delete('edit_success');
-                            url.searchParams.delete('delete_success');
-                            url.searchParams.delete('error');
-                            history.replaceState(null, '', url.toString());
-                        }
-                    }, 300);
-                }, 3000);
+                        closeModal(modal, modal.id);
+                    }, 3000);
+                }
             });
 
-            // Add confetti effect to success modals
-            const successModalContents = document.querySelectorAll('.success-modal');
-            successModalContents.forEach(content => {
-                for (let i = 0; i < 20; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = `${Math.random() * 100}%`;
-                    confetti.style.animationDelay = `${Math.random() * 2}s`;
-                    confetti.style.animationDuration = `${3 + Math.random() * 2}s`;
-                    content.appendChild(confetti);
-                }
+            // Handle form submission buttons
+            const submitBtn = document.getElementById('submit-btn');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function(e) {
+                    if (submitBtn.classList.contains('loading')) return;
+                    setButtonLoading(submitBtn, submitBtn.textContent.trim(), submitBtn.querySelector('i').classList[1]);
+                    setTimeout(() => {
+                        resetButton(submitBtn, submitBtn.textContent.trim(), submitBtn.querySelector('i').classList[1]);
+                    }, 3000);
+                });
+            }
+
+            const confirmBtn = document.getElementById('confirm-btn');
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', function(e) {
+                    if (confirmBtn.classList.contains('loading')) return;
+                    setButtonLoading(confirmBtn, 'Konfirmasi', 'fa-check');
+                    setTimeout(() => {
+                        resetButton(confirmBtn, 'Konfirmasi', 'fa-check');
+                        document.getElementById('confirm-form').submit();
+                    }, 3000);
+                });
+            }
+
+            const editSubmitBtn = document.getElementById('edit-submit-btn');
+            if (editSubmitBtn) {
+                editSubmitBtn.addEventListener('click', function(e) {
+                    if (editSubmitBtn.classList.contains('loading')) return;
+                    setButtonLoading(editSubmitBtn, 'Simpan', 'fa-save');
+                    setTimeout(() => {
+                        resetButton(editSubmitBtn, 'Simpan', 'fa-save');
+                    }, 3000);
+                });
+            }
+
+            const editConfirmBtn = document.getElementById('edit-confirm-btn');
+            if (editConfirmBtn) {
+                editConfirmBtn.addEventListener('click', function(e) {
+                    if (editConfirmBtn.classList.contains('loading')) return;
+                    setButtonLoading(editConfirmBtn, 'Konfirmasi', 'fa-check');
+                    setTimeout(() => {
+                        resetButton(editConfirmBtn, 'Konfirmasi', 'fa-check');
+                        document.getElementById('editConfirmForm').submit();
+                    }, 3000);
+                });
+            }
+
+            const deleteSubmitBtn = document.getElementById('delete-submit-btn');
+            if (deleteSubmitBtn) {
+                deleteSubmitBtn.addEventListener('click', function(e) {
+                    if (deleteSubmitBtn.classList.contains('loading')) return;
+                    setButtonLoading(deleteSubmitBtn, 'Hapus', 'fa-trash');
+                    setTimeout(() => {
+                        resetButton(deleteSubmitBtn, 'Hapus', 'fa-trash');
+                    }, 3000);
+                });
+            }
+
+            // Handle cancel buttons
+            document.querySelectorAll('.btn-cancel').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    if (btn.classList.contains('loading')) return;
+                    setButtonLoading(btn, 'Batal', 'fa-times');
+                    setTimeout(() => {
+                        resetButton(btn, btn.textContent.trim(), 'fa-times');
+                    }, 3000);
+                });
             });
 
             // Prevent form resubmission on page refresh
@@ -1898,20 +1580,16 @@ date_default_timezone_set('Asia/Jakarta');
                 window.history.replaceState(null, null, window.location.href);
             }
 
-            // Ensure modals close when clicking outside
+            // Handle click outside to close modals
             document.querySelectorAll('.modal, .success-overlay').forEach(modal => {
                 modal.addEventListener('click', function(e) {
                     if (e.target === modal) {
                         if (modal.id === 'editModal') hideEditModal();
                         else if (modal.id === 'deleteModal') hideDeleteModal();
                         else if (modal.id === 'editConfirmModal') hideEditConfirmModal();
-                        else if (modal.classList.contains('success-overlay')) {
-                            modal.classList.remove('visible');
-                            modal.querySelector('.success-modal').classList.remove('visible');
-                            setTimeout(() => {
-                                modal.style.display = 'none';
-                            }, 300);
-                        }
+                        else if (modal.id === 'confirmModal') hideConfirmModal();
+                        else if (modal.id === 'errorModal') hideErrorModal();
+                        else closeModal(modal, modal.id);
                     }
                 });
             });
@@ -1922,12 +1600,12 @@ date_default_timezone_set('Asia/Jakarta');
                     hideEditModal();
                     hideDeleteModal();
                     hideEditConfirmModal();
-                    document.querySelectorAll('.success-overlay.visible').forEach(modal => {
-                        modal.classList.remove('visible');
-                        modal.querySelector('.success-modal').classList.remove('visible');
-                        setTimeout(() => {
-                            modal.style.display = 'none';
-                        }, 300);
+                    hideConfirmModal();
+                    hideErrorModal();
+                    document.querySelectorAll('.success-overlay').forEach(modal => {
+                        if (modal.id !== 'confirmModal' && modal.id !== 'editConfirmModal' && modal.id !== 'errorModal') {
+                            closeModal(modal, modal.id);
+                        }
                     });
                 }
             });
@@ -1943,13 +1621,13 @@ date_default_timezone_set('Asia/Jakarta');
 
                     if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
                         e.preventDefault();
-                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
+                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!');
                         return;
                     }
 
                     if (new Date(tanggal) < new Date(today)) {
                         e.preventDefault();
-                        showAlert('Tanggal tidak boleh di masa lalu!', 'error');
+                        showAlert('Tanggal tidak boleh di masa lalu!');
                     }
                 });
             }
@@ -1965,13 +1643,13 @@ date_default_timezone_set('Asia/Jakarta');
 
                     if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
                         e.preventDefault();
-                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
+                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!');
                         return;
                     }
 
                     if (new Date(tanggal) < new Date(today)) {
                         e.preventDefault();
-                        showAlert('Tanggal tidak boleh di masa lalu!', 'error');
+                        showAlert('Tanggal tidak boleh di masa lalu!');
                     }
                 });
             }

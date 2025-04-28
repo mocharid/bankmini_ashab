@@ -2,7 +2,12 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
-$username = $_SESSION['username'] ?? 'Petugas';
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header('Location: ../login.php');
+    exit();
+}
+
+$username = $_SESSION['username'] ?? 'Admin';
 
 // Ambil data transaksi berdasarkan filter tanggal
 $start_date = $_GET['start_date'] ?? date('Y-m-01');
@@ -16,10 +21,9 @@ $total_query = "SELECT
     FROM transaksi t
     JOIN rekening r ON t.rekening_id = r.id
     JOIN users u ON r.user_id = u.id
-    LEFT JOIN users p ON t.petugas_id = p.id
     WHERE DATE(t.created_at) BETWEEN ? AND ?
     AND t.jenis_transaksi IN ('setor', 'tarik')
-    AND t.petugas_id IS NOT NULL";
+    AND t.petugas_id IS NULL";
 $stmt_total = $conn->prepare($total_query);
 $stmt_total->bind_param("ss", $start_date, $end_date);
 $stmt_total->execute();
@@ -36,7 +40,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Laporan Transaksi - SCHOBANK SYSTEM</title>
+    <title>Laporan Transaksi Admin - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -533,7 +537,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2>Transaksi Petugas</h2>
+            <h2>Transaksi Admin</h2>
             <p>Periode: <?= htmlspecialchars(date('d/m/Y', strtotime($start_date))) ?> - <?= htmlspecialchars(date('d/m/Y', strtotime($end_date))) ?></p>
         </div>
 
@@ -543,7 +547,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
         <div class="notes-container">
             <div class="notes-content">
                 <i class="fas fa-info-circle"></i>
-                <p>Catatan: Rekapitulasi ini hanya mencakup transaksi yang dilakukan oleh petugas. Untuk melihat daftar lengkap transaksi, silakan <a href="#" id="downloadLink">download laporan</a>.</p>
+                <p>Catatan: Rekapitulasi ini hanya mencakup transaksi yang dilakukan oleh admin. Untuk melihat daftar lengkap transaksi, silakan <a href="#" id="downloadLink">download laporan</a>.</p>
             </div>
         </div>
 
@@ -573,7 +577,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 
         <!-- Summary Section -->
         <div class="summary-container">
-            <h3 class="summary-title">Ringkasan Transaksi</h3>
+            <h3 class="summary-title">Ringkasan Transaksi Admin</h3>
             <?php if ($totals['total_transactions'] > 0): ?>
                 <table class="summary-table">
                     <thead>
@@ -598,7 +602,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-receipt"></i>
-                    <p>Tidak ada transaksi dalam periode ini</p>
+                    <p>Tidak ada transaksi admin dalam periode ini</p>
                 </div>
             <?php endif; ?>
         </div>
@@ -722,7 +726,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                     printButton.classList.add('loading');
                     printButton.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
 
-                    window.open(`download_laporan.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
+                    window.open(`download_laporan_admin.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
 
                     setTimeout(() => {
                         printButton.classList.remove('loading');
@@ -749,7 +753,7 @@ $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
                     downloadLink.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
                     downloadLink.style.pointerEvents = 'none';
 
-                    window.open(`download_laporan.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
+                    window.open(`download_laporan_admin.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
 
                     setTimeout(() => {
                         downloadLink.innerHTML = 'download laporan';
