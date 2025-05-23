@@ -186,17 +186,18 @@ while ($row = $result_students->fetch_assoc()) {
 <html>
 <head>
     <title>Dashboard - SCHOBANK SYSTEM</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <!-- Prevent zooming with viewport settings -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
             --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
@@ -204,9 +205,9 @@ while ($row = $result_students->fetch_assoc()) {
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
-            --scrollbar-track: #0a2e5c;
-            --scrollbar-thumb: #2a4a7a;
-            --scrollbar-thumb-hover: #3b5d92;
+            --scrollbar-track: #1e1b4b;
+            --scrollbar-thumb: #3b82f6;
+            --scrollbar-thumb-hover: #60a5fa;
         }
 
         * {
@@ -218,27 +219,30 @@ while ($row = $result_students->fetch_assoc()) {
             -ms-user-select: none;
             user-select: none;
             -webkit-touch-callout: none;
-            touch-action: pan-y;
+            touch-action: pan-y; /* Restrict pinch-to-zoom */
         }
-        
+
         html, body {
             width: 100%;
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
+            zoom: 1; /* Force fixed zoom level */
+            -webkit-text-size-adjust: 100%; /* Prevent text scaling */
         }
-        
+
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
             display: flex;
             transition: background-color 0.3s ease;
+            overscroll-behavior: none; /* Prevent pull-to-refresh or overscroll zoom */
         }
 
         /* Sidebar Utama */
         .sidebar {
             width: 280px;
-            background: linear-gradient(180deg, var(--primary-dark) 0%, #154785 100%);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             color: white;
             position: fixed;
             height: 100%;
@@ -261,9 +265,9 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .sidebar-header .bank-name {
-            font-size: 26px;
-            font-weight: bold;
-            letter-spacing: 1px;
+            font-size: 1.6rem;
+            font-weight: 600;
+            letter-spacing: 1.2px;
             margin: 0;
             color: white;
         }
@@ -325,11 +329,11 @@ while ($row = $result_students->fetch_assoc()) {
 
         .menu-label {
             padding: 15px 25px 10px;
-            font-size: 13px;
+            font-size: 0.8rem;
             text-transform: uppercase;
             letter-spacing: 1.5px;
             color: rgba(255, 255, 255, 0.6);
-            font-weight: 600;
+            font-weight: 500;
             margin-top: 10px;
         }
 
@@ -346,12 +350,13 @@ while ($row = $result_students->fetch_assoc()) {
             text-decoration: none;
             transition: var(--transition);
             border-left: 4px solid transparent;
-            font-weight: 500;
+            font-weight: 400;
+            font-size: 0.9rem;
         }
 
         .menu-item a:hover, .menu-item a.active {
             background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
+            border-left-color: var(--secondary-color);
             color: white;
         }
 
@@ -359,7 +364,7 @@ while ($row = $result_students->fetch_assoc()) {
             margin-right: 12px;
             width: 20px;
             text-align: center;
-            font-size: 18px;
+            font-size: 1.1rem;
         }
 
         /* Dropdown Menu */
@@ -374,15 +379,15 @@ while ($row = $result_students->fetch_assoc()) {
             color: rgba(255, 255, 255, 0.85);
             border: none;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 0.9rem;
             transition: var(--transition);
             border-left: 4px solid transparent;
-            font-weight: 500;
+            font-weight: 400;
         }
 
         .dropdown-btn:hover, .dropdown-btn.active {
             background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: #38bdf8;
+            border-left-color: var(--secondary-color);
             color: white;
         }
 
@@ -395,12 +400,12 @@ while ($row = $result_students->fetch_assoc()) {
             margin-right: 12px;
             width: 20px;
             text-align: center;
-            font-size: 18px;
+            font-size: 1.1rem;
         }
 
         .dropdown-btn .arrow {
             transition: transform 0.3s ease;
-            font-size: 14px;
+            font-size: 0.8rem;
         }
 
         .dropdown-btn.active .arrow {
@@ -425,20 +430,20 @@ while ($row = $result_students->fetch_assoc()) {
             color: rgba(255, 255, 255, 0.75);
             text-decoration: none;
             transition: var(--transition);
-            font-size: 14px;
+            font-size: 0.85rem;
             border-left: 4px solid transparent;
         }
 
         .dropdown-container a:hover, .dropdown-container a.active {
             background-color: rgba(255, 255, 255, 0.08);
-            border-left-color: #38bdf8;
+            border-left-color: var(--secondary-color);
             color: white;
         }
 
         /* Tombol Logout (Warna Merah) */
         .logout-btn {
-            color: #ff3b3b;
-            font-weight: 600;
+            color: var(--danger-color);
+            font-weight: 500;
         }
 
         /* Main Content */
@@ -452,12 +457,12 @@ while ($row = $result_students->fetch_assoc()) {
 
         /* Welcome Banner */
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, #2563eb 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 30px;
             border-radius: 18px;
             margin-bottom: 35px;
-            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.15);
+            box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
             display: flex;
@@ -468,13 +473,14 @@ while ($row = $result_students->fetch_assoc()) {
 
         .welcome-banner h2 {
             margin-bottom: 10px;
-            font-size: 28px;
-            font-weight: 700;
+            font-size: 1.6rem;
+            font-weight: 600;
             letter-spacing: 0.5px;
         }
 
         .welcome-banner .date {
-            font-size: 15px;
+            font-size: 0.9rem;
+            font-weight: 400;
             opacity: 0.8;
             display: flex;
             align-items: center;
@@ -496,7 +502,7 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .summary-header h2 {
-            font-size: 24px;
+            font-size: 1.4rem;
             font-weight: 600;
             color: var(--primary-dark);
             margin-right: 15px;
@@ -543,7 +549,7 @@ while ($row = $result_students->fetch_assoc()) {
             left: 0;
             width: 100%;
             height: 4px;
-            background: linear-gradient(90deg, var(--secondary-color), rgba(59, 130, 246, 0.3));
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
         }
 
         .stat-box:hover {
@@ -558,11 +564,11 @@ while ($row = $result_students->fetch_assoc()) {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 1.5rem;
             margin-bottom: 20px;
             transition: var(--transition);
             color: white;
-            background: linear-gradient(135deg, var(--secondary-color), #2563eb);
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
         }
 
         .stat-box:hover .stat-icon {
@@ -570,30 +576,34 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .stat-title {
-            font-family: 'Poppins', sans-serif;
-            font-size: 16px;
+            font-size: 0.9rem;
             color: var(--text-secondary);
             margin-bottom: 10px;
             font-weight: 500;
         }
 
         .stat-value {
-            font-family: 'Poppins', sans-serif;
-            font-size: 28px;
-            font-weight: 700;
+            font-size: 1.6rem;
+            font-weight: 600;
             margin-bottom: 10px;
             color: var(--primary-dark);
             letter-spacing: 0.5px;
         }
 
+        .stat-value.counter {
+            display: inline-block;
+            font-family: 'Poppins', monospace;
+            transition: var(--transition);
+        }
+
         .stat-trend {
-            font-family: 'Poppins', sans-serif;
             display: flex;
             align-items: center;
-            font-size: 14px;
+            font-size: 0.85rem;
             color: var(--text-secondary);
             margin-top: auto;
             padding-top: 10px;
+            font-weight: 400;
         }
 
         .stat-trend i {
@@ -611,8 +621,7 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .chart-title {
-            font-family: 'Poppins', sans-serif;
-            font-size: 20px;
+            font-size: 1.2rem;
             font-weight: 600;
             color: var(--primary-dark);
             margin-bottom: 20px;
@@ -656,9 +665,8 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .popup-content h2, .saldo-content h2, .transfer-content h2 {
-            font-family: 'Poppins', sans-serif;
-            font-size: 24px;
-            font-weight: 700;
+            font-size: 1.4rem;
+            font-weight: 600;
             color: var(--primary-dark);
             margin-bottom: 20px;
             text-align: center;
@@ -681,16 +689,15 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .jurusan-header {
-            font-family: 'Poppins', sans-serif;
             padding: 12px 15px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             cursor: pointer;
             color: white;
-            font-size: 16px;
+            font-size: 0.95rem;
             font-weight: 600;
-            background: linear-gradient(135deg, #2563eb, #1e40af);
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
             border-radius: 8px 8px 8px 8px;
             height: 48px;
             transition: background 0.2s ease;
@@ -701,11 +708,11 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .jurusan-header:hover {
-            background: linear-gradient(135deg, var(--secondary-color), #2563eb);
+            background: linear-gradient(135deg, var(--secondary-dark), var(--primary-dark));
         }
 
         .jurusan-header .logo {
-            font-size: 22px;
+            font-size: 1.3rem;
             margin-right: 10px;
             color: #e0f2fe;
             transition: transform 0.2s ease;
@@ -716,7 +723,7 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .jurusan-header .arrow {
-            font-size: 14px;
+            font-size: 0.8rem;
             color: #e0f2fe;
             margin-right: 10px;
             transition: transform 0.3s ease;
@@ -751,7 +758,7 @@ while ($row = $result_students->fetch_assoc()) {
             justify-content: space-between;
             box-shadow: var(--shadow-sm);
             transition: transform 0.2s ease, box-shadow 0.2s ease;
-            border-left: 3px solid #2563eb;
+            border-left: 3px solid var(--primary-color);
         }
 
         .kelas-card:last-child {
@@ -765,9 +772,9 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .kelas-card .logo {
-            font-size: 18px;
+            font-size: 1.1rem;
             margin-right: 10px;
-            color: #2563eb;
+            color: var(--primary-color);
             transition: transform 0.2s ease;
         }
 
@@ -776,17 +783,15 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .kelas-card .kelas-name {
-            font-family: 'Poppins', sans-serif;
-            font-size: 15px;
-            color: #1e3a8a;
+            font-size: 0.9rem;
+            color: var(--primary-dark);
             flex: 1;
         }
 
         .kelas-card .jumlah-siswa {
-            font-family: 'Poppins', sans-serif;
-            font-size: 15px;
+            font-size: 0.9rem;
             font-weight: 600;
-            color: #2563eb;
+            color: var(--primary-color);
         }
 
         /* Tanggal Card (Saldo and Transfer) */
@@ -805,16 +810,15 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .tanggal-header {
-            font-family: 'Poppins', sans-serif;
             padding: 12px 15px;
             display: flex;
             align-items: center;
             justify-content: space-between;
             cursor: pointer;
             color: white;
-            font-size: 16px;
+            font-size: 0.95rem;
             font-weight: 600;
-            background: linear-gradient(135deg, #2563eb, #1e40af);
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
             border-radius: 8px 8px 8px 8px;
             height: 48px;
             transition: background 0.2s ease;
@@ -825,11 +829,11 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .tanggal-header:hover {
-            background: linear-gradient(135deg, var(--secondary-color), #2563eb);
+            background: linear-gradient(135deg, var(--secondary-dark), var(--primary-dark));
         }
 
         .tanggal-header .logo {
-            font-size: 22px;
+            font-size: 1.3rem;
             margin-right: 10px;
             color: #e0f2fe;
             transition: transform 0.2s ease;
@@ -840,7 +844,7 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .tanggal-header .arrow {
-            font-size: 14px;
+            font-size: 0.8rem;
             color: #e0f2fe;
             margin-right: 10px;
             transition: transform 0.3s ease;
@@ -866,30 +870,29 @@ while ($row = $result_students->fetch_assoc()) {
         }
 
         .setoran-value, .transfer-value {
-            font-family: 'Poppins', sans-serif;
-            font-size: 16px;
+            font-size: 0.95rem;
             font-weight: 600;
-            color: #1e3a8a;
+            color: var(--primary-dark);
             text-align: center;
         }
 
         /* Empty State */
         .empty-state {
-            font-family: 'Poppins', sans-serif;
             text-align: center;
             color: var(--text-secondary);
-            font-size: 15px;
+            font-size: 0.9rem;
             padding: 20px;
             background: #f8fafc;
             border-radius: 8px;
             border: 1px solid #e2e8f0;
+            font-weight: 400;
         }
 
         /* Hamburger Menu Toggle */
         .menu-toggle {
             display: none;
             color: white;
-            font-size: 24px;
+            font-size: 1.5rem;
             cursor: pointer;
             transition: transform 0.3s ease;
         }
@@ -911,7 +914,7 @@ while ($row = $result_students->fetch_assoc()) {
 
         @keyframes popupScaleIn {
             from {
-                transform: translate(-50%, -50%) scale(0.95);
+                condense: translate(-50%, -50%) scale(0.95);
                 opacity: 0;
             }
             to {
@@ -971,11 +974,10 @@ while ($row = $result_students->fetch_assoc()) {
                 pointer-events: none;
             }
 
-            /* Welcome Banner */
             .welcome-banner {
                 padding: 20px;
                 border-radius: 12px;
-                box-shadow: 0 6px 15px rgba(37, 99, 235, 0.2);
+                box-shadow: var(--shadow-md);
                 position: relative;
                 display: flex;
                 flex-direction: row;
@@ -990,19 +992,15 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .welcome-banner h2 {
-                font-family: 'Poppins', sans-serif;
-                font-size: 22px;
-                font-weight: 700;
-                margin-bottom: 8px;
+                font-size: 1.4rem;
+                font-weight: 600;
             }
 
             .welcome-banner .date {
-                font-family: 'Poppins', sans-serif;
-                font-size: 12px;
-                font-weight: 500;
+                font-size: 0.85rem;
+                font-weight: 400;
             }
 
-            /* Pop-up Adjustments */
             .popup-content, .saldo-content, .transfer-content {
                 width: 95%;
                 max-width: 500px;
@@ -1010,25 +1008,23 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .popup-content h2, .saldo-content h2, .transfer-content h2 {
-                font-family: 'Poppins', sans-serif;
-                font-size: 20px;
+                font-size: 1.2rem;
                 margin-bottom: 15px;
             }
 
             .jurusan-header, .tanggal-header {
-                font-family: 'Poppins', sans-serif;
-                font-size: 15px;
+                font-size: 0.9rem;
                 padding: 10px 12px;
                 height: 44px;
             }
 
             .jurusan-header .logo, .tanggal-header .logo {
-                font-size: 20px;
+                font-size: 1.2rem;
                 margin-right: 8px;
             }
 
             .jurusan-header .arrow, .tanggal-header .arrow {
-                font-size: 13px;
+                font-size: 0.75rem;
                 margin-right: 8px;
             }
 
@@ -1042,14 +1038,13 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .kelas-card .logo {
-                font-size: 16px;
+                font-size: 1rem;
                 margin-right: 8px;
             }
 
             .kelas-card .kelas-name,
             .kelas-card .jumlah-siswa {
-                font-family: 'Poppins', sans-serif;
-                font-size: 14px;
+                font-size: 0.85rem;
             }
 
             .setoran-content.show, .transfer-content.show {
@@ -1057,14 +1052,11 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .setoran-value, .transfer-value {
-                font-family: 'Poppins', sans-serif;
-                font-size: 14px;
+                font-size: 0.85rem;
             }
 
-            /* Summary Section */
             .summary-header h2 {
-                font-family: 'Poppins', sans-serif;
-                font-size: 20px;
+                font-size: 1.2rem;
             }
 
             .summary-header h2::after {
@@ -1086,36 +1078,31 @@ while ($row = $result_students->fetch_assoc()) {
             .stat-icon {
                 width: 48px;
                 height: 48px;
-                font-size: 22px;
+                font-size: 1.3rem;
                 border-radius: 10px;
             }
 
             .stat-title {
-                font-family: 'Poppins', sans-serif;
-                font-size: 13px;
+                font-size: 0.85rem;
                 font-weight: 500;
             }
 
             .stat-value {
-                font-family: 'Poppins', sans-serif;
-                font-size: 22px;
-                font-weight: 700;
+                font-size: 1.4rem;
+                font-weight: 600;
             }
 
             .stat-trend {
-                font-family: 'Poppins', sans-serif;
-                font-size: 12px;
+                font-size: 0.8rem;
             }
 
-            /* Chart Container */
             .chart-container {
                 padding: 15px;
                 border-radius: 12px;
             }
 
             .chart-title {
-                font-family: 'Poppins', sans-serif;
-                font-size: 18px;
+                font-size: 1.1rem;
                 margin-bottom: 15px;
             }
 
@@ -1127,7 +1114,7 @@ while ($row = $result_students->fetch_assoc()) {
         /* Responsive Design for Small Phones (max-width: 480px) */
         @media (max-width: 480px) {
             .menu-toggle {
-                font-size: 20px;
+                font-size: 1.3rem;
                 left: 15px;
                 top: 50%;
                 transform: translateY(-50%);
@@ -1138,20 +1125,17 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .sidebar-header .bank-name {
-                font-family: 'Poppins', sans-serif;
-                font-size: 22px;
+                font-size: 1.4rem;
             }
 
             .menu-item a, .dropdown-btn {
-                font-family: 'Poppins', sans-serif;
                 padding: 12px 20px;
-                font-size: 14px;
+                font-size: 0.85rem;
             }
 
             .dropdown-container a {
-                font-family: 'Poppins', sans-serif;
                 padding: 10px 15px 10px 50px;
-                font-size: 13px;
+                font-size: 0.8rem;
             }
 
             .main-content {
@@ -1168,13 +1152,11 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .welcome-banner h2 {
-                font-family: 'Poppins', sans-serif;
-                font-size: 18px;
+                font-size: 1.2rem;
             }
 
             .welcome-banner .date {
-                font-family: 'Poppins', sans-serif;
-                font-size: 11px;
+                font-size: 0.8rem;
             }
 
             .popup-content, .saldo-content, .transfer-content {
@@ -1184,8 +1166,7 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .popup-content h2, .saldo-content h2, .transfer-content h2 {
-                font-family: 'Poppins', sans-serif;
-                font-size: 18px;
+                font-size: 1.1rem;
                 margin-bottom: 12px;
             }
 
@@ -1194,19 +1175,18 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .jurusan-header, .tanggal-header {
-                font-family: 'Poppins', sans-serif;
-                font-size: 14px;
+                font-size: 0.85rem;
                 padding: 8px 10px;
                 height: 40px;
             }
 
             .jurusan-header .logo, .tanggal-header .logo {
-                font-size: 18px;
+                font-size: 1.1rem;
                 margin-right: 6px;
             }
 
             .jurusan-header .arrow, .tanggal-header .arrow {
-                font-size: 12px;
+                font-size: 0.7rem;
                 margin-right: 6px;
             }
 
@@ -1220,14 +1200,13 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .kelas-card .logo {
-                font-size: 14px;
+                font-size: 0.9rem;
                 margin-right: 6px;
             }
 
             .kelas-card .kelas-name,
             .kelas-card .jumlah-siswa {
-                font-family: 'Poppins', sans-serif;
-                font-size: 13px;
+                font-size: 0.8rem;
             }
 
             .setoran-content.show, .transfer-content.show {
@@ -1235,13 +1214,11 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .setoran-value, .transfer-value {
-                font-family: 'Poppins', sans-serif;
-                font-size: 13px;
+                font-size: 0.8rem;
             }
 
             .summary-header h2 {
-                font-family: 'Poppins', sans-serif;
-                font-size: 18px;
+                font-size: 1.1rem;
             }
 
             .summary-header h2::after {
@@ -1256,22 +1233,19 @@ while ($row = $result_students->fetch_assoc()) {
             .stat-icon {
                 width: 42px;
                 height: 42px;
-                font-size: 20px;
+                font-size: 1.2rem;
             }
 
             .stat-title {
-                font-family: 'Poppins', sans-serif;
-                font-size: 12px;
+                font-size: 0.8rem;
             }
 
             .stat-value {
-                font-family: 'Poppins', sans-serif;
-                font-size: 20px;
+                font-size: 1.3rem;
             }
 
             .stat-trend {
-                font-family: 'Poppins', sans-serif;
-                font-size: 11px;
+                font-size: 0.75rem;
             }
 
             .chart-container {
@@ -1279,8 +1253,7 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             .chart-title {
-                font-family: 'Poppins', sans-serif;
-                font-size: 16px;
+                font-size: 1rem;
             }
 
             #transactionChart {
@@ -1342,7 +1315,7 @@ while ($row = $result_students->fetch_assoc()) {
                             <i class="fas fa-user-check"></i> Rekap Absen Petugas
                         </a>
                         <a href="data_siswa.php">
-                            <i class="fas fa-id-card"></i> Rekap Data Siswa
+                            <i class="fas fa-id-card"></i> Rekap Data Rekening
                         </a>
                     </div>
                 </div>
@@ -1383,19 +1356,36 @@ while ($row = $result_students->fetch_assoc()) {
 
                 <div class="menu-label">Lainnya</div>
                 <div class="menu-item">
-                    <a href="recover_account.php">
-                        <i class="fas fa-user-lock"></i> Pemulihan Akun Siswa
-                    </a>
+                    <button class="dropdown-btn" id="siswaDropdown">
+                        <div class="menu-icon">
+                            <i class="fas fa-users-cog"></i> Akun Siswa
+                        </div>
+                        <i class="fas fa-chevron-down arrow"></i>
+                    </button>
+                    <div class="dropdown-container" id="siswaDropdownContainer">
+                        <a href="recover_account.php">
+                            <i class="fas fa-user-lock"></i> Pemulihan Akun 
+                        </a>
+                        <a href="freeze_account.php">
+                            <i class="fas fa-ban"></i> Nonaktifkan Akun
+                        </a>
+                    </div>
                 </div>
                 <div class="menu-item">
-                    <a href="freeze_account.php">
-                        <i class="fas fa-ban"></i> Nonaktifkan Akun Siswa
-                    </a>
-                </div>
-                <div class="menu-item">
-                    <a href="kode_akses_petugas.php">
-                        <i class="fas fa-key"></i> Kode Akses Petugas
-                    </a>
+                    <button class="dropdown-btn" id="petugasDropdown">
+                        <div class="menu-icon">
+                            <i class="fas fa-user-shield"></i> Kontrol Petugas
+                        </div>
+                        <i class="fas fa-chevron-down arrow"></i>
+                    </button>
+                    <div class="dropdown-container" id="petugasDropdownContainer">
+                        <a href="manage_petugas_status.php">
+                            <i class="fa-solid fa-screwdriver-wrench"></i> Pembatasan Akses Petugas
+                        </a>
+                        <a href="kode_akses_petugas.php">
+                            <i class="fas fa-key"></i> Kode Akses Petugas
+                        </a>
+                    </div>
                 </div>
 
                 <div class="menu-label">Pengaturan</div>
@@ -1441,7 +1431,7 @@ while ($row = $result_students->fetch_assoc()) {
                     </div>
                     <div class="stat-content">
                         <div class="stat-title">Total Rekening</div>
-                        <div class="stat-value"><?= number_format($total_siswa) ?></div>
+                        <div class="stat-value counter" data-target="<?= $total_siswa ?>">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-user-graduate"></i>
                             <span>Rekening Aktif</span>
@@ -1454,7 +1444,7 @@ while ($row = $result_students->fetch_assoc()) {
                     </div>
                     <div class="stat-content">
                         <div class="stat-title">Perkiraan Total Kas Admin</div>
-                        <div class="stat-value">Rp <?= number_format($total_saldo + $saldo_harian, 0, ',', '.') ?></div>
+                        <div class="stat-value counter" data-target="<?= $total_saldo + $saldo_harian ?>" data-prefix="Rp ">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-chart-line"></i>
                             <span>Perkiraan Total Saldo setelah setoran Petugas</span>
@@ -1467,7 +1457,7 @@ while ($row = $result_students->fetch_assoc()) {
                     </div>
                     <div class="stat-content">
                         <div class="stat-title">Total Saldo di Kas Admin</div>
-                        <div class="stat-value">Rp <?= number_format($total_saldo, 0, ',', '.') ?></div>
+                        <div class="stat-value counter" data-target="<?= $total_saldo ?>" data-prefix="Rp ">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-chart-line"></i>
                             <span>Total Saldo di Kas Admin</span>
@@ -1480,7 +1470,7 @@ while ($row = $result_students->fetch_assoc()) {
                     </div>
                     <div class="stat-content">
                         <div class="stat-title">Perkiraan Setoran Petugas</div>
-                        <div class="stat-value">Rp <?= number_format($saldo_harian, 0, ',', '.') ?></div>
+                        <div class="stat-value counter" data-target="<?= $saldo_harian ?>" data-prefix="Rp ">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-calendar-day"></i>
                             <span>Total Saldo Bersih Petugas Hari ini</span>
@@ -1554,6 +1544,29 @@ while ($row = $result_students->fetch_assoc()) {
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
     <script>
+        // Prevent zooming via JavaScript
+        document.addEventListener('wheel', function(e) {
+            if (e.ctrlKey) {
+                e.preventDefault(); // Prevent Ctrl + Scroll zooming
+            }
+        }, { passive: false });
+
+        document.addEventListener('gesturestart', function(e) {
+            e.preventDefault(); // Prevent pinch-to-zoom on iOS
+        }, { passive: false });
+
+        document.addEventListener('touchstart', function(e) {
+            if (e.touches.length > 1) {
+                e.preventDefault(); // Prevent multi-touch zooming
+            }
+        }, { passive: false });
+
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '0')) {
+                e.preventDefault(); // Prevent Ctrl + Plus/Minus/Zero zooming
+            }
+        });
+
         document.addEventListener('DOMContentLoaded', function() {
             // Chart.js configuration
             const ctx = document.getElementById('transactionChart').getContext('2d');
@@ -1755,6 +1768,27 @@ while ($row = $result_students->fetch_assoc()) {
                         this.classList.add('active');
                     }
                 });
+            });
+
+            // Animated Counter for Numbers
+            const counters = document.querySelectorAll('.counter');
+            counters.forEach(counter => {
+                const updateCount = () => {
+                    const target = +counter.getAttribute('data-target');
+                    const prefix = counter.getAttribute('data-prefix') || '';
+                    const count = +counter.innerText.replace(/[^0-9]/g, '') || 0;
+                    const increment = target / 100;
+
+                    if (count < target) {
+                        let newCount = Math.ceil(count + increment);
+                        if (newCount > target) newCount = target;
+                        counter.innerText = prefix + newCount.toLocaleString('id-ID');
+                        setTimeout(updateCount, 20);
+                    } else {
+                        counter.innerText = prefix + target.toLocaleString('id-ID');
+                    }
+                };
+                updateCount();
             });
         });
     </script>

@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../../includes/db_connection.php';
-require '../../vendor/autoload.php';
+require_once '../../vendor/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -9,7 +9,7 @@ use PHPMailer\PHPMailer\Exception;
 date_default_timezone_set('Asia/Jakarta');
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header('Location: ../../index.php');
+    header('Location: ../../../index.php');
     exit();
 }
 
@@ -19,14 +19,14 @@ function generateToken() {
 }
 
 // Fungsi untuk menyimpan token reset
-function saveResetToken($conn, $user_id, $token, $recovery_type, $new_email = null, $expiry_hours = 24) {
+function saveResetToken($conn, $user_id, $token, $recovery_type, $expiry_hours = 24) {
     $expiry = date('Y-m-d H:i:s', strtotime("+{$expiry_hours} hours"));
-    $query = "INSERT INTO password_reset (user_id, token, recovery_type, new_email, expiry) VALUES (?, ?, ?, ?, ?)";
+    $query = "INSERT INTO password_reset (user_id, token, recovery_type, expiry) VALUES (?, ?, ?, ?)";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param('issss', $user_id, $token, $recovery_type, $new_email, $expiry);
+    $stmt->bind_param('isss', $user_id, $token, $recovery_type, $expiry);
     $success = $stmt->execute();
     if (!$success) {
-        error_log("Gagal menyimpan token: user_id=$user_id, token=$token, type=$recovery_type, new_email=$new_email, error=" . $conn->error);
+        error_log("Gagal menyimpan token: user_id=$user_id, token=$token, type=$recovery_type, error=" . $conn->error);
     }
     return $success;
 }
@@ -71,6 +71,134 @@ function sendEmail($toEmail, $toName, $subject, $htmlContent) {
     } catch (Exception $e) {
         error_log("Gagal mengirim email ke $toEmail: " . $e->getMessage());
         return false;
+    }
+}
+
+// Fungsi untuk mengirim pesan WhatsApp menggunakan Fonnte API
+function sendWhatsAppMessage($phone_number, $message) {
+    $curl = curl_init();
+    
+    // Pastikan format nomor benar (awalan 62)
+    if (substr($phone_number, 0, 2) === '08') {
+        $phone_number = '62' . substr($phone_number, 1);
+    }
+    
+    curl_setopt_array($curl, array(
+        CURLOPT_URL => 'https://api.fonnte.com/send',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING => '',
+        CURLOPT_MAXREDIRS => 10,
+        CURLOPT_TIMEOUT => 0,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_CUSTOMREQUEST => 'POST',
+        CURLOPT_POSTFIELDS => array(
+            'target' => $phone_number,
+            'message' => $message
+        ),
+        CURLOPT_HTTPHEADER => array(
+            'Authorization: dCjq3fJVf9p2DAfVDVED'
+        ),
+    ));
+    
+    $response = curl_exec($curl);
+    $curl_error = curl_error($curl);
+    curl_close($curl);
+    
+    if ($curl_error) {
+        error_log("CURL Error in sendWhatsAppMessage: $curl_error");
+        return false;
+    }
+    return $response;
+}
+
+// Fungsi untuk cek cooldown periode
+function checkCooldownPeriod($conn, $user_id, $method, $recovery_type) {
+    $query = "SELECT last_reset_request FROM reset_request_cooldown WHERE user_id = ? AND method = ? AND recovery_type = ?";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("iss", $user_id, $method, $recovery_type);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        $last_request_time = strtotime($row['last_reset_request']);
+        $current_time = time();
+        $cooldown_period = 15 * 60; // 15 menit dalam detik
+        
+        if (($current_time - $last_request_time) < $cooldown_period) {
+            $remaining_seconds = $cooldown_period - ($current_time - $last_request_time);
+            $remaining_minutes = ceil($remaining_seconds / 60);
+            return $remaining_minutes;
+        }
+    }
+    return 0;
+}
+
+// Fungsi untuk update waktu permintaan reset
+function updateResetRequestTime($conn, $user_id, $method, $recovery_type) {
+    $current_time = date('Y-m-d H:i:s');
+    
+    $check_query = "SELECT id FROM reset_request_cooldown WHERE user_id = ? AND method = ? AND recovery_type = ?";
+    $check_stmt = $conn->prepare($check_query);
+    $check_stmt->bind_param("iss", $user_id, $method, $recovery_type);
+    $check_stmt->execute();
+    $check_result = $check_stmt->get_result();
+    
+    if ($check_result->num_rows > 0) {
+        $update_query = "UPDATE reset_request_cooldown SET last_reset_request = ? WHERE user_id = ? AND method = ? AND recovery_type = ?";
+        $update_stmt = $conn->prepare($update_query);
+        $update_stmt->bind_param("siss", $current_time, $user_id, $method, $recovery_type);
+        $update_stmt->execute();
+    } else {
+        $insert_query = "INSERT INTO reset_request_cooldown (user_id, method, recovery_type, last_reset_request) VALUES (?, ?, ?, ?)";
+        $insert_stmt = $conn->prepare($insert_query);
+        $insert_stmt->bind_param("isss", $user_id, $method, $recovery_type, $current_time);
+        $insert_stmt->execute();
+    }
+}
+
+// Cek apakah tabel reset_request_cooldown sudah ada, jika belum maka buat
+$check_table_query = "SHOW TABLES LIKE 'reset_request_cooldown'";
+$check_table_result = $conn->query($check_table_query);
+if ($check_table_result->num_rows == 0) {
+    $create_table_query = "CREATE TABLE reset_request_cooldown (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        method VARCHAR(20) NOT NULL,
+        recovery_type VARCHAR(20) NOT NULL,
+        last_reset_request DATETIME NOT NULL,
+        INDEX idx_cooldown (user_id, method, recovery_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+    if (!$conn->query($create_table_query)) {
+        error_log("Gagal membuat tabel reset_request_cooldown: " . $conn->error);
+    }
+} else {
+    // Cek apakah kolom recovery_type sudah ada, jika belum tambahkan
+    $check_column_query = "SHOW COLUMNS FROM reset_request_cooldown LIKE 'recovery_type'";
+    $check_column_result = $conn->query($check_column_query);
+    if ($check_column_result->num_rows == 0) {
+        // Cek apakah index idx_cooldown ada
+        $check_index_query = "SHOW INDEX FROM reset_request_cooldown WHERE Key_name = 'idx_cooldown'";
+        $check_index_result = $conn->query($check_index_query);
+        $index_exists = $check_index_result->num_rows > 0;
+
+        // Bangun query ALTER TABLE
+        $alter_query = "ALTER TABLE reset_request_cooldown ADD COLUMN recovery_type VARCHAR(20) NOT NULL DEFAULT 'password'";
+        if ($index_exists) {
+            $alter_query .= ", DROP INDEX idx_cooldown";
+        }
+        $alter_query .= ", ADD INDEX idx_cooldown (user_id, method, recovery_type)";
+
+        if (!$conn->query($alter_query)) {
+            error_log("Gagal mengubah tabel reset_request_cooldown: " . $conn->error);
+        } else {
+            // Update existing records to set recovery_type to 'password'
+            $update_query = "UPDATE reset_request_cooldown SET recovery_type = 'password' WHERE recovery_type = '' OR recovery_type IS NULL";
+            if (!$conn->query($update_query)) {
+                error_log("Gagal mengupdate recovery_type pada reset_request_cooldown: " . $conn->error);
+            }
+        }
     }
 }
 
@@ -172,37 +300,41 @@ $messages = ['success' => '', 'errors' => []];
 // Cek pesan dari session
 if (isset($_SESSION['messages'])) {
     $messages = $_SESSION['messages'];
-    unset($_SESSION['messages']); // Hapus pesan setelah ditampilkan
+    unset($_SESSION['messages']);
 }
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $recovery_option = $_POST['recovery_option'] ?? '';
-    $no_rekening = trim($_POST['no_rekening'] ?? '');
     $recovery_type = $_POST['recovery_type'] ?? '';
-    $new_email = trim($_POST['new_email'] ?? '');
+    $no_rekening = trim($_POST['no_rekening'] ?? '');
+    $delivery_method = $_POST['delivery_method'] ?? '';
     $alasan = trim($_POST['alasan'] ?? '');
+    $custom_alasan = trim($_POST['custom_alasan'] ?? '');
 
-    if (empty($recovery_option) || !in_array($recovery_option, ['reset', 'email'])) {
-        $messages['errors'][] = 'Pilihan pemulihan tidak valid.';
+    // Gunakan alasan kustom jika disediakan
+    $alasan_pemulihan = $alasan === 'Lainnya' && !empty($custom_alasan) ? $custom_alasan : $alasan;
+
+    // Validasi input
+    if (empty($recovery_type) || !in_array($recovery_type, ['password', 'pin', 'username', 'email'])) {
+        $messages['errors'][] = 'Jenis pemulihan tidak valid.';
     }
     if (empty($no_rekening)) {
         $messages['errors'][] = 'Nomor rekening harus diisi.';
     } elseif (!preg_match('/^REK[0-9]{6}$/', $no_rekening)) {
         $messages['errors'][] = 'Nomor rekening harus berformat REK diikuti 6 digit angka.';
     }
-    if ($recovery_option === 'reset' && (empty($recovery_type) || !in_array($recovery_type, ['password', 'pin', 'username']))) {
-        $messages['errors'][] = 'Jenis pemulihan tidak valid.';
+    if (empty($delivery_method) || !in_array($delivery_method, ['email', 'whatsapp'])) {
+        $messages['errors'][] = 'Metode pengiriman tidak valid.';
     }
-    if ($recovery_option === 'email' && empty($new_email)) {
-        $messages['errors'][] = 'Email baru harus diisi.';
+    if ($recovery_type === 'email' && $delivery_method !== 'whatsapp') {
+        $messages['errors'][] = 'Pemulihan email hanya dapat dikirim melalui WhatsApp.';
     }
-    if (empty($alasan) || !in_array($alasan, ['Lupa kata sandi', 'Lupa PIN', 'Lupa username', 'Perubahan email', 'Lainnya'])) {
-        $messages['errors'][] = 'Alasan pemulihan tidak valid.';
+    if (empty($alasan_pemulihan)) {
+        $messages['errors'][] = 'Alasan pemulihan harus diisi.';
     }
 
     if (empty($messages['errors'])) {
         // Cek nomor rekening
-        $query = "SELECT u.id, u.nama, u.email, u.role FROM users u 
+        $query = "SELECT u.id, u.nama, u.email, u.no_wa, u.role FROM users u 
                   JOIN rekening r ON u.id = r.user_id 
                   WHERE r.no_rekening = ? AND u.role = 'siswa'";
         $stmt = $conn->prepare($query);
@@ -218,74 +350,107 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $user_id = $user['id'];
             $nama = $user['nama'];
             $email = $user['email'];
+            $no_wa = $user['no_wa'];
 
-            if ($recovery_option === 'reset') {
-                // Untuk pemulihan username, password, pin
-                if (empty($email)) {
-                    $messages['errors'][] = 'Akun ini tidak memiliki email. Silakan gunakan pemulihan email terlebih dahulu.';
+            // Validasi metode pengiriman
+            if ($delivery_method === 'email' && empty($email) && $recovery_type !== 'email') {
+                $messages['errors'][] = 'Akun ini tidak memiliki email. Silakan pilih metode WhatsApp atau hubungi admin.';
+            } elseif ($delivery_method === 'whatsapp' && empty($no_wa)) {
+                $messages['errors'][] = 'Akun ini tidak memiliki nomor WhatsApp. Silakan pilih metode email atau hubungi admin.';
+            } else {
+                // Cek cooldown berdasarkan user_id, delivery_method, dan recovery_type
+                $cooldown_minutes = checkCooldownPeriod($conn, $user_id, $delivery_method, $recovery_type);
+                if ($cooldown_minutes > 0) {
+                    $messages['errors'][] = "Anda harus menunggu {$cooldown_minutes} menit lagi sebelum mengirim permintaan reset {$recovery_type} baru.";
                 } else {
                     // Generate token dan simpan
                     $token = generateToken();
-                    if (saveResetToken($conn, $user_id, $token, $recovery_type)) {
+                    if (saveResetToken($conn, $user_id, $token, $recovery_type, 0.25)) { // 15 menit
                         // Log aktivitas
-                        $nilai_baru = 'Link reset dikirim';
-                        logActivity($conn, $_SESSION['user_id'], $user_id, $recovery_type, $nilai_baru, $alasan);
-
-                        // Kirim email ke email lama
-                        $reset_link = "http://localhost/Schobank/pages/reset_account.php?token=$token&type=$recovery_type";
-                        $subject = "Pemulihan Akun - SCHOBANK SYSTEM";
-                        $greeting = "Yth. $nama,";
-                        $content = "Admin telah memulai proses pemulihan $recovery_type Anda. Silakan klik tombol di bawah untuk mengatur ulang $recovery_type Anda.";
-                        $html = generateEmailTemplate(
-                            "Pemulihan Akun",
-                            $greeting,
-                            $content,
-                            "Atur Ulang Sekarang",
-                            $reset_link
-                        );
-
-                        error_log("Mengirim email ke: $email dengan token: $token, type: $recovery_type, link: $reset_link");
-
-                        if (sendEmail($email, $nama, $subject, $html)) {
-                            $messages['success'] = "Link pemulihan telah dikirim ke email siswa.";
-                        } else {
-                            $messages['errors'][] = "Gagal mengirim email. Silakan coba lagi.";
+                        $nilai_baru = $delivery_method === 'email' ? 'Link reset dikirim via email' : 'Link reset dikirim via WhatsApp';
+                        if ($recovery_type === 'email') {
+                            $nilai_baru = 'Link verifikasi dikirim ke WhatsApp';
                         }
-                    } else {
-                        $messages['errors'][] = "Gagal menyimpan token pemulihan.";
-                    }
-                }
-            } else {
-                // Untuk pemulihan email
-                if (!filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
-                    $messages['errors'][] = 'Email baru tidak valid.';
-                } else {
-                    // Generate token dan simpan email baru
-                    $token = generateToken();
-                    if (saveResetToken($conn, $user_id, $token, 'email', $new_email)) {
-                        // Log aktivitas
-                        $nilai_baru = $new_email;
-                        logActivity($conn, $_SESSION['user_id'], $user_id, 'email', $nilai_baru, $alasan);
+                        logActivity($conn, $_SESSION['user_id'], $user_id, $recovery_type, $nilai_baru, $alasan_pemulihan);
 
-                        // Kirim email ke email baru
-                        $reset_link = "http://localhost/Schobank/pages/reset_account.php?token=$token&type=email";
-                        $subject = "Verifikasi Perubahan Email - SCHOBANK SYSTEM";
-                        $greeting = "Yth. $nama,";
-                        $content = "Admin telah memulai proses perubahan email Anda ke $new_email. Silakan klik tombol di bawah untuk memverifikasi identitas Anda dengan memilih salah satu dari username, password, PIN, atau email lama.";
-                        $html = generateEmailTemplate(
-                            "Verifikasi Perubahan Email",
-                            $greeting,
-                            $content,
-                            "Verifikasi Sekarang",
-                            $reset_link
-                        );
+                        // Generate dynamic reset link
+                        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
+                        $host = $_SERVER['HTTP_HOST'];
+                        $path = dirname($_SERVER['PHP_SELF'], 3); // Navigate three levels up to reach /Schobank/
+                        $reset_link = $protocol . "://" . $host . $path . "/pages/siswa/reset_akun.php?token=$token&type=$recovery_type";
+                        $expire_time = date('d M Y H:i:s', strtotime('+15 minutes'));
 
-                        error_log("Mengirim email ke: $new_email dengan token: $token, type: email, link: $reset_link");
+                        if ($delivery_method === 'email') {
+                            // Kirim email
+                            $subject = $recovery_type === 'email' ? "Perubahan Email - SCHOBANK SYSTEM" : "Pemulihan " . ucfirst($recovery_type) . " - SCHOBANK SYSTEM";
+                            $greeting = "Yth. $nama,";
+                            $content = $recovery_type === 'email' ? 
+                                "Admin telah memulai proses perubahan email Anda. Silakan klik tombol di bawah untuk memasukkan email baru. Link ini akan kadaluarsa dalam 15 menit." :
+                                "Admin telah memulai proses pemulihan $recovery_type Anda. Silakan klik tombol di bawah untuk mengatur ulang $recovery_type Anda. Link ini akan kadaluarsa dalam 15 menit.";
+                            $button_text = $recovery_type === 'email' ? 'Ubah Email Sekarang' : 'Atur Ulang Sekarang';
+                            $html = generateEmailTemplate(
+                                $recovery_type === 'email' ? "Perubahan Email" : "Pemulihan " . ucfirst($recovery_type),
+                                $greeting,
+                                $content,
+                                $button_text,
+                                $reset_link
+                            );
 
-                        if (sendEmail($new_email, $nama, $subject, $html)) {
-                            $messages['success'] = "Link verifikasi telah dikirim ke email baru: $new_email.";
+                            error_log("Mengirim email ke: $email dengan token: $token, type: $recovery_type, link: $reset_link");
+
+                            if (sendEmail($email, $nama, $subject, $html)) {
+                                updateResetRequestTime($conn, $user_id, 'email', $recovery_type);
+                                $messages['success'] = "Link pemulihan telah dikirim ke email siswa.";
+                            } else {
+                                $messages['errors'][] = "Gagal mengirim email. Silakan coba lagi.";
+                            }
                         } else {
-                            $messages['errors'][] = "Gagal mengirim email ke email baru. Silakan coba lagi.";
+                            // Kirim WhatsApp
+                            $type_label = strtoupper($recovery_type === 'email' ? 'PERUBAHAN EMAIL' : $recovery_type);
+                            $action_text = $recovery_type === 'email' ? 
+                                "mengubah email akun Anda. Anda akan diminta untuk memasukkan email baru di halaman yang ditautkan" : 
+                                "mereset {$recovery_type}";
+                            $wa_message = "
+*📱 SCHOBANK SYSTEM - " . ($recovery_type === 'email' ? 'PERUBAHAN EMAIL' : 'RESET ' . strtoupper($recovery_type)) . "* 
+━━━━━━━━━━━━━━━━━━
+
+Halo, *{$nama}* 👋
+
+Kami menerima permintaan untuk $action_text. 
+
+*🔐 LINK " . ($recovery_type === 'email' ? 'VERIFIKASI' : 'RESET') . ":*
+{$reset_link}
+
+⏰ *PENTING*: Link ini akan *KADALUARSA* dalam 15 menit
+(sampai {$expire_time} WIB)
+
+🛡️ *KEAMANAN*: 
+Jika bukan Anda yang meminta pemulihan ini, abaikan pesan ini.
+
+━━━━━━━━━━━━━━━━━━
+_Pesan ini dikirim otomatis oleh sistem_
+*SCHOBANK* © " . date('Y') . "
+_Solusi Perbankan Digital Anda_
+";
+
+                            error_log("Mengirim WhatsApp ke: $no_wa dengan token: $token, type: $recovery_type, link: $reset_link");
+
+                            try {
+                                $response = sendWhatsAppMessage($no_wa, $wa_message);
+                                $response_data = json_decode($response, true);
+
+                                if (isset($response_data['status']) && $response_data['status'] === true) {
+                                    updateResetRequestTime($conn, $user_id, 'whatsapp', $recovery_type);
+                                    $masked_number = substr($no_wa, 0, 4) . "xxxx" . substr($no_wa, -4);
+                                    $messages['success'] = "Link pemulihan telah dikirim ke WhatsApp nomor {$masked_number}.";
+                                } else {
+                                    $messages['errors'][] = "Gagal mengirim pesan WhatsApp. Silakan coba lagi.";
+                                    error_log("WhatsApp API error: " . $response);
+                                }
+                            } catch (Exception $e) {
+                                $messages['errors'][] = "Gagal mengirim pesan WhatsApp. Silakan coba lagi.";
+                                error_log("WhatsApp error: " . $e->getMessage());
+                            }
                         }
                     } else {
                         $messages['errors'][] = "Gagal menyimpan token pemulihan.";
@@ -313,42 +478,34 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pemulihan Akun - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
+            --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
-            --shadow-sm: 0 0.125rem 0.625rem rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 0.3125rem 0.9375rem rgba(0, 0, 0, 0.1);
+            --bg-light: #f0f5ff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
-            --spacing-sm: 0.75rem;
-            --spacing-md: 1.25rem;
-            --spacing-lg: 2rem;
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            -webkit-text-size-adjust: 100%;
+            font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
             -webkit-user-select: none;
             user-select: none;
-        }
-
-        html {
-            -webkit-text-size-adjust: none;
-            -moz-text-size-adjust: none;
-            text-size-adjust: none;
         }
 
         body {
@@ -357,77 +514,54 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            font-size: clamp(0.875rem, 2.5vw, 1rem);
-            line-height: 1.5;
-            touch-action: pan-y !important; /* Allow vertical scrolling, block pinch-zoom */
-            zoom: 1 !important;
-            transform: scale(1) !important;
-            -webkit-text-size-adjust: 100% !important;
-            -webkit-tap-highlight-color: transparent;
-            overflow-y: auto; /* Enable vertical scrolling */
-            overflow-x: hidden; /* Disable horizontal scrolling */
-        }
-
-        button, input, select, textarea, a, .btn {
-            touch-action: none !important; /* Prevent zooming on interactive elements */
-            -webkit-text-size-adjust: 100% !important;
-            font-size: clamp(0.875rem, 2.5vw, 1rem) !important;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
-            padding: var(--spacing-md) var(--spacing-lg);
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            margin-bottom: var(--spacing-lg);
-        }
-
-        .top-nav h1 {
-            font-size: clamp(1.25rem, 3vw, 1.5rem);
-            font-weight: 600;
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: var(--spacing-sm);
+            padding: 10px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: clamp(2rem, 5vw, 2.5rem);
-            height: clamp(2rem, 5vw, 2.5rem);
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
         }
 
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-0.125rem);
+            transform: translateY(-2px);
         }
 
         .main-content {
             flex: 1;
-            padding: var(--spacing-lg);
+            padding: 20px;
             width: 100%;
-            max-width: 75rem;
+            max-width: 1200px;
             margin: 0 auto;
-            min-height: calc(100vh - 5rem); /* Ensure enough height for scrolling */
-            display: flex;
-            flex-direction: column;
-            padding-bottom: var(--spacing-lg); /* Add bottom padding for scrollable space */
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
-            padding: var(--spacing-lg);
-            border-radius: 0.9375rem;
-            margin-bottom: var(--spacing-lg);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
@@ -452,69 +586,92 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         @keyframes fadeInBanner {
-            from { opacity: 0; transform: translateY(-1.25rem); }
+            from { opacity: 0; transform: translateY(-20px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .welcome-banner h2 {
-            font-size: clamp(1.25rem, 3.5vw, 1.75rem);
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
-            gap: var(--spacing-sm);
+            gap: 10px;
             position: relative;
             z-index: 1;
         }
 
-        .form-card {
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .form-section {
             background: white;
-            border-radius: 0.9375rem;
-            padding: var(--spacing-lg);
+            border-radius: 15px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: var(--spacing-lg);
+            margin-bottom: 30px;
             animation: slideIn 0.5s ease-out;
         }
 
         @keyframes slideIn {
-            from { transform: translateY(-1.25rem); opacity: 0; }
+            from { transform: translateY(-20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
 
-        form {
+        .form-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .form-column {
+            flex: 1;
+            min-width: 300px;
             display: flex;
             flex-direction: column;
-            gap: var(--spacing-md);
+            gap: 20px;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: var(--spacing-sm);
+            gap: 8px;
             position: relative;
-            width: 100%;
         }
 
         label {
             font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.75rem, 1.8vw, 0.875rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        input[type="text"],
-        input[type="email"] {
+        input, select, textarea {
             width: 100%;
-            padding: var(--spacing-sm);
+            padding: 12px 15px;
             border: 1px solid #ddd;
-            border-radius: 0.625rem;
-            font-size: clamp(0.875rem, 2vw, 1rem);
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min-height: 44px;
             transition: var(--transition);
+            -webkit-user-select: text;
+            user-select: text;
             background-color: #fff;
         }
 
-        input[type="text"]:focus,
-        input[type="email"]:focus {
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.1875rem rgba(12, 77, 162, 0.1);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
         }
 
         .input-container {
@@ -524,116 +681,155 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         .input-prefix {
             position: absolute;
-            left: var(--spacing-sm);
+            left: 15px;
             top: 50%;
             transform: translateY(-50%);
             color: var(--text-secondary);
-            font-size: clamp(0.875rem, 2vw, 1rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             pointer-events: none;
+            font-weight: 500;
         }
 
         input.with-prefix {
             padding-left: 3rem;
         }
 
-        button[type="submit"],
+        .error-message {
+            color: var(--danger-color);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            margin-top: 4px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        select {
+            appearance: none;
+            position: relative;
+        }
+
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select-wrapper::after {
+            content: '\f078';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: var(--text-secondary);
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .method-selector {
+            display: flex;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+
+        .method-option {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            background: #f8f9fa;
+            color: var(--text-secondary);
+            border-right: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .method-option:last-child {
+            border-right: none;
+        }
+
+        .method-option.active {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            color: white;
+        }
+
+        .method-option.disabled {
+            background: #e9ecef;
+            color: #adb5bd;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: clamp(0.75rem, 1.5vw, 0.8rem);
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .form-group:hover .tooltip {
+            opacity: 1;
+        }
+
         .btn {
-            background: var(--primary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             border: none;
-            padding: var(--spacing-sm) var(--spacing-md);
-            border-radius: 0.625rem;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: clamp(0.875rem, 2vw, 1rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             transition: var(--transition);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-sm);
-            text-decoration: none;
-            justify-content: center;
+            position: relative;
         }
 
-        button[type="submit"]:hover,
         .btn:hover {
-            background: var(--primary-dark);
-            transform: translateY(-0.125rem);
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
-        .success-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
+        .btn:active {
+            transform: scale(0.95);
         }
 
-        @keyframes fadeInOverlay {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .success-modal {
-            background: white;
-            border-radius: 1.25rem;
-            padding: var(--spacing-lg);
-            text-align: center;
-            max-width: 90%;
-            width: clamp(18.75rem, 80vw, 28.125rem);
-            box-shadow: 0 0.9375rem 2.5rem rgba(0, 0, 0, 0.2);
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
-        }
-
-        @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .success-icon,
-        .error-icon {
-            font-size: clamp(3rem, 8vw, 4rem);
-            margin-bottom: var(--spacing-md);
-        }
-
-        .success-icon {
-            color: var(--secondary-color);
-        }
-
-        .error-icon {
-            color: var(--danger-color);
-        }
-
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: var(--spacing-md);
-            font-size: clamp(1.25rem, 3vw, 1.5rem);
-            font-weight: 600;
-        }
-
-        .success-modal p {
-            color: var(--text-secondary);
-            font-size: clamp(0.875rem, 2.2vw, 1rem);
-            margin-bottom: var(--spacing-md);
-            line-height: 1.5;
-        }
-
-        .loading {
+        .btn.loading {
             pointer-events: none;
             opacity: 0.7;
         }
 
-        .loading i {
-            animation: spin 1s linear infinite;
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        .btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            position: absolute;
+            animation: spin 1.5s linear infinite;
         }
 
         @keyframes spin {
@@ -641,96 +837,193 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             100% { transform: rotate(360deg); }
         }
 
-        select {
+        .form-buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
             width: 100%;
-            padding: var(--spacing-sm);
-            font-size: clamp(0.875rem, 2vw, 1rem);
-            color: #333;
-            background-color: #fff;
-            border: 1px solid #ccc;
-            border-radius: 0.625rem;
-            outline: none;
-            appearance: none;
-            background-image: url('data:image/svg+xml;utf8,<svg fill="%23333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
-            background-repeat: no-repeat;
-            background-position: right var(--spacing-sm) center;
-            background-size: 16px;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            cursor: pointer;
         }
 
-        select:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.1875rem rgba(12, 77, 162, 0.1);
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.65);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
+            cursor: default;
         }
 
-        select:hover {
-            border-color: #999;
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
-        select:invalid {
-            color: #999;
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
         }
 
-        select option {
-            color: #333;
+        .success-modal, .error-modal {
+            position: relative;
+            text-align: center;
+            width: clamp(300px, 80vw, 400px);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            border-radius: 15px;
+            padding: clamp(15px, 3vw, 20px);
+            box-shadow: var(--shadow-md);
+            transform: scale(0.7);
+            opacity: 0;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            cursor: default;
+        }
+
+        .error-modal {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+        }
+
+        .success-modal::before, .error-modal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.03); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon, .error-icon {
+            font-size: clamp(2.5rem, 5vw, 3rem);
+            margin: 0 auto 10px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+            color: white;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.25); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3, .error-modal h3 {
+            color: white;
+            margin: 0 0 10px;
+            font-size: clamp(1.1rem, 2.2vw, 1.2rem);
+            font-weight: 600;
+            animation: slideUpText 0.5s ease-out 0.2s both;
+        }
+
+        .success-modal p, .error-modal p {
+            color: white;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            margin: 0 0 15px;
+            line-height: 1.5;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         @media (max-width: 768px) {
             .top-nav {
-                padding: var(--spacing-sm) var(--spacing-md);
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
-                padding: var(--spacing-md);
-                min-height: calc(100vh - 4rem); /* Adjust for smaller nav */
+                padding: 15px;
             }
 
             .welcome-banner h2 {
-                font-size: clamp(1.125rem, 3vw, 1.5rem);
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
 
-            .form-card {
-                padding: var(--spacing-md);
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
-            button[type="submit"],
+            .form-container {
+                flex-direction: column;
+            }
+
+            .form-column {
+                min-width: 100%;
+            }
+
             .btn {
                 width: 100%;
+                justify-content: center;
+            }
+
+            .success-modal, .error-modal {
+                width: clamp(280px, 85vw, 360px);
+                padding: clamp(12px, 3vw, 15px);
+                margin: 10px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(2.3rem, 4.5vw, 2.5rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1rem, 2vw, 1.1rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             }
         }
 
         @media (max-width: 480px) {
             body {
-                font-size: clamp(0.75rem, 2.5vw, 0.875rem);
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
-            .top-nav h1 {
-                font-size: clamp(1rem, 2.5vw, 1.25rem);
+            .top-nav {
+                padding: 10px;
             }
 
             .welcome-banner {
-                padding: var(--spacing-md);
+                padding: 20px;
             }
 
-            .success-modal h3 {
-                font-size: clamp(1.125rem, 2.5vw, 1.25rem);
+            input, select, textarea {
+                min-height: 40px;
             }
 
-            .success-modal p {
-                font-size: clamp(0.75rem, 2vw, 0.875rem);
+            .success-modal, .error-modal {
+                width: clamp(260px, 90vw, 320px);
+                padding: clamp(10px, 2.5vw, 12px);
+                margin: 8px auto;
             }
 
-            select {
-                font-size: clamp(0.75rem, 2vw, 0.875rem);
-                padding: var(--spacing-sm);
+            .success-icon, .error-icon {
+                font-size: clamp(2rem, 4vw, 2.2rem);
             }
 
-            .main-content {
-                min-height: calc(100vh - 3.5rem); 
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(0.9rem, 1.9vw, 1rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.7rem, 1.6vw, 0.8rem);
             }
         }
     </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <nav class="top-nav">
@@ -738,248 +1031,381 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <i class="fas fa-xmark"></i>
         </button>
         <h1>SCHOBANK</h1>
-        <div style="width: clamp(2rem, 5vw, 2.5rem);"></div>
+        <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
             <h2>Pemulihan Akun Siswa</h2>
+            <p>Fitur ini memungkinkan admin untuk membantu siswa mengatur ulang kata sandi, PIN, username, atau memperbarui alamat email, memastikan akses akun yang aman dan terjamin.</p>
         </div>
 
-        <div class="success-overlay" id="popupModal" style="display: none;">
-            <div class="success-modal">
-                <div class="popup-icon">
-                    <i class="fas"></i>
-                </div>
-                <h3 class="popup-title"></h3>
-                <p class="popup-message"></p>
-            </div>
-        </div>
+        <div id="alertContainer"></div>
 
-        <div class="form-card">
-            <form method="POST" action="" id="recovery-form">
-                <div class="form-group">
-                    <label for="recovery_option">Pilih Jenis Pemulihan</label>
-                    <select id="recovery_option" name="recovery_option" required>
-                        <option value="" disabled selected>Pilih Opsi</option>
-                        <option value="reset">Reset Username/Password/PIN</option>
-                        <option value="email">Ubah Email</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="no_rekening">Nomor Rekening</label>
-                    <div class="input-container">
-                        <span class="input-prefix">REK</span>
-                        <input type="text" id="no_rekening" class="with-prefix" inputmode="numeric" pattern="[0-9]*" required placeholder="Masukkan 6 digit angka" maxlength="6" autocomplete="off">
-                        <input type="hidden" id="no_rekening_hidden" name="no_rekening">
+        <div class="form-section">
+            <form action="" method="POST" id="recoveryForm" class="form-container">
+                <div class="form-column">
+                    <div class="form-group">
+                        <label for="recovery_type">Jenis Pemulihan</label>
+                        <div class="select-wrapper">
+                            <select id="recovery_type" name="recovery_type" required>
+                                <option value="">Pilih Opsi</option>
+                                <option value="password">Reset Password</option>
+                                <option value="pin">Reset PIN</option>
+                                <option value="username">Reset Username</option>
+                                <option value="email">Ubah Email</option>
+                            </select>
+                            <span class="tooltip">Pilih jenis pemulihan yang diinginkan</span>
+                        </div>
+                        <span class="error-message" id="recovery_type-error"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="no_rekening">Nomor Rekening</label>
+                        <div class="input-container">
+                            <span class="input-prefix">REK</span>
+                            <input type="text" id="no_rekening" class="with-prefix" inputmode="numeric" pattern="[0-9]*" required placeholder="6 digit angka" maxlength="6" autocomplete="off">
+                            <input type="hidden" id="no_rekening_hidden" name="no_rekening">
+                            <span class="tooltip">Masukkan 6 digit angka nomor rekening</span>
+                        </div>
+                        <span class="error-message" id="no_rekening-error"></span>
                     </div>
                 </div>
-                <div class="form-group" id="reset_group" style="display: none;">
-                    <label for="recovery_type">Jenis Pemulihan</label>
-                    <select id="recovery_type" name="recovery_type">
-                        <option value="" disabled selected>Pilih Jenis</option>
-                        <option value="password">Password</option>
-                        <option value="pin">PIN</option>
-                        <option value="username">Username</option>
-                    </select>
+                <div class="form-column">
+                    <div class="form-group">
+                        <label for="delivery_method">Metode Pengiriman</label>
+                        <div class="method-selector">
+                            <div class="method-option active" data-method="email" id="email-option">
+                                <i class="fas fa-envelope"></i> Email
+                            </div>
+                            <div class="method-option" data-method="whatsapp" id="wa-option">
+                                <i class="fab fa-whatsapp"></i> WhatsApp
+                            </div>
+                        </div>
+                        <input type="hidden" id="delivery_method" name="delivery_method" value="email">
+                        <span class="error-message" id="delivery_method-error"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="alasan">Alasan Pemulihan</label>
+                        <div class="select-wrapper">
+                            <select id="alasan" name="alasan" required>
+                                <option value="">Pilih Alasan</option>
+                            </select>
+                            <span class="tooltip">Pilih alasan pemulihan</span>
+                        </div>
+                        <span class="error-message" id="alasan-error"></span>
+                    </div>
+                    <div class="form-group" id="custom_alasan_group" style="display: none;">
+                        <label for="custom_alasan">Alasan Lainnya</label>
+                        <textarea id="custom_alasan" name="custom_alasan" placeholder="Masukkan alasan lainnya"></textarea>
+                        <span class="tooltip">Masukkan alasan pemulihan secara rinci</span>
+                        <span class="error-message" id="custom_alasan-error"></span>
+                    </div>
                 </div>
-                <div class="form-group" id="email_group" style="display: none;">
-                    <label for="new_email">Email Baru</label>
-                    <input type="email" id="new_email" name="new_email" placeholder="Masukkan email baru">
+                <div class="form-buttons">
+                    <button type="submit" class="btn" id="submit-btn">
+                        <span class="btn-content">Kirim Permintaan</span>
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label for="alasan">Alasan Pemulihan</label>
-                    <select id="alasan" name="alasan" required>
-                        <option value="" disabled selected>Pilih Alasan</option>
-                        <option value="Lupa kata sandi">Lupa kata sandi</option>
-                        <option value="Lupa PIN">Lupa PIN</option>
-                        <option value="Lupa username">Lupa username</option>
-                        <option value="Perubahan email">Perubahan email</option>
-                        <option value="Lainnya">Lainnya</option>
-                    </select>
-                </div>
-                <button type="submit" id="submitBtn" class="btn">
-                    <i class="fas fa-paper-plane"></i> Kirim Permintaan
-                </button>
             </form>
         </div>
-        <div style="height: var(--spacing-lg);"></div> 
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
-        $(document).ready(function() {
-            
-            document.addEventListener('gesturestart', function(e) {
-                e.preventDefault();
+        document.addEventListener('DOMContentLoaded', function() {
+            // Prevent zooming and double-tap issues
+            document.addEventListener('touchstart', function(event) {
+                if (event.touches.length > 1) {
+                    event.preventDefault();
+                }
             }, { passive: false });
 
-            document.addEventListener('gesturechange', function(e) {
-                e.preventDefault();
-            }, { passive: false });
-
-            // Prevent double-tap zoom
             let lastTouchEnd = 0;
-            document.addEventListener('touchend', function(e) {
-                const now = Date.now();
+            document.addEventListener('touchend', function(event) {
+                const now = (new Date()).getTime();
                 if (now - lastTouchEnd <= 300) {
-                    e.preventDefault();
+                    event.preventDefault();
                 }
                 lastTouchEnd = now;
             }, { passive: false });
 
-            // Prevent browser zoom (Ctrl +/-, Cmd +/-)
-            document.addEventListener('wheel', function(e) {
-                if (e.ctrlKey || e.metaKey) {
-                    e.preventDefault();
+            document.addEventListener('wheel', function(event) {
+                if (event.ctrlKey) {
+                    event.preventDefault();
                 }
             }, { passive: false });
 
-            document.addEventListener('keydown', function(e) {
-                if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '=')) {
-                    e.preventDefault();
-                }
+            document.addEventListener('dblclick', function(event) {
+                event.preventDefault();
             }, { passive: false });
 
-            // Toggle reset/email groups based on recovery option
-            $('#recovery_option').on('change', function() {
-                $('#reset_group').css('display', this.value === 'reset' ? 'block' : 'none');
-                $('#email_group').css('display', this.value === 'email' ? 'block' : 'none');
-                if (this.value === 'reset') {
-                    $('#recovery_type').prop('required', true);
-                    $('#new_email').prop('required', false);
-                } else if (this.value === 'email') {
-                    $('#new_email').prop('required', true);
-                    $('#recovery_type').prop('required', false);
+            // Initialize reason options on page load
+            updateReasonOptions('');
+
+            // Toggle delivery method and reasons on recovery type change
+            $('#recovery_type').on('change', function() {
+                const value = this.value;
+                updateReasonOptions(value);
+                updateDeliveryMethod(value);
+                $('#alasan-error, #custom_alasan-error').removeClass('show').text('');
+            });
+
+            // Toggle custom reason input
+            $('#alasan').on('change', function() {
+                const isCustom = this.value === 'Lainnya';
+                $('#custom_alasan_group').toggle(isCustom);
+                $('#custom_alasan').prop('required', isCustom);
+                $('#alasan-error, #custom_alasan-error').removeClass('show').text('');
+            });
+
+            // Handle delivery method selection
+            $('.method-option').on('click', function() {
+                if (!$(this).hasClass('disabled')) {
+                    $('.method-option').removeClass('active');
+                    $(this).addClass('active');
+                    $('#delivery_method').val($(this).data('method'));
+                    $('#delivery_method-error').removeClass('show').text('');
                 }
             });
 
-            // Handle no_rekening input formatting
-            $('#no_rekening').on('input', function() {
-                let value = $(this).val().replace(/[^0-9]/g, ''); // Only allow numbers
-                if (value.length > 6) {
-                    value = value.slice(0, 6); // Limit to 6 digits
-                }
+            // Handle no_rekening input
+            $('#no_rekening').on('input paste', function(e) {
+                let value = $(this).val().replace(/[^0-9]/g, '');
+                if (value.length > 6) value = value.slice(0, 6);
                 $(this).val(value);
-                // Update hidden input for form submission
-                $('#no_rekening_hidden').val('REK' + value);
+                $('#no_rekening_hidden').val(value ? 'REK' + value : '');
+                $('#no_rekening-error').removeClass('show').text('');
             });
 
-            // Show alert popup
-            function showAlert(message, type) {
-                const popupModal = $('#popupModal');
-                popupModal.find('.popup-title').text(type === 'success' ? 'BERHASIL' : 'PERINGATAN');
-                popupModal.find('.popup-message').text(message);
-                popupModal.find('.popup-icon')
-                    .removeClass('success-icon error-icon')
-                    .addClass(type === 'success' ? 'success-icon' : 'error-icon')
-                    .find('i')
-                    .removeClass('fa-check-circle fa-exclamation-circle')
-                    .addClass(type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle');
-                popupModal.fadeIn(300);
-                setTimeout(() => {
-                    popupModal.fadeOut(300, () => {
-                        if (type === 'success') {
-                            $('#recovery-form')[0].reset();
-                            $('#reset_group, #email_group').hide();
-                            $('#recovery_option').val('').focus();
-                            $('#no_rekening_hidden').val('');
-                        }
-                    });
-                }, 3000);
-            }
+            // Function to update reason options
+            function updateReasonOptions(recovery_type) {
+                const alasanSelect = $('#alasan');
+                alasanSelect.empty().append('<option value="">Pilih Alasan</option>');
 
-            // Show loading spinner
-            function showLoadingSpinner(button) {
-                console.log('[DEBUG] Showing loading spinner for button:', button.attr('id'));
-                const originalContent = button.html();
-                button.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
-                return {
-                    restore: () => {
-                        button.html(originalContent).prop('disabled', false);
-                    }
+                const reasons = {
+                    'password': ['Lupa kata sandi', 'Keamanan akun', 'Lainnya'],
+                    'pin': ['Lupa PIN', 'Keamanan akun', 'Lainnya'],
+                    'username': ['Lupa username', 'Perubahan identitas', 'Lainnya'],
+                    'email': ['Perubahan email', 'Email lama tidak aktif', 'Lupa email', 'Lainnya'],
+                    '': ['Lainnya']
                 };
+
+                const selectedReasons = reasons[recovery_type] || ['Lainnya'];
+                selectedReasons.forEach(reason => {
+                    const option = new Option(reason, reason);
+                    alasanSelect.append(option);
+                });
+
+                alasanSelect.val('');
+                $('#custom_alasan_group').hide();
+                $('#custom_alasan').val('').prop('required', false);
+                console.log(`Updated reasons for recovery_type: ${recovery_type}, options: ${selectedReasons.join(', ')}`);
             }
 
-            // Form submission with AJAX
-            $('#recovery-form').on('submit', function(e) {
-                e.preventDefault();
-                const button = $('#submitBtn');
-                console.log('[DEBUG] Recovery form submission');
+            // Function to update delivery method
+            function updateDeliveryMethod(recovery_type) {
+                if (recovery_type === 'email') {
+                    $('#email-option').addClass('disabled').removeClass('active');
+                    $('#wa-option').addClass('active').removeClass('disabled');
+                    $('#delivery_method').val('whatsapp');
+                } else {
+                    $('#email-option').removeClass('disabled');
+                    $('#wa-option').removeClass('disabled');
+                    // Default to email if not already set
+                    if (!$('#delivery_method').val()) {
+                        $('#email-option').addClass('active');
+                        $('#wa-option').removeClass('active');
+                        $('#delivery_method').val('email');
+                    }
+                }
+            }
 
-                const recoveryOption = $('#recovery_option').val();
-                const noRekening = $('#no_rekening').val().trim();
-                const recoveryType = $('#recovery_type').val();
-                const newEmail = $('#new_email').val().trim();
-                const alasan = $('#alasan').val();
-
-                // Client-side validation
-                if (!recoveryOption) {
-                    showAlert('Harap pilih jenis pemulihan.', 'error');
-                    return;
-                }
-                if (!noRekening) {
-                    showAlert('Nomor rekening harus diisi.', 'error');
-                    return;
-                }
-                if (!/^\d{6}$/.test(noRekening)) {
-                    showAlert('Nomor rekening harus 6 digit angka.', 'error');
-                    return;
-                }
-                if (recoveryOption === 'reset' && !recoveryType) {
-                    showAlert('Harap pilih jenis pemulihan (password/pin/username).', 'error');
-                    return;
-                }
-                if (recoveryOption === 'email' && !newEmail) {
-                    showAlert('Email baru harus diisi.', 'error');
-                    return;
-                }
-                if (!alasan) {
-                    showAlert('Harap pilih alasan pemulihan.', 'error');
-                    return;
-                }
-
-                const spinner = showLoadingSpinner(button);
-
-                $.ajax({
-                    url: window.location.href,
-                    method: 'POST',
-                    data: $(this).serialize(),
-                    dataType: 'json',
-                    success: function(response) {
-                        spinner.restore();
-                        console.log('[DEBUG] Recovery submission response:', response);
-                        if (response.success) {
-                            showAlert(response.success, 'success');
-                        } else if (response.errors && response.errors.length > 0) {
-                            showAlert(response.errors.join(' '), 'error');
-                        } else {
-                            showAlert('Terjadi kesalahan. Silakan coba lagi.', 'error');
-                        }
-                    },
-                    error: function(xhr, status, error) {
-                        spinner.restore();
-                        console.error('[DEBUG] Recovery AJAX error:', status, error, xhr.responseText);
-                        showAlert('Gagal memproses permintaan. Periksa koneksi atau coba lagi.', 'error');
+            // Alert function
+            function showAlert(message, type) {
+                const alertContainer = document.getElementById('alertContainer');
+                const existingAlerts = alertContainer.querySelectorAll('.modal-overlay');
+                existingAlerts.forEach(alert => {
+                    alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => alert.remove(), 500);
+                });
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'modal-overlay';
+                alertDiv.innerHTML = `
+                    <div class="${type}-modal">
+                        <div class="${type}-icon">
+                            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                        </div>
+                        <h3>${type === 'success' ? 'Berhasil' : 'Gagal'}</h3>
+                        <p>${message}</p>
+                    </div>
+                `;
+                alertContainer.appendChild(alertDiv);
+                setTimeout(() => closeModal(alertDiv.id), 5000);
+                alertDiv.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('modal-overlay')) {
+                        closeModal(alertDiv.id);
                     }
                 });
-            });
+                alertDiv.id = 'alert-' + Date.now();
+            }
+
+            // Modal close handling
+            function closeModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => modal.remove(), 500);
+                }
+            }
+
+            // Form submission handling
+            const recoveryForm = document.getElementById('recoveryForm');
+            const submitBtn = document.getElementById('submit-btn');
+
+            if (recoveryForm && submitBtn) {
+                recoveryForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    if (recoveryForm.classList.contains('submitting')) return;
+                    recoveryForm.classList.add('submitting');
+
+                    const data = {
+                        recovery_type: $('#recovery_type').val().trim(),
+                        no_rekening: $('#no_rekening_hidden').val().trim(),
+                        delivery_method: $('#delivery_method').val().trim(),
+                        alasan: $('#alasan').val().trim(),
+                        custom_alasan: $('#custom_alasan').val().trim()
+                    };
+
+                    // Client-side validation
+                    let isValid = true;
+
+                    if (!data.recovery_type) {
+                        $('#recovery_type-error').text('Harap pilih jenis pemulihan.').addClass('show');
+                        $('#recovery_type').focus();
+                        isValid = false;
+                    } else {
+                        $('#recovery_type-error').removeClass('show').text('');
+                    }
+
+                    if (!data.no_rekening) {
+                        $('#no_rekening-error').text('Nomor rekening harus diisi.').addClass('show');
+                        $('#no_rekening').focus();
+                        isValid = false;
+                    } else if (!/^REK\d{6}$/.test(data.no_rekening)) {
+                        $('#no_rekening-error').text('Nomor rekening harus berformat REK diikuti 6 digit angka.').addClass('show');
+                        $('#no_rekening').focus();
+                        isValid = false;
+                    } else {
+                        $('#no_rekening-error').removeClass('show').text('');
+                    }
+
+                    if (!data.delivery_method) {
+                        $('#delivery_method-error').text('Harap pilih metode pengiriman.').addClass('show');
+                        isValid = false;
+                    } else if (data.recovery_type === 'email' && data.delivery_method !== 'whatsapp') {
+                        $('#delivery_method-error').text('Pemulihan email hanya dapat dikirim melalui WhatsApp.').addClass('show');
+                        isValid = false;
+                    } else {
+                        $('#delivery_method-error').removeClass('show').text('');
+                    }
+
+                    if (!data.alasan) {
+                        $('#alasan-error').text('Harap pilih alasan pemulihan.').addClass('show');
+                        $('#alasan').focus();
+                        isValid = false;
+                    } else if (data.alasan === 'Lainnya' && !data.custom_alasan) {
+                        $('#custom_alasan-error').text('Harap masukkan alasan lainnya.').addClass('show');
+                        $('#custom_alasan').focus();
+                        isValid = false;
+                    } else {
+                        $('#alasan-error, #custom_alasan-error').removeClass('show').text('');
+                    }
+
+                    if (!isValid) {
+                        recoveryForm.classList.remove('submitting');
+                        return;
+                    }
+
+                    submitBtn.classList.add('loading');
+                    submitBtn.innerHTML = '<span class="btn-content"><i class="fas fa-spinner"></i> Memproses...</span>';
+
+                    $.ajax({
+                        url: window.location.href,
+                        method: 'POST',
+                        data: data,
+                        dataType: 'json',
+                        timeout: 10000,
+                        success: (response) => {
+                            submitBtn.classList.remove('loading');
+                            submitBtn.innerHTML = '<span class="btn-content">Kirim Permintaan</span>';
+                            recoveryForm.classList.remove('submitting');
+
+                            if (response.success) {
+                                showAlert(response.success, 'success');
+                                setTimeout(() => {
+                                    $('#recoveryForm')[0].reset();
+                                    $('#custom_alasan_group').hide();
+                                    $('#recovery_type').val('').focus();
+                                    $('#no_rekening_hidden').val('');
+                                    $('#alasan, #custom_alasan').val('');
+                                    $('.method-option').removeClass('active disabled');
+                                    $('#email-option').addClass('active');
+                                    $('#wa-option').removeClass('active');
+                                    $('#delivery_method').val('email');
+                                    updateReasonOptions('');
+                                    updateDeliveryMethod('');
+                                }, 3000);
+                            } else if (response.errors && response.errors.length) {
+                                showAlert(response.errors.join(' '), 'error');
+                            } else {
+                                showAlert('Terjadi kesalahan tidak diketahui. Silakan coba lagi.', 'error');
+                            }
+                        },
+                        error: (xhr, status, error) => {
+                            submitBtn.classList.remove('loading');
+                            submitBtn.innerHTML = '<span class="btn-content">Kirim Permintaan</span>';
+                            recoveryForm.classList.remove('submitting');
+                            let errorMessage = 'Gagal memproses permintaan. Periksa koneksi atau coba lagi.';
+                            if (status === 'timeout') {
+                                errorMessage = 'Permintaan terlalu lama. Silakan coba lagi.';
+                            } else if (xhr.status === 500) {
+                                errorMessage = 'Kesalahan server. Silakan coba lagi atau hubungi dukungan.';
+                            }
+                            showAlert(errorMessage, 'error');
+                            console.error("AJAX error: status=" + status + ", error=" + error + ", response=" + xhr.responseText);
+                        }
+                    });
+                });
+            }
 
             // Handle session messages
             <?php if ($messages['success'] || !empty($messages['errors'])): ?>
-                <?php if ($messages['success']): ?>
-                    showAlert('<?php echo addslashes($messages['success']); ?>', 'success');
-                <?php elseif (!empty($messages['errors'])): ?>
-                    showAlert('<?php echo addslashes(implode(' ', $messages['errors'])); ?>', 'error');
-                <?php endif; ?>
+                $(window).on('load', function() {
+                    <?php if ($messages['success']): ?>
+                        showAlert('<?php echo addslashes($messages['success']); ?>', 'success');
+                    <?php elseif (!empty($messages['errors'])): ?>
+                        showAlert('<?php echo addslashes(implode(' ', $messages['errors'])); ?>', 'error');
+                    <?php endif; ?>
+                });
             <?php endif; ?>
 
-            // Close popup when clicking outside
-            $('.success-overlay').on('click', function(e) {
-                if ($(e.target).hasClass('success-overlay')) {
-                    $(this).fadeOut(300);
+            // Prevent text selection on double-click
+            document.addEventListener('mousedown', function(e) {
+                if (e.detail > 1) {
+                    e.preventDefault();
                 }
             });
+
+            // Keyboard accessibility
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
+                    recoveryForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
+            // Fix touch issues in Safari
+            document.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
         });
     </script>
 </body>

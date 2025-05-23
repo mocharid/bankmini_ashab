@@ -102,13 +102,25 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
         exit();
     }
 
+    // Check for duplicate jurusan name before showing confirmation
+    $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ?";
+    $check_stmt = $conn->prepare($check_query);
+    $check_stmt->bind_param("s", $nama_jurusan);
+    $check_stmt->execute();
+    $result = $check_stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        header('Location: tambah_jurusan.php?error=' . urlencode("Jurusan sudah ada!"));
+        exit();
+    }
+
     if (!isset($_POST['confirm'])) {
         // Show confirmation modal
         header('Location: tambah_jurusan.php?confirm=1&nama=' . urlencode($nama_jurusan));
         exit();
     }
 
-    // Process confirmed submission
+    // Process confirmed submission (redundant check for safety)
     $check_query = "SELECT id FROM jurusan WHERE nama_jurusan = ?";
     $check_stmt = $conn->prepare($check_query);
     $check_stmt->bind_param("s", $nama_jurusan);
@@ -145,7 +157,6 @@ $stmt->bind_param("ii", $items_per_page, $offset);
 $stmt->execute();
 $result = $stmt->get_result();
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -156,23 +167,18 @@ $result = $stmt->get_result();
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
+            --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
+            --bg-light: #f0f5ff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
-            --setor-bg: #dcfce7;
-            --tarik-bg: #fee2e2;
-            --net-positive-bg: #dcfce7;
-            --net-negative-bg: #fee2e2;
         }
 
         * {
@@ -191,32 +197,32 @@ $result = $stmt->get_result();
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
-            padding: 12px 20px;
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            font-size: clamp(1.1rem, 2vw, 1.25rem);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 8px;
+            padding: 10px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
         }
 
@@ -227,18 +233,18 @@ $result = $stmt->get_result();
 
         .main-content {
             flex: 1;
-            padding: 15px;
+            padding: 20px;
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 25px;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
@@ -268,21 +274,28 @@ $result = $stmt->get_result();
         }
 
         .welcome-banner h2 {
-            margin-bottom: 8px;
-            font-size: clamp(1.3rem, 2.5vw, 1.6rem);
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             position: relative;
             z-index: 1;
         }
 
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
         .form-card {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 15px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: 25px;
+            margin-bottom: 30px;
             animation: slideIn 0.5s ease-out;
         }
 
@@ -294,27 +307,27 @@ $result = $stmt->get_result();
         form {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 20px;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
 
         label {
             font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         input[type="text"] {
             width: 100%;
-            padding: 10px 12px;
+            padding: 12px 15px;
             border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
         }
 
@@ -322,29 +335,32 @@ $result = $stmt->get_result();
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.01);
+            transform: scale(1.02);
         }
 
         .btn {
-            background-color: var(--primary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
+            gap: 8px;
             transition: var(--transition);
-            width: auto;
-            max-width: 180px;
+            width: 200px;
+            margin: 0 auto;
+            position: relative;
         }
 
         .btn:hover {
-            background-color: var(--primary-dark);
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
         .btn:active {
@@ -352,49 +368,82 @@ $result = $stmt->get_result();
         }
 
         .btn-edit {
-            background-color: var(--secondary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            padding: 8px 12px;
+            width: auto;
+            min-width: 70px;
         }
 
         .btn-edit:hover {
-            background-color: var(--secondary-dark);
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
         }
 
         .btn-delete {
-            background-color: var(--danger-color);
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+            padding: 8px 12px;
+            width: auto;
+            min-width: 70px;
         }
 
         .btn-delete:hover {
-            background-color: #d32f2f;
+            background: linear-gradient(135deg, #d32f2f 0%, var(--danger-color) 100%);
         }
 
         .btn-cancel {
-            background-color: #f0f0f0;
+            background: #f0f0f0;
             color: var(--text-secondary);
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-            transition: var(--transition);
+            padding: 12px 25px;
         }
 
         .btn-cancel:hover {
-            background-color: #e0e0e0;
+            background: #e0e0e0;
             transform: translateY(-2px);
         }
 
         .btn-confirm {
-            background-color: var(--secondary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            padding: 12px 25px;
         }
 
         .btn-confirm:hover {
-            background-color: var(--secondary-dark);
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
+        }
+
+        .btn-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        .btn.loading::after {
+            content: '\f110'; /* Font Awesome spinner icon */
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            position: absolute;
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .jurusan-list {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 15px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
             transition: var(--transition);
         }
@@ -405,12 +454,12 @@ $result = $stmt->get_result();
         }
 
         .jurusan-list h3 {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             color: var(--primary-dark);
-            font-size: clamp(1rem, 2vw, 1.15rem);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         table {
@@ -419,15 +468,15 @@ $result = $stmt->get_result();
         }
 
         th, td {
-            padding: 10px 12px;
+            padding: 12px 15px;
             text-align: left;
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-            min-width: 70px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            min-width: 80px;
             border-bottom: 1px solid #eee;
         }
 
         th {
-            background: var(--primary-light);
+            background: var(--bg-light);
             color: var(--text-secondary);
             font-weight: 600;
         }
@@ -446,51 +495,64 @@ $result = $stmt->get_result();
         }
 
         tr:hover {
-            background-color: #f8faff;
+            background-color: var(--bg-light);
         }
 
         .total-siswa {
-            background: var(--primary-light);
+            background: var(--bg-light);
             color: var(--primary-dark);
-            padding: 4px 8px;
-            border-radius: 10px;
-            font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+            padding: 6px 10px;
+            border-radius: 12px;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             font-weight: 500;
         }
 
         .action-buttons {
             display: flex;
-            gap: 8px;
+            gap: 5px;
+            justify-content: flex-start;
+        }
+
+        .action-buttons .btn {
+            margin: 0;
+            padding: 6px 10px;
+            min-width: auto;
+            width: auto;
+            font-size: 0.85rem;
+        }
+
+        .action-buttons .btn i {
+            margin-right: 4px;
         }
 
         .pagination {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 8px;
-            margin-top: 20px;
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            gap: 10px;
+            margin-top: 25px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         .pagination a {
             text-decoration: none;
-            padding: 8px 12px;
-            border-radius: 8px;
+            padding: 10px 15px;
+            border-radius: 10px;
             color: var(--text-primary);
             background-color: #f0f0f0;
             transition: var(--transition);
         }
 
         .pagination a:hover {
-            background-color: var(--primary-light);
+            background-color: var(--bg-light);
             color: var(--primary-dark);
             transform: translateY(-2px);
         }
 
         .pagination .current-page {
-            padding: 8px 12px;
-            border-radius: 8px;
-            background-color: var(--primary-color);
+            padding: 10px 15px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             font-weight: 500;
         }
@@ -517,33 +579,27 @@ $result = $stmt->get_result();
 
         .modal-content {
             background: white;
-            padding: 20px;
-            border-radius: 12px;
+            padding: 25px;
+            border-radius: 15px;
             width: 90%;
-            max-width: 450px;
+            max-width: 500px;
             box-shadow: var(--shadow-md);
             animation: slideIn 0.5s ease-out;
         }
 
         .modal-title {
-            font-size: clamp(1rem, 2vw, 1.15rem);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
             color: var(--primary-dark);
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         .modal p {
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             color: var(--text-secondary);
-            margin-bottom: 15px;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
+            margin-bottom: 20px;
         }
 
         .success-overlay {
@@ -552,7 +608,7 @@ $result = $stmt->get_result();
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.65);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -571,74 +627,99 @@ $result = $stmt->get_result();
             to { opacity: 0; }
         }
 
-        .success-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
-            border-radius: 16px;
-            padding: 30px;
-            text-align: center;
-            max-width: 90%;
-            width: 400px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+        .success-modal, .error-modal {
             position: relative;
-            overflow: hidden;
-            transform: scale(0.5);
+            text-align: center;
+            width: clamp(350px, 85vw, 450px);
+            border-radius: 15px;
+            padding: clamp(30px, 5vw, 40px);
+            box-shadow: var(--shadow-md);
+            transform: scale(0.7);
             opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            overflow: hidden;
+        }
+
+        .success-modal {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+        }
+
+        .error-modal {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+        }
+
+        .success-modal::before, .error-modal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
         }
 
         @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.03); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-icon {
-            font-size: clamp(3rem, 6vw, 4rem);
-            color: var(--secondary-color);
-            margin-bottom: 20px;
-            animation: bounceIn 0.6s ease-out;
+        .success-icon, .error-icon {
+            font-size: clamp(3.8rem, 8vw, 4.8rem);
+            margin: 0 auto 20px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
             filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        .success-icon {
+            color: white;
+        }
+
+        .error-icon {
+            color: white;
         }
 
         @keyframes bounceIn {
             0% { transform: scale(0); opacity: 0; }
-            50% { transform: scale(1.2); }
+            50% { transform: scale(1.25); }
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: 12px;
-            font-size: clamp(1.25rem, 2.5vw, 1.4rem);
-            animation: slideUpText 0.5s ease-out 0.2s both;
+        .success-modal h3, .error-modal h3 {
+            color: white;
+            margin: 0 0 20px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
             font-weight: 600;
+            animation: slideUpText 0.5s ease-out 0.2s both;
         }
 
-        .success-modal p {
-            color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            margin-bottom: 20px;
+        .success-modal p, .error-modal p {
+            color: white;
+            font-size: clamp(0.95rem, 2.3vw, 1.05rem);
+            margin: 0 0 25px;
+            line-height: 1.6;
             animation: slideUpText 0.5s ease-out 0.3s both;
-            line-height: 1.5;
         }
 
         @keyframes slideUpText {
-            from { transform: translateY(20px); opacity: 0; }
+            from { transform: translateY(15px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
 
         .modal-content-confirm {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 14px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 25px;
         }
 
         .modal-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .modal-row:last-child {
@@ -647,82 +728,84 @@ $result = $stmt->get_result();
 
         .modal-label {
             font-weight: 500;
-            color: var(--text-secondary);
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            color: white;
+            font-size: clamp(0.9rem, 2.2vw, 1rem);
         }
 
         .modal-value {
             font-weight: 600;
-            color: var(--text-primary);
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            color: white;
+            font-size: clamp(0.9rem, 2.2vw, 1rem);
         }
 
         .modal-buttons {
             display: flex;
-            gap: 12px;
+            gap: 15px;
             justify-content: center;
-            margin-top: 15px;
+            margin-top: 20px;
         }
 
-        .loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .loading i {
-            animation: spin 1.5s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .modal-buttons .btn {
+            width: 140px;
         }
 
         .no-data {
             text-align: center;
-            padding: 25px;
+            padding: 30px;
             color: var(--text-secondary);
             animation: slideIn 0.5s ease-out;
         }
 
         .no-data i {
-            font-size: clamp(1.8rem, 3.5vw, 2rem);
+            font-size: clamp(2rem, 4vw, 2.2rem);
             color: #d1d5db;
-            margin-bottom: 12px;
+            margin-bottom: 15px;
         }
 
         .no-data p {
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         @media (max-width: 768px) {
             .top-nav {
-                padding: 12px;
-                font-size: clamp(1rem, 2vw, 1.15rem);
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
-                padding: 12px;
-            }
-
-            .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.5vw, 1.4rem);
-            }
-
-            .form-card, .jurusan-list {
                 padding: 15px;
             }
 
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
+            }
+
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .form-card, .jurusan-list {
+                padding: 20px;
+            }
+
             form {
-                gap: 12px;
+                gap: 15px;
             }
 
             .btn {
                 width: 100%;
-                max-width: none;
-                justify-content: center;
-                padding: 8px 15px;
-                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+                max-width: 300px;
+            }
+
+            .btn-edit, .btn-delete {
+                padding: 6px 10px;
+                min-width: 65px;
+                font-size: 0.8rem;
+            }
+
+            .action-buttons {
+                gap: 5px;
+                justify-content: flex-start;
             }
 
             table {
@@ -732,43 +815,57 @@ $result = $stmt->get_result();
             }
 
             th, td {
-                padding: 8px 10px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            }
-
-            .action-buttons {
-                flex-direction: column;
-                gap: 4px;
+                padding: 10px 12px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
 
             .modal-content {
-                margin: 12px;
-                width: calc(100% - 24px);
-                padding: 15px;
+                margin: 15px;
+                width: calc(100% - 30px);
+                padding: 20px;
             }
 
             .modal-buttons {
-                flex-direction: column;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 10px;
             }
 
-            .success-modal {
-                width: 90%;
-                padding: 25px;
+            .modal-buttons .btn {
+                width: 140px;
+            }
+
+            .success-modal, .error-modal {
+                width: clamp(330px, 90vw, 440px);
+                padding: clamp(25px, 5vw, 35px);
+                margin: 15px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.5rem, 7vw, 4.5rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1.3rem, 2.8vw, 1.5rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.9rem, 2.2vw, 1rem);
             }
 
             .pagination {
-                gap: 6px;
+                gap: 8px;
             }
 
             .pagination a, .pagination .current-page {
-                padding: 6px 10px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+                padding: 8px 12px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
         }
 
         @media (max-width: 480px) {
             body {
-                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
             .top-nav {
@@ -776,23 +873,62 @@ $result = $stmt->get_result();
             }
 
             .welcome-banner {
-                padding: 15px;
+                padding: 20px;
             }
 
             .jurusan-list h3 {
-                font-size: clamp(0.95rem, 2vw, 1.05rem);
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .no-data i {
-                font-size: clamp(1.6rem, 3.5vw, 1.8rem);
+                font-size: clamp(1.8rem, 3.5vw, 2rem);
             }
 
-            .success-modal h3 {
-                font-size: clamp(1.15rem, 2.5vw, 1.25rem);
+            .btn-edit, .btn-delete {
+                padding: 5px 8px;
+                min-width: 60px;
+                font-size: 0.75rem;
             }
 
-            .success-modal p {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            .action-buttons {
+                gap: 4px;
+                justify-content: flex-start;
+            }
+
+            .action-buttons .btn i {
+                margin-right: 3px;
+                font-size: 0.7rem;
+            }
+
+            .success-modal, .error-modal {
+                width: clamp(310px, 92vw, 380px);
+                padding: clamp(20px, 4vw, 30px);
+                margin: 10px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.2rem, 6.5vw, 4rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1.2rem, 2.7vw, 1.4rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.85rem, 2.1vw, 0.95rem);
+            }
+
+            .modal-content-confirm {
+                padding: 12px;
+                gap: 12px;
+            }
+
+            .modal-row {
+                padding: 10px 0;
+            }
+
+            .modal-buttons .btn {
+                width: 120px;
             }
         }
     </style>
@@ -810,7 +946,8 @@ $result = $stmt->get_result();
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2><i class="fas fa-plus-circle"></i> Tambah Jurusan</h2>
+            <h2>Tambah Jurusan</h2>
+            <p>Kelola data jurusan untuk sistem SCHOBANK</p>
         </div>
 
         <!-- Form Section -->
@@ -822,8 +959,7 @@ $result = $stmt->get_result();
                            placeholder="Masukkan nama jurusan">
                 </div>
                 <button type="submit" class="btn" id="submit-btn">
-                    <i class="fas fa-plus"></i>
-                    Tambah Jurusan
+                    <span class="btn-content"> Tambah </span>
                 </button>
             </form>
         </div>
@@ -858,13 +994,11 @@ $result = $stmt->get_result();
                                     <div class="action-buttons">
                                         <button type="button" class="btn btn-edit" 
                                                 onclick="showEditModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_jurusan'], ENT_QUOTES); ?>')">
-                                            <i class="fas fa-edit"></i>
-                                            Edit
+                                            <i class="fas fa-edit"></i> Edit
                                         </button>
                                         <button type="button" class="btn btn-delete" 
-                                                onclick="deleteJurusan(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_jurusan'], ENT_QUOTES); ?>')">
-                                            <i class="fas fa-trash"></i>
-                                            Hapus
+                                                onclick="showDeleteModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['nama_jurusan'], ENT_QUOTES); ?>')">
+                                            <i class="fas fa-trash"></i> Hapus
                                         </button>
                                     </div>
                                 </td>
@@ -902,20 +1036,15 @@ $result = $stmt->get_result();
                         <i class="fas fa-graduation-cap"></i>
                     </div>
                     <h3>Konfirmasi Jurusan Baru</h3>
-                    <div class="modal-content-confirm">
-                        <div class="modal-row">
-                            <span class="modal-label">Nama Jurusan</span>
-                            <span class="modal-value"><?php echo htmlspecialchars(urldecode($_GET['nama'])); ?></span>
-                        </div>
-                    </div>
+                    <p><?php echo htmlspecialchars(urldecode($_GET['nama'])); ?></p>
                     <form action="" method="POST" id="confirm-form">
                         <input type="hidden" name="nama_jurusan" value="<?php echo htmlspecialchars(urldecode($_GET['nama'])); ?>">
                         <div class="modal-buttons">
                             <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
-                                <i class="fas fa-check"></i> Konfirmasi
+                                <span class="btn-content"><i class="fas fa-check"></i> Konfirmasi</span>
                             </button>
                             <button type="button" class="btn btn-cancel" onclick="window.location.href='tambah_jurusan.php'">
-                                <i class="fas fa-times"></i> Batal
+                                <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
                             </button>
                         </div>
                     </form>
@@ -930,7 +1059,7 @@ $result = $stmt->get_result();
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
-                    <h3>BERHASIL</h3>
+                    <h3>Berhasil</h3>
                     <p>Jurusan berhasil ditambahkan!</p>
                 </div>
             </div>
@@ -943,7 +1072,7 @@ $result = $stmt->get_result();
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
-                    <h3>BERHASIL</h3>
+                    <h3>Berhasil</h3>
                     <p>Jurusan berhasil diupdate!</p>
                 </div>
             </div>
@@ -956,7 +1085,7 @@ $result = $stmt->get_result();
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
-                    <h3>BERHASIL</h3>
+                    <h3>Berhasil</h3>
                     <p>Jurusan berhasil dihapus!</p>
                 </div>
             </div>
@@ -965,11 +1094,11 @@ $result = $stmt->get_result();
         <!-- Error Modal -->
         <?php if (isset($_GET['error'])): ?>
             <div class="success-overlay" id="errorModal">
-                <div class="success-modal">
-                    <div class="success-icon" style="color: var(--danger-color);">
+                <div class="error-modal">
+                    <div class="error-icon">
                         <i class="fas fa-exclamation-circle"></i>
                     </div>
-                    <h3>GAGAL</h3>
+                    <h3>Gagal</h3>
                     <p><?php echo htmlspecialchars(urldecode($_GET['error'])); ?></p>
                 </div>
             </div>
@@ -980,8 +1109,7 @@ $result = $stmt->get_result();
     <div id="editModal" class="modal">
         <div class="modal-content">
             <div class="modal-title">
-                <i class="fas fa-edit"></i>
-                Edit Jurusan
+                <i class="fas fa-edit"></i> Edit Jurusan
             </div>
             <form id="editForm" method="POST" action="">
                 <input type="hidden" name="edit_id" id="edit_id">
@@ -990,10 +1118,11 @@ $result = $stmt->get_result();
                     <input type="text" id="edit_nama" name="edit_nama" required>
                 </div>
                 <div class="modal-buttons">
-                    <button type="button" class="btn-cancel" onclick="hideEditModal()">Batal</button>
+                    <button type="button" class="btn btn-cancel" onclick="hideEditModal()">
+                        <span class="btn-content">Batal</span>
+                    </button>
                     <button type="submit" class="btn btn-edit" id="edit-submit-btn" onclick="return showEditConfirmation()">
-                        <i class="fas fa-save"></i>
-                        Simpan
+                        <span class="btn-content"><i class="fas fa-save"></i> Simpan</span>
                     </button>
                 </div>
             </form>
@@ -1007,22 +1136,17 @@ $result = $stmt->get_result();
                 <i class="fas fa-graduation-cap"></i>
             </div>
             <h3>Konfirmasi Edit Jurusan</h3>
-            <div class="modal-content-confirm">
-                <div class="modal-row">
-                    <span class="modal-label">Nama Jurusan</span>
-                    <span class="modal-value" id="editConfirmNama"></span>
-                </div>
-            </div>
+            <p id="editConfirmNama"></p>
             <form action="" method="POST" id="editConfirmForm">
                 <input type="hidden" name="edit_id" id="editConfirmId">
                 <input type="hidden" name="edit_nama" id="editConfirmNamaInput">
                 <input type="hidden" name="edit_confirm" value="1">
                 <div class="modal-buttons">
                     <button type="submit" class="btn btn-confirm" id="edit-confirm-btn">
-                        <i class="fas fa-check"></i> Konfirmasi
+                        <span class="btn-content"><i class="fas fa-check"></i> Konfirmasi</span>
                     </button>
                     <button type="button" class="btn btn-cancel" onclick="hideEditConfirmModal()">
-                        <i class="fas fa-times"></i> Batal
+                        <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
                     </button>
                 </div>
             </form>
@@ -1033,17 +1157,17 @@ $result = $stmt->get_result();
     <div id="deleteModal" class="modal">
         <div class="modal-content">
             <div class="modal-title">
-                <i class="fas fa-trash"></i>
-                Hapus Jurusan
+                <i class="fas fa-trash"></i> Hapus Jurusan
             </div>
             <p>Apakah Anda yakin ingin menghapus jurusan <strong id="delete_nama"></strong>?</p>
             <form id="deleteForm" method="POST" action="">
                 <input type="hidden" name="delete_id" id="delete_id">
                 <div class="modal-buttons">
-                    <button type="button" class="btn-cancel" onclick="hideDeleteModal()">Batal</button>
+                    <button type="button" class="btn btn-cancel" onclick="hideDeleteModal()">
+                        <span class="btn-content">Batal</span>
+                    </button>
                     <button type="submit" class="btn btn-delete" id="delete-submit-btn">
-                        <i class="fas fa-trash"></i>
-                        Hapus
+                        <span class="btn-content"><i class="fas fa-trash"></i> Hapus</span>
                     </button>
                 </div>
             </form>
@@ -1092,40 +1216,16 @@ $result = $stmt->get_result();
             document.getElementById('deleteModal').style.display = 'none';
         }
 
-        // Delete Jurusan with Animation
-        function deleteJurusan(id, nama) {
-            showDeleteModal(id, nama);
-            const deleteForm = document.getElementById('deleteForm');
-            const deleteBtn = document.getElementById('delete-submit-btn');
-            
-            deleteForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                deleteBtn.classList.add('loading');
-                deleteBtn.innerHTML = '<i class="fas fa-spinner"></i> Menghapus...';
-                const row = document.getElementById(`row-${id}`);
-                if (row) {
-                    row.classList.add('deleting');
-                    setTimeout(() => {
-                        deleteForm.submit();
-                    }, 1500);
-                } else {
-                    setTimeout(() => {
-                        deleteForm.submit();
-                    }, 1500);
-                }
-            }, { once: true });
-        }
-
         // Show Error Modal Function
         function showErrorModal(message) {
             const modal = document.createElement('div');
             modal.className = 'success-overlay';
             modal.innerHTML = `
-                <div class="success-modal">
-                    <div class="success-icon" style="color: var(--danger-color);">
+                <div class="error-modal">
+                    <div class="error-icon">
                         <i class="fas fa-exclamation-circle"></i>
                     </div>
-                    <h3>GAGAL</h3>
+                    <h3>Gagal</h3>
                     <p>${message}</p>
                 </div>
             `;
@@ -1179,11 +1279,9 @@ $result = $stmt->get_result();
                         e.preventDefault();
                         showErrorModal('Nama jurusan harus minimal 3 karakter!');
                         submitBtn.classList.remove('loading');
-                        submitBtn.innerHTML = '<i class="fas fa-plus"></i> Tambah Jurusan';
                     } else {
                         e.preventDefault();
                         submitBtn.classList.add('loading');
-                        submitBtn.innerHTML = '<i class="fas fa-spinner"></i> Memproses...';
                         setTimeout(() => {
                             jurusanForm.submit();
                         }, 1500);
@@ -1198,25 +1296,22 @@ $result = $stmt->get_result();
             if (confirmForm && confirmBtn) {
                 confirmForm.addEventListener('submit', function(e) {
                     e.preventDefault();
-                    console.log('Confirm form submitted'); // Debugging
                     confirmBtn.classList.add('loading');
-                    confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
                     const formData = new FormData(confirmForm);
-                    formData.append('confirm', '1'); // Ensure confirm is sent
+                    formData.append('confirm', '1');
                     fetch('tambah_jurusan.php', {
                         method: 'POST',
                         body: formData
                     })
                     .then(response => response.text())
                     .then(() => {
-                        document.getElementById('jurusan-form').reset(); // Clear form
-                        window.location.href = 'tambah_jurusan.php?success=1'; // Force success redirect
+                        document.getElementById('jurusan-form').reset();
+                        window.location.href = 'tambah_jurusan.php?success=1';
                     })
                     .catch(error => {
                         console.error('Error:', error);
                         showErrorModal('Terjadi kesalahan saat menyimpan!');
                         confirmBtn.classList.remove('loading');
-                        confirmBtn.innerHTML = '<i class="fas fa-check"></i> Konfirmasi';
                     });
                 });
             }
@@ -1232,7 +1327,6 @@ $result = $stmt->get_result();
                         e.preventDefault();
                         showErrorModal('Nama jurusan harus minimal 3 karakter!');
                         editSubmitBtn.classList.remove('loading');
-                        editSubmitBtn.innerHTML = '<i class="fas fa-save"></i> Simpan';
                     }
                 });
             }
@@ -1245,10 +1339,32 @@ $result = $stmt->get_result();
                 editConfirmForm.addEventListener('submit', function(e) {
                     e.preventDefault();
                     editConfirmBtn.classList.add('loading');
-                    editConfirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
                     setTimeout(() => {
                         editConfirmForm.submit();
                     }, 1500);
+                });
+            }
+
+            // Delete form handling (Hapus Jurusan)
+            const deleteForm = document.getElementById('deleteForm');
+            const deleteBtn = document.getElementById('delete-submit-btn');
+
+            if (deleteForm && deleteBtn) {
+                deleteForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    deleteBtn.classList.add('loading');
+                    const id = document.getElementById('delete_id').value;
+                    const row = document.getElementById(`row-${id}`);
+                    if (row) {
+                        row.classList.add('deleting');
+                        setTimeout(() => {
+                            deleteForm.submit();
+                        }, 500);
+                    } else {
+                        setTimeout(() => {
+                            deleteForm.submit();
+                        }, 500);
+                    }
                 });
             }
         });

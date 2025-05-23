@@ -12,6 +12,18 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
     exit();
 }
 
+// Validasi keberadaan petugas1_nama dan petugas2_nama di jadwal hari ini
+$query_schedule = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = CURDATE()";
+$stmt_schedule = $conn->prepare($query_schedule);
+$stmt_schedule->execute();
+$result_schedule = $stmt_schedule->get_result();
+$schedule = $result_schedule->fetch_assoc();
+
+if (!$schedule || empty($schedule['petugas1_nama']) || empty($schedule['petugas2_nama'])) {
+    echo json_encode(['status' => 'error', 'message' => 'Transaksi tidak dapat dilakukan karena tidak ada petugas.', 'email_status' => 'none']);
+    exit();
+}
+
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $action = $_POST['action'] ?? '';
     $no_rekening = trim($_POST['no_rekening'] ?? '');
@@ -146,162 +158,72 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $email_status = 'success';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $subject = "Bukti Transaksi Setor Tunai - SCHOBANK SYSTEM";
+                
+                // Konversi bulan ke bahasa Indonesia
+                $bulan = [
+                    'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
+                    'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
+                    'Sep' => 'September', 'Oct' => 'Oktober', 'Nov' => 'November', 'Dec' => 'Desember'
+                ];
+                $tanggal_transaksi = date('d M Y H:i:s');
+                foreach ($bulan as $en => $id) {
+                    $tanggal_transaksi = str_replace($en, $id, $tanggal_transaksi);
+                }
+
                 $message = "
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset=\"UTF-8\">
-                    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-                    <title>Bukti Transaksi Setor Tunai - SCHOBANK SYSTEM</title>
-                    <style>
-                        body { 
-                            font-family: Arial, sans-serif; 
-                            line-height: 1.6; 
-                            color: #333; 
-                            background-color: #f5f5f5;
-                            margin: 0;
-                            padding: 20px;
-                        }
-                        .container { 
-                            max-width: 600px; 
-                            margin: 0 auto; 
-                            padding: 30px; 
-                            border: 1px solid #ddd; 
-                            border-radius: 8px;
-                            background-color: white;
-                            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-                        }
-                        h2 { 
-                            color: #0a2e5c; 
-                            border-bottom: 2px solid #0a2e5c; 
-                            padding-bottom: 10px; 
-                            margin-top: 0;
-                            text-align: center;
-                        }
-                        .transaction-details {
-                            background-color: #f9f9f9;
-                            border: 1px solid #eee;
-                            border-radius: 5px;
-                            padding: 15px;
-                            margin: 20px 0;
-                        }
-                        .transaction-row {
-                            display: flex;
-                            padding: 8px 0;
-                            border-bottom: 1px solid #eee;
-                        }
-                        .transaction-row:last-child {
-                            border-bottom: none;
-                        }
-                        .label {
-                            font-weight: bold;
-                            color: #2c3e50;
-                            width: 40%;
-                            position: relative;
-                            padding-right: 10px;
-                        }
-                        .label::after {
-                            content: ':';
-                            position: absolute;
-                            right: 10px;
-                        }
-                        .value {
-                            width: 60%;
-                            padding-left: 10px;
-                            text-align: left;
-                        }
-                        .amount {
-                            font-size: 1.2em;
-                            color: #2980b9;
-                            font-weight: bold;
-                        }
-                        .btn { 
-                            display: inline-block; 
-                            background: #0a2e5c; 
-                            color: white; 
-                            padding: 10px 20px; 
-                            text-decoration: none; 
-                            border-radius: 5px;
-                            margin-top: 15px;
-                        }
-                        .button-container {
-                            text-align: center;
-                            margin: 20px 0;
-                        }
-                        .expire-note { 
-                            font-size: 0.9em; 
-                            color: #666; 
-                            margin-top: 20px; 
-                        }
-                        .footer { 
-                            margin-top: 30px; 
-                            font-size: 0.8em; 
-                            color: #666; 
-                            border-top: 1px solid #ddd; 
-                            padding-top: 15px; 
-                            text-align: center;
-                        }
-                        .security-notice {
-                            background-color: #fff8e1;
-                            border-left: 4px solid #f39c12;
-                            padding: 10px 15px;
-                            margin: 20px 0;
-                            font-size: 0.9em;
-                            color: #7f8c8d;
-                        }
-                        p {
-                            color: #34495e;
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class=\"container\">
-                        <h2>Bukti Transaksi Setor Tunai</h2>
-                        <p>Yth. {$nama_nasabah},</p>
-                        <p>Kami informasikan bahwa transaksi setor tunai ke rekening Anda telah berhasil diproses. Berikut rincian transaksi:</p>
-                        <div class=\"transaction-details\">
-                            <div class=\"transaction-row\">
-                                <div class=\"label\">Nomor Transaksi</div>
-                                <div class=\"value\">{$no_transaksi}</div>
-                            </div>
-                            <div class=\"transaction-row\">
-                                <div class=\"label\">Nomor Rekening</div>
-                                <div class=\"value\">{$no_rekening}</div>
-                            </div>
-                            <div class=\"transaction-row\">
-                                <div class=\"label\">Nama Pemilik</div>
-                                <div class=\"value\">{$nama_nasabah}</div>
-                            </div>
-                            <div class=\"transaction-row\">
-                                <div class=\"label\">Jurusan</div>
-                                <div class=\"value\">{$jurusan}</div>
-                            </div>
-                            <div class=\"transaction-row\">
-                                <div class=\"label\">Kelas</div>
-                                <div class=\"value\">{$kelas}</div>
-                            </div>
-                            <div class=\"transaction-row\">
-                                <div class=\"label\">Jumlah Setoran</div>
-                                <div class=\"value amount\">Rp " . number_format($jumlah, 0, ',', '.') . "</div>
-                            </div>
-                            <div class=\"transaction-row\">
-                                <div class=\"label\">Tanggal Transaksi</div>
-                                <div class=\"value\">" . date('d M Y H:i:s') . " WIB</div>
-                            </div>
+                <div style='font-family: Poppins, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f0f5ff; border-radius: 12px; overflow: hidden;'>
+                    <div style='background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px 20px; text-align: center; color: #ffffff;'>
+                        <h2 style='font-size: 24px; font-weight: 600; margin: 0;'>SCHOBANK SYSTEM</h2>
+                        <p style='font-size: 16px; opacity: 0.8; margin: 5px 0 0;'>Bukti Transaksi Setor Tunai</p>
+                    </div>
+                    <div style='background: #ffffff; padding: 30px;'>
+                        <h3 style='color: #1e3a8a; font-size: 20px; font-weight: 600; margin-bottom: 20px;'>Halo, {$nama_nasabah}</h3>
+                        <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Kami informasikan bahwa transaksi setor tunai ke rekening Anda telah berhasil diproses oleh petugas. Berikut rincian transaksi:</p>
+                        <div style='background: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 20px;'>
+                            <table style='width: 100%; font-size: 15px; color: #333333;'>
+                                <tr>
+                                    <td style='padding: 8px 0; font-weight: 500;'>Nomor Transaksi</td>
+                                    <td style='padding: 8px 0; text-align: right;'>{$no_transaksi}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px 0; font-weight: 500;'>Nomor Rekening</td>
+                                    <td style='padding: 8px 0; text-align: right;'>{$no_rekening}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px 0; font-weight: 500;'>Nama Pemilik</td>
+                                    <td style='padding: 8px 0; text-align: right;'>{$nama_nasabah}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px 0; font-weight: 500;'>Jurusan</td>
+                                    <td style='padding: 8px 0; text-align: right;'>{$jurusan}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px 0; font-weight: 500;'>Kelas</td>
+                                    <td style='padding: 8px 0; text-align: right;'>{$kelas}</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px 0; font-weight: 500;'>Jumlah Setoran</td>
+                                    <td style='padding: 8px 0; text-align: right;'>Rp " . number_format($jumlah, 0, ',', '.') . "</td>
+                                </tr>
+                                <tr>
+                                    <td style='padding: 8px 0; font-weight: 500;'>Tanggal Transaksi</td>
+                                    <td style='padding: 8px 0; text-align: right;'>{$tanggal_transaksi} WIB</td>
+                                </tr>
+                            </table>
                         </div>
-                        <p>Terima kasih telah menggunakan layanan SCHOBANK SYSTEM. Untuk informasi lebih lanjut, silakan kunjungi halaman akun Anda atau hubungi petugas kami.</p>
-                        <div class=\"security-notice\">
-                            <strong>Perhatian Keamanan:</strong> Jangan bagikan informasi rekening, kata sandi, atau detail transaksi kepada pihak lain. Petugas SCHOBANK tidak akan meminta informasi tersebut melalui email atau telepon.
-                        </div>
-                        <div class=\"footer\">
-                            <p>Email ini dikirim otomatis oleh sistem, mohon tidak membalas email ini.</p>
-                            <p>Jika Anda memiliki pertanyaan, silakan hubungi Bank Mini SMK Plus Ashabulyamin.</p>
-                            <p>© " . date('Y') . " SCHOBANK SYSTEM - Hak cipta dilindungi.</p>
+                        <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Terima kasih telah menggunakan layanan SCHOBANK SYSTEM. Untuk informasi lebih lanjut, silakan kunjungi halaman akun Anda atau hubungi petugas kami.</p>
+                        <p style='color: #e74c3c; font-size: 14px; font-weight: 500; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;'>
+                            <span style='font-size: 18px;'>🔒</span> Jangan bagikan informasi rekening, kata sandi, atau detail transaksi kepada pihak lain.
+                        </p>
+                        <div style='text-align: center; margin: 30px 0;'>
+                            <a href='mailto:support@schobank.xai' style='display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%); color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 500;'>Hubungi Kami</a>
                         </div>
                     </div>
-                </body>
-                </html>
-                ";
+                    <div style='background: #f0f5ff; padding: 15px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0;'>
+                        <p style='margin: 0;'>© " . date('Y') . " SCHOBANK SYSTEM. All rights reserved.</p>
+                        <p style='margin: 5px 0 0;'>Email ini otomatis. Mohon tidak membalas.</p>
+                    </div>
+                </div>";
 
                 try {
                     $mail = new PHPMailer(true);
@@ -321,7 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $mail->isHTML(true);
                     $mail->Subject = $subject;
                     $mail->Body = $message;
-                    $mail->AltBody = strip_tags($message);
+                    $mail->AltBody = strip_tags(str_replace('<br>', "\n", $message));
 
                     $mail->send();
                     $email_status = 'success';

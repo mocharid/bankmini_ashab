@@ -1,17 +1,26 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
-require_once '../../vendor/autoload.php'; // Sesuaikan path ke autoload Composer
-date_default_timezone_set('Asia/Jakarta'); // Set timezone ke WIB
+require_once '../../vendor/autoload.php';
+date_default_timezone_set('Asia/Jakarta');
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+// Inisialisasi variabel pesan
 $message = '';
 $error = '';
 
-// Ambil data user lengkap dan rekening
-$query = "SELECT u.username, u.nama, u.role, u.email, u.no_wa, k.nama_kelas, j.nama_jurusan, 
+// Ambil pesan dari query string setelah redirect
+if (isset($_GET['message'])) {
+    $message = htmlspecialchars($_GET['message']);
+}
+if (isset($_GET['error'])) {
+    $error = htmlspecialchars($_GET['error']);
+}
+
+// Ambil data pengguna
+$query = "SELECT u.username, u.nama, u.role, u.email, u.no_wa, u.tanggal_lahir, k.nama_kelas, j.nama_jurusan, 
           r.no_rekening, r.saldo, u.created_at as tanggal_bergabung, u.pin, u.jurusan_id, u.kelas_id
           FROM users u 
           LEFT JOIN rekening r ON u.id = r.user_id 
@@ -43,21 +52,78 @@ function sendEmail($email, $subject, $body) {
 
         $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
         $mail->addAddress($email);
-
         $mail->isHTML(true);
         $mail->Subject = $subject;
         $mail->Body = $body;
         $mail->AltBody = strip_tags($body);
-
         $mail->send();
         return true;
     } catch (Exception $e) {
-        error_log("Mail error: " . $mail->ErrorInfo);
+        error_log("Gagal mengirim email: " . $mail->ErrorInfo);
         return false;
     }
 }
 
-// Template email tanpa logo (karena localhost)
+// Fungsi untuk mengirim pesan WhatsApp menggunakan Fonnte API
+function sendWhatsAppMessage($phone_number, $message) {
+    $api_token = 'dCjq3fJVf9p2DAfVDVED';
+    $curl = curl_init();
+    if (substr($phone_number, 0, 2) === '08') {
+        $phone_number = '62' . substr($phone_number, 1);
+    } elseif (substr($phone_number, 0, 1) === '0') {
+        $phone_number = '62' . substr($phone_number, 1);
+    }
+    
+    curl_setopt_array($curl, array(
+        CURLOPT_URL => 'https://api.fonnte.com/send',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_ENCODING => '',
+        CURLOPT_MAXREDIRS => 10,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+        CURLOPT_CUSTOMREQUEST => 'POST',
+        CURLOPT_POSTFIELDS => array(
+            'target' => $phone_number,
+            'message' => $message
+        ),
+        CURLOPT_HTTPHEADER => array(
+            "Authorization: $api_token"
+        ),
+    ));
+    
+    $response = curl_exec($curl);
+    $err = curl_error($curl);
+    curl_close($curl);
+    
+    if ($err) {
+        error_log("Gagal mengirim pesan WhatsApp: " . $err);
+        return false;
+    }
+    
+    $result = json_decode($response, true);
+    if (isset($result['status']) && $result['status'] === true) {
+        return true;
+    } else {
+        error_log("Respons Fonnte API: " . $response);
+        return false;
+    }
+}
+
+// Fungsi untuk mendapatkan nama bulan dalam bahasa Indonesia
+function getIndonesianMonth($date) {
+    $months = [
+        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 
+        5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus', 
+        9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+    ];
+    $day = date('d', strtotime($date));
+    $month = $months[(int)date('m', strtotime($date))];
+    $year = date('Y', strtotime($date));
+    return "$day $month $year";
+}
+
+// Template email
 function getEmailTemplate($title, $greeting, $content, $additionalInfo = '') {
     return "
     <!DOCTYPE html>
@@ -69,23 +135,19 @@ function getEmailTemplate($title, $greeting, $content, $additionalInfo = '') {
     </head>
     <body style='margin: 0; padding: 0; background-color: #f5f5f5; font-family: Helvetica, Arial, sans-serif; color: #333333;'>
         <table align='center' border='0' cellpadding='0' cellspacing='0' width='100%' style='max-width: 600px; background-color: #ffffff; margin: 40px auto; border: 1px solid #e0e0e0;'>
-            <!-- Header -->
             <tr>
                 <td style='padding: 20px; border-bottom: 2px solid #0c4da2;'>
                     <table width='100%' border='0' cellpadding='0' cellspacing='0'>
                         <tr>
-                            <td style='font-size: calc(1rem + 0.2vw); font-weight: bold; color: #0c4da2;'>
-                                SCHOBANK
-                            </td>
+                            <td style='font-size: calc(1rem + 0.2vw); font-weight: bold; color: #0c4da2;'>SCHOBANK</td>
                             <td style='text-align: right;'>
                                 <span style='font-size: calc(0.75rem + 0.1vw); color: #666666;'>SCHOBANK SYSTEM</span><br>
-                                <span style='font-size: calc(0.65rem + 0.1vw); color: #999999;'>Tanggal: " . date('d M Y') . "</span>
+                                <span style='font-size: calc(0.65rem + 0.1vw); color: #999999;'>Tanggal: " . getIndonesianMonth(date('Y-m-d')) . "</span>
                             </td>
                         </tr>
                     </table>
                 </td>
             </tr>
-            <!-- Body -->
             <tr>
                 <td style='padding: 30px 20px;'>
                     <h2 style='font-size: calc(1.2rem + 0.3vw); color: #0c4da2; margin: 0 0 15px 0; font-weight: bold;'>{$title}</h2>
@@ -98,12 +160,11 @@ function getEmailTemplate($title, $greeting, $content, $additionalInfo = '') {
                     {$additionalInfo}
                 </td>
             </tr>
-            <!-- Footer -->
             <tr>
                 <td style='padding: 20px; background-color: #f9f9f9; border-top: 1px solid #e0e0e0; font-size: calc(0.75rem + 0.1vw); color: #666666; text-align: center;'>
                     <p style='margin: 0 0 10px 0;'>Hubungi kami di <a href='mailto:support@schobank.com' style='color: #0c4da2; text-decoration: none;'>support@schobank.com</a> jika ada pertanyaan.</p>
                     <p style='margin: 0;'>© " . date('Y') . " SCHOBANK. Hak cipta dilindungi.</p>
-                    <p style='margin: 10px 0 0 0; font-size: calc(0.7rem + 0.1vw); color: #999999;'>Email ini dikirim secara otomatis. Mohon tidak membalas email ini.</p>
+                    <p style='margin: 10px 0 0 0; font-size: calc(0.7rem + 0.1vw); color: #999999;'>Pesan ini dikirim secara otomatis. Mohon tidak membalas pesan ini.</p>
                 </td>
             </tr>
         </table>
@@ -112,301 +173,334 @@ function getEmailTemplate($title, $greeting, $content, $additionalInfo = '') {
     ";
 }
 
-// Handle form submission
-if (isset($_POST['update_username'])) {
-    $new_username = trim($_POST['new_username']);
+// Fungsi untuk memvalidasi format tanggal (dd/mm/yyyy)
+function validateDateFormat($date) {
+    if (!preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $date, $matches)) {
+        return false;
+    }
+    $day = $matches[1];
+    $month = $matches[2];
+    $year = $matches[3];
+    if ($day < 1 || $day > 31 || $month < 1 || $month > 12 || $year < 1900 || $year > date('Y')) {
+        return false;
+    }
+    $inputDate = DateTime::createFromFormat('d/m/Y', $date);
+    $currentDate = new DateTime();
+    if ($inputDate > $currentDate) {
+        return false;
+    }
+    return checkdate($month, $day, $year);
+}
 
-    if (empty($new_username)) {
-        $error = "Username tidak boleh kosong!";
-    } elseif ($new_username === $user['username']) {
-        $error = "Username baru tidak boleh sama dengan username saat ini!";
-    } else {
-        $check_query = "SELECT id FROM users WHERE username = ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("s", $new_username);
-        $check_stmt->execute();
-        $check_result = $check_stmt->get_result();
-        
-        if ($check_result->num_rows > 0) {
-            $error = "Username sudah digunakan oleh pengguna lain!";
+// Tangani pengiriman form
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['update_username'])) {
+        $new_username = trim($_POST['new_username']);
+        if (empty($new_username)) {
+            header("Location: profile.php?error=" . urlencode("Username tidak boleh kosong!"));
+            exit();
+        } elseif ($new_username === $user['username']) {
+            header("Location: profile.php?error=" . urlencode("Username baru tidak boleh sama dengan username saat ini!"));
+            exit();
         } else {
-            $update_query = "UPDATE users SET username = ? WHERE id = ?";
-            $update_stmt = $conn->prepare($update_query);
-            $update_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
-            
-            if ($update_stmt->execute()) {
-                $message = "Username berhasil diubah!";
-                if (!empty($user['email'])) {
-                    $email_title = "Pemberitahuan Perubahan Username";
-                    $email_greeting = "Yth. {$user['nama']},";
-                    $email_content = "Kami informasikan bahwa username akun SCHOBANK Anda telah berhasil diperbarui menjadi: <strong>{$new_username}</strong>.";
-                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
-                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
-                    $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
-
-                    if (sendEmail($user['email'], $email_title, $email_body)) {
-                        logout();
-                    } else {
-                        $error = "Gagal mengirim email notifikasi!";
-                    }
-                } else {
-                    logout();
-                }
+            $check_query = "SELECT id FROM users WHERE username = ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("s", $new_username);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+            if ($check_result->num_rows > 0) {
+                header("Location: profile.php?error=" . urlencode("Username sudah digunakan!"));
+                exit();
             } else {
-                $error = "Gagal mengubah username!";
+                $update_query = "UPDATE users SET username = ? WHERE id = ?";
+                $update_stmt = $conn->prepare($update_query);
+                $update_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
+                if ($update_stmt->execute()) {
+                    if (!empty($user['email'])) {
+                        $email_title = "Pemberitahuan Perubahan Username";
+                        $email_greeting = "Yth. {$user['nama']},";
+                        $email_content = "Username akun SCHOBANK Anda telah diperbarui menjadi: <strong>{$new_username}</strong>.";
+                        $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . " " . date('H:i:s') . " WIB</strong></p>
+                                           <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                        $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
+                        if (!sendEmail($user['email'], $email_title, $email_body)) {
+                            header("Location: profile.php?error=" . urlencode("Gagal mengirim email notifikasi!"));
+                            exit();
+                        }
+                    }
+                    logout();
+                } else {
+                    header("Location: profile.php?error=" . urlencode("Gagal mengubah username!"));
+                    exit();
+                }
             }
         }
-    }
-} elseif (isset($_POST['update_password'])) {
-    $current_password = $_POST['current_password'];
-    $new_password = $_POST['new_password'];
-    $confirm_password = $_POST['confirm_password'];
-    
-    if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
-        $error = "Semua field password harus diisi!";
-    } elseif ($new_password !== $confirm_password) {
-        $error = "Password baru tidak cocok!";
-    } elseif (strlen($new_password) < 6) {
-        $error = "Password baru minimal 6 karakter!";
-    } else {
-        $verify_query = "SELECT password FROM users WHERE id = ?";
-        $verify_stmt = $conn->prepare($verify_query);
-        $verify_stmt->bind_param("i", $_SESSION['user_id']);
-        $verify_stmt->execute();
-        $verify_result = $verify_stmt->get_result();
-        $user_data = $verify_result->fetch_assoc();
-        
-        if (!$user_data || !isset($user_data['password'])) {
-            $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
+    } elseif (isset($_POST['update_password'])) {
+        $current_password = $_POST['current_password'];
+        $new_password = $_POST['new_password'];
+        $confirm_password = $_POST['confirm_password'];
+        if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
+            header("Location: profile.php?error=" . urlencode("Semua field password harus diisi!"));
+            exit();
+        } elseif ($new_password !== $confirm_password) {
+            header("Location: profile.php?error=" . urlencode("Password baru tidak cocok!"));
+            exit();
+        } elseif (strlen($new_password) < 6) {
+            header("Location: profile.php?error=" . urlencode("Password baru minimal 6 karakter!"));
+            exit();
         } else {
-            $stored_hash = $user_data['password'];
-            $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
-            $password_verified = $is_sha256 ? (hash('sha256', $current_password) === $stored_hash) : password_verify($current_password, $stored_hash);
-            
-            if ($password_verified) {
-                $hashed_password = $is_sha256 ? hash('sha256', $new_password) : password_hash($new_password, PASSWORD_DEFAULT);
+            $verify_query = "SELECT password FROM users WHERE id = ?";
+            $verify_stmt = $conn->prepare($verify_query);
+            $verify_stmt->bind_param("i", $_SESSION['user_id']);
+            $verify_stmt->execute();
+            $verify_result = $verify_stmt->get_result();
+            $user_data = $verify_result->fetch_assoc();
+            if (!$user_data || !password_verify($current_password, $user_data['password'])) {
+                header("Location: profile.php?error=" . urlencode("Password saat ini tidak valid!"));
+                exit();
+            } else {
+                $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
                 $update_query = "UPDATE users SET password = ? WHERE id = ?";
                 $update_stmt = $conn->prepare($update_query);
                 $update_stmt->bind_param("si", $hashed_password, $_SESSION['user_id']);
-                
                 if ($update_stmt->execute()) {
-                    $message = "Password berhasil diubah! Anda dapat menggunakan password baru untuk login selanjutnya.";
                     if (!empty($user['email'])) {
                         $email_title = "Pemberitahuan Perubahan Password";
                         $email_greeting = "Yth. {$user['nama']},";
-                        $email_content = "Kami informasikan bahwa password akun SCHOBANK Anda telah berhasil diperbarui.";
-                        $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
+                        $email_content = "Password akun SCHOBANK Anda telah diperbarui.";
+                        $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . " " . date('H:i:s') . " WIB</strong></p>
                                            <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
                         $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
-
-                        if (sendEmail($user['email'], $email_title, $email_body)) {
-                            logout();
-                        } else {
-                            $error = "Gagal mengirim email notifikasi!";
+                        if (!sendEmail($user['email'], $email_title, $email_body)) {
+                            header("Location: profile.php?error=" . urlencode("Gagal mengirim email notifikasi!"));
+                            exit();
                         }
-                    } else {
-                        logout();
                     }
+                    logout();
                 } else {
-                    $error = "Gagal mengubah password!";
+                    header("Location: profile.php?error=" . urlencode("Gagal mengubah password!"));
+                    exit();
                 }
-            } else {
-                $error = "Password saat ini tidak valid!";
             }
         }
-    }
-} elseif (isset($_POST['update_pin'])) {
-    $new_pin = $_POST['new_pin'];
-    $confirm_pin = $_POST['confirm_pin'];
-
-    if (empty($new_pin) || empty($confirm_pin)) {
-        $error = "Semua field PIN harus diisi!";
-    } elseif ($new_pin !== $confirm_pin) {
-        $error = "PIN baru tidak cocok!";
-    } elseif (strlen($new_pin) !== 6 || !ctype_digit($new_pin)) {
-        $error = "PIN harus terdiri dari 6 digit angka!";
-    } else {
-        if (!empty($user['pin'])) {
-            if (!isset($_POST['current_pin']) || empty($_POST['current_pin'])) {
-                $error = "PIN saat ini harus diisi!";
-            } elseif ($_POST['current_pin'] !== $user['pin']) {
-                $error = "PIN saat ini tidak valid!";
-            } else {
-                $update_query = "UPDATE users SET pin = ? WHERE id = ?";
-                $update_stmt = $conn->prepare($update_query);
-                $update_stmt->bind_param("si", $new_pin, $_SESSION['user_id']);
-
-                if ($update_stmt->execute()) {
-                    $message = "PIN berhasil diubah!";
-                    if (!empty($user['email'])) {
-                        $email_title = "Pemberitahuan Perubahan PIN";
-                        $email_greeting = "Yth. {$user['nama']},";
-                        $email_content = "Kami informasikan bahwa PIN akun SCHOBANK Anda telah berhasil diperbarui.";
-                        $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
-                                           <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
-                        $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
-
-                        if (!sendEmail($user['email'], $email_title, $email_body)) {
-                            $error = "Gagal mengirim email notifikasi!";
-                        }
-                    }
-                    $user['pin'] = $new_pin;
-                } else {
-                    $error = "Gagal mengubah PIN!";
+    } elseif (isset($_POST['update_pin'])) {
+        $new_pin = $_POST['new_pin'];
+        $confirm_pin = $_POST['confirm_pin'];
+        if (empty($new_pin) || empty($confirm_pin)) {
+            header("Location: profile.php?error=" . urlencode("Semua field PIN harus diisi!"));
+            exit();
+        } elseif ($new_pin !== $confirm_pin) {
+            header("Location: profile.php?error=" . urlencode("PIN baru tidak cocok!"));
+            exit();
+        } elseif (strlen($new_pin) !== 6 || !ctype_digit($new_pin)) {
+            header("Location: profile.php?error=" . urlencode("PIN harus 6 digit angka!"));
+            exit();
+        } else {
+            if (!empty($user['pin'])) {
+                if (!isset($_POST['current_pin']) || empty($_POST['current_pin'])) {
+                    header("Location: profile.php?error=" . urlencode("PIN saat ini harus diisi!"));
+                    exit();
+                } elseif ($_POST['current_pin'] !== $user['pin']) {
+                    header("Location: profile.php?error=" . urlencode("PIN saat ini tidak valid!"));
+                    exit();
                 }
             }
-        } else {
-            $update_query = "UPDATE users SET pin = ? WHERE id = ?";
+            $update_query = "UPDATE users SET pin = ?, has_pin = 1 WHERE id = ?";
             $update_stmt = $conn->prepare($update_query);
             $update_stmt->bind_param("si", $new_pin, $_SESSION['user_id']);
-
             if ($update_stmt->execute()) {
-                $message = "PIN berhasil dibuat!";
                 if (!empty($user['email'])) {
-                    $email_title = "Pemberitahuan Pembuatan PIN";
+                    $email_title = !empty($user['pin']) ? "Pemberitahuan Perubahan PIN" : "Pemberitahuan Pembuatan PIN";
                     $email_greeting = "Yth. {$user['nama']},";
-                    $email_content = "Kami informasikan bahwa PIN akun SCHOBANK Anda telah berhasil dibuat.";
-                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Pembuatan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
-                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan pembuatan ini, segera hubungi kami.</p>";
+                    $email_content = !empty($user['pin']) ? "PIN akun SCHOBANK Anda telah diperbarui." : "PIN akun SCHOBANK Anda telah dibuat.";
+                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . " " . date('H:i:s') . " WIB</strong></p>
+                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
                     $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
-
                     if (!sendEmail($user['email'], $email_title, $email_body)) {
-                        $error = "Gagal mengirim email notifikasi!";
+                        header("Location: profile.php?error=" . urlencode("Gagal mengirim email notifikasi!"));
+                        exit();
                     }
                 }
-                $user['pin'] = $new_pin;
+                header("Location: profile.php?message=" . urlencode(!empty($user['pin']) ? "PIN berhasil diubah!" : "PIN berhasil dibuat!"));
+                exit();
             } else {
-                $error = "Gagal membuat PIN!";
+                header("Location: profile.php?error=" . urlencode("Gagal mengubah PIN!"));
+                exit();
             }
         }
-    }
-} elseif (isset($_POST['update_email'])) {
-    $email = trim($_POST['email']);
-
-    if (empty($email)) {
-        $error = "Email tidak boleh kosong!";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = "Format email tidak valid!";
-    } else {
-        $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
-        $check_stmt->execute();
-        $check_result = $check_stmt->get_result();
-
-        if ($check_result->num_rows > 0) {
-            $error = "Email sudah terdaftar pada akun lain!";
+    } elseif (isset($_POST['update_email'])) {
+        $email = trim($_POST['email']);
+        if (empty($email)) {
+            header("Location: profile.php?error=" . urlencode("Email tidak boleh kosong!"));
+            exit();
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            header("Location: profile.php?error=" . urlencode("Format email tidak valid!"));
+            exit();
         } else {
-            $otp = rand(100000, 999999);
-            $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes'));
-            $update_query = "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?";
-            $update_stmt = $conn->prepare($update_query);
-            $update_stmt->bind_param("ssi", $otp, $expiry, $_SESSION['user_id']);
-
-            if ($update_stmt->execute()) {
-                $email_title = "Verifikasi Perubahan Email";
-                $email_greeting = "Yth. {$user['nama']},";
-                $email_content = "Kode OTP untuk verifikasi perubahan email Anda adalah: <strong>{$otp}</strong>";
-                $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Kode ini berlaku hingga: <strong>" . date('d M Y H:i:s', strtotime($expiry)) . " WIB</strong></p>
-                                   <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak meminta perubahan ini, abaikan email ini atau hubungi kami.</p>";
-                $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
-
-                if (sendEmail($email, $email_title, $email_body)) {
-                    $_SESSION['new_email'] = $email;
-                    header("Location: verify_otp.php");
-                    exit();
-                } else {
-                    $error = "Gagal mengirim OTP. Silakan coba lagi nanti.";
-                }
-            } else {
-                $error = "Gagal menyimpan OTP. Silakan coba lagi.";
-            }
-        }
-    }
-} elseif (isset($_POST['update_kelas'])) {
-    $new_kelas_id = $_POST['new_kelas_id'];
-    
-    if (empty($new_kelas_id)) {
-        $error = "Kelas harus dipilih!";
-    } elseif ($new_kelas_id == $user['kelas_id']) {
-        $error = "Kelas baru tidak boleh sama dengan kelas saat ini!";
-    } else {
-        $update_query = "UPDATE users SET kelas_id = ? WHERE id = ?";
-        $update_stmt = $conn->prepare($update_query);
-        $update_stmt->bind_param("ii", $new_kelas_id, $_SESSION['user_id']);
-        
-        if ($update_stmt->execute()) {
-            $message = "Kelas berhasil diubah!";
-            $user['kelas_id'] = $new_kelas_id;
-            $kelas_query = "SELECT nama_kelas FROM kelas WHERE id = ?";
-            $kelas_stmt = $conn->prepare($kelas_query);
-            $kelas_stmt->bind_param("i", $new_kelas_id);
-            $kelas_stmt->execute();
-            $kelas_result = $kelas_stmt->get_result();
-            $kelas_data = $kelas_result->fetch_assoc();
-            $user['nama_kelas'] = $kelas_data['nama_kelas'];
-
-            if (!empty($user['email'])) {
-                $email_title = "Pemberitahuan Perubahan Kelas";
-                $email_greeting = "Yth. {$user['nama']},";
-                $email_content = "Kami informasikan bahwa kelas Anda di SCHOBANK telah diperbarui menjadi: <strong>{$user['nama_kelas']}</strong>.";
-                $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
-                                   <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
-                $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
-
-                if (!sendEmail($user['email'], $email_title, $email_body)) {
-                    $error = "Gagal mengirim email notifikasi!";
-                }
-            }
-        } else {
-            $error = "Gagal mengubah kelas!";
-        }
-    }
-} elseif (isset($_POST['update_no_wa'])) {
-    $no_wa = trim($_POST['no_wa']);
-
-    if (!empty($no_wa)) {
-        if (!preg_match('/^08[0-9]{8,11}$/', $no_wa)) {
-            $error = "Nomor WhatsApp harus dimulai dengan '08' dan terdiri dari 10-13 digit angka!";
-        } else {
-            $check_query = "SELECT id FROM users WHERE no_wa = ? AND id != ?";
+            $check_query = "SELECT id FROM users WHERE email = ? AND id != ?";
             $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("si", $no_wa, $_SESSION['user_id']);
+            $check_stmt->bind_param("si", $email, $_SESSION['user_id']);
             $check_stmt->execute();
             $check_result = $check_stmt->get_result();
-
             if ($check_result->num_rows > 0) {
-                $error = "Nomor WhatsApp sudah terdaftar pada akun lain!";
+                header("Location: profile.php?error=" . urlencode("Email sudah terdaftar!"));
+                exit();
+            } else {
+                $otp = rand(100000, 999999);
+                $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+                $update_query = "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?";
+                $update_stmt = $conn->prepare($update_query);
+                $update_stmt->bind_param("ssi", $otp, $expiry, $_SESSION['user_id']);
+                if ($update_stmt->execute()) {
+                    $email_title = "Verifikasi Perubahan Email";
+                    $email_greeting = "Yth. {$user['nama']},";
+                    $email_content = "Kode OTP untuk verifikasi perubahan email Anda adalah: <strong>{$otp}</strong>";
+                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Kode ini berlaku hingga: <strong>" . getIndonesianMonth(date('Y-m-d', strtotime($expiry))) . " " . date('H:i:s', strtotime($expiry)) . " WIB</strong></p>
+                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak meminta perubahan ini, abaikan pesan ini.</p>";
+                    $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
+                    if (sendEmail($email, $email_title, $email_body)) {
+                        $_SESSION['new_email'] = $email;
+                        header("Location: verify_otp.php");
+                        exit();
+                    } else {
+                        header("Location: profile.php?error=" . urlencode("Gagal mengirim OTP!"));
+                        exit();
+                    }
+                } else {
+                    header("Location: profile.php?error=" . urlencode("Gagal menyimpan OTP!"));
+                    exit();
+                }
             }
         }
-    }
-
-    if (empty($error)) {
-        $update_query = "UPDATE users SET no_wa = ? WHERE id = ?";
-        $update_stmt = $conn->prepare($update_query);
-        $no_wa = empty($no_wa) ? null : $no_wa; // Set ke NULL jika kosong
-        $update_stmt->bind_param("si", $no_wa, $_SESSION['user_id']);
-
-        if ($update_stmt->execute()) {
-            $message = "Nomor WhatsApp berhasil diubah!";
-            $user['no_wa'] = $no_wa;
-
-            if (!empty($user['email'])) {
-                $email_title = "Pemberitahuan Perubahan Nomor WhatsApp";
-                $email_greeting = "Yth. {$user['nama']},";
-                $email_content = empty($no_wa) 
-                    ? "Kami informasikan bahwa nomor WhatsApp akun SCHOBANK Anda telah dihapus."
-                    : "Kami informasikan bahwa nomor WhatsApp akun SCHOBANK Anda telah diperbarui menjadi: <strong>{$no_wa}</strong>.";
-                $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . date('d M Y H:i:s') . " WIB</strong></p>
-                                   <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
-                $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
-
-                if (!sendEmail($user['email'], $email_title, $email_body)) {
-                    $error = "Gagal mengirim email notifikasi!";
+    } elseif (isset($_POST['update_kelas'])) {
+        $new_kelas_id = $_POST['new_kelas_id'];
+        if (empty($new_kelas_id)) {
+            header("Location: profile.php?error=" . urlencode("Kelas harus dipilih!"));
+            exit();
+        } elseif ($new_kelas_id == $user['kelas_id']) {
+            header("Location: profile.php?error=" . urlencode("Kelas baru tidak boleh sama!"));
+            exit();
+        } else {
+            $update_query = "UPDATE users SET kelas_id = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("ii", $new_kelas_id, $_SESSION['user_id']);
+            if ($update_stmt->execute()) {
+                $kelas_query = "SELECT nama_kelas FROM kelas WHERE id = ?";
+                $kelas_stmt = $conn->prepare($kelas_query);
+                $kelas_stmt->bind_param("i", $new_kelas_id);
+                $kelas_stmt->execute();
+                $kelas_result = $kelas_stmt->get_result();
+                $kelas_data = $kelas_result->fetch_assoc();
+                $nama_kelas = $kelas_data['nama_kelas'];
+                if (!empty($user['email'])) {
+                    $email_title = "Pemberitahuan Perubahan Kelas";
+                    $email_greeting = "Yth. {$user['nama']},";
+                    $email_content = "Kelas Anda telah diperbarui menjadi: <strong>{$nama_kelas}</strong>.";
+                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . " " . date('H:i:s') . " WIB</strong></p>
+                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                    $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
+                    if (!sendEmail($user['email'], $email_title, $email_body)) {
+                        header("Location: profile.php?error=" . urlencode("Gagal mengirim email notifikasi!"));
+                        exit();
+                    }
+                }
+                header("Location: profile.php?message=" . urlencode("Kelas berhasil diubah!"));
+                exit();
+            } else {
+                header("Location: profile.php?error=" . urlencode("Gagal mengubah kelas!"));
+                exit();
+            }
+        }
+    } elseif (isset($_POST['update_no_wa'])) {
+        $no_wa = trim($_POST['no_wa']);
+        $requires_otp = false;
+        $otp_target_number = '';
+        if (!empty($no_wa)) {
+            if (!preg_match('/^08[0-9]{8,11}$/', $no_wa)) {
+                header("Location: profile.php?error=" . urlencode("Nomor WhatsApp tidak valid!"));
+                exit();
+            } else {
+                $check_query = "SELECT id FROM users WHERE no_wa = ? AND id != ?";
+                $check_stmt = $conn->prepare($check_query);
+                $check_stmt->bind_param("si", $no_wa, $_SESSION['user_id']);
+                $check_stmt->execute();
+                $check_result = $check_stmt->get_result();
+                if ($check_result->num_rows > 0) {
+                    header("Location: profile.php?error=" . urlencode("Nomor WhatsApp sudah terdaftar!"));
+                    exit();
+                } else {
+                    $requires_otp = true;
+                    $otp_target_number = $no_wa;
                 }
             }
         } else {
-            $error = "Gagal mengubah nomor WhatsApp!";
+            if (empty($user['no_wa'])) {
+                header("Location: profile.php?error=" . urlencode("Nomor WhatsApp sudah kosong!"));
+                exit();
+            } else {
+                $requires_otp = true;
+                $otp_target_number = $user['no_wa'];
+            }
+        }
+        if ($requires_otp) {
+            if (empty($otp_target_number)) {
+                header("Location: profile.php?error=" . urlencode("Nomor WhatsApp diperlukan untuk OTP!"));
+                exit();
+            } else {
+                $otp = rand(100000, 999999);
+                $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes'));
+                $update_query = "UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?";
+                $update_stmt = $conn->prepare($update_query);
+                $update_stmt->bind_param("ssi", $otp, $expiry, $_SESSION['user_id']);
+                if ($update_stmt->execute()) {
+                    $otp_message = "Yth. {$user['nama']},\nKode OTP untuk verifikasi perubahan nomor WhatsApp Anda adalah: *{$otp}*\nKode ini berlaku hingga: " . getIndonesianMonth(date('Y-m-d', strtotime('+5 minutes'))) . " " . date('H:i:s', strtotime('+5 minutes')) . " WIB\nJika Anda tidak meminta perubahan ini, abaikan pesan ini.";
+                    if (sendWhatsAppMessage($otp_target_number, $otp_message)) {
+                        $_SESSION['new_no_wa'] = $no_wa;
+                        header("Location: verify_otp.php");
+                        exit();
+                    } else {
+                        header("Location: profile.php?error=" . urlencode("Gagal mengirim OTP ke WhatsApp!"));
+                        exit();
+                    }
+                } else {
+                    header("Location: profile.php?error=" . urlencode("Gagal menyimpan OTP!"));
+                    exit();
+                }
+            }
+        }
+    } elseif (isset($_POST['update_tanggal_lahir'])) {
+        $tanggal_lahir = trim($_POST['tanggal_lahir']);
+        if (empty($tanggal_lahir)) {
+            header("Location: profile.php?error=" . urlencode("Tanggal lahir tidak boleh kosong!"));
+            exit();
+        } elseif (!validateDateFormat($tanggal_lahir)) {
+            header("Location: profile.php?error=" . urlencode("Format tanggal lahir tidak valid! Gunakan dd/mm/yyyy."));
+            exit();
+        } else {
+            $date_parts = explode('/', $tanggal_lahir);
+            $db_date = $date_parts[2] . '-' . $date_parts[1] . '-' . $date_parts[0];
+            $update_query = "UPDATE users SET tanggal_lahir = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("si", $db_date, $_SESSION['user_id']);
+            if ($update_stmt->execute()) {
+                if (!empty($user['email'])) {
+                    $email_title = "Pemberitahuan Perubahan Tanggal Lahir";
+                    $email_greeting = "Yth. {$user['nama']},";
+                    $email_content = "Tanggal lahir Anda telah diperbarui menjadi: <strong>{$tanggal_lahir}</strong>.";
+                    $email_additional = "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . " " . date('H:i:s') . " WIB</strong></p>
+                                       <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>";
+                    $email_body = getEmailTemplate($email_title, $email_greeting, $email_content, $email_additional);
+                    if (!sendEmail($user['email'], $email_title, $email_body)) {
+                        header("Location: profile.php?error=" . urlencode("Gagal mengirim email notifikasi!"));
+                        exit();
+                    }
+                }
+                header("Location: profile.php?message=" . urlencode("Tanggal lahir berhasil diubah!"));
+                exit();
+            } else {
+                header("Location: profile.php?error=" . urlencode("Gagal mengubah tanggal lahir!"));
+                exit();
+            }
         }
     }
 }
@@ -417,11 +511,11 @@ if (isset($_POST['update_username'])) {
 <head>
     <title>Profil Pengguna - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
+         :root {
             --primary-color: #0c4da2;
             --primary-dark: #0a2e5c;
             --primary-light: #e0e9f5;
@@ -686,24 +780,6 @@ if (isset($_POST['update_username'])) {
             }
         }
 
-        .badge {
-            display: inline-block;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: calc(0.8rem + 0.1vw);
-            font-weight: 500;
-            text-transform: uppercase;
-            background: var(--primary-light);
-            color: var(--primary-color);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-            100% { transform: scale(1); }
-        }
-
         .modal {
             display: none;
             position: fixed;
@@ -886,11 +962,6 @@ if (isset($_POST['update_username'])) {
             transform: translateY(-3px);
         }
 
-        .btn i {
-            margin-right: 10px;
-            font-size: calc(1rem + 0.2vw);
-        }
-
         .btn::before {
             content: '';
             position: absolute;
@@ -1054,21 +1125,16 @@ if (isset($_POST['update_username'])) {
         }
     </style>
 </head>
-<body>
-    <?php if (file_exists('../../includes/header.php')) {
-        include '../../includes/header.php';
-    } ?>
-    
+<body>    
     <div class="main-content">
         <div class="welcome-banner">
             <h2>Profil Pengguna</h2>
-            <p>Kelola informasi dan pengaturan akun Anda dengan mudah</p>
+            <p>Kelola informasi dan pengaturan akun Anda</p>
             <a href="dashboard.php" class="cancel-btn" title="Kembali ke Dashboard">
                 <i class="fas fa-xmark"></i>
             </a>
         </div>
 
-        <!-- Alerts -->
         <?php if ($message): ?>
             <div id="successAlert" class="alert alert-success">
                 <i class="fas fa-check-circle"></i>
@@ -1094,7 +1160,6 @@ if (isset($_POST['update_username'])) {
         <?php endif; ?>
 
         <div class="profile-container">
-            <!-- Informasi Pribadi -->
             <div class="profile-card">
                 <div class="profile-header">
                     <div>
@@ -1109,7 +1174,6 @@ if (isset($_POST['update_username'])) {
                             <div class="value"><?= htmlspecialchars($user['nama']) ?></div>
                         </div>
                     </div>
-                    
                     <div class="info-item">
                         <i class="fas fa-user-tag"></i>
                         <div class="text-container">
@@ -1120,7 +1184,6 @@ if (isset($_POST['update_username'])) {
                             <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
-
                     <div class="info-item">
                         <i class="fas fa-lock"></i>
                         <div class="text-container">
@@ -1131,7 +1194,18 @@ if (isset($_POST['update_username'])) {
                             <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
-                    
+                    <div class="info-item">
+                        <i class="fas fa-calendar-day"></i>
+                        <div class="text-container">
+                            <div class="label">Tanggal Lahir</div>
+                            <div class="value">
+                                <?= !empty($user['tanggal_lahir']) ? date('d/m/Y', strtotime($user['tanggal_lahir'])) : 'Belum diatur' ?>
+                            </div>
+                        </div>
+                        <button class="edit-btn" data-target="tanggal_lahir">
+                            <i class="fas fa-pen-to-square"></i>
+                        </button>
+                    </div>
                     <div class="info-item">
                         <i class="fas fa-envelope"></i>
                         <div class="text-container">
@@ -1144,57 +1218,6 @@ if (isset($_POST['update_username'])) {
                             <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
-                    
-                    <div class="info-item">
-                        <i class="fab fa-whatsapp"></i>
-                        <div class="text-container">
-                            <div class="label">Nomor WhatsApp</div>
-                            <div class="value">
-                                <?= !empty($user['no_wa']) ? htmlspecialchars($user['no_wa']) : 'Belum diatur' ?>
-                            </div>
-                        </div>
-                        <button class="edit-btn" data-target="no_wa">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    
-                    <div class="info-item">
-                        <i class="fas fa-graduation-cap"></i>
-                        <div class="text-container">
-                            <div class="label">Jurusan</div>
-                            <div class="value"><?= htmlspecialchars($user['nama_jurusan']) ?></div>
-                        </div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <i class="fas fa-users"></i>
-                        <div class="text-container">
-                            <div class="label">Kelas</div>
-                            <div class="value"><?= htmlspecialchars($user['nama_kelas']) ?></div>
-                        </div>
-                        <button class="edit-btn" data-target="kelas">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    
-                    <div class="info-item">
-                        <i class="fas fa-user-shield"></i>
-                        <div class="text-container">
-                            <div class="label">Status</div>
-                            <div class="value">
-                                <span class="badge"><?= htmlspecialchars(ucfirst($user['role'])) ?></span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="info-item">
-                        <i class="fas fa-calendar-alt"></i>
-                        <div class="text-container">
-                            <div class="label">Bergabung Sejak</div>
-                            <div class="value"><?= date('d F Y', strtotime($user['tanggal_bergabung'])) ?></div>
-                        </div>
-                    </div>
-                    
                     <div class="info-item">
                         <i class="fas fa-key"></i>
                         <div class="text-container">
@@ -1207,12 +1230,48 @@ if (isset($_POST['update_username'])) {
                             <i class="fas fa-pen-to-square"></i>
                         </button>
                     </div>
+                    <div class="info-item">
+                        <i class="fab fa-whatsapp"></i>
+                        <div class="text-container">
+                            <div class="label">Nomor WhatsApp</div>
+                            <div class="value">
+                                <?= !empty($user['no_wa']) ? htmlspecialchars($user['no_wa']) : 'Belum diatur' ?>
+                            </div>
+                        </div>
+                        <button class="edit-btn" data-target="no_wa">
+                            <i class="fas fa-pen-to-square"></i>
+                        </button>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-graduation-cap"></i>
+                        <div class="text-container">
+                            <div class="label">Jurusan</div>
+                            <div class="value"><?= htmlspecialchars($user['nama_jurusan']) ?></div>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-users"></i>
+                        <div class="text-container">
+                            <div class="label">Kelas</div>
+                            <div class="value"><?= htmlspecialchars($user['nama_kelas']) ?></div>
+                        </div>
+                        <button class="edit-btn" data-target="kelas">
+                            <i class="fas fa-pen-to-square"></i>
+                        </button>
+                    </div>
+                    <div class="info-item">
+                        <i class="fas fa-calendar-alt"></i>
+                        <div class="text-container">
+                            <div class="label">Bergabung Sejak</div>
+                            <div class="value"><?= getIndonesianMonth($user['tanggal_bergabung']) ?></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal for Edit Username -->
+    <!-- Modal untuk Edit Username -->
     <div id="usernameModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1230,10 +1289,10 @@ if (isset($_POST['update_username'])) {
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_username" class="btn btn-primary" id="usernameBtn">
-                            <i class="fas fa-save"></i> <span>Simpan</span>
+                            <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
-                            <i class="fas fa-times"></i> <span>Batal</span>
+                            <span>Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1241,7 +1300,7 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <!-- Modal for Edit Email -->
+    <!-- Modal untuk Edit Email -->
     <div id="emailModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1254,15 +1313,15 @@ if (isset($_POST['update_username'])) {
                         <label for="email">Email</label>
                         <div class="input-wrapper">
                             <i class="fas fa-envelope input-icon"></i>
-                            <input type="email" id="email" name="email" required placeholder="Masukkan email" value="<?= !empty($user['email']) ? htmlspecialchars($user['email']) : '' ?>">
+                            <input type="email" id="email" name="email" required placeholder="Masukkan email" value="<?= htmlspecialchars($user['email'] ?? '') ?>">
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_email" class="btn btn-primary" id="emailBtn">
-                            <i class="fas fa-save"></i> <span>Simpan</span>
+                            <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
-                            <i class="fas fa-times"></i> <span>Batal</span>
+                            <span>Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1270,7 +1329,7 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <!-- Modal for Edit WhatsApp Number -->
+    <!-- Modal untuk Edit Nomor WhatsApp -->
     <div id="no_waModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1284,19 +1343,18 @@ if (isset($_POST['update_username'])) {
                         <div class="input-wrapper">
                             <i class="fab fa-whatsapp input-icon"></i>
                             <input type="text" id="no_wa" name="no_wa" placeholder="Masukkan nomor WhatsApp (contoh: 081234567890)" 
-                                   value="<?= !empty($user['no_wa']) ? htmlspecialchars($user['no_wa']) : '' ?>" 
-                                   pattern="^08[0-9]{8,11}$" maxlength="13">
+                                   value="<?= htmlspecialchars($user['no_wa'] ?? '') ?>" pattern="^08[0-9]{8,11}$" maxlength="13">
                         </div>
                         <small style="font-size: calc(0.75rem + 0.1vw); color: var(--text-secondary);">
-                            Mulai dengan 08, 10-13 digit angka. Kosongkan untuk menghapus.
+                            Mulai dengan 08, 10-13 digit. Kosongkan untuk menghapus.
                         </small>
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_no_wa" class="btn btn-primary" id="no_waBtn">
-                            <i class="fas fa-save"></i> <span>Simpan</span>
+                            <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
-                            <i class="fas fa-times"></i> <span>Batal</span>
+                            <span>Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1304,28 +1362,34 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <!-- Modal for Verify OTP -->
-    <div id="otpModal" class="modal">
+    <!-- Modal untuk Edit Tanggal Lahir -->
+    <div id="tanggal_lahirModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3><i class="fas fa-shield-alt"></i> Verifikasi OTP</h3>
+                <h3><i class="fas fa-calendar-day"></i> Ubah Tanggal Lahir</h3>
                 <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
-                <form method="POST" action="" id="otpForm">
+                <form method="POST" action="" id="tanggalLahirForm">
                     <div class="form-group">
-                        <label for="otp">Kode OTP</label>
+                        <label for="tanggal_lahir">Tanggal Lahir (dd/mm/yyyy)</label>
                         <div class="input-wrapper">
-                            <i class="fas fa-shield-alt input-icon"></i>
-                            <input type="text" id="otp" name="otp" required placeholder="Masukkan kode OTP">
+                            <i class="fas fa-calendar-day input-icon"></i>
+                            <input type="text" id="tanggal_lahir" name="tanggal_lahir" required 
+                                   placeholder="Masukkan tanggal lahir (contoh: 31/12/2003)" 
+                                   pattern="\d{2}/\d{2}/\d{4}" 
+                                   value="<?= !empty($user['tanggal_lahir']) ? date('d/m/Y', strtotime($user['tanggal_lahir'])) : '' ?>">
                         </div>
+                        <small style="font-size: calc(0.75rem + 0.1vw); color: var(--text-secondary);">
+                            Format: dd/mm/yyyy (contoh: 31/12/2003).
+                        </small>
                     </div>
                     <div class="modal-footer">
-                        <button type="submit" name="verify_otp" class="btn btn-primary" id="otpBtn">
-                            <i class="fas fa-check"></i> <span>Verifikasi</span>
+                        <button type="submit" name="update_tanggal_lahir" class="btn btn-primary" id="tanggalLahirBtn">
+                            <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
-                            <i class="fas fa-times"></i> <span>Batal</span>
+                            <span>Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1333,7 +1397,7 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <!-- Modal for Edit Password -->
+    <!-- Modal untuk Edit Password -->
     <div id="passwordModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1341,6 +1405,10 @@ if (isset($_POST['update_username'])) {
                 <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
+                <div id="passwordErrorPopup" class="error-popup" style="display: none;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="passwordErrorMessage"></span>
+                </div>
                 <form method="POST" action="" id="passwordForm">
                     <div class="form-group">
                         <label for="current_password">Password Saat Ini</label>
@@ -1368,10 +1436,10 @@ if (isset($_POST['update_username'])) {
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_password" class="btn btn-primary" id="passwordBtn">
-                            <i class="fas fa-save"></i> <span>Simpan</span>
+                            <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
-                            <i class="fas fa-times"></i> <span>Batal</span>
+                            <span>Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1379,7 +1447,7 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <!-- Modal for Edit PIN -->
+    <!-- Modal untuk Edit PIN -->
     <div id="pinModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1387,6 +1455,10 @@ if (isset($_POST['update_username'])) {
                 <button class="close-modal">×</button>
             </div>
             <div class="modal-body">
+                <div id="pinErrorPopup" class="error-popup" style="display: none;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="pinErrorMessage"></span>
+                </div>
                 <form method="POST" action="" id="pinForm">
                     <?php if (!empty($user['pin'])): ?>
                     <div class="form-group">
@@ -1395,9 +1467,6 @@ if (isset($_POST['update_username'])) {
                             <i class="fas fa-key input-icon"></i>
                             <input type="password" id="current_pin" name="current_pin" required placeholder="Masukkan PIN saat ini" maxlength="6">
                             <i class="fas fa-eye password-toggle" data-target="current_pin"></i>
-                        </div>
-                        <div class="forgot-pin-container">
-                            <a href="#" id="forgotPinLink" class="forgot-pin-link">Lupa PIN?</a>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -1419,10 +1488,10 @@ if (isset($_POST['update_username'])) {
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_pin" class="btn btn-primary" id="pinBtn">
-                            <i class="fas fa-save"></i> <span>Simpan</span>
+                            <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
-                            <i class="fas fa-times"></i> <span>Batal</span>
+                            <span>Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1430,7 +1499,7 @@ if (isset($_POST['update_username'])) {
         </div>
     </div>
 
-    <!-- Modal for Edit Kelas -->
+    <!-- Modal untuk Edit Kelas -->
     <div id="kelasModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1446,14 +1515,11 @@ if (isset($_POST['update_username'])) {
                             <select id="new_kelas_id" name="new_kelas_id" required>
                                 <option value="">Pilih Kelas</option>
                                 <?php
-                                $kelas_query = "SELECT k.id, k.nama_kelas FROM kelas k 
-                                               WHERE k.jurusan_id = ? 
-                                               ORDER BY k.nama_kelas";
+                                $kelas_query = "SELECT k.id, k.nama_kelas FROM kelas k WHERE k.jurusan_id = ? ORDER BY k.nama_kelas";
                                 $kelas_stmt = $conn->prepare($kelas_query);
                                 $kelas_stmt->bind_param("i", $user['jurusan_id']);
                                 $kelas_stmt->execute();
                                 $kelas_result = $kelas_stmt->get_result();
-                                
                                 while ($kelas = $kelas_result->fetch_assoc()) {
                                     $selected = ($kelas['id'] == $user['kelas_id']) ? 'selected' : '';
                                     echo '<option value="' . $kelas['id'] . '" ' . $selected . '>' . htmlspecialchars($kelas['nama_kelas']) . '</option>';
@@ -1464,10 +1530,10 @@ if (isset($_POST['update_username'])) {
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_kelas" class="btn btn-primary" id="kelasBtn">
-                            <i class="fas fa-save"></i> <span>Simpan</span>
+                            <span>Simpan</span>
                         </button>
                         <button type="button" class="btn btn-outline close-modal">
-                            <i class="fas fa-times"></i> <span>Batal</span>
+                            <span>Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1476,59 +1542,35 @@ if (isset($_POST['update_username'])) {
     </div>
 
     <script>
-        // Prevent pinch zooming
-        document.addEventListener('touchstart', function (event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        // Prevent double-tap zooming
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', function (event) {
-            const now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                event.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, { passive: false });
-
         document.addEventListener('DOMContentLoaded', function() {
-            // Handle forgot PIN
-            const forgotPinLink = document.getElementById('forgotPinLink');
-            if (forgotPinLink) {
-                forgotPinLink.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (confirm('Apakah Anda yakin ingin mereset PIN? Link reset akan dikirim ke email Anda.')) {
-                        const originalText = forgotPinLink.textContent;
-                        forgotPinLink.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
-                        
-                        fetch('send_pin_reset.php', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
-                            body: `user_id=<?= $_SESSION['user_id'] ?>`
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.status === 'success') {
-                                alert('Link reset PIN telah dikirim ke email Anda.');
-                            } else {
-                                alert('Gagal mengirim link reset: ' + data.message);
-                            }
-                        })
-                        .catch(error => {
-                            alert('Terjadi kesalahan: ' + error);
-                        })
-                        .finally(() => {
-                            forgotPinLink.textContent = originalText;
-                        });
-                    }
-                });
+            // Fungsi untuk menampilkan pop-up error
+            function showErrorPopup(modalId, message, focusInputId) {
+                const popup = document.getElementById(modalId + 'ErrorPopup');
+                const messageSpan = document.getElementById(modalId + 'ErrorMessage');
+                messageSpan.textContent = message;
+                popup.style.display = 'flex';
+                setTimeout(() => {
+                    popup.style.opacity = '1';
+                }, 10);
+                setTimeout(() => {
+                    popup.style.opacity = '0';
+                    setTimeout(() => {
+                        popup.style.display = 'none';
+                        if (focusInputId) {
+                            document.getElementById(focusInputId).focus();
+                        }
+                    }, 300);
+                }, 3000);
             }
 
-            // Handle alerts
+            // Fungsi untuk mereset form
+            function resetForm(modalId) {
+                const modal = document.getElementById(modalId);
+                const form = modal.querySelector('form');
+                form.reset();
+            }
+
+            // Tangani alert
             function dismissAlert(alert) {
                 alert.classList.add('hide');
                 setTimeout(() => alert.remove(), 500);
@@ -1539,7 +1581,7 @@ if (isset($_POST['update_username'])) {
                 setTimeout(() => dismissAlert(alert), 5000);
             });
 
-            // Password visibility toggle
+            // Toggle visibilitas password
             const toggles = document.querySelectorAll('.password-toggle');
             toggles.forEach(toggle => {
                 toggle.addEventListener('click', function() {
@@ -1554,10 +1596,11 @@ if (isset($_POST['update_username'])) {
                         this.classList.remove('fa-eye-slash');
                         this.classList.add('fa-eye');
                     }
+                    input.focus();
                 });
             });
 
-            // Modal handling
+            // Penanganan modal
             const editButtons = document.querySelectorAll('.edit-btn');
             const modals = document.querySelectorAll('.modal');
             const closeModalButtons = document.querySelectorAll('.close-modal');
@@ -1566,12 +1609,11 @@ if (isset($_POST['update_username'])) {
                 button.addEventListener('click', function() {
                     const target = this.getAttribute('data-target');
                     const modal = document.getElementById(target + 'Modal');
-                    if (modal) {
-                        modal.style.display = 'block';
-                        modal.style.zIndex = '1000';
-                        document.body.style.overflow = 'hidden';
-                        setTimeout(() => modal.classList.add('active'), 10);
-                    }
+                    modal.style.display = 'block';
+                    setTimeout(() => modal.classList.add('active'), 10);
+                    resetForm(target + 'Modal');
+                    const firstInput = modal.querySelector('input, select');
+                    if (firstInput) firstInput.focus();
                 });
             });
 
@@ -1579,10 +1621,7 @@ if (isset($_POST['update_username'])) {
                 button.addEventListener('click', function() {
                     const modal = this.closest('.modal');
                     modal.classList.remove('active');
-                    setTimeout(() => {
-                        modal.style.display = 'none';
-                        document.body.style.overflow = 'auto';
-                    }, 400);
+                    setTimeout(() => modal.style.display = 'none', 400);
                 });
             });
 
@@ -1590,20 +1629,77 @@ if (isset($_POST['update_username'])) {
                 modals.forEach(modal => {
                     if (event.target === modal) {
                         modal.classList.remove('active');
-                        setTimeout(() => {
-                            modal.style.display = 'none';
-                            document.body.style.overflow = 'auto';
-                        }, 400);
+                        setTimeout(() => modal.style.display = 'none', 400);
                     }
                 });
             });
 
-            // Form submission loading state
-            const forms = [
-                'usernameForm', 'passwordForm', 'pinForm', 
-                'emailForm', 'otpForm', 'kelasForm', 'no_waForm'
-            ];
+            // Validasi form password
+            const passwordForm = document.getElementById('passwordForm');
+            passwordForm.addEventListener('submit', function(e) {
+                const currentPassword = document.getElementById('current_password').value;
+                const newPassword = document.getElementById('new_password').value;
+                const confirmPassword = document.getElementById('confirm_password').value;
+                const submitButton = document.getElementById('passwordBtn');
 
+                if (!currentPassword || !newPassword || !confirmPassword) {
+                    e.preventDefault();
+                    showErrorPopup('password', 'Semua field password harus diisi!', 'current_password');
+                    submitButton.classList.remove('btn-loading');
+                    return;
+                }
+                if (newPassword.length < 6) {
+                    e.preventDefault();
+                    showErrorPopup('password', 'Password baru minimal 6 karakter!', 'new_password');
+                    submitButton.classList.remove('btn-loading');
+                    return;
+                }
+                if (newPassword !== confirmPassword) {
+                    e.preventDefault();
+                    showErrorPopup('password', 'Konfirmasi password tidak cocok!', 'confirm_password');
+                    submitButton.classList.remove('btn-loading');
+                    return;
+                }
+                submitButton.classList.add('btn-loading');
+            });
+
+            // Validasi form PIN
+            const pinForm = document.getElementById('pinForm');
+            pinForm.addEventListener('submit', function(e) {
+                const currentPin = document.getElementById('current_pin') ? document.getElementById('current_pin').value : '';
+                const newPin = document.getElementById('new_pin').value;
+                const confirmPin = document.getElementById('confirm_pin').value;
+                const submitButton = document.getElementById('pinBtn');
+
+                if (document.getElementById('current_pin') && !currentPin) {
+                    e.preventDefault();
+                    showErrorPopup('pin', 'PIN saat ini harus diisi!', 'current_pin');
+                    submitButton.classList.remove('btn-loading');
+                    return;
+                }
+                if (!newPin || !confirmPin) {
+                    e.preventDefault();
+                    showErrorPopup('pin', 'Semua field PIN harus diisi!', 'new_pin');
+                    submitButton.classList.remove('btn-loading');
+                    return;
+                }
+                if (!/^\d{6}$/.test(newPin)) {
+                    e.preventDefault();
+                    showErrorPopup('pin', 'PIN harus 6 digit angka!', 'new_pin');
+                    submitButton.classList.remove('btn-loading');
+                    return;
+                }
+                if (newPin !== confirmPin) {
+                    e.preventDefault();
+                    showErrorPopup('pin', 'Konfirmasi PIN tidak cocok!', 'confirm_pin');
+                    submitButton.classList.remove('btn-loading');
+                    return;
+                }
+                submitButton.classList.add('btn-loading');
+            });
+
+            // Status loading saat submit form
+            const forms = ['usernameForm', 'emailForm', 'kelasForm', 'no_waForm', 'tanggalLahirForm'];
             forms.forEach(formId => {
                 const form = document.getElementById(formId);
                 if (form) {
@@ -1614,29 +1710,16 @@ if (isset($_POST['update_username'])) {
                 }
             });
 
-            // WhatsApp number validation
-            const noWaInput = document.getElementById('no_wa');
-            if (noWaInput) {
-                noWaInput.addEventListener('input', function() {
-                    this.value = this.value.replace(/[^0-9]/g, '');
-                    if (this.value.length > 0 && !this.value.startsWith('08')) {
-                        this.value = '08' + this.value.slice(this.value.length);
-                    }
-                });
-            }
-
-            // Intersection Observer for animations
-            const animatedElements = document.querySelectorAll('.profile-card, .welcome-banner');
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.classList.add('animate');
-                        observer.unobserve(entry.target);
-                    }
-                });
-            }, { threshold: 0.2 });
-
-            animatedElements.forEach(element => observer.observe(element));
+            // Validasi input PIN
+            ['current_pin', 'new_pin', 'confirm_pin'].forEach(id => {
+                const input = document.getElementById(id);
+                if (input) {
+                    input.addEventListener('input', function() {
+                        this.value = this.value.replace(/[^0-9]/g, '');
+                        if (this.value.length > 6) this.value = this.value.slice(0, 6);
+                    });
+                }
+            });
         });
     </script>
 </body>

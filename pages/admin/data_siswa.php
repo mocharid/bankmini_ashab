@@ -4,7 +4,8 @@ require_once '../../includes/db_connection.php';
 
 // Ensure TCPDF is included safely
 if (!file_exists('../../tcpdf/tcpdf.php')) {
-    die('[DEBUG] TCPDF library not found at ../../tcpdf/tcpdf.php');
+    error_log('[DEBUG] TCPDF library not found at ../../tcpdf/tcpdf.php');
+    die('TCPDF library not found');
 }
 require_once '../../tcpdf/tcpdf.php';
 
@@ -28,10 +29,156 @@ $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $limit = 10;
 $offset = ($page - 1) * $limit;
 
+// Handle account deletion
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_selected'])) {
+    $selected_ids = isset($_POST['selected_ids']) && is_array($_POST['selected_ids']) ? array_map('intval', $_POST['selected_ids']) : [];
+    error_log("Received selected_ids: " . json_encode($selected_ids));
+    $success_count = 0;
+    $failed_accounts = [];
+
+    if (!empty($selected_ids)) {
+        error_log("Processing deletion for user IDs: " . implode(', ', $selected_ids));
+        foreach ($selected_ids as $user_id) {
+            $conn->begin_transaction();
+            try {
+                // Fetch user and account details
+                $stmt = $conn->prepare("SELECT u.id, u.nama, r.id AS rekening_id, r.saldo, r.no_rekening 
+                                        FROM users u 
+                                        LEFT JOIN rekening r ON u.id = r.user_id 
+                                        WHERE u.id = ? AND u.role = 'siswa'");
+                $stmt->bind_param("i", $user_id);
+                if (!$stmt->execute()) {
+                    throw new Exception("Failed to fetch user ID $user_id: " . $stmt->error);
+                }
+                $result = $stmt->get_result();
+                if ($result->num_rows === 0) {
+                    throw new Exception("User ID $user_id not found or not a student.");
+                }
+                $user = $result->fetch_assoc();
+                $stmt->close();
+
+                $rekening_id = $user['rekening_id'];
+                $saldo = $user['saldo'] ?? 0;
+                $no_rekening = $user['no_rekening'] ?? '';
+
+                // Check if saldo is not zero
+                if (!is_null($saldo) && $saldo != 0) {
+                    $failed_accounts[] = "Akun $no_rekening (Saldo: Rp " . number_format($saldo, 0, ',', '.') . ")";
+                    error_log("Skipping deletion for user ID $user_id: Non-zero saldo ($saldo)");
+                    $conn->rollback();
+                    continue;
+                }
+
+                // Delete related mutasi
+                if ($rekening_id) {
+                    $stmt = $conn->prepare("DELETE m FROM mutasi m 
+                                            JOIN transaksi t ON m.transaksi_id = t.id 
+                                            WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?");
+                    $stmt->bind_param("ii", $rekening_id, $rekening_id);
+                    if (!$stmt->execute()) {
+                        throw new Exception("Failed to delete mutasi for rekening ID $rekening_id: " . $stmt->error);
+                    }
+                    error_log("Deleted mutasi for rekening ID $rekening_id");
+                    $stmt->close();
+
+                    // Delete related transaksi
+                    $stmt = $conn->prepare("DELETE FROM transaksi WHERE rekening_id = ? OR rekening_tujuan_id = ?");
+                    $stmt->bind_param("ii", $rekening_id, $rekening_id);
+                    if (!$stmt->execute()) {
+                        throw new Exception("Failed to delete transaksi for rekening ID $rekening_id: " . $stmt->error);
+                    }
+                    error_log("Deleted transaksi for rekening ID $rekening_id");
+                    $stmt->close();
+
+                    // Delete rekening
+                    $stmt = $conn->prepare("DELETE FROM rekening WHERE id = ?");
+                    $stmt->bind_param("i", $rekening_id);
+                    if (!$stmt->execute()) {
+                        throw new Exception("Failed to delete rekening ID $rekening_id: " . $stmt->error);
+                    }
+                    error_log("Deleted rekening ID $rekening_id");
+                    $stmt->close();
+                }
+
+                // Delete related user data
+                $tables = [
+                    'account_freeze_log' => ['column' => 'siswa_id', 'type' => 'i'],
+                    'active_sessions' => ['column' => 'user_id', 'type' => 'i'],
+                    'log_aktivitas' => ['column' => 'siswa_id', 'type' => 'i'],
+                    'notifications' => ['column' => 'user_id', 'type' => 'i'],
+                    'reset_request_cooldown' => ['column' => 'user_id', 'type' => 'i'],
+                ];
+
+                foreach ($tables as $table => $config) {
+                    if ($conn->query("SHOW TABLES LIKE '$table'")->num_rows > 0) {
+                        $stmt = $conn->prepare("DELETE FROM $table WHERE {$config['column']} = ?");
+                        $stmt->bind_param($config['type'], $user_id);
+                        if (!$stmt->execute()) {
+                            throw new Exception("Failed to delete from $table for user ID $user_id: " . $stmt->error);
+                        }
+                        error_log("Deleted from $table for user ID $user_id");
+                        $stmt->close();
+                    }
+                }
+
+                // Delete user
+                $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+                $stmt->bind_param("i", $user_id);
+                if (!$stmt->execute()) {
+                    throw new Exception("Failed to delete user ID $user_id: " . $stmt->error);
+                }
+                error_log("Deleted user ID $user_id");
+                $stmt->close();
+
+                // Verify deletion
+                $stmt = $conn->prepare("SELECT id FROM users WHERE id = ?");
+                $stmt->bind_param("i", $user_id);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                if ($result->num_rows > 0) {
+                    throw new Exception("User ID $user_id still exists after deletion attempt.");
+                }
+                $stmt->close();
+
+                $conn->commit();
+                $success_count++;
+                error_log("Successfully deleted user ID $user_id");
+            } catch (Exception $e) {
+                $conn->rollback();
+                error_log("Deletion error for user ID $user_id: " . $e->getMessage());
+                $failed_accounts[] = "Akun $no_rekening (Error: " . htmlspecialchars($e->getMessage()) . ")";
+            }
+        }
+
+        if ($success_count > 0) {
+            $_SESSION['success_message'] = "$success_count akun berhasil dihapus.";
+        }
+
+        if (!empty($failed_accounts)) {
+            $_SESSION['error_message'] = "Gagal menghapus beberapa akun:<br>" . implode("<br>", $failed_accounts);
+        } elseif ($success_count === 0) {
+            $_SESSION['error_message'] = "Tidak ada akun yang berhasil dihapus.";
+        }
+    } else {
+        $_SESSION['error_message'] = "Tidak ada akun yang dipilih untuk dihapus.";
+        error_log("No selected_ids received in POST data: " . json_encode($_POST));
+    }
+
+    // Redirect with cache-busting
+    $redirect_url = "data_siswa.php?page=$page&jurusan_id=$jurusan_id&kelas_id=$kelas_id&t=" . time();
+    error_log("Redirecting to: $redirect_url");
+    header("Location: $redirect_url");
+    exit();
+}
+
+// Start output buffering
+ob_start();
+
 // Fetch jurusan options
 $stmt_jurusan = $conn->prepare("SELECT id, nama_jurusan FROM jurusan ORDER BY nama_jurusan");
 if (!$stmt_jurusan->execute()) {
     error_log('[DEBUG] Error fetching jurusan: ' . $conn->error);
+    ob_end_clean();
     die("Error fetching jurusan: " . $conn->error);
 }
 $jurusan_options = $stmt_jurusan->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -62,18 +209,19 @@ if ($kelas_id > 0) {
     $types .= 'i';
 }
 
-// Add pagination for display query
+// Add pagination
 $display_query = $query . " ORDER BY u.nama LIMIT ? OFFSET ?";
 $params_display = array_merge($params, [$limit, $offset]);
 $types_display = $types . 'ii';
 
-// Fetch students for display
+// Fetch students
 $stmt_siswa = $conn->prepare($display_query);
 if (!empty($params_display)) {
     $stmt_siswa->bind_param($types_display, ...$params_display);
 }
 if (!$stmt_siswa->execute()) {
     error_log('[DEBUG] Error fetching siswa: ' . $conn->error);
+    ob_end_clean();
     die("Error fetching siswa: " . $conn->error);
 }
 $siswa = $stmt_siswa->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -86,6 +234,7 @@ if (!empty($params)) {
 }
 if (!$stmt_count->execute()) {
     error_log('[DEBUG] Error counting records: ' . $conn->error);
+    ob_end_clean();
     die("Error counting records: " . $conn->error);
 }
 $total_records = $stmt_count->get_result()->fetch_assoc()['total'];
@@ -113,15 +262,30 @@ if ($kelas_id > 0) {
     $stmt_kelas_name->close();
 }
 
-// Handle exports
+// Handle PDF export
 if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
+    ob_end_clean();
     try {
-        // Increase memory and execution time for PDF generation
         ini_set('memory_limit', '256M');
         ini_set('max_execution_time', 60);
 
-        // Clean output buffer to prevent corruption
-        ob_end_clean();
+        $stmt_export = $conn->prepare($query . " ORDER BY u.nama");
+        if (!empty($params)) {
+            $stmt_export->bind_param($types, ...$params);
+        }
+        if (!$stmt_export->execute()) {
+            error_log('[DEBUG] Error exporting to PDF: ' . $conn->error);
+            http_response_code(500);
+            die('Error exporting to PDF');
+        }
+        $all_siswa = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt_export->close();
+
+        if (empty($all_siswa)) {
+            error_log('[DEBUG] No data found for PDF export');
+            http_response_code(404);
+            die('No data found for export');
+        }
 
         class MYPDF extends TCPDF {
             public function trimText($text, $maxLength) {
@@ -171,7 +335,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
 
         $pdf->Ln(5);
         $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 7, 'DATA SISWA', 0, 1, 'C');
+        $pdf->Cell(0, 7, 'DATA REKENING SISWA', 0, 1, 'C');
         $pdf->SetFont('helvetica', '', 10);
         $pdf->Cell(0, 7, 'Tanggal: ' . date('d/m/Y'), 0, 1, 'C');
 
@@ -193,18 +357,6 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         $pdf->Cell(35, 6, 'Jurusan', 1, 0, 'C');
         $pdf->Cell(25, 6, 'Kelas', 1, 0, 'C');
         $pdf->Cell(30, 6, 'Saldo', 1, 1, 'C');
-
-        // Fetch all students for export
-        $stmt_export = $conn->prepare($query . " ORDER BY u.nama");
-        if (!empty($params)) {
-            $stmt_export->bind_param($types, ...$params);
-        }
-        if (!$stmt_export->execute()) {
-            error_log('[DEBUG] Error exporting to PDF: ' . $conn->error);
-            throw new Exception("Error exporting to PDF: " . $conn->error);
-        }
-        $all_siswa = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
-        $stmt_export->close();
 
         $pdf->SetFont('helvetica', '', 8);
         $no = 1;
@@ -229,98 +381,49 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             $pdf->Cell(30, 6, $pdf->formatCurrency($row['saldo'] ?? 0), 1, 1, 'R');
         }
 
-        // Output PDF
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="data_siswa.pdf"');
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
         $pdf->Output('data_siswa.pdf', 'D');
         exit();
     } catch (Exception $e) {
         error_log('[DEBUG] PDF Generation Error: ' . $e->getMessage());
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'Failed to generate PDF: ' . $e->getMessage()]);
-        exit();
+        http_response_code(500);
+        die('Failed to generate PDF: ' . $e->getMessage());
     }
-} elseif (isset($_GET['export']) && $_GET['export'] == 'excel') {
-    header('Content-Type: application/vnd.ms-excel');
-    header('Content-Disposition: attachment; filename="data_siswa.xls"');
-
-    // Fetch all students for export
-    $stmt_export = $conn->prepare($query . " ORDER BY u.nama");
-    if (!empty($params)) {
-        $stmt_export->bind_param($types, ...$params);
-    }
-    if (!$stmt_export->execute()) {
-        error_log('[DEBUG] Error exporting to Excel: ' . $conn->error);
-        die("Error exporting to Excel: " . $conn->error);
-    }
-    $all_siswa = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
-    $stmt_export->close();
-
-    echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-    echo '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">';
-    echo '<style>
-            body { font-family: Poppins, sans-serif; }
-            .text-left { text-align: left; }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            td, th { padding: 6px; border: 1px solid #ddd; }
-            .title { font-size: 16pt; font-weight: bold; text-align: center; }
-            .subtitle { font-size: 12pt; text-align: center; }
-            .section-header { background-color: #f0f4ff; font-weight: bold; text-align: center; }
-          </style></head><body>';
-
-    echo '<table border="0" cellpadding="5">';
-    echo '<tr><td colspan="6" class="title">DATA SISWA</td></tr>';
-    echo '<tr><td colspan="6" class="subtitle">Tanggal: ' . date('d/m/Y') . '</td></tr>';
-    echo '</table>';
-
-    echo '<table border="1" cellpadding="5">';
-    echo '<tr><th colspan="2" class="section-header">FILTER YANG DIPILIH</th></tr>';
-    echo '<tr><td class="text-left">Jurusan</td><td class="text-left">' . htmlspecialchars($filter_jurusan) . '</td></tr>';
-    echo '<tr><td class="text-left">Kelas</td><td class="text-left">' . htmlspecialchars($filter_kelas) . '</td></tr>';
-    echo '</table>';
-
-    echo '<table border="1" cellpadding="5">';
-    echo '<tr><th colspan="6" class="section-header">DAFTAR SISWA</th></tr>';
-    echo '<tr><th>No</th><th>Nama</th><th>No Rekening</th><th>Jurusan</th><th>Kelas</th><th>Saldo</th></tr>';
-
-    $no = 1;
-    foreach ($all_siswa as $row) {
-        echo '<tr>';
-        echo '<td class="text-center">' . $no++ . '</td>';
-        echo '<td class="text-left">' . htmlspecialchars($row['nama'] ?? '-') . '</td>';
-        echo '<td class="text-left">' . htmlspecialchars(maskNoRekening($row['no_rekening'])) . '</td>';
-        echo '<td class="text-left">' . htmlspecialchars($row['nama_jurusan'] ?? '-') . '</td>';
-        echo '<td class="text-left">' . htmlspecialchars($row['nama_kelas'] ?? '-') . '</td>';
-        echo '<td class="text-right">Rp ' . number_format($row['saldo'] ?? 0, 2, ',', '.') . '</td>';
-        echo '</tr>';
-    }
-    echo '</table></body></html>';
-    exit();
 }
+
+ob_end_flush();
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Data Siswa - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
+            --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
+            --bg-light: #f0f5ff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
+            --setor-bg: #d1fae5;
+            --tarik-bg: #fee2e2;
+            --net-positive-bg: #d1fae5;
+            --net-negative-bg: #fee2e2;
         }
 
         * {
@@ -382,7 +485,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 25px;
             border-radius: 15px;
@@ -476,17 +579,19 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
             background-color: white;
-            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%230c4da2%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%231e3a8a%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
             background-repeat: no-repeat;
             background-position: right 15px center;
             background-size: 12px;
             appearance: none;
+            -webkit-user-select: text;
+            user-select: text;
         }
 
         select:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
             transform: scale(1.02);
         }
 
@@ -494,20 +599,41 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             position: absolute;
             right: 15px;
             top: 50%;
-            transform: translateY(25%);
+            transform: translateY(-50%);
             color: var(--primary-color);
             font-size: clamp(0.9rem, 2vw, 1rem);
             animation: spin 1s linear infinite;
             display: none;
         }
 
+        .tooltip {
+            position: absolute;
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: clamp(0.75rem, 1.5vw, 0.8rem);
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .form-group:hover .tooltip {
+            opacity: 1;
+        }
+
         .filter-buttons {
             display: flex;
             gap: 15px;
+            flex-wrap: wrap;
         }
 
         .btn {
-            background-color: var(--primary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             border: none;
             padding: 12px 25px;
@@ -517,29 +643,71 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             font-weight: 500;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
             transition: var(--transition);
+            position: relative;
             text-decoration: none;
         }
 
         .btn:hover {
-            background-color: var(--primary-dark);
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
         .btn:active {
             transform: scale(0.95);
         }
 
-        .btn-secondary {
-            background-color: var(--secondary-color);
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
         }
 
-        .btn-secondary:hover {
-            background-color: var(--secondary-dark);
+        .btn.loading .btn-content {
+            visibility: hidden;
         }
 
-        .transactions-container {
+        .btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            position: absolute;
+            animation: spin 1.5s linear infinite;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+        }
+
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #d32f2f 0%, var(--danger-color) 100%);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-disabled {
+            background: #ccc;
+            color: #666;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .btn-disabled:hover {
+            background: #ccc;
+            transform: none;
+            box-shadow: none;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .summary-container {
             background: white;
             border-radius: 15px;
             padding: 25px;
@@ -548,8 +716,8 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             animation: slideIn 0.5s ease-out;
         }
 
-        .transactions-title {
-            background: var(--primary-dark);
+        .summary-title {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 10px;
             border-radius: 10px;
@@ -558,48 +726,36 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
-        table {
+        .summary-table {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 20px;
         }
 
-        th, td {
-            padding: 12px;
-            border: 1px solid #ddd;
+        .summary-table th, .summary-table td {
+            padding: 12px 15px;
             text-align: left;
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            border-bottom: 1px solid #eee;
         }
 
-        th {
-            background: #f0f4ff;
+        .summary-table th {
+            background: var(--bg-light);
+            color: var(--text-secondary);
             font-weight: 600;
-            color: var(--text-primary);
         }
 
-        td {
+        .summary-table td {
             background: white;
         }
 
-        th:last-child, td:last-child {
+        .summary-table th:last-child, .summary-table td:last-child {
             text-align: right;
         }
 
-        .empty-state {
+        .summary-table th:first-child, .summary-table td:first-child {
+            width: 50px;
             text-align: center;
-            padding: 30px;
-            color: var(--text-secondary);
-            animation: slideIn 0.5s ease-out;
-        }
-
-        .empty-state i {
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            color: #d1d5db;
-            margin-bottom: 15px;
-        }
-
-        .empty-state p {
-            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .pagination {
@@ -610,7 +766,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         }
 
         .pagination-link {
-            background-color: var(--primary-light);
+            background: var(--bg-light);
             color: var(--text-primary);
             padding: 10px 20px;
             border-radius: 10px;
@@ -621,85 +777,278 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         }
 
         .pagination-link:hover:not(.disabled) {
-            background-color: var(--primary-color);
+            background: var(--primary-color);
             color: white;
             transform: translateY(-2px);
         }
 
         .pagination-link.disabled {
-            background-color: #f0f0f0;
+            background: #f0f0f0;
             color: #aaa;
             cursor: not-allowed;
             pointer-events: none;
         }
 
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
             animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        .alert.hide {
-            animation: slideOut 0.5s ease-out forwards;
+        .empty-state i {
+            font-size: clamp(2rem, 4vw, 2.2rem);
+            color: #d1d5db;
+            margin-bottom: 15px;
         }
 
-        @keyframes slideOut {
-            from { transform: translateY(0); opacity: 1; }
-            to { transform: translateY(-20px); opacity: 0; }
+        .empty-state p {
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 5px solid #fecaca;
+        .success-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.65);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
         }
 
-        .alert-success {
-            background-color: #e8f5e9;
-            color: #2e7d32;
-            border-left: 5px solid #81c784;
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
-        .loading .btn {
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .success-modal, .error-modal {
+            position: relative;
+            text-align: center;
+            width: clamp(350px, 85vw, 450px);
+            border-radius: 15px;
+            padding: clamp(30px, 5vw, 40px);
+            box-shadow: var(--shadow-md);
+            transform: scale(0.7);
+            opacity: 0;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            overflow: hidden;
+        }
+
+        .success-modal {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+        }
+
+        .error-modal {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+        }
+
+        .success-modal::before, .error-modal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
             pointer-events: none;
-            background-color: #cccccc;
         }
 
-        .loading .btn i {
-            animation: spin 1s linear infinite;
+        @keyframes popInModal {
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.03); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .success-icon, .error-icon {
+            font-size: clamp(3.8rem, 8vw, 4.8rem);
+            margin: 0 auto 20px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+        }
+
+        .success-icon {
+            color: white;
+        }
+
+        .error-icon {
+            color: white;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.25); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3, .error-modal h3 {
+            color: white;
+            margin: 0 0 20px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            font-weight: 600;
+            animation: slideUpText 0.5s ease-out 0.2s both;
+        }
+
+        .success-modal p, .error-modal p {
+            color: white;
+            font-size: clamp(0.95rem, 2.3vw, 1.05rem);
+            margin: 0 0 25px;
+            line-height: 1.6;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .modal-footer .btn {
+            padding: 10px 20px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            min-width: 120px;
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
         }
 
         @media (max-width: 768px) {
-            .top-nav { padding: 15px; font-size: clamp(1rem, 2.5vw, 1.2rem); }
-            .main-content { padding: 15px; }
-            .welcome-banner h2 { font-size: clamp(1.3rem, 3vw, 1.6rem); }
-            .welcome-banner p { font-size: clamp(0.8rem, 2vw, 0.9rem); }
-            .filter-form { flex-direction: column; gap: 15px; }
-            .form-group { min-width: 100%; }
-            .filter-buttons { flex-direction: column; width: 100%; }
-            .btn { width: 100%; justify-content: center; }
-            .transactions-container { padding: 20px; }
-            table { display: block; overflow-x: auto; white-space: nowrap; }
-            th, td { padding: 10px; font-size: clamp(0.8rem, 1.8vw, 0.9rem); }
-            .pagination { flex-wrap: wrap; }
+            .top-nav {
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+            }
+
+            .main-content {
+                padding: 15px;
+            }
+
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
+            }
+
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .filter-form {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .form-group {
+                min-width: 100%;
+            }
+
+            .filter-buttons {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .summary-container {
+                padding: 20px;
+            }
+
+            .summary-table {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .summary-table th, .summary-table td {
+                padding: 10px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            }
+
+            .pagination {
+                flex-wrap: wrap;
+            }
+
+            .success-modal, .error-modal {
+                width: clamp(330px, 90vw, 440px);
+                padding: clamp(25px, 5vw, 35px);
+                margin: 15px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.5rem, 7vw, 4.5rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1.3rem, 2.8vw, 1.5rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.9rem, 2.2vw, 1rem);
+            }
         }
 
         @media (max-width: 480px) {
-            body { font-size: clamp(0.85rem, 2vw, 0.95rem); }
-            .top-nav { padding: 10px; }
-            .welcome-banner { padding: 20px; }
-            .transactions-title { font-size: clamp(1rem, 2.5vw, 1.2rem); }
-            .empty-state i { font-size: clamp(1.8rem, 4vw, 2rem); }
+            body {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            }
+
+            .top-nav {
+                padding: 10px;
+            }
+
+            .welcome-banner {
+                padding: 20px;
+            }
+
+            .summary-title {
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
+            }
+
+            .empty-state i {
+                font-size: clamp(1.8rem, 3.5vw, 2rem);
+            }
+
+            .success-modal, .error-modal {
+                width: clamp(310px, 92vw, 380px);
+                padding: clamp(20px, 4vw, 30px);
+                margin: 10px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.2rem, 6.5vw, 4rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1.2rem, 2.7vw, 1.4rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.85rem, 2.1vw, 0.95rem);
+            }
+
+            .modal-footer {
+                gap: 10px;
+            }
+
+            .modal-footer .btn {
+                padding: 8px 15px;
+                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+                min-width: 100px;
+            }
         }
     </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -715,11 +1064,35 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-users"></i> Data Siswa</h2>
-            <p>Kelola data siswa dengan mudah</p>
+            <h2>Data Rekening Siswa</h2>
+            <p>Kelola data rekening siswa dengan mudah</p>
         </div>
 
-        <div id="alertContainer"></div>
+        <div id="alertContainer">
+            <?php if (isset($_SESSION['success_message'])): ?>
+                <div class="success-overlay">
+                    <div class="success-modal">
+                        <div class="success-icon">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h3>Berhasil</h3>
+                        <p><?php echo htmlspecialchars($_SESSION['success_message']); ?></p>
+                    </div>
+                </div>
+                <?php unset($_SESSION['success_message']); ?>
+            <?php elseif (isset($_SESSION['error_message'])): ?>
+                <div class="success-overlay">
+                    <div class="error-modal">
+                        <div class="error-icon">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <h3>Gagal</h3>
+                        <p><?php echo htmlspecialchars($_SESSION['error_message']); ?></p>
+                    </div>
+                </div>
+                <?php unset($_SESSION['error_message']); ?>
+            <?php endif; ?>
+        </div>
 
         <div class="filter-section">
             <form id="filterForm" class="filter-form">
@@ -733,6 +1106,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <span class="tooltip">Pilih jurusan siswa</span>
                 </div>
                 <div class="form-group">
                     <label for="kelas_id">Kelas</label>
@@ -752,24 +1126,25 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
                             $stmt_kelas->close();
                         endif; ?>
                     </select>
+                    <span class="tooltip">Pilih kelas siswa</span>
                     <i class="fas fa-spinner loading-spinner" id="kelas-loading"></i>
                 </div>
                 <div class="filter-buttons">
                     <button type="submit" id="filterButton" class="btn">
-                        <i class="fas fa-filter"></i> Filter
+                        <span class="btn-content"><i class="fas fa-filter"></i> Filter</span>
                     </button>
-                    <button type="button" id="exportPdfButton" class="btn btn-secondary">
-                        <i class="fas fa-file-pdf"></i> Ekspor PDF
+                    <button type="button" id="exportPdfButton" class="btn">
+                        <span class="btn-content"><i class="fas fa-file-pdf"></i> Ekspor PDF</span>
                     </button>
-                    <button type="button" id="exportExcelButton" class="btn btn-secondary">
-                        <i class="fas fa-file-excel"></i> Ekspor Excel
+                    <button type="submit" id="deleteButton" form="deleteForm" class="btn btn-disabled" disabled>
+                        <span class="btn-content"><i class="fas fa-trash"></i> Hapus Terpilih</span>
                     </button>
                 </div>
             </form>
         </div>
 
-        <div class="transactions-container">
-            <h3 class="transactions-title">Daftar Siswa</h3>
+        <div class="summary-container">
+            <h3 class="summary-title">Daftar Siswa</h3>
             <div id="tableContainer">
                 <?php if (empty($siswa)): ?>
                     <div class="empty-state">
@@ -777,30 +1152,35 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
                         <p>Tidak ada data siswa yang ditemukan</p>
                     </div>
                 <?php else: ?>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Nama</th>
-                                <th>No Rekening</th>
-                                <th>Jurusan</th>
-                                <th>Kelas</th>
-                                <th>Saldo</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php $no = $offset + 1; foreach ($siswa as $row): ?>
+                    <form id="deleteForm" method="POST">
+                        <input type="hidden" name="delete_selected" value="1">
+                        <table class="summary-table">
+                            <thead>
                                 <tr>
-                                    <td><?= $no++ ?></td>
-                                    <td><?= htmlspecialchars($row['nama'] ?? '-') ?></td>
-                                    <td><?= htmlspecialchars(maskNoRekening($row['no_rekening'])) ?></td>
-                                    <td><?= htmlspecialchars($row['nama_jurusan'] ?? '-') ?></td>
-                                    <td><?= htmlspecialchars($row['nama_kelas'] ?? '-') ?></td>
-                                    <td>Rp <?= number_format($row['saldo'] ?? 0, 2, ',', '.') ?></td>
+                                    <th><input type="checkbox" id="selectAll"></th>
+                                    <th>No</th>
+                                    <th>Nama</th>
+                                    <th>No Rekening</th>
+                                    <th>Jurusan</th>
+                                    <th>Kelas</th>
+                                    <th>Saldo</th>
                                 </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php $no = $offset + 1; foreach ($siswa as $row): ?>
+                                    <tr>
+                                        <td><input type="checkbox" name="selected_ids[]" value="<?= $row['id'] ?>" class="select-item"></td>
+                                        <td><?= $no++ ?></td>
+                                        <td><?= htmlspecialchars($row['nama'] ?? '-') ?></td>
+                                        <td><?= htmlspecialchars(maskNoRekening($row['no_rekening'])) ?></td>
+                                        <td><?= htmlspecialchars($row['nama_jurusan'] ?? '-') ?></td>
+                                        <td><?= htmlspecialchars($row['nama_kelas'] ?? '-') ?></td>
+                                        <td>Rp <?= number_format($row['saldo'] ?? 0, 0, ',', '.') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </form>
                 <?php endif; ?>
                 <?php if ($total_pages > 1): ?>
                     <div class="pagination">
@@ -811,25 +1191,32 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
                     </div>
                 <?php endif; ?>
             </div>
+            <input type="hidden" id="totalSiswa" value="<?= count($siswa) ?>">
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Prevent zooming
+            // Prevent zooming and double-tap issues
             document.addEventListener('touchstart', function(event) {
-                if (event.touches.length > 1) event.preventDefault();
+                if (event.touches.length > 1) {
+                    event.preventDefault();
+                }
             }, { passive: false });
 
             let lastTouchEnd = 0;
             document.addEventListener('touchend', function(event) {
                 const now = (new Date()).getTime();
-                if (now - lastTouchEnd <= 300) event.preventDefault();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
                 lastTouchEnd = now;
             }, { passive: false });
 
             document.addEventListener('wheel', function(event) {
-                if (event.ctrlKey) event.preventDefault();
+                if (event.ctrlKey) {
+                    event.preventDefault();
+                }
             }, { passive: false });
 
             document.addEventListener('dblclick', function(event) {
@@ -837,34 +1224,109 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             }, { passive: false });
 
             // Alert function
-            function showAlert(message, type) {
+            function showAlert(message, type, isConfirm = false, confirmCallback = null) {
                 const alertContainer = document.getElementById('alertContainer');
-                const existingAlerts = alertContainer.querySelectorAll('.alert');
+                const existingAlerts = alertContainer.querySelectorAll('.success-overlay');
                 existingAlerts.forEach(alert => {
-                    alert.classList.add('hide');
+                    alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => alert.remove(), 500);
                 });
+
                 const alertDiv = document.createElement('div');
-                alertDiv.className = `alert alert-${type}`;
-                let icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
-                alertDiv.innerHTML = `<i class="fas fa-${icon}"></i><span>${message}</span>`;
+                alertDiv.className = 'success-overlay';
+                alertDiv.innerHTML = `
+                    <div class="${type}-modal">
+                        <div class="${type}-icon">
+                            <i class="fas fa-${type === 'success' ? 'check-circle' : isConfirm ? 'exclamation-triangle' : 'exclamation-circle'}"></i>
+                        </div>
+                        <h3>${type === 'success' ? 'Berhasil' : isConfirm ? 'Konfirmasi Penghapusan' : 'Gagal'}</h3>
+                        <p>${message}</p>
+                        ${isConfirm ? `
+                            <div class="modal-footer">
+                                <button type="button" class="btn modal-close-btn">
+                                    <i class="fas fa-xmark"></i> Batal
+                                </button>
+                                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                                    <i class="fas fa-trash-alt"></i> Ya, Hapus
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
                 alertContainer.appendChild(alertDiv);
-                setTimeout(() => {
-                    alertDiv.classList.add('hide');
-                    setTimeout(() => alertDiv.remove(), 500);
-                }, 5000);
+
+                if (!isConfirm) {
+                    // Auto-close success/error modals after 5 seconds
+                    setTimeout(() => {
+                        alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        setTimeout(() => {
+                            alertDiv.remove();
+                            if (type === 'success') {
+                                window.location.href = 'data_siswa.php?page=<?= $page ?>&jurusan_id=<?= $jurusan_id ?>&kelas_id=<?= $kelas_id ?>&t=' + new Date().getTime();
+                            }
+                        }, 500);
+                    }, 5000);
+
+                    // Close success/error modals on any click
+                    alertDiv.addEventListener('click', function() {
+                        alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        setTimeout(() => {
+                            alertDiv.remove();
+                            if (type === 'success') {
+                                window.location.href = 'data_siswa.php?page=<?= $page ?>&jurusan_id=<?= $jurusan_id ?>&kelas_id=<?= $kelas_id ?>&t=' + new Date().getTime();
+                            }
+                        }, 500);
+                    });
+                } else {
+                    // Close confirmation modal on outside click
+                    alertDiv.addEventListener('click', function(event) {
+                        if (!event.target.closest('.error-modal')) {
+                            alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                            setTimeout(() => alertDiv.remove(), 500);
+                        }
+                    });
+
+                    // Handle confirmation modal buttons
+                    const confirmBtn = alertDiv.querySelector('#confirmDeleteBtn');
+                    const cancelBtn = alertDiv.querySelector('.modal-close-btn');
+
+                    if (confirmBtn) {
+                        confirmBtn.addEventListener('click', function() {
+                            const spinner = showLoadingSpinner(this);
+                            setTimeout(() => {
+                                spinner.restore();
+                                alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                                setTimeout(() => {
+                                    alertDiv.remove();
+                                    if (confirmCallback) confirmCallback();
+                                }, 500);
+                            }, 1000);
+                        });
+                    }
+
+                    if (cancelBtn) {
+                        cancelBtn.addEventListener('click', function() {
+                            alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                            setTimeout(() => alertDiv.remove(), 500);
+                        });
+                    }
+                }
             }
 
             // Show loading spinner
-            function showLoadingSpinner(button) {
-                console.log('[DEBUG] Showing loading spinner for button:', button.id); // Debug log (remove after testing)
-                const originalContent = button.innerHTML;
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
-                button.classList.add('loading');
+            function showLoadingSpinner(element, isButton = true) {
+                console.log('[DEBUG] Showing loading spinner for element:', element.id || element.className);
+                const originalContent = element.innerHTML;
+                element.innerHTML = isButton 
+                    ? '<span class="btn-content"><i class="fas fa-spinner fa-spin"></i> Memproses...</span>'
+                    : '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+                element.classList.add('loading');
+                element.disabled = true;
                 return {
                     restore: () => {
-                        button.innerHTML = originalContent;
-                        button.classList.remove('loading');
+                        element.innerHTML = originalContent;
+                        element.classList.remove('loading');
+                        element.disabled = false;
                     }
                 };
             }
@@ -873,10 +1335,14 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             const filterForm = document.getElementById('filterForm');
             const filterButton = document.getElementById('filterButton');
             const exportPdfButton = document.getElementById('exportPdfButton');
-            const exportExcelButton = document.getElementById('exportExcelButton');
             const jurusanSelect = document.getElementById('jurusan_id');
             const kelasSelect = document.getElementById('kelas_id');
             const kelasLoading = document.getElementById('kelas-loading');
+            const totalSiswa = parseInt(document.getElementById('totalSiswa').value);
+            const deleteForm = document.getElementById('deleteForm');
+            const deleteButton = document.getElementById('deleteButton');
+            const selectAll = document.getElementById('selectAll');
+            const selectItems = document.querySelectorAll('.select-item');
 
             if (filterForm && filterButton) {
                 filterForm.addEventListener('submit', function(e) {
@@ -885,71 +1351,103 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
                     setTimeout(() => {
                         spinner.restore();
                         filterForm.submit();
-                    }, 3000);
+                    }, 1000);
                 });
             }
 
+            // Build export URL
+            function buildExportUrl(format) {
+                const jurusan_id = jurusanSelect.value;
+                const kelas_id = kelasSelect.value;
+                let url = `?export=${format}`;
+                if (jurusan_id !== '0') url += `&jurusan_id=${encodeURIComponent(jurusan_id)}`;
+                if (kelas_id !== '0') url += `&kelas_id=${encodeURIComponent(kelas_id)}`;
+                return url;
+            }
+
+            // Handle PDF export
             if (exportPdfButton) {
                 exportPdfButton.addEventListener('click', function() {
+                    if (totalSiswa === 0) {
+                        showAlert('Tidak ada data untuk diekspor.', 'error');
+                        return;
+                    }
                     const spinner = showLoadingSpinner(exportPdfButton);
-                    const jurusan_id = jurusanSelect.value;
-                    const kelas_id = kelasSelect.value;
-                    let url = '?export=pdf';
-                    if (jurusan_id) url += `&jurusan_id=${encodeURIComponent(jurusan_id)}`;
-                    if (kelas_id) url += `&kelas_id=${encodeURIComponent(kelas_id)}`;
-                    console.log('[DEBUG] PDF Export URL:', url); // Debug log (remove after testing)
-                    setTimeout(() => {
-                        try {
-                            const xhr = new XMLHttpRequest();
-                            xhr.open('GET', url, true);
-                            xhr.responseType = 'blob';
-                            xhr.onload = function() {
-                                spinner.restore();
-                                if (xhr.status === 200) {
-                                    const blob = new Blob([xhr.response], { type: 'application/pdf' });
-                                    const link = document.createElement('a');
-                                    link.href = window.URL.createObjectURL(blob);
-                                    link.download = 'data_siswa.pdf';
-                                    link.click();
-                                    window.URL.revokeObjectURL(link.href);
-                                } else {
-                                    xhr.response.text().then(text => {
-                                        console.error('[DEBUG] PDF Export Error:', text); // Debug log (remove after testing)
-                                        showAlert('Gagal mengekspor PDF: ' + (text || 'Unknown error'), 'error');
-                                    });
-                                }
-                            };
-                            xhr.onerror = function() {
-                                spinner.restore();
-                                console.error('[DEBUG] PDF Export Network Error'); // Debug log (remove after testing)
-                                showAlert('Gagal mengekspor PDF: Network error', 'error');
-                            };
-                            xhr.send();
-                        } catch (e) {
-                            spinner.restore();
-                            console.error('[DEBUG] PDF Export Exception:', e.message); // Debug log (remove after testing)
-                            showAlert('Gagal mengekspor PDF: ' + e.message, 'error');
-                        }
-                    }, 3000);
-                });
-            }
-
-            if (exportExcelButton) {
-                exportExcelButton.addEventListener('click', function() {
-                    const spinner = showLoadingSpinner(exportExcelButton);
-                    const jurusan_id = jurusanSelect.value;
-                    const kelas_id = kelasSelect.value;
-                    let url = '?export=excel';
-                    if (jurusan_id) url += `&jurusan_id=${encodeURIComponent(jurusan_id)}`;
-                    if (kelas_id) url += `&kelas_id=${encodeURIComponent(kelas_id)}`;
-                    console.log('[DEBUG] Excel Export URL:', url); // Debug log (remove after testing)
+                    const url = buildExportUrl('pdf');
                     setTimeout(() => {
                         spinner.restore();
                         window.location.href = url;
-                    }, 3000);
+                    }, 1000);
                 });
             }
 
+            // Function to toggle delete button state
+            function toggleDeleteButton() {
+                const checkedItems = document.querySelectorAll('.select-item:checked');
+                if (checkedItems.length > 0) {
+                    deleteButton.classList.remove('btn-disabled');
+                    deleteButton.classList.add('btn-danger');
+                    deleteButton.disabled = false;
+                } else {
+                    deleteButton.classList.add('btn-disabled');
+                    deleteButton.classList.remove('btn-danger');
+                    deleteButton.disabled = true;
+                }
+            }
+
+            // Handle delete form submission
+            if (deleteForm && deleteButton) {
+                deleteForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const checkedItems = document.querySelectorAll('.select-item:checked');
+                    if (checkedItems.length === 0) {
+                        showAlert('Pilih setidaknya satu akun untuk dihapus.', 'error');
+                        return;
+                    }
+
+                    console.log('Selected IDs for deletion:', Array.from(checkedItems).map(item => item.value));
+
+                    showAlert(
+                        `PERINGATAN: Anda akan menghapus ${checkedItems.length} akun secara permanen. Pastikan semua saldo akun nol sebelum melanjutkan. Apakah Anda yakin?`,
+                        'error',
+                        true,
+                        () => {
+                            const spinner = showLoadingSpinner(deleteButton);
+                            setTimeout(() => {
+                                spinner.restore();
+                                deleteForm.submit();
+                            }, 1000);
+                        }
+                    );
+                });
+            }
+
+            // Handle select all checkbox
+            if (selectAll) {
+                selectAll.addEventListener('change', function() {
+                    selectItems.forEach(item => {
+                        item.checked = this.checked;
+                    });
+                    toggleDeleteButton();
+                });
+            }
+
+            // Handle individual checkbox changes
+            selectItems.forEach(item => {
+                item.addEventListener('change', function() {
+                    if (!this.checked) {
+                        selectAll.checked = false;
+                    } else if (document.querySelectorAll('.select-item:checked').length === selectItems.length) {
+                        selectAll.checked = true;
+                    }
+                    toggleDeleteButton();
+                });
+            });
+
+            // Initial check for delete button state
+            toggleDeleteButton();
+
+            // Dynamic kelas loading
             if (jurusanSelect && kelasSelect) {
                 jurusanSelect.addEventListener('change', function() {
                     const jurusan_id = this.value;
@@ -963,7 +1461,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
                             kelasLoading.style.display = 'none';
                         },
                         error: function(xhr, status, error) {
-                            console.error('[DEBUG] Error fetching kelas:', status, error, xhr.responseText); // Debug log (remove after testing)
+                            console.error('[DEBUG] Error fetching kelas:', status, error, xhr.responseText);
                             showAlert('Gagal memuat data kelas', 'error');
                             kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>';
                             kelasLoading.style.display = 'none';
@@ -971,6 +1469,31 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
                     });
                 });
             }
+
+            // Prevent text selection on double-click
+            document.addEventListener('mousedown', function(e) {
+                if (e.detail > 1) {
+                    e.preventDefault();
+                }
+            });
+
+            // Keyboard accessibility
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
+                    filterForm.dispatchEvent(new Event('submit'));
+                }
+            });
+
+            // Ensure responsive table scroll
+            const table = document.querySelector('.summary-table');
+            if (table) {
+                table.parentElement.style.overflowX = 'auto';
+            }
+
+            // Fix touch issues in Safari
+            document.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
         });
     </script>
 </body>

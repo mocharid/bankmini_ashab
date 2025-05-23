@@ -20,19 +20,20 @@ $username = $_SESSION['username'] ?? 'Petugas';
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
+            --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
+            --bg-light: #f0f5ff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
+            --button-width: 140px;
+            --button-height: 44px;
         }
 
         * {
@@ -51,46 +52,32 @@ $username = $_SESSION['username'] ?? 'Petugas';
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
-            padding: 12px 20px;
+            padding: 15px 30px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            font-size: clamp(1.1rem, 2vw, 1.25rem);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-
-        .top-nav h1 {
             font-size: clamp(1.2rem, 2.5vw, 1.4rem);
-            font-weight: 600;
-            margin: 0;
-            flex-grow: 0;
-            text-align: center;
         }
 
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 8px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
-            position: absolute;
-            left: 20px;
         }
 
         .back-btn:hover {
@@ -98,27 +85,44 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transform: translateY(-2px);
         }
 
+        .back-btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .back-btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        .back-btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            position: absolute;
+            animation: spin 1s linear infinite;
+        }
+
         .main-content {
             flex: 1;
-            padding: 15px;
+            padding: 20px;
             width: 100%;
             max-width: 1200px;
             margin: 0 auto;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
-            padding: 20px;
-            border-radius: 12px;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
             animation: fadeInBanner 0.8s ease-out;
-            max-width: 100%;
+            text-align: center;
         }
 
         .welcome-banner::before {
@@ -144,11 +148,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .welcome-banner h2 {
-            margin-bottom: 8px;
-            font-size: clamp(1.3rem, 2.5vw, 1.6rem);
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            gap: 10px;
             position: relative;
             z-index: 1;
         }
@@ -157,26 +162,34 @@ $username = $_SESSION['username'] ?? 'Petugas';
             position: relative;
             z-index: 1;
             opacity: 0.9;
-            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .steps-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        .combined-container {
             background: white;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: var(--shadow-sm);
-            animation: slideInSteps 0.5s ease-out;
-            max-width: 800px;
-            width: 100%;
-            margin: 0 auto;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: var(--shadow-md);
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
-        @keyframes slideInSteps {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
+        .steps-section {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            position: relative;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         .step-item {
@@ -184,7 +197,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             flex-direction: column;
             align-items: center;
             flex: 1;
-            max-width: 150px;
             position: relative;
             z-index: 1;
             padding: 10px;
@@ -192,8 +204,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .step-number {
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             background-color: #e0e0e0;
             color: var(--text-secondary);
@@ -201,9 +213,10 @@ $username = $_SESSION['username'] ?? 'Petugas';
             justify-content: center;
             align-items: center;
             font-weight: 600;
-            margin-bottom: 8px;
-            font-size: clamp(0.9rem, 1.8vw, 1rem);
+            margin-bottom: 10px;
+            font-size: clamp(1rem, 2vw, 1.1rem);
             transition: var(--transition);
+            box-shadow: var(--shadow-sm);
         }
 
         .step-text {
@@ -211,25 +224,39 @@ $username = $_SESSION['username'] ?? 'Petugas';
             color: var(--text-secondary);
             text-align: center;
             line-height: 1.2;
-            margin-bottom: 8px;
             transition: var(--transition);
         }
 
         .step-item:not(:last-child)::after {
             content: '';
             position: absolute;
-            bottom: 0;
-            right: -50%;
-            width: 100%;
-            height: 4px;
-            background-color: #e0e0e0;
-            transition: var(--transition);
+            top: 24px;
+            left: calc(50% + 24px);
+            width: calc(100% - 48px);
+            height: 6px;
+            background: repeating-linear-gradient(
+                to right,
+                #e0e0e0 0,
+                #e0e0e0 8px,
+                transparent 8px,
+                transparent 16px
+            );
+            border-radius: 3px;
+            transition: background 0.5s ease;
+            z-index: 0;
         }
 
         .step-item.active .step-number {
             background-color: var(--primary-color);
             color: white;
-            transform: scale(1.1);
+            transform: scale(1.15);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(30, 58, 138, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(30, 58, 138, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(30, 58, 138, 0); }
         }
 
         .step-item.active .step-text {
@@ -243,22 +270,18 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .step-item.completed::after {
-            background-color: var(--secondary-color);
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-dark));
+            animation: fillLine 0.5s ease forwards;
         }
 
-        .transaction-container {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-            justify-items: center;
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
+        @keyframes fillLine {
+            from { width: 0; }
+            to { width: calc(100% - 48px); }
         }
 
         .deposit-card, .account-details {
-            background: white;
-            border-radius: 12px;
+            background: #f9fafb;
+            border-radius: 10px;
             padding: 20px;
             box-shadow: var(--shadow-sm);
             width: 100%;
@@ -276,25 +299,31 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
         .account-details.visible {
             display: block;
-            animation: slideStep 0.5s ease-in-out;
-        }
-
-        @keyframes slideStep {
-            from { opacity: 0; transform: translateX(20px); }
-            to { opacity: 1; transform: translateX(0); }
+            animation: slideIn 0.5s ease-out;
         }
 
         .deposit-form {
-            display: grid;
-            gap: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .form-group {
+            width: 100%;
+            max-width: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            position: relative;
         }
 
         label {
-            display: block;
-            margin-bottom: 6px;
-            color: var(--text-secondary);
             font-weight: 500;
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            text-align: center;
         }
 
         .currency-input {
@@ -314,11 +343,16 @@ $username = $_SESSION['username'] ?? 'Petugas';
         input[type="text"],
         input.currency {
             width: 100%;
-            padding: 10px 12px;
+            padding: 12px 15px;
             border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min      min-height: 44px;
             transition: var(--transition);
+            -webkit-user-select: text;
+            user-select: text;
+            background-color: #fff;
         }
 
         input.currency {
@@ -329,17 +363,17 @@ $username = $_SESSION['username'] ?? 'Petugas';
         input.currency:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.01);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
         }
 
         .rek-container {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             flex-wrap: nowrap;
-            max-width: 300px;
+            max-width: 400px;
             margin: 0 auto;
             visibility: visible;
             overflow: visible;
@@ -349,33 +383,37 @@ $username = $_SESSION['username'] ?? 'Petugas';
             font-size: clamp(1rem, 2vw, 1.1rem);
             color: var(--text-secondary);
             font-weight: 500;
-            margin-right: 8px;
+            margin-right: 10px;
             flex-shrink: 0;
+            line-height: 48px;
         }
 
         .rek-input {
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             text-align: center;
             font-size: clamp(1rem, 2vw, 1.1rem);
             border: 1px solid #ddd;
-            border-radius: 8px;
+            border-radius: 10px;
             background: #fff;
             transition: var(--transition);
-            line-height: 40px;
+            line-height: 48px;
             display: inline-block;
             visibility: visible;
+            -webkit-appearance: none;
+            -moz-appearance: textfield;
+            appearance: none;
         }
 
         .rek-input:focus {
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
             transform: scale(1.05);
         }
 
         .rek-input.filled {
             border-color: var(--secondary-color);
-            background: var(--primary-light);
+            background: rgba(59, 130, 246, 0.05);
             animation: bouncePin 0.3s ease;
         }
 
@@ -395,107 +433,66 @@ $username = $_SESSION['username'] ?? 'Petugas';
             100% { transform: scale(1); }
         }
 
-        button {
-            background-color: var(--primary-color);
+        .btn {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             font-weight: 500;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
             transition: var(--transition);
-            width: 100%;
-            max-width: 200px;
+            width: var(--button-width);
+            height: var(--button-height);
             margin: 0 auto;
+            position: relative;
         }
 
-        button:hover {
-            background-color: var(--primary-dark);
+        .btn:hover {
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
-        button:active {
+        .btn:active {
             transform: scale(0.95);
         }
 
-        .detail-row {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            align-items: center;
-            border-bottom: 1px solid #eee;
-            padding: 10px 0;
-            gap: 8px;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
-            transition: var(--transition);
-        }
-
-        .detail-row:hover {
-            background: var(--primary-light);
-        }
-
-        .detail-row:last-child {
-            border-bottom: none;
-        }
-
-        .detail-label {
-            color: var(--text-secondary);
-            font-weight: 500;
-            text-align: left;
-        }
-
-        .detail-value {
-            font-weight: 600;
-            color: var(--text-primary);
-            text-align: left;
-        }
-
-        .confirm-buttons {
-            display: flex;
-            gap: 12px;
-            margin-top: 15px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-
         .btn-confirm {
-            background-color: var(--secondary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
         }
 
         .btn-confirm:hover {
-            background-color: var(--secondary-dark);
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
         }
 
         .btn-cancel {
-            background-color: var(--danger-color);
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
         }
 
         .btn-cancel:hover {
-            background-color: #d32f2f;
+            background: linear-gradient(135deg, #d32f2f 0%, var(--danger-color) 100%);
         }
 
-        .btn-loading {
-            position: relative;
+        .btn.loading {
             pointer-events: none;
+            opacity: 0.7;
         }
 
-        .btn-loading i,
-        .btn-loading span {
-            opacity: 0;
+        .btn.loading .btn-content {
+            visibility: hidden;
         }
 
-        .btn-loading::after {
-            content: '';
+        .btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             position: absolute;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #fff;
-            border-top-color: transparent;
-            border-radius: 50%;
             animation: spin 1s linear infinite;
         }
 
@@ -504,19 +501,63 @@ $username = $_SESSION['username'] ?? 'Petugas';
             100% { transform: rotate(360deg); }
         }
 
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            transition: var(--transition);
+        }
+
+        .detail-row:hover {
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .confirm-buttons {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 20px auto 0;
+            width: 100%;
+            max-width: 310px;
+            box-sizing: border-box;
+        }
+
         .modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
+            background: rgba(0, 0, 0, 0.65);
+            display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
             opacity: 0;
             animation: fadeInOverlay 0.5s ease-in-out forwards;
+            cursor: pointer;
+        }
+
+        .modal-overlay.show {
+            display: flex;
         }
 
         @keyframes fadeInOverlay {
@@ -525,58 +566,66 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .modal-content {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            text-align: center;
-            max-width: 90%;
-            width: 400px;
-            box-shadow: var(--shadow-md);
             position: relative;
+            text-align: center;
+            width: clamp(350px, 85vw, 450px);
+            border-radius: 15px;
+            padding: clamp(30px, 5vw, 40px);
+            box-shadow: var(--shadow-md);
             transform: scale(0.7);
             opacity: 0;
-            animation: popInModal 0.4s ease-out forwards;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            overflow: hidden;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            cursor: default;
+        }
+
+        .modal-content::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
         }
 
         @keyframes popInModal {
             0% { transform: scale(0.7); opacity: 0; }
-            70% { transform: scale(1.03); opacity: 1; }
+            80% { transform: scale(1.03); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
         }
 
         .modal-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            animation: bounceIn 0.4s ease-out;
+            font-size: clamp(3.8rem, 8vw, 4.8rem);
+            margin: 0 auto 20px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+            color: white;
         }
 
-        .success-icon {
-            color: var(--secondary-color);
-        }
-
-        .error-icon {
-            color: var(--danger-color);
+        .success-icon, .error-icon {
+            color: white;
         }
 
         @keyframes bounceIn {
             0% { transform: scale(0); opacity: 0; }
-            50% { transform: scale(1.15); }
+            50% { transform: scale(1.25); }
             100% { transform: scale(1); opacity: 1; }
         }
 
         .modal-content h3 {
-            color: var(--primary-dark);
-            margin-bottom: 12px;
-            font-size: clamp(1.1rem, 2vw, 1.25rem);
+            color: white;
+            margin: 0 0 20px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
             font-weight: 600;
-            animation: slideUpText 0.4s ease-out 0.1s both;
+            animation: slideUpText 0.5s ease-out 0.2s both;
         }
 
         .modal-content p {
-            color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
-            line-height: 1.5;
-            animation: slideUpText 0.4s ease-out 0.2s both;
+            color: white;
+            font-size: clamp(0.95rem, 2.3vw, 1.05rem);
+            margin: 0 0 25px;
+            line-height: 1.6;
+            animation: slideUpText 0.5s ease-out 0.3s both;
         }
 
         @keyframes slideUpText {
@@ -587,79 +636,50 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .section-title {
             margin-bottom: 15px;
             color: var(--primary-dark);
-            font-size: clamp(1rem, 2vw, 1.15rem);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            gap: 10px;
         }
 
-        /* Wide Screen (Desktop) */
-        @media (min-width: 769px) {
-            .steps-container {
-                flex-direction: row;
-                justify-content: space-between;
-            }
-
-            .step-item {
-                max-width: 200px;
-            }
-
-            .step-item:not(:last-child)::after {
-                bottom: 0;
-                right: -50%;
-                width: 100%;
-            }
-
-            .transaction-container {
-                grid-template-columns: 1fr;
-                max-width: 600px;
-            }
-
-            .confirm-buttons {
-                flex-direction: row;
-            }
-
-            button {
-                width: auto;
-                max-width: 200px;
-            }
-        }
-
-        /* Tablet and Below */
         @media (max-width: 768px) {
             .top-nav {
-                padding: 12px;
-                font-size: clamp(1rem, 2vw, 1.15rem);
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
-                padding: 12px;
-            }
-
-            .welcome-banner {
                 padding: 15px;
             }
 
+            .welcome-banner {
+                padding: 20px;
+            }
+
             .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
 
             .welcome-banner p {
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
-            .steps-container {
+            .combined-container {
+                padding: 15px;
+                max-width: 100%;
+            }
+
+            .steps-section {
                 flex-direction: column;
                 align-items: flex-start;
-                padding: 10px;
-                max-width: 100%;
             }
 
             .step-item {
                 flex-direction: row;
                 align-items: center;
                 width: 100%;
-                max-width: none;
                 margin-bottom: 16px;
                 padding: 5px 0;
             }
@@ -669,113 +689,27 @@ $username = $_SESSION['username'] ?? 'Petugas';
             }
 
             .step-number {
-                width: 32px;
-                height: 32px;
+                width: 36px;
+                height: 36px;
                 margin-right: 10px;
                 margin-bottom: 0;
-                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-            }
-
-            .step-text {
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-                text-align: left;
-                max-width: none;
-                margin-bottom: 0;
-            }
-
-            .transaction-container {
-                max-width: 100%;
-            }
-
-            .deposit-card, .account-details {
-                padding: 15px;
+                font-size: clamp(0.9rem, 1.8vw, 1rem);
             }
 
             .rek-container {
-                gap: 8px;
-                max-width: 320px;
-                flex-wrap: nowrap;
-                justify-content: center;
-                align-items: center;
-                visibility: visible;
-                overflow: visible;
-            }
-
-            .rek-input {
-                width: 42px;
-                height: 42px;
-                font-size: clamp(1rem, 2vw, 1.1rem);
-                display: inline-block;
-                visibility: visible;
-                line-height: 42px;
+                gap: 5px;
             }
 
             .rek-prefix {
-                font-size: clamp(1rem, 2vw, 1.1rem);
-                margin-right: 8px;
-            }
-
-            .modal-content {
-                width: 90%;
-                padding: 15px;
-            }
-
-            .confirm-buttons {
-                flex-direction: column;
-            }
-
-            button {
-                width: 100%;
-                max-width: none;
-            }
-        }
-
-        /* Small Mobile */
-        @media (max-width: 480px) {
-            body {
-                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-            }
-
-            .top-nav {
-                padding: 10px;
-            }
-
-            .section-title {
-                font-size: clamp(0.95rem, 2vw, 1.05rem);
-            }
-
-            .detail-row {
-                grid-template-columns: 1fr 1.5fr;
-                font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-            }
-
-            .rek-container {
-                max-width: 280px;
-                gap: 6px;
-                flex-wrap: nowrap;
-                justify-content: center;
-                align-items: center;
-                visibility: visible;
-                overflow: visible;
+                font-size: clamp(0.9rem, 1.8vw, 1rem);
+                line-height: 36px;
             }
 
             .rek-input {
-                width: 38px;
-                height: 38px;
-                font-size: clamp(0.95rem, 1.8vw, 1rem);
-                display: inline-block;
-                visibility: visible;
-                line-height: 38px;
-            }
-
-            .rek-prefix {
-                font-size: clamp(0.95rem, 1.8vw, 1rem);
-                margin-right: 6px;
-            }
-
-            .modal-content {
-                width: 95%;
-                padding: 12px;
+                width: 36px;
+                height: 36px;
+                font-size: clamp(0.9rem, 1.8vw, 1rem);
+                line-height: 36px;
             }
         }
     </style>
@@ -783,38 +717,39 @@ $username = $_SESSION['username'] ?? 'Petugas';
 <body>
     <nav class="top-nav">
         <button class="back-btn" id="backBtn">
-            <i class="fas fa-xmark"></i>
+            <span class="btn-content"><i class="fas fa-xmark"></i></span>
         </button>
         <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-money-bill-wave"></i> Setor Tunai</h2>
-            <p>Layanan setor tunai untuk nasabah secara cepat dan aman</p>
+            <h2>Setor Tunai</h2>
+            <p>Layanan untuk nasabah menabung </p>
         </div>
 
-        <div class="steps-container">
-            <div class="step-item active" id="step1-indicator">
-                <div class="step-number">1</div>
-                <div class="step-text">Cek Rekening</div>
+        <div class="combined-container">
+            <div class="steps-section">
+                <div class="step-item active" id="step1-indicator">
+                    <div class="step-number">1</div>
+                    <div class="step-text">Cek Rekening</div>
+                </div>
+                <div class="step-item" id="step2-indicator">
+                    <div class="step-number">2</div>
+                    <div class="step-text">Input Nominal</div>
+                </div>
+                <div class="step-item" id="step3-indicator">
+                    <div class="step-number">3</div>
+                    <div class="step-text">Konfirmasi</div>
+                </div>
             </div>
-            <div class="step-item" id="step2-indicator">
-                <div class="step-number">2</div>
-                <div class="step-text">Input Nominal</div>
-            </div>
-            <div class="step-item" id="step3-indicator">
-                <div class="step-number">3</div>
-                <div class="step-text">Konfirmasi</div>
-            </div>
-        </div>
 
-        <div class="transaction-container">
             <!-- Step 1: Check Account -->
             <div class="deposit-card" id="checkAccountStep">
-                <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Rekening</h3>
+                <h3 class="section-title">Masukkan Nomor Rekening</h3>
                 <form id="cekRekening" class="deposit-form" novalidate>
-                    <div>
+                    <div class="form-group">
                         <label for="no_rekening">No Rekening:</label>
                         <div class="rek-container">
                             <span class="rek-prefix">REK</span>
@@ -827,16 +762,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         </div>
                         <input type="hidden" id="no_rekening" name="no_rekening">
                     </div>
-                    <button type="submit" id="cekButton">
-                        <i class="fas fa-search"></i>
-                        <span>Cek Rekening</span>
+                    <button type="submit" id="cekButton" class="btn">
+                        <span class="btn-content">Cek Rekening</span>
                     </button>
                 </form>
             </div>
 
             <!-- Step 2: Input Amount -->
             <div class="account-details" id="amountDetails">
-                <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
+                <h3 class="section-title">Detail Rekening</h3>
                 <div class="detail-row">
                     <div class="detail-label">Nomor Rekening:</div>
                     <div class="detail-value" id="displayNoRek">-</div>
@@ -853,20 +787,18 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     <div class="detail-label">Kelas:</div>
                     <div class="detail-value" id="displayKelas">-</div>
                 </div>
-                <form id="formSetoran" class="deposit-form" style="margin-top: 20px;">
-                    <div class="currency-input">
+                <form id="formSetoran" class="deposit-form">
+                    <div class="form-group currency-input">
                         <label for="jumlah">Jumlah Setoran (Rp):</label>
                         <span class="currency-prefix">Rp</span>
                         <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="1000" inputmode="numeric" pattern="[0-9]*" required>
                     </div>
                     <div class="confirm-buttons">
-                        <button type="button" id="confirmAmount" class="btn-confirm">
-                            <i class="fas fa-check-circle"></i>
-                            <span>Lanjutkan</span>
+                        <button type="button" id="confirmAmount" class="btn btn-confirm">
+                            <span class="btn-content">Lanjutkan</span>
                         </button>
-                        <button type="button" id="cancelAmount" class="btn-cancel">
-                            <i class="fas fa-times-circle"></i>
-                            <span>Batal</span>
+                        <button type="button" id="cancelAmount" class="btn btn-cancel">
+                            <span class="btn-content">Batal</span>
                         </button>
                     </div>
                 </form>
@@ -874,7 +806,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
             <!-- Step 3: Confirmation -->
             <div class="account-details" id="confirmationDetails">
-                <h3 class="section-title"><i class="fas fa-receipt"></i> Konfirmasi Setoran</h3>
+                <h3 class="section-title">Konfirmasi Setoran</h3>
                 <div class="detail-row">
                     <div class="detail-label">Nomor Rekening:</div>
                     <div class="detail-value" id="confirmNoRek">-</div>
@@ -896,16 +828,22 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     <div class="detail-value" id="confirmJumlah">-</div>
                 </div>
                 <div class="confirm-buttons">
-                    <button type="button" id="processDeposit" class="btn-confirm">
-                        <i class="fas fa-check-circle"></i>
-                        <span>Proses Setoran</span>
+                    <button type="button" id="processDeposit" class="btn btn-confirm">
+                        <span class="btn-content">Proses Setoran</span>
                     </button>
-                    <button type="button" id="backToAmount" class="btn-cancel">
-                        <i class="fas fa-arrow-left"></i>
-                        <span>Kembali</span>
+                    <button type="button" id="backToAmount" class="btn btn-cancel">
+                        <span class="btn-content">Kembali</span>
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-content" id="modalContent">
+            <i class="fas modal-icon" id="modalIcon"></i>
+            <h3 id="modalTitle"></h3>
+            <p id="modalMessage"></p>
         </div>
     </div>
 
@@ -917,14 +855,23 @@ $username = $_SESSION['username'] ?? 'Petugas';
             }
         }, { passive: false });
 
-        document.addEventListener('gesturestart', function(event) {
-            event.preventDefault();
-        });
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
 
         document.addEventListener('wheel', function(event) {
             if (event.ctrlKey) {
                 event.preventDefault();
             }
+        }, { passive: false });
+
+        document.addEventListener('dblclick', function(event) {
+            event.preventDefault();
         }, { passive: false });
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -950,27 +897,16 @@ $username = $_SESSION['username'] ?? 'Petugas';
             const backToAmount = document.getElementById('backToAmount');
             const backBtn = document.getElementById('backBtn');
 
+            const modalOverlay = document.getElementById('modalOverlay');
+            const modalContent = document.getElementById('modalContent');
+            const modalIcon = document.getElementById('modalIcon');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+
             let accountData = {};
             const prefix = "REK";
 
-            // Debug: Verify rek-container and rek-input sizes
-            console.log('rek-container computed style:', {
-                display: window.getComputedStyle(rekContainer).display,
-                visibility: window.getComputedStyle(rekContainer).visibility,
-                width: window.getComputedStyle(rekContainer).width,
-                maxWidth: window.getComputedStyle(rekContainer).maxWidth
-            });
-            rekInputs.forEach((input, index) => {
-                console.log(`rek-input[${index}] computed style:`, {
-                    display: window.getComputedStyle(input).display,
-                    visibility: window.getComputedStyle(input).visibility,
-                    width: window.getComputedStyle(input).width,
-                    height: window.getComputedStyle(input).height,
-                    fontSize: window.getComputedStyle(input).fontSize
-                });
-            });
-
-            // Ensure rek-container is visible and inputs are properly sized
+            // Ensure rek-container visibility
             rekContainer.style.display = 'flex';
             rekContainer.style.visibility = 'visible';
             rekInputs.forEach(input => {
@@ -978,10 +914,60 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.style.visibility = 'visible';
             });
 
+            // Modal Handling
+            function showModal(title, message, isSuccess) {
+                modalTitle.textContent = title;
+                modalMessage.textContent = message;
+                modalIcon.className = `fas modal-icon ${isSuccess ? 'fa-check-circle success-icon' : 'fa-exclamation-circle error-icon'}`;
+                modalOverlay.classList.add('show');
+                modalOverlay.focus();
+                // Auto-close modal after 2 seconds
+                setTimeout(() => {
+                    closeModal();
+                    if (isSuccess) {
+                        resetForm();
+                    }
+                }, 2000);
+            }
+
+            function closeModal() {
+                modalOverlay.classList.remove('show');
+            }
+
+            // Close modal when clicking outside the modal content
+            modalOverlay.addEventListener('click', function() {
+                closeModal();
+            });
+
+            // Prevent clicks on modal content from closing the modal
+            modalContent.addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+
             // Back Button Handler
             backBtn.addEventListener('click', function() {
+                backBtn.classList.add('loading');
                 window.location.href = 'dashboard.php';
             });
+
+            // Function to clear account number form
+            function clearRekForm() {
+                rekInputs.forEach(input => {
+                    input.value = '';
+                    input.classList.remove('filled');
+                    input.dataset.originalValue = '';
+                });
+                hiddenNoRek.value = '';
+            }
+
+            // Update Hidden Input for Account Number
+            function updateHiddenNoRek() {
+                let noRek = prefix;
+                rekInputs.forEach(input => {
+                    noRek += input.dataset.originalValue || '';
+                });
+                hiddenNoRek.value = noRek;
+            }
 
             // Account Number Input Handling
             rekInputs.forEach((input, index) => {
@@ -1071,75 +1057,35 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 if (activeStep === 3) {
                     step3Indicator.className = 'step-item active';
                 }
-
-                checkAccountStep.style.display = activeStep === 1 ? 'block' : 'none';
-                amountDetails.classList.toggle('visible', activeStep === 2);
-                confirmationDetails.classList.toggle('visible', activeStep === 3);
             }
 
-            function updateHiddenNoRek() {
-                const digits = Array.from(rekInputs).map(i => i.dataset.originalValue || '').join('');
-                hiddenNoRek.value = digits.length === 6 ? prefix + digits : '';
+            function showStep(step) {
+                checkAccountStep.style.display = step === 1 ? 'block' : 'none';
+                amountDetails.className = `account-details ${step === 2 ? 'visible' : ''}`;
+                confirmationDetails.className = `account-details ${step === 3 ? 'visible' : ''}`;
+                updateStepIndicators(step);
             }
 
-            function clearRekInputs() {
-                rekInputs.forEach(i => {
-                    i.value = '';
-                    i.classList.remove('filled');
-                    i.dataset.originalValue = '';
-                });
-                hiddenNoRek.value = '';
-                rekInputs[0].focus();
-            }
-
-            function shakeRekContainer() {
-                rekContainer.classList.add('error');
-                setTimeout(() => rekContainer.classList.remove('error'), 400);
-            }
-
-            function startLoading(button) {
-                button.classList.add('btn-loading');
-            }
-
-            function stopLoading(button, callback) {
-                setTimeout(() => {
-                    button.classList.remove('btn-loading');
-                    if (callback) callback();
-                }, 500);
-            }
-
-            function showModal(message, type, redirect = false) {
-                const modal = document.createElement('div');
-                modal.className = 'modal-overlay';
-                modal.innerHTML = `
-                    <div class="modal-content">
-                        <i class="fas fa-${type === 'success' ? 'check-circle' : 'times-circle'} modal-icon ${type}-icon"></i>
-                        <h3>${type === 'success' ? 'Berhasil' : 'Gagal'}</h3>
-                        <p>${message}</p>
-                    </div>
-                `;
-                document.body.appendChild(modal);
-                setTimeout(() => {
-                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => {
-                        modal.remove();
-                        if (redirect) {
-                            window.location.href = 'dashboard.php';
-                        }
-                    }, 500);
-                }, 2000);
+            function resetForm() {
+                cekForm.reset();
+                setoranForm.reset();
+                clearRekForm();
+                inputJumlah.value = '';
+                showStep(1);
+                accountData = {};
             }
 
             cekForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const rekening = hiddenNoRek.value;
                 if (!rekening || rekening.length !== 9 || !/REK[0-9]{6}/.test(rekening)) {
-                    showModal('Nomor rekening harus diawali REK diikuti 6 digit angka', 'error');
-                    shakeRekContainer();
-                    rekInputs[0].focus();
+                    showModal('Error', 'Nomor rekening harus diawali REK diikuti 6 digit angka', false);
+                    rekContainer.classList.add('error');
+                    setTimeout(() => rekContainer.classList.remove('error'), 400);
+                    clearRekForm();
                     return;
                 }
-                startLoading(cekButton);
+                cekButton.classList.add('loading');
                 fetch('proses_setor.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1152,36 +1098,34 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     return response.json();
                 })
                 .then(data => {
-                    stopLoading(cekButton, () => {
-                        if (data.status === 'error') {
-                            showModal(data.message, 'error');
-                            clearRekInputs();
-                            return;
-                        }
-                        accountData = data;
-                        document.getElementById('displayNoRek').textContent = data.no_rekening;
-                        document.getElementById('displayNama').textContent = data.nama;
-                        document.getElementById('displayJurusan').textContent = data.jurusan;
-                        document.getElementById('displayKelas').textContent = data.kelas;
-                        updateStepIndicators(2);
-                        inputJumlah.focus();
-                    });
+                    cekButton.classList.remove('loading');
+                    if (data.status === 'error') {
+                        showModal('Error', data.message, false);
+                        clearRekForm();
+                        return;
+                    }
+                    accountData = data;
+                    document.getElementById('displayNoRek').textContent = data.no_rekening;
+                    document.getElementById('displayNama').textContent = data.nama;
+                    document.getElementById('displayJurusan').textContent = data.jurusan;
+                    document.getElementById('displayKelas').textContent = data.kelas;
+                    showStep(2);
+                    inputJumlah.focus();
                 })
                 .catch(error => {
-                    stopLoading(cekButton);
-                    showModal('Terjadi kesalahan sistem: ' + error.message, 'error');
-                    clearRekInputs();
+                    cekButton.classList.remove('loading');
+                    showModal('Error', 'Terjadi kesalahan sistem: ' + error.message, false);
+                    clearRekForm();
                 });
             });
 
             confirmAmount.addEventListener('click', function() {
-                startLoading(confirmAmount);
+                confirmAmount.classList.add('loading');
                 let jumlah = inputJumlah.value.replace(/[^0-9]/g, '');
                 jumlah = parseFloat(jumlah);
                 if (isNaN(jumlah) || jumlah < 1000) {
-                    stopLoading(confirmAmount);
-                    showModal('Jumlah setoran minimal Rp 1.000', 'error');
-                    inputJumlah.focus();
+                    confirmAmount.classList.remove('loading');
+                    showModal('Error', 'Jumlah setoran minimal Rp 1.000', false);
                     return;
                 }
                 accountData.jumlah = jumlah;
@@ -1190,27 +1134,20 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 document.getElementById('confirmJurusan').textContent = accountData.jurusan;
                 document.getElementById('confirmKelas').textContent = accountData.kelas;
                 document.getElementById('confirmJumlah').textContent = formatRupiah(jumlah);
-                stopLoading(confirmAmount, () => {
-                    updateStepIndicators(3);
-                });
+                confirmAmount.classList.remove('loading');
+                showStep(3);
             });
 
             cancelAmount.addEventListener('click', function() {
-                startLoading(cancelAmount);
-                stopLoading(cancelAmount, () => {
-                    cekForm.reset();
-                    setoranForm.reset();
-                    clearRekInputs();
-                    inputJumlah.value = '';
-                    amountDetails.classList.remove('visible');
-                    checkAccountStep.style.display = 'block';
-                    updateStepIndicators(1);
-                    rekInputs[0].focus();
-                });
+                cancelAmount.classList.add('loading');
+                setTimeout(() => {
+                    cancelAmount.classList.remove('loading');
+                    resetForm();
+                }, 500);
             });
 
             processDeposit.addEventListener('click', function() {
-                startLoading(processDeposit);
+                processDeposit.classList.add('loading');
                 fetch('proses_setor.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1223,40 +1160,26 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     return response.json();
                 })
                 .then(data => {
-                    stopLoading(processDeposit, () => {
-                        if (data.status === 'error') {
-                            showModal(data.message, 'error');
-                            return;
-                        }
-                        if (data.email_status === 'failed') {
-                            showModal('Transaksi berhasil, tetapi gagal mengirim bukti transaksi ke email', 'error');
-                            return;
-                        }
-                        showModal(data.message, 'success', true);
-                        cekForm.reset();
-                        setoranForm.reset();
-                        clearRekInputs();
-                        inputJumlah.value = '';
-                        confirmationDetails.classList.remove('visible');
-                        amountDetails.classList.remove('visible');
-                        checkAccountStep.style.display = 'block';
-                        updateStepIndicators(1);
-                        accountData = {};
-                        rekInputs[0].focus();
-                    });
+                    processDeposit.classList.remove('loading');
+                    if (data.status === 'error') {
+                        showModal('Error', data.message, false);
+                        return;
+                    }
+                    showModal('Sukses', data.message, true);
                 })
                 .catch(error => {
-                    stopLoading(processDeposit);
-                    showModal('Gagal memproses transaksi: ' + error.message, 'error');
+                    processDeposit.classList.remove('loading');
+                    showModal('Error', 'Gagal memproses transaksi: ' + error.message, false);
                 });
             });
 
             backToAmount.addEventListener('click', function() {
-                startLoading(backToAmount);
-                stopLoading(backToAmount, () => {
-                    updateStepIndicators(2);
+                backToAmount.classList.add('loading');
+                setTimeout(() => {
+                    backToAmount.classList.remove('loading');
+                    showStep(2);
                     inputJumlah.focus();
-                });
+                }, 500);
             });
         });
     </script>

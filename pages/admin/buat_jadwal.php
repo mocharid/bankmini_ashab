@@ -386,16 +386,12 @@ date_default_timezone_set('Asia/Jakarta');
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
+            --bg-light: #f0f5ff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
@@ -417,32 +413,32 @@ date_default_timezone_set('Asia/Jakarta');
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
-            padding: 12px 20px;
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            font-size: clamp(1.1rem, 2.2vw, 1.2rem);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: 8px;
+            padding: 10px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
         }
 
@@ -453,68 +449,104 @@ date_default_timezone_set('Asia/Jakarta');
 
         .main-content {
             flex: 1;
-            padding: 15px;
+            padding: 20px;
             width: 100%;
             max-width: 1000px;
             margin: 0 auto;
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
+        }
+
+        .welcome-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+            animation: shimmer 8s infinite linear;
+        }
+
+        @keyframes shimmer {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .welcome-banner h2 {
-            margin-bottom: 8px;
-            font-size: clamp(1.3rem, 2.5vw, 1.5rem);
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             position: relative;
             z-index: 1;
         }
 
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
         .form-card {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 15px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: 20px;
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         form {
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 20px;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 8px;
         }
 
         label {
             font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         input[type="text"],
         input[type="date"] {
             width: 100%;
-            padding: 10px 12px;
+            padding: 12px 15px;
             border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             line-height: 1.5;
-            min-height: 40px;
+            min-height: 44px;
             transition: var(--transition);
             -webkit-user-select: text;
             user-select: text;
@@ -550,100 +582,99 @@ date_default_timezone_set('Asia/Jakarta');
         input[type="date"]:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(12, 77, 162, 0.1);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
         }
 
         .btn {
-            background-color: var(--primary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             font-weight: 500;
             display: flex;
             align-items: center;
-            gap: 6px;
+            justify-content: center;
+            gap: 8px;
             transition: var(--transition);
             width: fit-content;
         }
 
         .btn:hover {
-            background-color: var(--primary-dark);
+            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
         .btn:active {
             transform: scale(0.95);
         }
 
-        .btn-edit {
-            background-color: var(--secondary-color);
-        }
-
-        .btn-edit:hover {
-            background-color: var(--secondary-dark);
-        }
-
-        .btn-delete {
-            background-color: var(--danger-color);
-        }
-
-        .btn-delete:hover {
-            background-color: #d32f2f;
-        }
-
         .btn-cancel {
-            background-color: #f0f0f0;
+            background: #f0f0f0;
             color: var(--text-secondary);
             border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
         }
 
         .btn-cancel:hover {
-            background-color: #e0e0e0;
+            background: #e0e0e0;
             transform: translateY(-2px);
         }
 
-        .btn-confirm {
-            background-color: var(--secondary-color);
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
         }
 
-        .btn-confirm:hover {
-            background-color: var(--secondary-dark);
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        .btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            position: absolute;
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .jadwal-list {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 15px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            transition: var(--transition);
-        }
-
-        .jadwal-list:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-3px);
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
         }
 
         .jadwal-list-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         .jadwal-list h3 {
             color: var(--primary-dark);
-            font-size: clamp(1rem, 2vw, 1.1rem);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
         table {
@@ -652,16 +683,20 @@ date_default_timezone_set('Asia/Jakarta');
         }
 
         th, td {
-            padding: 10px 12px;
+            padding: 12px 15px;
             text-align: left;
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             border-bottom: 1px solid #eee;
         }
 
         th {
-            background: var(--primary-light);
+            background: var(--bg-light);
             color: var(--text-secondary);
             font-weight: 600;
+        }
+
+        td {
+            background: white;
         }
 
         tr:hover {
@@ -670,30 +705,30 @@ date_default_timezone_set('Asia/Jakarta');
 
         .action-buttons {
             display: flex;
-            gap: 8px;
+            gap: 10px;
         }
 
         .pagination {
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             margin-top: 20px;
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         .pagination a {
             text-decoration: none;
-            padding: 8px 12px;
-            border-radius: 8px;
+            padding: 10px 15px;
+            border-radius: 10px;
             color: var(--text-primary);
             background-color: #f0f0f0;
             transition: var(--transition);
         }
 
         .pagination a:hover:not(.disabled) {
-            background-color: var(--primary-light);
-            color: var(--primary-dark);
+            background: var(--primary-color);
+            color: white;
             transform: translateY(-2px);
         }
 
@@ -705,9 +740,9 @@ date_default_timezone_set('Asia/Jakarta');
         }
 
         .pagination .current-page {
-            padding: 8px 12px;
-            border-radius: 8px;
-            background-color: var(--primary-color);
+            padding: 10px 15px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             font-weight: 500;
         }
@@ -719,46 +754,20 @@ date_default_timezone_set('Asia/Jakarta');
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.65);
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
         }
 
         .modal-content {
             background: white;
-            padding: 20px;
-            border-radius: 12px;
-            width: 90%;
-            max-width: 450px;
+            padding: 25px;
+            border-radius: 15px;
+            width: clamp(350px, 85vw, 450px);
             box-shadow: var(--shadow-md);
-            animation: popInModal 0.3s ease-out;
-        }
-
-        @keyframes popInModal {
-            0% { transform: scale(0.8); opacity: 0; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .modal-title {
-            font-size: clamp(1rem, 2vw, 1.1rem);
-            color: var(--primary-dark);
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .modal p {
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            color: var(--text-secondary);
-            margin-bottom: 15px;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
         }
 
         .success-overlay {
@@ -767,67 +776,109 @@ date_default_timezone_set('Asia/Jakarta');
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.65);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            animation: fadeInOverlay 0.3s ease-out;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
         }
 
         @keyframes fadeInOverlay {
-            0% { opacity: 0; }
-            100% { opacity: 1; }
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
-        .success-modal {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .success-modal, .error-modal {
+            position: relative;
             text-align: center;
-            max-width: 90%;
-            width: 400px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
-            animation: popInModal 0.3s ease-out;
+            width: clamp(350px, 85vw, 450px);
+            border-radius: 15px;
+            padding: clamp(30px, 5vw, 40px);
+            box-shadow: var(--shadow-md);
+            transform: scale(0.7);
+            opacity: 0;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            overflow: hidden;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
         }
 
-        .success-icon {
-            font-size: clamp(3rem, 6vw, 3.5rem);
-            color: var(--secondary-color);
-            margin-bottom: 20px;
+        .success-modal::before, .error-modal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
         }
 
-        .error-icon {
-            font-size: clamp(3rem, 6vw, 3.5rem);
-            color: var(--danger-color);
-            margin-bottom: 20px;
+        @keyframes popInModal {
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.03); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: 10px;
-            font-size: clamp(1.2rem, 2.5vw, 1.3rem);
+        .success-icon, .error-icon {
+            font-size: clamp(3.8rem, 8vw, 4.8rem);
+            margin: 0 auto 20px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+            color: white;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.25); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3, .error-modal h3 {
+            color: white;
+            margin: 0 0 20px;
+            font-size: clamp(1.4rem, 3vw, 1.6rem);
             font-weight: 600;
+            animation: slideUpText 0.5s ease-out 0.2s both;
         }
 
-        .success-modal p {
-            color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        .success-modal p, .error-modal p {
+            color: white;
+            font-size: clamp(0.95rem, 2.3vw, 1.05rem);
+            margin: 0 0 25px;
+            line-height: 1.6;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-title {
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            color: var(--primary-dark);
             margin-bottom: 20px;
-            line-height: 1.5;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .modal-content-confirm {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 15px;
+            margin-bottom: 20px;
         }
 
         .modal-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px 0;
+            padding: 10px 0;
             border-bottom: 1px solid #eee;
         }
 
@@ -837,75 +888,62 @@ date_default_timezone_set('Asia/Jakarta');
 
         .modal-label {
             font-weight: 500;
-            color: var(--text-secondary);
+            color: #fff; 
         }
 
         .modal-value {
             font-weight: 600;
-            color: var(--text-primary);
+            color: #fff; 
         }
 
         .modal-buttons {
             display: flex;
-            gap: 12px;
+            gap: 15px;
             justify-content: center;
-            margin-top: 15px;
-        }
-
-        .loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .loading i {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            margin-top: 20px;
         }
 
         .no-data {
             text-align: center;
-            padding: 20px;
+            padding: 30px;
             color: var(--text-secondary);
+            animation: slideIn 0.5s ease-out;
         }
 
         .no-data i {
-            font-size: clamp(1.5rem, 3vw, 1.8rem);
+            font-size: clamp(2rem, 4vw, 2.2rem);
             color: #d1d5db;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
         }
 
         .no-data p {
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         @media (max-width: 768px) {
             .top-nav {
-                padding: 10px;
-                font-size: clamp(1rem, 2vw, 1.1rem);
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
-                padding: 10px;
-            }
-
-            .welcome-banner {
                 padding: 15px;
             }
 
             .welcome-banner h2 {
-                font-size: clamp(1.1rem, 2.2vw, 1.2rem);
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
+            }
+
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
             .form-card, .jadwal-list {
-                padding: 15px;
+                padding: 20px;
             }
 
             form {
-                gap: 12px;
+                gap: 15px;
             }
 
             .btn {
@@ -916,7 +954,7 @@ date_default_timezone_set('Asia/Jakarta');
             .jadwal-list-header {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 10px;
+                gap: 15px;
             }
 
             table {
@@ -926,75 +964,94 @@ date_default_timezone_set('Asia/Jakarta');
             }
 
             th, td {
-                padding: 8px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+                padding: 10px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
 
             .action-buttons {
                 flex-direction: column;
-                gap: 5px;
+                gap: 8px;
             }
 
             .modal-content {
-                margin: 10px;
-                width: calc(100% - 20px);
-                padding: 15px;
-            }
-
-            .modal-buttons {
-                flex-direction: column;
-            }
-
-            .success-modal {
-                width: 90%;
+                width: clamp(330px, 90vw, 440px);
                 padding: 20px;
             }
 
+            .success-modal, .error-modal {
+                width: clamp(330px, 90vw, 440px);
+                padding: clamp(25px, 5vw, 35px);
+                margin: 15px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.5rem, 7vw, 4.5rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1.3rem, 2.8vw, 1.5rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.9rem, 2.2vw, 1rem);
+            }
+
             .pagination {
-                gap: 6px;
+                gap: 8px;
             }
 
             .pagination a, .pagination .current-page {
-                padding: 6px 10px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+                padding: 8px 12px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
         }
 
         @media (max-width: 480px) {
             body {
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
             .top-nav {
-                padding: 8px;
+                padding: 10px;
             }
 
             .welcome-banner {
-                padding: 12px;
+                padding: 20px;
             }
 
             .jadwal-list h3 {
-                font-size: clamp(0.9rem, 1.8vw, 1rem);
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .no-data i {
-                font-size: clamp(1.2rem, 2.5vw, 1.5rem);
-            }
-
-            .success-modal h3 {
-                font-size: clamp(1rem, 2vw, 1.1rem);
-            }
-
-            .success-modal p {
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+                font-size: clamp(1.8rem, 3.5vw, 2rem);
             }
 
             input[type="text"],
             input[type="date"] {
-                min-height: 36px;
+                min-height: 40px;
+            }
+
+            .success-modal, .error-modal {
+                width: clamp(310px, 92vw, 380px);
+                padding: clamp(20px, 4vw, 30px);
+                margin: 10px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(3.2rem, 6.5vw, 4rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1.2rem, 2.7vw, 1.4rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.85rem, 2.1vw, 0.95rem);
             }
         }
     </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -1003,15 +1060,17 @@ date_default_timezone_set('Asia/Jakarta');
             <i class="fas fa-xmark"></i>
         </button>
         <h1>SCHOBANK</h1>
-        <div style="width: 36px;"></div>
+        <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2>Buat Jadwal Petugas</h2>
-            <p>Kelola Jadwal Petugas disini</p>
+            <h2> Buat Jadwal Petugas</h2>
+            <p>Kelola Jadwal Petugas di sini</p>
         </div>
+
+        <div id="alertContainer"></div>
 
         <!-- Form Section -->
         <div class="form-card">
@@ -1030,13 +1089,13 @@ date_default_timezone_set('Asia/Jakarta');
                     <label for="petugas2_nama">Nama Petugas 2</label>
                     <input type="text" id="petugas2_nama" name="petugas2_nama" value="<?php echo htmlspecialchars($petugas2_nama); ?>" placeholder="Masukkan nama petugas kedua" required>
                 </div>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 15px;">
                     <button type="submit" class="btn" id="submit-btn">
-                        <i class="fas fa-plus-circle"></i> <?php echo $id ? 'Update Jadwal' : 'Tambah Jadwal'; ?>
+                        <span class="btn-content"><i class="fas fa-plus-circle"></i> <?php echo $id ? 'Update Jadwal' : 'Tambah Jadwal'; ?></span>
                     </button>
                     <?php if ($id): ?>
                         <button type="button" class="btn btn-cancel" onclick="window.location.href='buat_jadwal.php'">
-                            <i class="fas fa-times"></i> Batal
+                            <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
                         </button>
                     <?php endif; ?>
                 </div>
@@ -1047,7 +1106,9 @@ date_default_timezone_set('Asia/Jakarta');
         <div class="jadwal-list">
             <div class="jadwal-list-header">
                 <h3><i class="fas fa-list"></i> Daftar Jadwal</h3>
-                <button id="printButton" class="btn btn-edit"><i class="fas fa-print"></i> Cetak</button>
+                <button id="printButton" class="btn">
+                    <span class="btn-content"><i class="fas fa-print"></i> Cetak</span>
+                </button>
             </div>
             <?php if (!empty($jadwal)): ?>
                 <table>
@@ -1067,18 +1128,18 @@ date_default_timezone_set('Asia/Jakarta');
                         ?>
                             <tr id="row-<?php echo $row['id']; ?>">
                                 <td><?php echo $no++; ?></td>
-                                <td><?php echo date('d/m/y', strtotime($row['tanggal'])); ?></td>
+                                <td><?php echo date('d/m/Y', strtotime($row['tanggal'])); ?></td>
                                 <td><?php echo htmlspecialchars($row['petugas1_nama']); ?></td>
                                 <td><?php echo htmlspecialchars($row['petugas2_nama']); ?></td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button class="btn btn-edit" 
+                                        <button class="btn" 
                                                 onclick="showEditModal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars($row['tanggal'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($row['petugas1_nama'], ENT_QUOTES); ?>', '<?php echo htmlspecialchars($row['petugas2_nama'], ENT_QUOTES); ?>')">
-                                            <i class="fas fa-edit"></i> Edit
+                                            <span class="btn-content"><i class="fas fa-edit"></i> Edit</span>
                                         </button>
-                                        <button class="btn btn-delete" 
-                                                onclick="deleteJadwal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars(date('d/m/y', strtotime($row['tanggal'])), ENT_QUOTES); ?>')">
-                                            <i class="fas fa-trash"></i> Hapus
+                                        <button class="btn" 
+                                                onclick="deleteJadwal(<?php echo $row['id']; ?>, '<?php echo htmlspecialchars(date('d/m/Y', strtotime($row['tanggal'])), ENT_QUOTES); ?>')">
+                                            <span class="btn-content"><i class="fas fa-trash"></i> Hapus</span>
                                         </button>
                                     </div>
                                 </td>
@@ -1106,6 +1167,9 @@ date_default_timezone_set('Asia/Jakarta');
                 </div>
             <?php endif; ?>
         </div>
+
+        <!-- Hidden input to pass jadwal count to JavaScript -->
+        <input type="hidden" id="jadwalCount" value="<?php echo count($jadwal); ?>">
 
         <!-- Confirmation Modal -->
         <?php if (isset($_GET['confirm']) && isset($_GET['tanggal']) && isset($_GET['petugas1_nama']) && isset($_GET['petugas2_nama']) && !$show_error_modal): ?>
@@ -1135,11 +1199,11 @@ date_default_timezone_set('Asia/Jakarta');
                         <input type="hidden" name="petugas1_nama" value="<?php echo htmlspecialchars(urldecode($_GET['petugas1_nama'])); ?>">
                         <input type="hidden" name="petugas2_nama" value="<?php echo htmlspecialchars(urldecode($_GET['petugas2_nama'])); ?>">
                         <div class="modal-buttons">
-                            <button type="submit" name="confirm" class="btn btn-confirm" id="confirm-btn">
-                                <i class="fas fa-check"></i> Konfirmasi
+                            <button type="submit" name="confirm" class="btn" id="confirm-btn">
+                                <span class="btn-content"><i class="fas fa-check"></i> Konfirmasi</span>
                             </button>
                             <button type="button" class="btn btn-cancel" onclick="hideConfirmModal()">
-                                <i class="fas fa-times"></i> Batal
+                                <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
                             </button>
                         </div>
                     </form>
@@ -1154,7 +1218,7 @@ date_default_timezone_set('Asia/Jakarta');
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
-                    <h3>BERHASIL</h3>
+                    <h3>Berhasil</h3>
                     <p>Jadwal berhasil ditambahkan!</p>
                 </div>
             </div>
@@ -1167,7 +1231,7 @@ date_default_timezone_set('Asia/Jakarta');
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
-                    <h3>BERHASIL</h3>
+                    <h3>Berhasil</h3>
                     <p>Jadwal berhasil diupdate!</p>
                 </div>
             </div>
@@ -1180,7 +1244,7 @@ date_default_timezone_set('Asia/Jakarta');
                     <div class="success-icon">
                         <i class="fas fa-check-circle"></i>
                     </div>
-                    <h3>BERHASIL</h3>
+                    <h3>Berhasil</h3>
                     <p>Jadwal berhasil dihapus!</p>
                 </div>
             </div>
@@ -1189,15 +1253,15 @@ date_default_timezone_set('Asia/Jakarta');
         <!-- Error Modal -->
         <?php if ($show_error_modal): ?>
             <div class="success-overlay" id="errorModal">
-                <div class="success-modal">
+                <div class="error-modal">
                     <div class="error-icon">
                         <i class="fas fa-exclamation-circle"></i>
                     </div>
-                    <h3>ERROR</h3>
+                    <h3>Gagal</h3>
                     <p><?php echo htmlspecialchars($error_message); ?></p>
                     <div class="modal-buttons">
                         <button type="button" class="btn btn-cancel" onclick="hideErrorModal()">
-                            <i class="fas fa-times"></i> OK
+                            <span class="btn-content"><i class="fas fa-times"></i> OK</span>
                         </button>
                     </div>
                 </div>
@@ -1227,9 +1291,11 @@ date_default_timezone_set('Asia/Jakarta');
                         <input type="text" id="edit_petugas2_nama" name="edit_petugas2_nama" required>
                     </div>
                     <div class="modal-buttons">
-                        <button type="button" class="btn-cancel" onclick="hideEditModal()">Batal</button>
-                        <button type="submit" class="btn btn-edit" id="edit-submit-btn">
-                            <i class="fas fa-save"></i> Simpan
+                        <button type="button" class="btn btn-cancel" onclick="hideEditModal()">
+                            <span class="btn-content">Batal</span>
+                        </button>
+                        <button type="submit" class="btn" id="edit-submit-btn">
+                            <span class="btn-content"><i class="fas fa-save"></i> Simpan</span>
                         </button>
                     </div>
                 </form>
@@ -1265,11 +1331,11 @@ date_default_timezone_set('Asia/Jakarta');
                     <input type="hidden" name="edit_petugas2_nama" id="editConfirmPetugas2Input">
                     <input type="hidden" name="edit_confirm" value="1">
                     <div class="modal-buttons">
-                        <button type="submit" class="btn btn-confirm" id="edit-confirm-btn">
-                            <i class="fas fa-check"></i> Konfirmasi
+                        <button type="submit" class="btn" id="edit-confirm-btn">
+                            <span class="btn-content"><i class="fas fa-check"></i> Konfirmasi</span>
                         </button>
                         <button type="button" class="btn btn-cancel" onclick="hideEditConfirmModal()">
-                            <i class="fas fa-times"></i> Batal
+                            <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
                         </button>
                     </div>
                 </form>
@@ -1288,9 +1354,11 @@ date_default_timezone_set('Asia/Jakarta');
                     <input type="hidden" name="token" value="<?php echo $token; ?>">
                     <input type="hidden" name="delete_id" id="delete_id">
                     <div class="modal-buttons">
-                        <button type="button" class="btn-cancel" onclick="hideDeleteModal()">Batal</button>
-                        <button type="submit" class="btn btn-delete" id="delete-submit-btn">
-                            <i class="fas fa-trash"></i> Hapus
+                        <button type="button" class="btn btn-cancel" onclick="hideDeleteModal()">
+                            <span class="btn-content">Batal</span>
+                        </button>
+                        <button type="submit" class="btn" id="delete-submit-btn">
+                            <span class="btn-content"><i class="fas fa-trash"></i> Hapus</span>
                         </button>
                     </div>
                 </form>
@@ -1299,27 +1367,52 @@ date_default_timezone_set('Asia/Jakarta');
     </div>
 
     <script>
-        // Format tanggal ke dd/mm/yy
+        // Format tanggal ke dd/mm/yyyy
         function formatDate(date) {
             const d = new Date(date);
-            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(-2)}`;
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
         }
 
-        // Show popup alert
-        function showAlert(message) {
-            alert(message);
+        // Show modal alert
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alertContainer');
+            const existingAlerts = alertContainer.querySelectorAll('.success-overlay');
+            existingAlerts.forEach(alert => {
+                alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => alert.remove(), 500);
+            });
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `success-overlay`;
+            alertDiv.innerHTML = `
+                <div class="${type}-modal">
+                    <div class="${type}-icon">
+                        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                    </div>
+                    <h3>${type === 'success' ? 'Berhasil' : 'Gagal'}</h3>
+                    <p>${message}</p>
+                </div>
+            `;
+            alertContainer.appendChild(alertDiv);
+            setTimeout(() => {
+                alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => alertDiv.remove(), 500);
+            }, 5000);
+            alertDiv.addEventListener('click', () => {
+                alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => alertDiv.remove(), 500);
+            });
         }
 
         // Add loading state to button
         function setButtonLoading(button, text, icon) {
             button.classList.add('loading');
-            button.innerHTML = `<i class="fas fa-spinner"></i> Memproses...`;
+            button.innerHTML = '<span class="btn-content"><i class="fas fa-spinner"></i> Memproses...</span>';
         }
 
         // Remove loading state from button
         function resetButton(button, text, icon) {
             button.classList.remove('loading');
-            button.innerHTML = `<i class="fas ${icon}"></i> ${text}`;
+            button.innerHTML = `<span class="btn-content"><i class="fas ${icon}"></i> ${text}</span>`;
         }
 
         // Close modal and clean up URL
@@ -1347,8 +1440,6 @@ date_default_timezone_set('Asia/Jakarta');
             isModalOpening = true;
 
             const modal = document.getElementById('editModal');
-            const modalContent = modal.querySelector('.modal-content');
-
             document.getElementById('edit_id').value = id;
             document.getElementById('edit_tanggal').value = tanggal;
             document.getElementById('edit_petugas1_nama').value = petugas1_nama;
@@ -1376,20 +1467,18 @@ date_default_timezone_set('Asia/Jakarta');
             const today = new Date().toISOString().split('T')[0];
 
             if (!tanggal || petugas1_nama.length < 3 || petugas2_nama.length < 3) {
-                showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!');
+                showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
                 isModalOpening = false;
                 return false;
             }
 
             if (new Date(tanggal) < new Date(today)) {
-                showAlert('Tanggal tidak boleh di masa lalu!');
+                showAlert('Tanggal tidak boleh di masa lalu!', 'error');
                 isModalOpening = false;
                 return false;
             }
 
             const modal = document.getElementById('editConfirmModal');
-            const modalContent = modal.querySelector('.success-modal');
-
             document.getElementById('editConfirmId').value = document.getElementById('edit_id').value;
             document.getElementById('editConfirmTanggal').textContent = formatDate(tanggal);
             document.getElementById('editConfirmTanggalInput').value = tanggal;
@@ -1419,8 +1508,6 @@ date_default_timezone_set('Asia/Jakarta');
             isModalOpening = true;
 
             const modal = document.getElementById('deleteModal');
-            const modalContent = modal.querySelector('.modal-content');
-
             document.getElementById('delete_id').value = id;
             document.getElementById('delete_tanggal').textContent = tanggal;
 
@@ -1434,7 +1521,7 @@ date_default_timezone_set('Asia/Jakarta');
                     setButtonLoading(document.getElementById('delete-submit-btn'), 'Hapus', 'fa-trash');
                     setTimeout(() => {
                         deleteForm.submit();
-                    }, 3000);
+                    }, 1000);
                 } else {
                     deleteForm.submit();
                 }
@@ -1473,36 +1560,65 @@ date_default_timezone_set('Asia/Jakarta');
 
         // Event Listeners
         document.addEventListener('DOMContentLoaded', () => {
+            // Prevent zooming and double-tap issues
+            document.addEventListener('touchstart', function(event) {
+                if (event.touches.length > 1) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', function(event) {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, { passive: false });
+
+            document.addEventListener('wheel', function(event) {
+                if (event.ctrlKey) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            document.addEventListener('dblclick', function(event) {
+                event.preventDefault();
+            }, { passive: false });
+
             // Print Button
             const printButton = document.getElementById('printButton');
+            const jadwalCount = parseInt(document.getElementById('jadwalCount').value);
             if (printButton) {
                 printButton.addEventListener('click', function() {
                     if (printButton.classList.contains('loading')) return;
-                    setButtonLoading(printButton, 'Cetak', 'fa-print');
 
+                    if (jadwalCount === 0) {
+                        showAlert('Tidak ada jadwal untuk dicetak!', 'error');
+                        return;
+                    }
+
+                    setButtonLoading(printButton, 'Cetak', 'fa-print');
                     const exportUrl = `${window.location.pathname}?export=pdf`;
-                    try {
-                        const pdfWindow = window.open(exportUrl);
-                        if (!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed === 'undefined') {
-                            showAlert('Gagal membuka PDF. Pastikan popup tidak diblokir oleh browser.');
-                        }
-                    } catch (e) {
-                        showAlert('Terjadi kesalahan saat membuka PDF.');
+                    console.log('Attempting to open print URL:', exportUrl);
+                    const pdfWindow = window.open(exportUrl, '_blank');
+                    if (!pdfWindow || pdfWindow.closed || typeof pdfWindow.closed === 'undefined') {
+                        showAlert('Gagal membuka PDF. Pastikan popup tidak diblokir oleh browser.', 'error');
                     }
 
                     setTimeout(() => {
                         resetButton(printButton, 'Cetak', 'fa-print');
-                    }, 3000);
+                    }, 1000);
                 });
             }
 
-            // Auto-dismiss success modals after 3 seconds
+            // Auto-dismiss success modals after 5 seconds
             const successModals = document.querySelectorAll('.success-overlay');
             successModals.forEach(modal => {
                 if (modal.id !== 'confirmModal' && modal.id !== 'editConfirmModal' && modal.id !== 'errorModal') {
                     setTimeout(() => {
                         closeModal(modal, modal.id);
-                    }, 3000);
+                    }, 5000);
                 }
             });
 
@@ -1511,10 +1627,10 @@ date_default_timezone_set('Asia/Jakarta');
             if (submitBtn) {
                 submitBtn.addEventListener('click', function(e) {
                     if (submitBtn.classList.contains('loading')) return;
-                    setButtonLoading(submitBtn, submitBtn.textContent.trim(), submitBtn.querySelector('i').classList[1]);
+                    setButtonLoading(submitBtn, submitBtn.textContent.trim(), 'fa-plus-circle');
                     setTimeout(() => {
-                        resetButton(submitBtn, submitBtn.textContent.trim(), submitBtn.querySelector('i').classList[1]);
-                    }, 3000);
+                        resetButton(submitBtn, submitBtn.textContent.trim(), 'fa-plus-circle');
+                    }, 1000);
                 });
             }
 
@@ -1526,7 +1642,7 @@ date_default_timezone_set('Asia/Jakarta');
                     setTimeout(() => {
                         resetButton(confirmBtn, 'Konfirmasi', 'fa-check');
                         document.getElementById('confirm-form').submit();
-                    }, 3000);
+                    }, 1000);
                 });
             }
 
@@ -1537,7 +1653,7 @@ date_default_timezone_set('Asia/Jakarta');
                     setButtonLoading(editSubmitBtn, 'Simpan', 'fa-save');
                     setTimeout(() => {
                         resetButton(editSubmitBtn, 'Simpan', 'fa-save');
-                    }, 3000);
+                    }, 1000);
                 });
             }
 
@@ -1549,7 +1665,7 @@ date_default_timezone_set('Asia/Jakarta');
                     setTimeout(() => {
                         resetButton(editConfirmBtn, 'Konfirmasi', 'fa-check');
                         document.getElementById('editConfirmForm').submit();
-                    }, 3000);
+                    }, 1000);
                 });
             }
 
@@ -1560,7 +1676,7 @@ date_default_timezone_set('Asia/Jakarta');
                     setButtonLoading(deleteSubmitBtn, 'Hapus', 'fa-trash');
                     setTimeout(() => {
                         resetButton(deleteSubmitBtn, 'Hapus', 'fa-trash');
-                    }, 3000);
+                    }, 1000);
                 });
             }
 
@@ -1568,10 +1684,10 @@ date_default_timezone_set('Asia/Jakarta');
             document.querySelectorAll('.btn-cancel').forEach(btn => {
                 btn.addEventListener('click', function() {
                     if (btn.classList.contains('loading')) return;
-                    setButtonLoading(btn, 'Batal', 'fa-times');
+                    setButtonLoading(btn, btn.textContent.trim(), 'fa-times');
                     setTimeout(() => {
                         resetButton(btn, btn.textContent.trim(), 'fa-times');
-                    }, 3000);
+                    }, 1000);
                 });
             });
 
@@ -1610,6 +1726,19 @@ date_default_timezone_set('Asia/Jakarta');
                 }
             });
 
+            // Ensure date input consistency in Safari
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+            dateInputs.forEach(input => {
+                input.addEventListener('focus', function() {
+                    this.style.webkitAppearance = 'none';
+                    this.style.appearance = 'none';
+                });
+                input.addEventListener('blur', function() {
+                    this.style.webkitAppearance = 'none';
+                    this.style.appearance = 'none';
+                });
+            });
+
             // Validate form inputs
             const jadwalForm = document.getElementById('jadwal-form');
             if (jadwalForm) {
@@ -1621,13 +1750,13 @@ date_default_timezone_set('Asia/Jakarta');
 
                     if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
                         e.preventDefault();
-                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!');
+                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
                         return;
                     }
 
                     if (new Date(tanggal) < new Date(today)) {
                         e.preventDefault();
-                        showAlert('Tanggal tidak boleh di masa lalu!');
+                        showAlert('Tanggal tidak boleh di masa lalu!', 'error');
                     }
                 });
             }
@@ -1643,16 +1772,61 @@ date_default_timezone_set('Asia/Jakarta');
 
                     if (!tanggal || petugas1.length < 3 || petugas2.length < 3) {
                         e.preventDefault();
-                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!');
+                        showAlert('Semua field harus diisi dan nama petugas minimal 3 karakter!', 'error');
                         return;
                     }
 
                     if (new Date(tanggal) < new Date(today)) {
                         e.preventDefault();
-                        showAlert('Tanggal tidak boleh di masa lalu!');
+                        showAlert('Tanggal tidak boleh di masa lalu!', 'error');
                     }
                 });
             }
+
+            // Prevent text selection on double-click
+            document.addEventListener('mousedown', function(e) {
+                if (e.detail > 1) {
+                    e.preventDefault();
+                }
+            });
+
+            // Fix touch issues in Safari
+            document.addEventListener('touchstart', function(e) {
+                const target = e.target;
+                if (target.tagName === 'INPUT' || target.tagName === 'BUTTON') {
+                    target.focus();
+                }
+            }, { passive: true });
+
+            // Handle print button focus for accessibility
+            if (printButton) {
+                printButton.addEventListener('focus', function() {
+                    printButton.style.outline = '2px solid var(--secondary-color)';
+                });
+                printButton.addEventListener('blur', function() {
+                    printButton.style.outline = 'none';
+                });
+            }
+
+            // Ensure modals are accessible via keyboard
+            const modals = document.querySelectorAll('.modal, .success-overlay');
+            modals.forEach(modal => {
+                const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+                const firstFocusable = focusableElements[0];
+                const lastFocusable = focusableElements[focusableElements.length - 1];
+
+                modal.addEventListener('keydown', function(e) {
+                    if (e.key === 'Tab') {
+                        if (e.shiftKey && document.activeElement === firstFocusable) {
+                            e.preventDefault();
+                            lastFocusable.focus();
+                        } else if (!e.shiftKey && document.activeElement === lastFocusable) {
+                            e.preventDefault();
+                            firstFocusable.focus();
+                        }
+                    }
+                });
+            });
         });
     </script>
 </body>

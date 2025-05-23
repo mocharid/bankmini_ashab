@@ -6,25 +6,25 @@ require '../../vendor/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
-// Start session if not active
+// Mulai sesi jika belum aktif
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Restrict access to admin only
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: ../../pages/login.php?error=' . urlencode('Silakan login sebagai admin terlebih dahulu!'));
+// Batasi akses hanya untuk petugas
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'petugas') {
+    header('Location: ../../pages/login.php?error=' . urlencode('Silakan login sebagai petugas terlebih dahulu!'));
     exit();
 }
 
-// Enable debugging for development
+// Aktifkan debugging untuk development
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 ini_set('log_errors', 1);
 ini_set('error_log', 'C:/laragon/www/schobank/logs/error.log');
 
-// Fetch jurusan data
+// Ambil data jurusan
 $query_jurusan = "SELECT * FROM jurusan";
 $result_jurusan = $conn->query($query_jurusan);
 if (!$result_jurusan) {
@@ -32,13 +32,13 @@ if (!$result_jurusan) {
     die("Terjadi kesalahan saat mengambil data jurusan.");
 }
 
-// Initialize variables
+// Inisialisasi variabel
 $showConfirmation = false;
 $formData = [];
 $show_success_popup = false;
 $errors = [];
 
-// Function to generate unique username
+// Fungsi untuk menghasilkan username unik
 function generateUsername($nama, $conn) {
     $base_username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nama));
     $username = $base_username;
@@ -58,7 +58,7 @@ function generateUsername($nama, $conn) {
     return $username;
 }
 
-// Function to check unique field
+// Fungsi untuk memeriksa keunikan field
 function checkUniqueField($field, $value, $conn, $table = 'users') {
     $query = "SELECT id FROM $table WHERE $field = ?";
     $stmt = $conn->prepare($query);
@@ -74,7 +74,7 @@ function checkUniqueField($field, $value, $conn, $table = 'users') {
     return $exists ? ucfirst($field) . " sudah digunakan!" : null;
 }
 
-// Function to send WhatsApp message using Fonnte API
+// Fungsi untuk mengirim pesan WhatsApp menggunakan Fonnte API
 function sendWhatsAppMessage($phone_number, $message) {
     $curl = curl_init();
     
@@ -113,7 +113,7 @@ function sendWhatsAppMessage($phone_number, $message) {
     }
 }
 
-// Function to send email confirmation
+// Fungsi untuk mengirim email konfirmasi
 function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name, $no_wa = '') {
     try {
         $mail = new PHPMailer(true);
@@ -132,9 +132,10 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
         $mail->isHTML(true);
         $mail->Subject = 'Pembukaan Rekening SCHOBANK Berhasil';
 
+        // Generate dynamic login link
         $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
         $host = $_SERVER['HTTP_HOST'];
-        $path = dirname($_SERVER['PHP_SELF'], 2);
+        $path = dirname($_SERVER['PHP_SELF'], 2); // Navigate two levels up to reach /pages/
         $login_link = $protocol . "://" . $host . $path . "/login.php";
 
         $emailBody = "
@@ -241,7 +242,7 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
     }
 }
 
-// Function to send notifications
+// Fungsi untuk mengirim notifikasi berdasarkan input
 function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name) {
     $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
     $host = $_SERVER['HTTP_HOST'];
@@ -249,6 +250,24 @@ function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $pass
     $login_link = $protocol . "://" . $host . $path . "/login.php";
 
     $success = true;
+
+    $labels = [
+        'Nama' => $nama,
+        'No. Rekening' => $no_rekening,
+        'Username' => $username,
+        'Password' => $password,
+        'Jurusan' => $jurusan_name,
+        'Kelas' => $kelas_name,
+        'No. WhatsApp' => ($no_wa ? $no_wa : '-'),
+        'Saldo Awal' => 'Rp 0'
+    ];
+    $max_label_length = max(array_map('strlen', array_keys($labels)));
+    $max_label_length = max($max_label_length, 20);
+    $text_rows = [];
+    foreach ($labels as $label => $value) {
+        $text_rows[] = str_pad($label, $max_label_length, ' ') . " : " . $value;
+    }
+    $details_text = implode("\n", $text_rows);
 
     if (!empty($email)) {
         if (!sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name, $no_wa)) {
@@ -258,11 +277,12 @@ function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $pass
     }
 
     if (!empty($no_wa)) {
-        $wa_message = "SCHOBANK SYSTEM\n\nYth. {$nama},\n\nSelamat! Rekening digital Anda telah aktif.\n\n" .
-                      "Rincian Akun:\n- No. Rekening: {$no_rekening}\n- Username: {$username}\n- Password: {$password}\n- Jurusan: {$jurusan_name}\n- Kelas: {$kelas_name}\n\n" .
-                      "⚠️ Untuk keamanan, segera ubah kata sandi dan atur PIN transaksi setelah login.\n\n" .
-                      "Login sekarang: {$login_link}\nHubungi kami: 081234567890 atau support@schobank.xai\n\n" .
-                      "Hormat kami,\nTim SCHOBANK";
+        $wa_message = "SCHOBANK SYSTEM\n\nYth. {$nama},\n\nRekening digital Anda telah berhasil dibuka. Rincian:\n\n" .
+                      $details_text . "\n\n" .
+                      "PERINGATAN: Segera ubah kata sandi dan atur PIN transaksi setelah login pertama.\n" .
+                      "Login: {$login_link}\n" .
+                      "Hubungi: 081234567890 atau support@schobank.xai\n\n" .
+                      "Pesan otomatis, jangan balas.";
         if (!sendWhatsAppMessage($no_wa, $wa_message)) {
             error_log("Peringatan: Gagal mengirim WhatsApp ke: $no_wa");
             $success = false;
@@ -272,17 +292,17 @@ function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $pass
     return $success;
 }
 
-// Handle form submission
+// Penanganan form submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     error_log("Data POST diterima: " . print_r($_POST, true));
 
-    // Handle cancel button
+    // Penanganan tombol batal
     if (isset($_POST['cancel'])) {
         header('Location: tambah_nasabah.php');
         exit();
     }
 
-    // Handle confirmation
+    // Penanganan konfirmasi
     if (isset($_POST['confirmed'])) {
         $nama = trim($_POST['nama'] ?? '');
         $username = trim($_POST['username'] ?? '');
@@ -293,7 +313,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $email = trim($_POST['email'] ?? '');
         $no_wa = trim($_POST['no_wa'] ?? '');
 
-        // Validate input
+        // Validasi input
         if (empty($nama) || strlen($nama) < 3) {
             $errors['nama'] = "Nama harus minimal 3 karakter!";
         }
@@ -319,7 +339,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $errors['no_rekening'] = "Nomor rekening tidak valid!";
         }
 
-        // Validate unique fields
+        // Validasi unik
         if (!$errors) {
             if (!empty($email) && ($error = checkUniqueField('email', $email, $conn))) {
                 $errors['email'] = $error;
@@ -366,7 +386,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
                 $stmt_rekening->close();
 
-                // Fetch jurusan and kelas names
+                // Ambil nama jurusan dan kelas
                 $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
                 $stmt_jurusan = $conn->prepare($query_jurusan_name);
                 if (!$stmt_jurusan) {
@@ -397,7 +417,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
                 $stmt_kelas->close();
 
-                // Send notifications
+                // Kirim notifikasi
                 $notifications_sent = sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_name);
                 if (!$notifications_sent) {
                     error_log("Peringatan: Gagal mengirim notifikasi, tetapi data disimpan.");
@@ -413,14 +433,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
     } else {
-        // Handle initial form submission
+        // Penanganan pengisian form awal
         $nama = trim($_POST['nama'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $no_wa = trim($_POST['no_wa'] ?? '');
         $jurusan_id = (int)($_POST['jurusan_id'] ?? 0);
         $kelas_id = (int)($_POST['kelas_id'] ?? 0);
 
-        // Validate input
+        // Validasi input
         if (empty($nama) || strlen($nama) < 3) {
             $errors['nama'] = "Nama harus minimal 3 karakter!";
         }
@@ -440,7 +460,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $errors['kelas_id'] = "Kelas wajib dipilih!";
         }
 
-        // Validate unique fields
+        // Validasi unik
         if (!$errors) {
             if (!empty($email) && ($error = checkUniqueField('email', $email, $conn))) {
                 $errors['email'] = $error;
@@ -459,7 +479,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 error_log("No rekening duplikat (initial), generate ulang: $no_rekening");
             }
 
-            // Fetch jurusan and kelas names
+            // Ambil nama jurusan dan kelas
             $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
             $stmt_jurusan = $conn->prepare($query_jurusan_name);
             if (!$stmt_jurusan) {
@@ -509,7 +529,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
 }
 
-// Function to mask account number
+// Fungsi untuk memformat nomor rekening
 function maskNoRekening($no_rekening) {
     if (strlen($no_rekening) >= 9) {
         return substr($no_rekening, 0, 4) . '****' . substr($no_rekening, -2);
@@ -973,13 +993,14 @@ function maskNoRekening($no_rekening) {
 
         .modal-buttons {
             display: flex;
-            justify-content: center;
             gap: 15px;
+            justify-content: center;
             margin-top: 15px;
         }
 
         .modal-buttons .btn {
-            max-width: 160px;
+            flex: 1;
+            max-width: 200px;
             padding: 12px 20px;
             font-size: clamp(0.9rem, 2vw, 1rem);
         }
@@ -1028,6 +1049,11 @@ function maskNoRekening($no_rekening) {
                 justify-content: center;
             }
 
+            .modal-buttons {
+                flex-direction: column;
+                gap: 10px;
+            }
+
             .success-modal, .error-modal, .confirm-modal {
                 width: clamp(300px, 85vw, 400px);
                 padding: clamp(15px, 3vw, 20px);
@@ -1057,11 +1083,6 @@ function maskNoRekening($no_rekening) {
 
             .modal-label, .modal-value {
                 font-size: clamp(0.75rem, 1.6vw, 0.85rem);
-            }
-
-            .modal-buttons .btn {
-                max-width: 140px;
-                padding: 10px 18px;
             }
         }
 
@@ -1110,11 +1131,6 @@ function maskNoRekening($no_rekening) {
 
             .modal-label, .modal-value {
                 font-size: clamp(0.7rem, 1.5vw, 0.8rem);
-            }
-
-            .modal-buttons .btn {
-                max-width: 130px;
-                padding: 10px 16px;
             }
         }
     </style>

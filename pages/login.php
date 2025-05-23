@@ -100,9 +100,10 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
     <title>Login - SCHOBANK SYSTEM</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
@@ -142,90 +143,48 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             padding: 15px;
         }
 
-        .main-container {
-            display: flex;
-            max-width: 900px;
-            width: 100%;
-            background: #ffffff;
-            border-radius: 12px;
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
-        }
-
-        .left-section {
-            flex: 1;
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 3rem 2rem;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .left-section::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-            opacity: 0.3;
-        }
-
-        .left-section h1 {
-            font-size: 2.4rem;
-            font-weight: 800;
-            margin-bottom: 0.8rem;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-            animation: slideIn 0.8s ease-out;
-        }
-
-        .left-section .tagline {
-            font-size: 1.2rem;
-            font-weight: 300;
-            margin-bottom: 1.5rem;
-            opacity: 0.9;
-            animation: slideIn 0.8s ease-out 0.2s;
-            animation-fill-mode: backwards;
-        }
-
-        .left-section p {
-            font-size: 1rem;
-            line-height: 1.6;
-            opacity: 0.85;
-            animation: slideIn 0.8s ease-out 0.4s;
-            animation-fill-mode: backwards;
-        }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(15px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .left-section:hover {
-            background: linear-gradient(135deg, #151c66 0%, #009bb8 100%);
-            transition: background 0.4s ease;
-        }
-
         .login-container {
-            flex: 1;
             background: #ffffff;
             padding: 2.5rem;
-            border-radius: 0 12px 12px 0;
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
             width: 100%;
             max-width: 400px;
             text-align: center;
-            border-left: 1px solid #e8ecef;
             animation: fadeIn 0.8s ease-out;
+            position: relative;
         }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+
+        .back-home {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            background: #f5f7fa;
+            border: 1px solid #e8ecef;
+            border-radius: 50%;
+            cursor: pointer;
+            text-decoration: none;
+            transition: var(--transition);
+        }
+
+        .back-home:hover {
+            color: #ffffff;
+            background: var(--secondary-color);
+            border-color: var(--secondary-color);
+            transform: scale(1.1);
+            text-decoration: none;
         }
 
         .logo-container {
@@ -439,30 +398,18 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             display: none;
         }
 
-        @media (max-width: 768px) {
-            .main-container {
-                display: block;
-                box-shadow: none;
-                background: transparent;
-            }
-
-            .left-section {
-                display: none;
-            }
-
-            .login-container {
-                max-width: 400px;
-                border-radius: 12px;
-                box-shadow: var(--shadow-sm);
-                border: 1px solid #e8ecef;
-                margin: 0 auto;
-                padding: 2rem;
-            }
-        }
-
         @media (max-width: 480px) {
             .login-container {
                 padding: 1.5rem;
+            }
+
+            .back-home {
+                top: 10px;
+                right: 10px;
+                width: 28px;
+                height: 28px;
+                font-size: 1rem;
+                text-decoration: none;
             }
 
             .logo {
@@ -516,51 +463,45 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
     </style>
 </head>
 <body>
-    <div class="main-container">
-        <!-- Left Section (Wide Screens Only) -->
-        <div class="left-section">
-            <h1>SCHOBANK DIGITAL SYSTEM</h1>
-            <div class="tagline">SMK PLUS ASHABULYAMIN CIANJUR</div>
-            <p>Nikmati pengelolaan keuangan yang aman dan inovatif bersama SCHOBANK. Dirancang khusus untuk pelajar dan pendidik, kami mendukung Anda menuju kesuksesan finansial.</p>
+    <!-- Login Form -->
+    <div class="login-container">
+        <a href="../landing.php" class="back-home" title="Kembali ke Beranda">
+            <i class="fas fa-times"></i>
+        </a>
+        <div class="logo-container">
+            <img src="/bankmini/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
+            <div class="bank-name">SCHOBANK</div>
         </div>
 
-        <!-- Login Form -->
-        <div class="login-container">
-            <div class="logo-container">
-                <img src="/bankmini/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
-                <div class="bank-name">SCHOBANK</div>
+        <form method="POST" id="login-form">
+            <div class="input-group">
+                <i class="fas fa-user icon"></i>
+                <input type="text" name="username" id="username" placeholder="Username" value="<?= htmlspecialchars($username) ?>" required autocomplete="username">
+            </div>
+            
+            <div class="input-group">
+                <i class="fas fa-lock icon"></i>
+                <input type="password" name="password" id="password" placeholder="Password" value="<?= htmlspecialchars($password) ?>" required autocomplete="current-password">
+                <i class="fas fa-eye toggle-icon" id="togglePassword"></i>
+            </div>
+            
+            <div class="input-group" id="code-group" style="display: <?= $is_petugas ? 'block' : 'none' ?>;">
+                <i class="fas fa-key icon"></i>
+                <input type="tel" name="code" id="code" placeholder="Kode Petugas (4 digit)" value="<?= htmlspecialchars($code) ?>" maxlength="4" pattern="\d{4}" inputmode="numeric" onkeypress="return (event.charCode !=8 && event.charCode ==0 || (event.charCode >= 48 && event.charCode <= 57))" <?= $is_petugas ? 'required' : '' ?>>
+                <i class="fas fa-exclamation-circle info-icon" id="codeInfoIcon" title="Informasi Kode Petugas"></i>
+            </div>
+            
+            <div class="forgot-password">
+                <a href="forgot_password.php">Lupa Password?</a>
             </div>
 
-            <form method="POST" id="login-form">
-                <div class="input-group">
-                    <i class="fas fa-user icon"></i>
-                    <input type="text" name="username" id="username" placeholder="Username" value="<?= htmlspecialchars($username) ?>" required autocomplete="username">
-                </div>
-                
-                <div class="input-group">
-                    <i class="fas fa-lock icon"></i>
-                    <input type="password" name="password" id="password" placeholder="Password" value="<?= htmlspecialchars($password) ?>" required autocomplete="current-password">
-                    <i class="fas fa-eye toggle-icon" id="togglePassword"></i>
-                </div>
-                
-                <div class="input-group" id="code-group" style="display: <?= $is_petugas ? 'block' : 'none' ?>;">
-                    <i class="fas fa-key icon"></i>
-                    <input type="tel" name="code" id="code" placeholder="Kode Petugas (4 digit)" value="<?= htmlspecialchars($code) ?>" maxlength="4" pattern="\d{4}" inputmode="numeric" onkeypress="return (event.charCode !=8 && event.charCode ==0 || (event.charCode >= 48 && event.charCode <= 57))" <?= $is_petugas ? 'required' : '' ?>>
-                    <i class="fas fa-exclamation-circle info-icon" id="codeInfoIcon" title="Informasi Kode Petugas"></i>
-                </div>
-                
-                <div class="forgot-password">
-                    <a href="forgot_password.php">Lupa Password?</a>
-                </div>
+            <button type="submit">
+                <i class="fas fa-sign-in-alt"></i> Masuk
+            </button>
+        </form>
 
-                <button type="submit">
-                    <i class="fas fa-sign-in-alt"></i> Masuk
-                </button>
-            </form>
-
-            <div class="bank-tagline">
-                SMK PLUS ASHABULYAMIN CIANJUR
-            </div>
+        <div class="bank-tagline">
+            SMK PLUS ASHABULYAMIN CIANJUR
         </div>
     </div>
 
@@ -617,7 +558,6 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             // Code input validation
             const codeInput = document.getElementById('code');
             if (codeInput) {
-                // Prevent non-numeric input
                 codeInput.addEventListener('input', function() {
                     this.value = this.value.replace(/[^0-9]/g, '');
                     if (this.value.length > 4) {
@@ -629,47 +569,50 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             // Show/hide code field based on user role
             const usernameInput = document.getElementById('username');
             const codeGroup = document.getElementById('code-group');
-            const isPetugas = <?= $is_petugas ? 'true' : 'false' ?>; // Get initial state from PHP
             
             if (usernameInput && codeGroup) {
-                // Set initial state based on PHP
+                // Initial state based on PHP
+                const isPetugas = <?= $is_petugas ? 'true' : 'false' ?>;
                 if (isPetugas) {
                     codeGroup.style.display = 'block';
                     codeInput.setAttribute('required', 'required');
+                } else {
+                    codeGroup.style.display = 'none';
+                    codeInput.removeAttribute('required');
                 }
 
+                // Handle username input changes
                 usernameInput.addEventListener('input', function() {
                     const username = this.value.trim();
-                    if (username.length > 0) {
-                        // Make AJAX request to check user role
-                        fetch('', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/x-www-form-urlencoded',
-                            },
-                            body: 'action=check_role&username=' + encodeURIComponent(username)
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.role === 'petugas') {
-                                codeGroup.style.display = 'block';
-                                codeInput.setAttribute('required', 'required');
-                            } else if (!isPetugas) { // Only hide if not already set as petugas by PHP
-                                codeGroup.style.display = 'none';
-                                codeInput.removeAttribute('required');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error checking role:', error);
-                            if (!isPetugas) { // Only hide if not already set as petugas by PHP
-                                codeGroup.style.display = 'none';
-                                codeInput.removeAttribute('required');
-                            }
-                        });
-                    } else if (!isPetugas) { // Only hide if not already set as petugas by PHP
+                    if (username.length === 0) {
                         codeGroup.style.display = 'none';
                         codeInput.removeAttribute('required');
+                        return;
                     }
+
+                    // Make AJAX request to check user role
+                    fetch('', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: 'action=check_role&username=' + encodeURIComponent(username)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.role === 'petugas') {
+                            codeGroup.style.display = 'block';
+                            codeInput.setAttribute('required', 'required');
+                        } else {
+                            codeGroup.style.display = 'none';
+                            codeInput.removeAttribute('required');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error checking role:', error);
+                        codeGroup.style.display = 'none';
+                        codeInput.removeAttribute('required');
+                    });
                 });
             }
 
@@ -679,20 +622,18 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             if (codeInfoIcon && infoModal) {
                 codeInfoIcon.addEventListener('click', function() {
                     infoModal.style.display = 'flex';
-                    // Auto-close after 5 seconds
                     setTimeout(() => {
                         infoModal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                         setTimeout(() => {
                             infoModal.style.display = 'none';
-                            infoModal.style.animation = ''; // Reset animation
+                            infoModal.style.animation = '';
                         }, 500);
                     }, 5000);
-                    // Close on click anywhere
                     infoModal.addEventListener('click', function() {
                         this.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                         setTimeout(() => {
                             this.style.display = 'none';
-                            this.style.animation = ''; // Reset animation
+                            this.style.animation = '';
                         }, 500);
                     }, { once: true });
                 });
@@ -713,13 +654,10 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             // Auto-close error popup and close on click
             const errorModal = document.getElementById('errorModal');
             if (errorModal) {
-                // Auto-close after 5 seconds
                 setTimeout(() => {
                     errorModal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => errorModal.remove(), 500);
                 }, 5000);
-
-                // Close on click anywhere
                 errorModal.addEventListener('click', function() {
                     this.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => this.remove(), 500);

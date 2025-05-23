@@ -45,16 +45,18 @@ try {
     }
     $officer_stmt->close();
 
-    // Get transaction data (aligned with laporan.php)
+    // Get transaction data (aligned with laporan.php, including nama_kelas)
     $query = "SELECT 
         t.no_transaksi,
         t.jenis_transaksi,
         t.jumlah,
         t.created_at,
-        u.nama AS nama_siswa
+        u.nama AS nama_siswa,
+        k.nama_kelas
         FROM transaksi t 
         JOIN rekening r ON t.rekening_id = r.id 
         JOIN users u ON r.user_id = u.id 
+        LEFT JOIN kelas k ON u.kelas_id = k.id 
         WHERE DATE(t.created_at) = ? 
         AND t.jenis_transaksi != 'transfer'
         AND t.petugas_id IS NOT NULL
@@ -71,8 +73,8 @@ try {
     // Calculate totals
     $total_query = "SELECT 
         COUNT(id) as total_transactions,
-        SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_setoran,
-        SUM(CASE WHEN jenis_transaksi = 'tarik' AND status = 'approved' THEN jumlah ELSE 0 END) as total_penarikan
+        SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_debit,
+        SUM(CASE WHEN jenis_transaksi = 'tarik' AND status = 'approved' THEN jumlah ELSE 0 END) as total_kredit
         FROM transaksi 
         WHERE DATE(created_at) = ? 
         AND jenis_transaksi != 'transfer'
@@ -87,7 +89,7 @@ try {
     $stmt_total->close();
 
     // Calculate net balance
-    $saldo_bersih = ($totals['total_setoran'] ?? 0) - ($totals['total_penarikan'] ?? 0);
+    $saldo_bersih = ($totals['total_debit'] ?? 0) - ($totals['total_kredit'] ?? 0);
     $saldo_bersih = max(0, $saldo_bersih);
 
     // Prepare transaction data
@@ -97,8 +99,9 @@ try {
     while ($row = $result->fetch_assoc()) {
         $has_transactions = true;
         $row['no'] = $row_number++;
-        $row['display_jenis'] = $row['jenis_transaksi'] == 'setor' ? 'Setoran' : 'Penarikan';
+        $row['display_jenis'] = $row['jenis_transaksi'] == 'setor' ? 'Debit' : 'Kredit';
         $row['display_nama'] = $row['nama_siswa'] ?? 'N/A';
+        $row['display_kelas'] = trim($row['nama_kelas'] ?? '') ?: 'N/A';
         $transactions[] = $row;
     }
     $stmt->close();
@@ -166,8 +169,8 @@ try {
         $pdf->SetFont('helvetica', '', 8);
         if ($has_transactions) {
             $pdf->Cell(63, 7, 'Total Transaksi: ' . ($totals['total_transactions'] ?? 0), 1, 0, 'C', false);
-            $pdf->Cell(63, 7, 'Setoran: ' . formatRupiah($totals['total_setoran'] ?? 0), 1, 0, 'C', false);
-            $pdf->Cell(64, 7, 'Penarikan: ' . formatRupiah($totals['total_penarikan'] ?? 0), 1, 1, 'C', false);
+            $pdf->Cell(63, 7, 'Debit: ' . formatRupiah($totals['total_debit'] ?? 0), 1, 0, 'C', false);
+            $pdf->Cell(64, 7, 'Kredit: ' . formatRupiah($totals['total_kredit'] ?? 0), 1, 1, 'C', false);
             $pdf->SetFont('helvetica', 'B', 8);
             $pdf->Cell(190, 7, 'Saldo Bersih: ' . formatRupiah($saldo_bersih), 1, 1, 'C', false);
             $pdf->SetFont('helvetica', '', 8);
@@ -182,7 +185,8 @@ try {
         if ($has_transactions) {
             $pdf->SetFont('helvetica', 'B', 8);
             $pdf->Cell(10, 6, 'No', 1, 0, 'C', true);
-            $pdf->Cell(100, 6, 'Nama', 1, 0, 'C', true);
+            $pdf->Cell(70, 6, 'Nama', 1, 0, 'C', true);
+            $pdf->Cell(30, 6, 'Kelas', 1, 0, 'C', true);
             $pdf->Cell(30, 6, 'Jenis', 1, 0, 'C', true);
             $pdf->Cell(50, 6, 'Jumlah', 1, 1, 'C', true);
 
@@ -191,10 +195,12 @@ try {
             foreach ($transactions as $row) {
                 $bg_color = $row_count % 2 == 0 ? 245 : 255;
                 $pdf->SetFillColor($bg_color, $bg_color, $bg_color);
-                $displayName = mb_strlen($row['display_nama']) > 50 ? mb_substr($row['display_nama'], 0, 47) . '...' : $row['display_nama'];
-                
+                $displayName = mb_strlen($row['display_nama']) > 40 ? mb_substr($row['display_nama'], 0, 37) . '...' : $row['display_nama'];
+                $displayKelas = mb_strlen($row['display_kelas']) > 15 ? mb_substr($row['display_kelas'], 0, 12) . '...' : $row['display_kelas'];
+
                 $pdf->Cell(10, 6, $row['no'], 1, 0, 'C', true);
-                $pdf->Cell(100, 6, $displayName, 1, 0, 'L', true);
+                $pdf->Cell(70, 6, $displayName, 1, 0, 'L', true);
+                $pdf->Cell(30, 6, $displayKelas, 1, 0, 'C', true);
                 $pdf->Cell(30, 6, $row['display_jenis'], 1, 0, 'C', true);
                 $pdf->Cell(50, 6, formatRupiah($row['jumlah']), 1, 1, 'R', true);
                 $row_count++;
@@ -206,14 +212,14 @@ try {
             $pdf->Cell(50, 6, formatRupiah($saldo_bersih), 1, 1, 'R', true);
         } else {
             $pdf->SetFont('helvetica', '', 9);
-            $pdf->Cell(190, 6, 'Tidak ada transaksi setoran atau penarikan hari ini', 1, 1, 'C', false);
+            $pdf->Cell(190, 6, 'Tidak ada transaksi debit atau kredit hari ini', 1, 1, 'C', false);
         }
 
         // Notes
         $pdf->Ln(5);
         $pdf->SetFont('helvetica', 'I', 8);
         $pdf->SetFillColor(240, 248, 255);
-        $pdf->MultiCell(190, 12, "Catatan:\n- Laporan ini hanya mencakup setoran dan penarikan oleh petugas.", 1, 'L', true);
+        $pdf->MultiCell(190, 12, "Catatan:\n- Laporan ini hanya mencakup transaksi debit dan kredit oleh petugas.", 1, 'L', true);
 
         $pdf->Output('laporan_transaksi_' . $date . '.pdf', 'D');
     } else {

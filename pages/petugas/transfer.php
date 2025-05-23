@@ -3,6 +3,8 @@ session_start();
 require_once '../../includes/db_connection.php';
 require '../../vendor/autoload.php'; // Include PHPMailer
 
+date_default_timezone_set('Asia/Jakarta');
+
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
@@ -96,78 +98,87 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             } elseif ($rek_asal['saldo'] < $jumlah) {
                 $error = "Saldo tidak mencukupi untuk transfer.";
             } else {
-                $koneksi->begin_transaction();
-                try {
-                    $no_transaksi = 'TRF' . date('YmdHis') . rand(100, 999);
-                    $today = date('Y-m-d');
-                    $stmt = $koneksi->prepare("SELECT * FROM petugas_tugas WHERE tanggal = ?");
-                    $stmt->bind_param("s", $today);
-                    $stmt->execute();
-                    $petugas_tugas = $stmt->get_result()->fetch_assoc();
-                    $stmt->close();
+                // Validate petugas_tugas for today
+                $today = date('Y-m-d');
+                $stmt = $koneksi->prepare("SELECT * FROM petugas_tugas WHERE tanggal = ?");
+                $stmt->bind_param("s", $today);
+                $stmt->execute();
+                $petugas_tugas = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
 
-                    $stmt = $koneksi->prepare("INSERT INTO transaksi (no_transaksi, rekening_id, rekening_tujuan_id, jenis_transaksi, jumlah, petugas_id, status) VALUES (?, ?, ?, 'transfer', ?, ?, 'approved')");
-                    $stmt->bind_param("siidi", $no_transaksi, $rek_asal['id'], $rek_tujuan['id'], $jumlah, $user_id);
-                    $stmt->execute();
-                    $transaksi_id = $koneksi->insert_id;
-                    $stmt->close();
+                if (!$petugas_tugas) {
+                    $error = "Tidak ada petugas yang bertugas hari ini. Silakan hubungi admin.";
+                } else {
+                    $koneksi->begin_transaction();
+                    try {
+                        $no_transaksi = 'TRF' . date('YmdHis') . rand(100, 999);
 
-                    $saldo_asal_baru = $rek_asal['saldo'] - $jumlah;
-                    $stmt = $koneksi->prepare("UPDATE rekening SET saldo = ? WHERE id = ?");
-                    $stmt->bind_param("di", $saldo_asal_baru, $rek_asal['id']);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    $saldo_tujuan_baru = $rek_tujuan['saldo'] + $jumlah;
-                    $stmt = $koneksi->prepare("UPDATE rekening SET saldo = ? WHERE id = ?");
-                    $stmt->bind_param("di", $saldo_tujuan_baru, $rek_tujuan['id']);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    $stmt = $koneksi->prepare("INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) VALUES (?, ?, ?, ?)");
-                    $jumlah_negative = -$jumlah;
-                    $stmt->bind_param("iidd", $transaksi_id, $rek_asal['id'], $jumlah_negative, $saldo_asal_baru);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    $stmt = $koneksi->prepare("INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) VALUES (?, ?, ?, ?)");
-                    $stmt->bind_param("iidd", $transaksi_id, $rek_tujuan['id'], $jumlah, $saldo_tujuan_baru);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    $message_pengirim = "Transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " ke rekening " . $rek_tujuan['no_rekening'] . " BERHASIL dilakukan oleh PETUGAS. Saldo baru: Rp " . number_format($saldo_asal_baru, 0, ',', '.');
-                    $stmt = $koneksi->prepare("INSERT INTO notifications (user_id, message) VALUES (?, ?)");
-                    $stmt->bind_param('is', $rek_asal['user_id'], $message_pengirim);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    $message_penerima = "Anda menerima transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " dari rekening " . $rek_asal['no_rekening'] . ". Saldo baru: Rp " . number_format($saldo_tujuan_baru, 0, ',', '.');
-                    $stmt = $koneksi->prepare("INSERT INTO notifications (user_id, message) VALUES (?, ?)");
-                    $stmt->bind_param('is', $rek_tujuan['user_id'], $message_penerima);
-                    $stmt->execute();
-                    $stmt->close();
-
-                    sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $saldo_asal_baru, $saldo_tujuan_baru, $petugas_tugas);
-
-                    $message = "Transfer berhasil dilakukan! Nomor transaksi: " . $no_transaksi;
-
-                    if ($role == 'siswa') {
-                        $stmt = $koneksi->prepare("SELECT * FROM rekening WHERE user_id = ?");
-                        $stmt->bind_param("i", $user_id);
+                        $stmt = $koneksi->prepare("INSERT INTO transaksi (no_transaksi, rekening_id, rekening_tujuan_id, jenis_transaksi, jumlah, petugas_id, status) VALUES (?, ?, ?, 'transfer', ?, ?, 'approved')");
+                        $stmt->bind_param("siidi", $no_transaksi, $rek_asal['id'], $rek_tujuan['id'], $jumlah, $user_id);
                         $stmt->execute();
-                        $rekening = $stmt->get_result()->fetch_assoc();
+                        $transaksi_id = $koneksi->insert_id;
                         $stmt->close();
-                    }
 
-                    $koneksi->commit();
-                    $form_data = [];
-                } catch (Exception $e) {
-                    $koneksi->rollback();
-                    $error = "Transfer gagal: " . $e->getMessage();
+                        $saldo_asal_baru = $rek_asal['saldo'] - $jumlah;
+                        $stmt = $koneksi->prepare("UPDATE rekening SET saldo = ? WHERE id = ?");
+                        $stmt->bind_param("di", $saldo_asal_baru, $rek_asal['id']);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        $saldo_tujuan_baru = $rek_tujuan['saldo'] + $jumlah;
+                        $stmt = $koneksi->prepare("UPDATE rekening SET saldo = ? WHERE id = ?");
+                        $stmt->bind_param("di", $saldo_tujuan_baru, $rek_tujuan['id']);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        $stmt = $koneksi->prepare("INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) VALUES (?, ?, ?, ?)");
+                        $jumlah_negative = -$jumlah;
+                        $stmt->bind_param("iidd", $transaksi_id, $rek_asal['id'], $jumlah_negative, $saldo_asal_baru);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        $stmt = $koneksi->prepare("INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) VALUES (?, ?, ?, ?)");
+                        $stmt->bind_param("iidd", $transaksi_id, $rek_tujuan['id'], $jumlah, $saldo_tujuan_baru);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        // Corrected notification for sender
+                        $message_pengirim = "Transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " ke rekening " . $rek_tujuan['no_rekening'] . " BERHASIL dilakukan oleh PETUGAS. Saldo baru: Rp " . number_format($saldo_asal_baru, 0, ',', '.');
+                        $stmt = $koneksi->prepare("INSERT INTO notifications (user_id, message) VALUES (?, ?)");
+                        $stmt->bind_param('is', $rek_asal['user_id'], $message_pengirim);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        // Notification for receiver
+                        $message_penerima = "Anda menerima transfer sebesar Rp " . number_format($jumlah, 0, ',', '.') . " dari rekening " . $rek_asal['no_rekening'] . ". Saldo baru: Rp " . number_format($saldo_tujuan_baru, 0, ',', '.');
+                        $stmt = $koneksi->prepare("INSERT INTO notifications (user_id, message) VALUES (?, ?)");
+                        $stmt->bind_param('is', $rek_tujuan['user_id'], $message_penerima);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $saldo_asal_baru, $saldo_tujuan_baru, $petugas_tugas);
+
+                        $koneksi->commit();
+
+                        // Redirect to prevent form resubmission
+                        $_SESSION['transfer_success'] = true;
+                        header("Location: " . $_SERVER['PHP_SELF']);
+                        exit;
+                    } catch (Exception $e) {
+                        $koneksi->rollback();
+                        $error = "Transfer gagal: " . $e->getMessage();
+                    }
                 }
             }
         }
     }
+}
+
+// Check for success message in session
+if (isset($_SESSION['transfer_success']) && $_SESSION['transfer_success']) {
+    $message = "Transfer Berhasil";
+    unset($_SESSION['transfer_success']);
+    $form_data = []; // Reset form data after successful transfer
 }
 
 // Function to send transfer emails
@@ -183,12 +194,7 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
 
-        $petugas_info = "";
-        if ($petugas_tugas) {
-            $petugas_info = "<tr><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; font-weight: 600; color: #1e3a8a; width: 40%;'>Petugas 1</td><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; width: 60%;'>{$petugas_tugas['petugas1_nama']}</td></tr>
-                             <tr><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; font-weight: 600; color: #1e3a8a; width: 40%;'>Petugas 2</td><td style='padding: 12px 15px; border-bottom: 1px solid #e0e0e0; width: 60%;'>{$petugas_tugas['petugas2_nama']}</td></tr>";
-        }
-
+        // Sender Email
         $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
         $mail->addAddress($rek_asal['email'], $rek_asal['nama']);
         $mail->isHTML(true);
@@ -225,9 +231,6 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     text-align: center; 
                     color: #ffffff; 
                 }
-                .logo {
-                    margin-bottom: 10px;
-                }
                 .header h1 { 
                     margin: 0; 
                     font-size: 26px; 
@@ -264,9 +267,6 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     font-size: 14px; 
                     vertical-align: middle;
                 }
-                .transaction-details tr:last-child td { 
-                    border-bottom: none; 
-                }
                 .transaction-details .label { 
                     font-weight: 600; 
                     color: #1e3a8a; 
@@ -280,11 +280,6 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     color: #1e3a8a; 
                     font-weight: 700; 
                     font-size: 16px; 
-                }
-                .new-balance { 
-                    color: #1e3a8a; 
-                    font-weight: 600; 
-                    font-size: 15px; 
                 }
                 .security-notice { 
                     background-color: #f3f4f6; 
@@ -319,33 +314,18 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     margin: 5px 0;
                 }
                 @media screen and (max-width: 600px) {
-                    body {
-                        padding: 10px;
-                    }
-                    .container { 
-                        width: 100%; 
-                    }
-                    .header h1 { 
-                        font-size: 22px; 
-                    }
-                    .content { 
-                        padding: 20px; 
-                    }
-                    .transaction-details td { 
-                        padding: 10px; 
-                    }
-                    .security-notice {
-                        padding: 15px;
-                    }
+                    body { padding: 10px; }
+                    .container { width: 100%; }
+                    .header h1 { font-size: 22px; }
+                    .content { padding: 20px; }
+                    .transaction-details td { padding: 10px; }
+                    .security-notice { padding: 15px; }
                 }
             </style>
         </head>
         <body>
             <div class='container'>
                 <div class='header'>
-                    <div class='logo'>
-                        <!-- Logo dapat ditambahkan di sini jika diperlukan -->
-                    </div>
                     <h1>Konfirmasi Transfer Dana</h1>
                 </div>
                 <div class='content'>
@@ -353,11 +333,12 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     <p>Kami menginformasikan bahwa transaksi transfer dana Anda telah berhasil diproses. Berikut adalah rincian transaksi:</p>
                     <table class='transaction-details'>
                         <tr><td class='label'>Nomor Transaksi</td><td class='value'>{$no_transaksi}</td></tr>
-                        <tr><td class='label'>Rekening Asal</td><td class='value'>{$rek_asal['no_rekening']}</td></tr>
-                        <tr><td class='label'>Rekening Tujuan</td><td class='value'>{$rek_tujuan['no_rekening']} - {$rek_tujuan['nama']}</td></tr>
+                        <tr><td class='label'>Rekening Pengirim</td><td class='value'>{$rek_asal['no_rekening']}</td></tr>
+                        <tr><td class='label'>Nama Pengirim</td><td class='value'>{$rek_asal['nama']}</td></tr>
+                        <tr><td class='label'>Rekening Penerima</td><td class='value'>{$rek_tujuan['no_rekening']}</td></tr>
+                        <tr><td class='label'>Nama Penerima</td><td class='value'>{$rek_tujuan['nama']}</td></tr>
                         <tr><td class='label'>Jumlah Transfer</td><td class='value amount'>Rp " . number_format($jumlah, 0, ',', '.') . "</td></tr>
                         <tr><td class='label'>Tanggal Transaksi</td><td class='value'>" . date('d F Y H:i:s') . " WIB</td></tr>
-                        {$petugas_info}
                     </table>
                     <div class='security-notice'>
                         <strong>Informasi Keamanan:</strong>
@@ -377,6 +358,7 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
         ";
         $mail->send();
 
+        // Receiver Email
         $mail->clearAddresses();
         $mail->addAddress($rek_tujuan['email'], $rek_tujuan['nama']);
         $mail->Subject = 'Konfirmasi Penerimaan Dana - SCHOBANK SYSTEM';
@@ -412,9 +394,6 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     text-align: center; 
                     color: #ffffff; 
                 }
-                .logo {
-                    margin-bottom: 10px;
-                }
                 .header h1 { 
                     margin: 0; 
                     font-size: 26px; 
@@ -451,9 +430,6 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     font-size: 14px; 
                     vertical-align: middle;
                 }
-                .transaction-details tr:last-child td { 
-                    border-bottom: none; 
-                }
                 .transaction-details .label { 
                     font-weight: 600; 
                     color: #1e3a8a; 
@@ -467,11 +443,6 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     color: #1e3a8a; 
                     font-weight: 700; 
                     font-size: 16px; 
-                }
-                .new-balance { 
-                    color: #1e3a8a; 
-                    font-weight: 600; 
-                    font-size: 15px; 
                 }
                 .security-notice { 
                     background-color: #f3f4f6; 
@@ -506,33 +477,18 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     margin: 5px 0;
                 }
                 @media screen and (max-width: 600px) {
-                    body {
-                        padding: 10px;
-                    }
-                    .container { 
-                        width: 100%; 
-                    }
-                    .header h1 { 
-                        font-size: 22px; 
-                    }
-                    .content { 
-                        padding: 20px; 
-                    }
-                    .transaction-details td { 
-                        padding: 10px; 
-                    }
-                    .security-notice {
-                        padding: 15px;
-                    }
+                    body { padding: 10px; }
+                    .container { width: 100%; }
+                    .header h1 { font-size: 22px; }
+                    .content { padding: 20px; }
+                    .transaction-details td { padding: 10px; }
+                    .security-notice { padding: 15px; }
                 }
             </style>
         </head>
         <body>
             <div class='container'>
                 <div class='header'>
-                    <div class='logo'>
-                        <!-- Logo dapat ditambahkan di sini jika diperlukan -->
-                    </div>
                     <h1>Konfirmasi Penerimaan Dana</h1>
                 </div>
                 <div class='content'>
@@ -540,11 +496,12 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
                     <p>Kami menginformasikan bahwa Anda telah menerima transfer dana. Berikut adalah rincian transaksi:</p>
                     <table class='transaction-details'>
                         <tr><td class='label'>Nomor Transaksi</td><td class='value'>{$no_transaksi}</td></tr>
-                        <tr><td class='label'>Rekening Pengirim</td><td class='value'>{$rek_asal['no_rekening']} - {$rek_asal['nama']}</td></tr>
-                        <tr><td class='label'>Rekening Tujuan</td><td class='value'>{$rek_tujuan['no_rekening']}</td></tr>
+                        <tr><td class='label'>Rekening Pengirim</td><td class='value'>{$rek_asal['no_rekening']}</td></tr>
+                        <tr><td class='label'>Nama Pengirim</td><td class='value'>{$rek_asal['nama']}</td></tr>
+                        <tr><td class='label'>Rekening Penerima</td><td class='value'>{$rek_tujuan['no_rekening']}</td></tr>
+                        <tr><td class='label'>Nama Penerima</td><td class='value'>{$rek_tujuan['nama']}</td></tr>
                         <tr><td class='label'>Jumlah Transfer</td><td class='value amount'>Rp " . number_format($jumlah, 0, ',', '.') . "</td></tr>
                         <tr><td class='label'>Tanggal Transaksi</td><td class='value'>" . date('d F Y H:i:s') . " WIB</td></tr>
-                        {$petugas_info}
                     </table>
                     <div class='security-notice'>
                         <strong>Informasi Keamanan:</strong>
@@ -571,11 +528,10 @@ function sendTransferEmail($rek_asal, $rek_tujuan, $jumlah, $no_transaksi, $sald
 // Get accounts for admin/officer
 $accounts = [];
 if ($role == 'admin' || $role == 'petugas') {
-    $query = "SELECT r.*, u.nama, u.email, k.nama_kelas, j.nama_jurusan 
+    $query = "SELECT r.*, u.nama, u.email, k.nama_kelas 
               FROM rekening r 
               JOIN users u ON r.user_id = u.id 
               LEFT JOIN kelas k ON u.kelas_id = k.id 
-              LEFT JOIN jurusan j ON u.jurusan_id = j.id 
               ORDER BY u.nama";
     $result = $koneksi->query($query);
     while ($row = $result->fetch_assoc()) {
@@ -588,22 +544,21 @@ if ($role == 'admin' || $role == 'petugas') {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Transfer - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
+            --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
+            --bg-light: #f0f5ff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
@@ -625,8 +580,7 @@ if ($role == 'admin' || $role == 'petugas') {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            -webkit-text-size-adjust: none;
-            zoom: 1;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
@@ -669,7 +623,7 @@ if ($role == 'admin' || $role == 'petugas') {
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 25px;
             border-radius: 15px;
@@ -719,138 +673,13 @@ if ($role == 'admin' || $role == 'petugas') {
             font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .deposit-card {
+        .form-section {
             background: white;
             border-radius: 15px;
             padding: 25px;
             box-shadow: var(--shadow-sm);
             margin-bottom: 30px;
-            transition: var(--transition);
-        }
-
-        .deposit-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-5px);
-        }
-
-        .deposit-form {
-            display: grid;
-            gap: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-        }
-
-        input[type="text"],
-        input[type="number"],
-        select {
-            width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            transition: var(--transition);
-            -webkit-text-size-adjust: none;
-        }
-
-        input[type="text"]:focus,
-        input[type="number"]:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.02);
-        }
-
-        .pin-group {
-            text-align: center;
-            margin: 30px 0;
-        }
-
-        .pin-container {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .pin-container.error {
-            animation: shake 0.4s ease;
-        }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20%, 60% { transform: translateX(-5px); }
-            40%, 80% { transform: translateX(5px); }
-        }
-
-        .pin-input {
-            width: 50px;
-            height: 50px;
-            text-align: center;
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            background: white;
-            transition: var(--transition);
-        }
-
-        .pin-input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.05);
-        }
-
-        .pin-input.filled {
-            border-color: var(--secondary-color);
-            background: var(--primary-light);
-            animation: bouncePin 0.3s ease;
-        }
-
-        @keyframes bouncePin {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); }
-        }
-
-        button {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: var(--transition);
-            width: fit-content;
-        }
-
-        button:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-
-        button:active {
-            transform: scale(0.95);
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
             animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
         @keyframes slideIn {
@@ -858,187 +687,92 @@ if ($role == 'admin' || $role == 'petugas') {
             to { transform: translateY(0); opacity: 1; }
         }
 
-        .alert.hide {
-            animation: slideOut 0.5s ease-out forwards;
-        }
-
-        @keyframes slideOut {
-            from { transform: translateY(0); opacity: 1; }
-            to { transform: translateY(-20px); opacity: 0; }
-        }
-
-        .alert-success {
-            background-color: var(--primary-light);
-            color: var(--primary-dark);
-            border-left: 5px solid var(--primary-color);
-        }
-
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 5px solid #fecaca;
-        }
-
-        .btn-loading {
-            position: relative;
-            pointer-events: none;
-        }
-
-        .btn-loading span {
-            visibility: hidden;
-        }
-
-        .btn-loading::after {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            margin: -10px 0 0 -10px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: rotate 0.8s linear infinite;
-        }
-
-        @keyframes rotate {
-            to { transform: rotate(360deg); }
-        }
-
-        .success-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+        .form-container {
             display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
-            cursor: pointer;
+            flex-wrap: wrap;
+            gap: 20px;
         }
 
-        @keyframes fadeInOverlay {
-            from { opacity: 0; }
-            to { opacity: 1; }
+        .form-column {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        @keyframes fadeOutOverlay {
-            from { opacity: 1; }
-            to { opacity: 0; }
-        }
-
-        .success-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
-            border-radius: 20px;
-            padding: 40px;
-            text-align: center;
-            max-width: 90%;
-            width: 450px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
             position: relative;
-            overflow: hidden;
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
         }
 
-        @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .success-icon {
-            font-size: clamp(4rem, 8vw, 4.5rem);
-            color: var(--secondary-color);
-            margin-bottom: 25px;
-            animation: bounceIn 0.6s ease-out;
-            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-        }
-
-        @keyframes bounceIn {
-            0% { transform: scale(0); opacity: 0; }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: 15px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            animation: slideUpText 0.5s ease-out 0.2s both;
-            font-weight: 600;
-        }
-
-        .success-modal p {
+        label {
+            font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
-            margin-bottom: 25px;
-            animation: slideUpText 0.5s ease-out 0.3s both;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             line-height: 1.5;
+            min-height: 44px;
+            transition: var(--transition);
+            -webkit-user-select: text;
+            user-select: text;
+            background-color: #fff;
         }
 
-        @keyframes slideUpText {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
         }
 
-        .confetti {
+        input[readonly] {
+            background-color: #f8fafc;
+            cursor: default;
+        }
+
+        .error-message {
+            color: var(--danger-color);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            margin-top: 4px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select-wrapper::after {
+            content: '\f078';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: var(--text-secondary);
             position: absolute;
-            width: 12px;
-            height: 12px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
-        }
-
-        .section-title {
-            margin-bottom: 20px;
-            color: var(--primary-dark);
-            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
         }
 
         .search-box {
             position: relative;
-            margin-bottom: 10px;
         }
 
         .search-box input {
-            width: 100%;
-            padding: 12px 15px 12px 40px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            transition: var(--transition);
-        }
-
-        .search-box input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.02);
+            padding-left: 40px;
         }
 
         .search-box i {
@@ -1099,11 +833,11 @@ if ($role == 'admin' || $role == 'petugas') {
         }
 
         .custom-select-option:hover {
-            background-color: var(--primary-light);
+            background-color: var(--bg-light);
         }
 
         .custom-select-option.selected {
-            background-color: var(--primary-light);
+            background-color: var(--bg-light);
         }
 
         .custom-select-no-results {
@@ -1111,6 +845,201 @@ if ($role == 'admin' || $role == 'petugas') {
             color: var(--text-secondary);
             font-style: italic;
             font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .pin-group {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .pin-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .pin-container.error {
+            animation: shake 0.4s ease;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+
+        .pin-input {
+            width: 50px;
+            height: 50px;
+            text-align: center;
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            background: white;
+            transition: var(--transition);
+        }
+
+        .pin-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.05);
+        }
+
+        .pin-input.filled {
+            border-color: var(--secondary-color);
+            background: var(--bg-light);
+            animation: bouncePin 0.3s ease;
+        }
+
+        @keyframes bouncePin {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: var(--transition);
+            position: relative;
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        .btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            position: absolute;
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .form-buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.65);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
+            cursor: default;
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .success-modal, .error-modal {
+            position: relative;
+            text-align: center;
+            width: clamp(300px, 80vw, 400px);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            border-radius: 15px;
+            padding: clamp(15px, 3vw, 20px);
+            box-shadow: var(--shadow-md);
+            transform: scale(0.7);
+            opacity: 0;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            cursor: default;
+            overflow: hidden;
+            max-height: 90vh;
+        }
+
+        .error-modal {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.03); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon, .error-icon {
+            font-size: clamp(2.5rem, 5vw, 3rem);
+            margin: 0 auto 10px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+            color: white;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.25); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3, .error-modal h3 {
+            color: white;
+            margin: 0 0 10px;
+            font-size: clamp(1.1rem, 2.2vw, 1.2rem);
+            font-weight: 600;
+            animation: slideUpText 0.5s ease-out 0.2s both;
+        }
+
+        .success-modal p, .error-modal p {
+            color: white;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            margin: 0 0 15px;
+            line-height: 1.5;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         @media (max-width: 768px) {
@@ -1123,14 +1052,6 @@ if ($role == 'admin' || $role == 'petugas') {
                 padding: 15px;
             }
 
-            .welcome-banner {
-                padding: 20px;
-            }
-
-            .deposit-card {
-                padding: 20px;
-            }
-
             .welcome-banner h2 {
                 font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
@@ -1139,19 +1060,17 @@ if ($role == 'admin' || $role == 'petugas') {
                 font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
-            .section-title {
-                font-size: clamp(1rem, 2.5vw, 1.1rem);
+            .form-container {
+                flex-direction: column;
             }
 
-            .deposit-form {
-                gap: 15px;
+            .form-column {
+                min-width: 100%;
             }
 
-            input[type="text"],
-            input[type="number"],
-            select {
-                padding: 10px 12px;
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            .btn {
+                width: 100%;
+                justify-content: center;
             }
 
             .pin-container {
@@ -1164,39 +1083,58 @@ if ($role == 'admin' || $role == 'petugas') {
                 font-size: clamp(1.1rem, 2.5vw, 1.3rem);
             }
 
-            button {
-                width: 100%;
-                justify-content: center;
+            .success-modal, .error-modal {
+                width: clamp(280px, 85vw, 360px);
+                padding: clamp(12px, 3vw, 15px);
+                margin: 10px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(2.3rem, 4.5vw, 2.5rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1rem, 2vw, 1.1rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.75rem, 1.7vw, 0.85rem);
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
                 font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
-            .alert {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            .top-nav {
+                padding: 10px;
             }
 
-            .success-modal {
-                width: 90%;
-                padding: 30px;
+            .welcome-banner {
+                padding: 20px;
             }
 
-            .success-icon {
-                font-size: clamp(3.5rem, 7vw, 4rem);
+            input, select {
+                min-height: 40px;
             }
 
-            .success-modal h3 {
-                font-size: clamp(1.2rem, 3vw, 1.4rem);
+            .success-modal, .error-modal {
+                width: clamp(260px, 90vw, 320px);
+                padding: clamp(10px, 2.5vw, 12px);
+                margin: 8px auto;
             }
 
-            .success-modal p {
-                font-size: clamp(0.9rem, 2vw, 1rem);
+            .success-icon, .error-icon {
+                font-size: clamp(2rem, 4vw, 2.2rem);
             }
 
-            .search-box input {
-                padding: 10px 12px 10px 35px;
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(0.9rem, 1.9vw, 1rem);
             }
 
-            .custom-select {
-                padding: 10px 12px;
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.7rem, 1.6vw, 0.8rem);
             }
         }
     </style>
@@ -1212,144 +1150,151 @@ if ($role == 'admin' || $role == 'petugas') {
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-paper-plane"></i> Transfer</h2>
-            <p>Kirim uang ke rekening lain dengan mudah dan cepat</p>
+            <h2>Transfer Antar Rekening</h2>
+            <p>Kirim uang antar rekening SCHOBANK</p>
         </div>
 
-        <div class="deposit-card">
-            <h3 class="section-title"><i class="fas fa-exchange-alt"></i> Form Transfer</h3>
-            <form method="POST" action="" id="transferForm" class="deposit-form">
-                <?php if ($role == 'siswa' && $rekening): ?>
-                    <div>
-                        <label>Rekening Asal:</label>
-                        <input type="text" name="rekening_asal" value="<?= htmlspecialchars($rekening['no_rekening']) ?>" readonly>
-                        <small>Saldo: Rp <?= number_format($rekening['saldo'], 2, ',', '.') ?></small>
-                    </div>
-                <?php else: ?>
-                    <div>
-                        <label>Pilih Rekening Asal:</label>
-                        <div class="search-box">
-                            <i class="fas fa-search"></i>
-                            <input type="text" id="search-rekening-asal" placeholder="Cari rekening berdasarkan nama atau kelas">
+        <div id="alertContainer"></div>
+
+        <div class="form-section">
+            <form method="POST" action="" id="transferForm" class="form-container">
+                <div class="form-column">
+                    <?php if ($role == 'siswa' && $rekening): ?>
+                        <div class="form-group">
+                            <label for="rekening_asal">Rekening Asal</label>
+                            <input type="text" id="rekening_asal" name="rekening_asal" value="<?= htmlspecialchars($rekening['no_rekening']) ?>" readonly>
+                            <span class="error-message" id="rekening_asal-error"></span>
+                            <small>Saldo: Rp <?= number_format($rekening['saldo'], 2, ',', '.') ?></small>
                         </div>
-                        <div class="custom-select-wrapper">
-                            <div class="custom-select" id="rekening-asal-select">
-                                <span><?= !empty($form_data['rekening_asal']) ? htmlspecialchars($form_data['rekening_asal']) : '-- Pilih Rekening --' ?></span>
-                                <i class="fas fa-chevron-down"></i>
-                            </div>
-                            <div class="custom-select-dropdown" id="rekening-asal-dropdown">
-                                <div class="custom-select-option" data-value="">-- Pilih Rekening --</div>
-                                <?php foreach ($accounts as $account): ?>
-                                    <?php 
-                                    $kelas_info = $account['nama_kelas'] ? $account['nama_kelas'] : 'Belum ditentukan';
-                                    $jurusan_info = $account['nama_jurusan'] ? $account['nama_jurusan'] : '';
-                                    $display_text = "{$account['nama']} - {$kelas_info}";
-                                    if ($jurusan_info) {
-                                        $display_text .= " ({$jurusan_info})";
-                                    }
-                                    ?>
-                                    <div class="custom-select-option" 
-                                         data-value="<?= htmlspecialchars($account['no_rekening']) ?>"
-                                         data-search="<?= htmlspecialchars($account['nama'] . ' ' . $kelas_info . ' ' . $jurusan_info) ?>"
-                                         <?= (!empty($form_data['rekening_asal']) && $form_data['rekening_asal'] == $account['no_rekening']) ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($display_text) ?>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                            <input type="hidden" name="rekening_asal" id="rekening-asal-input" value="<?= htmlspecialchars($form_data['rekening_asal'] ?? '') ?>" required>
-                        </div>
-                    </div>
-                <?php endif; ?>
-                
-                <div>
-                    <label>Rekening Tujuan:</label>
-                    <?php if ($role == 'siswa'): ?>
-                        <input type="text" name="rekening_tujuan" required 
-                               placeholder="Masukkan nomor rekening tujuan" 
-                               value="<?= htmlspecialchars($form_data['rekening_tujuan'] ?? '') ?>">
                     <?php else: ?>
-                        <div class="search-box">
-                            <i class="fas fa-search"></i>
-                            <input type="text" id="search-rekening-tujuan" placeholder="Cari rekening berdasarkan nama atau kelas">
-                        </div>
-                        <div class="custom-select-wrapper">
-                            <div class="custom-select" id="rekening-tujuan-select">
-                                <span><?= !empty($form_data['rekening_tujuan']) ? htmlspecialchars($form_data['rekening_tujuan']) : '-- Pilih Rekening --' ?></span>
-                                <i class="fas fa-chevron-down"></i>
+                        <div class="form-group">
+                            <label for="rekening_asal">Pilih Rekening Asal</label>
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="search-rekening-asal" placeholder="Cari berdasarkan nama atau kelas" value="">
                             </div>
-                            <div class="custom-select-dropdown" id="rekening-tujuan-dropdown">
-                                <div class="custom-select-option" data-value="">-- Pilih Rekening --</div>
-                                <?php foreach ($accounts as $account): ?>
-                                    <?php 
-                                    $kelas_info = $account['nama_kelas'] ? $account['nama_kelas'] : 'Belum ditentukan';
-                                    $jurusan_info = $account['nama_jurusan'] ? $account['nama_jurusan'] : '';
-                                    $display_text = "{$account['nama']} - {$kelas_info}";
-                                    if ($jurusan_info) {
-                                        $display_text .= " ({$jurusan_info})";
-                                    }
-                                    ?>
-                                    <div class="custom-select-option" 
-                                         data-value="<?= htmlspecialchars($account['no_rekening']) ?>"
-                                         data-search="<?= htmlspecialchars($account['nama'] . ' ' . $kelas_info . ' ' . $jurusan_info) ?>"
-                                         <?= (!empty($form_data['rekening_tujuan']) && $form_data['rekening_tujuan'] == $account['no_rekening']) ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($display_text) ?>
-                                    </div>
-                                <?php endforeach; ?>
+                            <div class="custom-select-wrapper">
+                                <div class="custom-select" id="rekening-asal-select">
+                                    <span><?= !empty($form_data['rekening_asal']) ? htmlspecialchars($form_data['rekening_asal']) : '-- Pilih Rekening --' ?></span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </div>
+                                <div class="custom-select-dropdown" id="rekening-asal-dropdown">
+                                    <div class="custom-select-option" data-value="">-- Pilih Rekening --</div>
+                                    <?php foreach ($accounts as $account): ?>
+                                        <?php 
+                                        $kelas_info = $account['nama_kelas'] ? $account['nama_kelas'] : 'Belum ditentukan';
+                                        $display_text = "{$account['nama']} - {$kelas_info}";
+                                        ?>
+                                        <div class="custom-select-option" 
+                                             data-value="<?= htmlspecialchars($account['no_rekening']) ?>"
+                                             data-search="<?= htmlspecialchars($account['nama'] . ' ' . $kelas_info) ?>"
+                                             data-display="<?= htmlspecialchars($display_text) ?>"
+                                             <?= (!empty($form_data['rekening_asal']) && $form_data['rekening_asal'] == $account['no_rekening']) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($display_text) ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <input type="hidden" name="rekening_asal" id="rekening-asal-input" value="<?= htmlspecialchars($form_data['rekening_asal'] ?? '') ?>" required>
                             </div>
-                            <input type="hidden" name="rekening_tujuan" id="rekening-tujuan-input" value="<?= htmlspecialchars($form_data['rekening_tujuan'] ?? '') ?>" required>
+                            <span class="error-message" id="rekening_asal-error"></span>
                         </div>
                     <?php endif; ?>
-                </div>
-                
-                <div>
-                    <label>Jumlah Transfer:</label>
-                    <input type="text" name="jumlah" id="jumlah" required 
-                           inputmode="numeric" pattern="[0-9\.]*" 
-                           placeholder="10.000" 
-                           value="<?= !empty($form_data['jumlah']) ? number_format((int)preg_replace('/[^0-9]/', '', $form_data['jumlah']), 0, ',', '.') : '' ?>">
-                </div>
-                
-                <div class="pin-group">
-                    <label>Masukkan PIN (6 Digit):</label>
-                    <div class="pin-container">
-                        <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
-                        <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
-                        <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
-                        <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
-                        <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
-                        <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                    
+                    <div class="form-group">
+                        <label for="rekening_tujuan">Rekening Tujuan</label>
+                        <?php if ($role == 'siswa'): ?>
+                            <input type="text" id="rekening_tujuan" name="rekening_tujuan" required 
+                                   placeholder="Masukkan nomor rekening tujuan" 
+                                   value="<?= htmlspecialchars($form_data['rekening_tujuan'] ?? '') ?>">
+                        <?php else: ?>
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="search-rekening-tujuan" placeholder="Cari berdasarkan nama atau kelas" value="">
+                            </div>
+                            <div class="custom-select-wrapper">
+                                <div class="custom-select" id="rekening-tujuan-select">
+                                    <span><?= !empty($form_data['rekening_tujuan']) ? htmlspecialchars($form_data['rekening_tujuan']) : '-- Pilih Rekening --' ?></span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </div>
+                                <div class="custom-select-dropdown" id="rekening-tujuan-dropdown">
+                                    <div class="custom-select-option" data-value="">-- Pilih Rekening --</div>
+                                    <?php foreach ($accounts as $account): ?>
+                                        <?php 
+                                        $kelas_info = $account['nama_kelas'] ? $account['nama_kelas'] : 'Belum ditentukan';
+                                        $display_text = "{$account['nama']} - {$kelas_info}";
+                                        ?>
+                                        <div class="custom-select-option" 
+                                             data-value="<?= htmlspecialchars($account['no_rekening']) ?>"
+                                             data-search="<?= htmlspecialchars($account['nama'] . ' ' . $kelas_info) ?>"
+                                             data-display="<?= htmlspecialchars($display_text) ?>"
+                                             <?= (!empty($form_data['rekening_tujuan']) && $form_data['rekening_tujuan'] == $account['no_rekening']) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($display_text) ?>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <input type="hidden" name="rekening_tujuan" id="rekening-tujuan-input" value="<?= htmlspecialchars($form_data['rekening_tujuan'] ?? '') ?>" required>
+                            </div>
+                        <?php endif; ?>
+                        <span class="error-message" id="rekening_tujuan-error"></span>
                     </div>
-                    <input type="hidden" name="pin" id="pin-value">
                 </div>
                 
-                <button type="submit" id="transferButton">
-                    <i class="fas fa-paper-plane"></i>
-                    <span>Transfer</span>
-                </button>
+                <div class="form-column">
+                    <div class="form-group">
+                        <label for="jumlah">Jumlah Transfer</label>
+                        <input type="text" id="jumlah" name="jumlah" required 
+                               inputmode="numeric" pattern="[0-9\.]*" 
+                               placeholder="10.000" 
+                               value="<?= !empty($form_data['jumlah']) ? number_format((int)preg_replace('/[^0-9]/', '', $form_data['jumlah']), 0, ',', '.') : '' ?>">
+                        <span class="error-message" id="jumlah-error"></span>
+                    </div>
+                    
+                    <div class="form-group pin-group">
+                        <label for="pin-value">Masukkan PIN (6 Digit)</label>
+                        <div class="pin-container">
+                            <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                            <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                            <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                            <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                            <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                            <input type="text" class="pin-input" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                        </div>
+                        <input type="hidden" name="pin" id="pin-value">
+                        <span class="error-message" id="pin-error"></span>
+                    </div>
+                </div>
+                
+                <div class="form-buttons">
+                    <button type="submit" class="btn" id="transferButton">
+                        <span class="btn-content"><i class="fas fa-paper-plane"></i> Transfer</span>
+                    </button>
+                </div>
             </form>
         </div>
 
-        <div id="alertContainer">
-            <?php if (!empty($error)): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span><?= htmlspecialchars($error) ?></span>
+        <?php if (!empty($message)): ?>
+            <div id="successModal" class="modal-overlay">
+                <div class="success-modal">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>Transfer Berhasil!</h3>
                 </div>
-            <?php endif; ?>
-        </div>
-    </div>
-
-    <?php if (!empty($message)): ?>
-    <div id="successOverlay" class="success-overlay">
-        <div class="success-modal">
-            <div class="success-icon">
-                <i class="fas fa-check-circle"></i>
             </div>
-            <h3>Transfer Berhasil!</h3>
-            <p><?= htmlspecialchars($message) ?></p>
-        </div>
+        <?php endif; ?>
+
+        <?php if (!empty($error)): ?>
+            <div id="errorModal" class="modal-overlay">
+                <div class="error-modal">
+                    <div class="error-icon">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <h3>Gagal</h3>
+                    <p><?= htmlspecialchars($error) ?></p>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
-    <?php endif; ?>
 
     <script>
         document.addEventListener('touchstart', function(event) {
@@ -1417,7 +1362,6 @@ if ($role == 'admin' || $role == 'petugas') {
                     }
                 });
 
-                // Ensure correct format on paste
                 amountInput.addEventListener('paste', function(e) {
                     e.preventDefault();
                     let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
@@ -1533,65 +1477,54 @@ if ($role == 'admin' || $role == 'petugas') {
                 if (document.getElementById('rekening-asal-select')) {
                     document.getElementById('rekening-asal-select').querySelector('span').textContent = '-- Pilih Rekening --';
                     document.getElementById('rekening-asal-input').value = '';
+                    document.getElementById('search-rekening-asal').value = '';
                 }
                 if (document.getElementById('rekening-tujuan-select')) {
                     document.getElementById('rekening-tujuan-select').querySelector('span').textContent = '-- Pilih Rekening --';
                     document.getElementById('rekening-tujuan-input').value = '';
+                    document.getElementById('search-rekening-tujuan').value = '';
                 }
             }
 
             function showAlert(message, type) {
-                const existingAlerts = document.querySelectorAll('.alert');
+                const alertContainer = document.getElementById('alertContainer');
+                const existingAlerts = alertContainer.querySelectorAll('.modal-overlay');
                 existingAlerts.forEach(alert => {
-                    alert.classList.add('hide');
+                    alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => alert.remove(), 500);
                 });
                 const alertDiv = document.createElement('div');
-                alertDiv.className = `alert alert-${type}`;
-                let icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+                alertDiv.className = 'modal-overlay';
                 alertDiv.innerHTML = `
-                    <i class="fas fa-${icon}"></i>
-                    <span>${message}</span>
-                `;
-                alertContainer.appendChild(alertDiv);
-                setTimeout(() => {
-                    alertDiv.classList.add('hide');
-                    setTimeout(() => alertDiv.remove(), 500);
-                }, 3000);
-            }
-
-            function showSuccessAnimation(message) {
-                const overlay = document.createElement('div');
-                overlay.className = 'success-overlay';
-                overlay.innerHTML = `
-                    <div class="success-modal">
-                        <div class="success-icon">
-                            <i class="fas fa-check-circle"></i>
+                    <div class="${type}-modal">
+                        <div class="${type}-icon">
+                            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
                         </div>
-                        <h3>Transfer Berhasil!</h3>
-                        <p>${message}</p>
+                        <h3>${type === 'success' ? 'Transfer Berhasil!' : 'Gagal'}</h3>
+                        ${type === 'error' ? `<p>${message}</p>` : ''}
                     </div>
                 `;
-                document.body.appendChild(overlay);
-
-                const modal = overlay.querySelector('.success-modal');
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    modal.appendChild(confetti);
-                }
-
-                overlay.addEventListener('click', () => {
-                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
-                    setTimeout(() => {
-                        overlay.remove();
-                        resetForm();
-                    }, 500);
+                alertContainer.appendChild(alertDiv);
+                setTimeout(() => closeModal(alertDiv.id), 5000);
+                alertDiv.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('modal-overlay')) {
+                        closeModal(alertDiv.id);
+                        if (type === 'success') {
+                            resetForm();
+                        } else {
+                            clearPinInputs(); // Clear PIN only on error
+                        }
+                    }
                 });
+                alertDiv.id = 'alert-' + Date.now();
+            }
+
+            function closeModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => modal.remove(), 500);
+                }
             }
 
             function initCustomSelect(selectId, dropdownId, inputId, searchId) {
@@ -1617,8 +1550,10 @@ if ($role == 'admin' || $role == 'petugas') {
                 options.forEach(option => {
                     option.addEventListener('click', function() {
                         const value = this.getAttribute('data-value');
+                        const displayText = this.getAttribute('data-display') || '-- Pilih Rekening --';
                         inputElement.value = value;
                         selectElement.querySelector('span').textContent = value ? value : '-- Pilih Rekening --';
+                        searchElement.value = value ? displayText : ''; // Update search input with name and class
                         options.forEach(opt => opt.classList.remove('selected'));
                         this.classList.add('selected');
                         dropdownElement.classList.remove('active');
@@ -1687,69 +1622,80 @@ if ($role == 'admin' || $role == 'petugas') {
                     const rekeningAsal = document.querySelector('input[name="rekening_asal"]').value;
                     const rekeningTujuan = document.querySelector('input[name="rekening_tujuan"]').value;
                     
-                    if (!rekeningAsal || (rekeningTujuan === prefix || !rekeningTujuan)) {
-                        showAlert('Semua field harus diisi.', 'error');
+                    if (!rekeningAsal) {
+                        showAlert('Rekening asal harus diisi.', 'error');
+                        document.getElementById('rekening_asal-error').textContent = 'Rekening asal harus diisi.';
+                        document.getElementById('rekening_asal-error').classList.add('show');
                         return;
+                    } else {
+                        document.getElementById('rekening_asal-error').classList.remove('show');
                     }
+
+                    if (rekeningTujuan === prefix || !rekeningTujuan) {
+                        showAlert('Rekening tujuan harus diisi.', 'error');
+                        document.getElementById('rekening_tujuan-error').textContent = 'Rekening tujuan harus diisi.';
+                        document.getElementById('rekening_tujuan-error').classList.add('show');
+                        return;
+                    } else {
+                        document.getElementById('rekening_tujuan-error').classList.remove('show');
+                    }
+
                     if (rekeningAsal === rekeningTujuan) {
                         showAlert('Rekening tujuan tidak boleh sama dengan rekening asal.', 'error');
-                        return;
-                    }
-                    if (!jumlah || Number(jumlah) < 1000) {
-                        showAlert('Jumlah transfer minimal Rp 1.000', 'error');
-                        return;
-                    }
-                    if (!pin || pin.length !== 6) {
-                        shakePinContainer();
-                        showAlert('PIN harus 6 digit.', 'error');
+                        document.getElementById('rekening_tujuan-error').textContent = 'Rekening tujuan tidak boleh sama dengan rekening asal.';
+                        document.getElementById('rekening_tujuan-error').classList.add('show');
                         return;
                     }
 
-                    this.classList.add('btn-loading');
+                    if (!jumlah || Number(jumlah) < 1000) {
+                        showAlert('Jumlah transfer minimal Rp 1.000.', 'error');
+                        document.getElementById('jumlah-error').textContent = 'Jumlah transfer minimal Rp 1.000.';
+                        document.getElementById('jumlah-error').classList.add('show');
+                        return;
+                    } else {
+                        document.getElementById('jumlah-error').classList.remove('show');
+                    }
+
+                    if (!pin || pin.length !== 6) {
+                        shakePinContainer();
+                        showAlert('PIN harus 6 digit.', 'error');
+                        document.getElementById('pin-error').textContent = 'PIN harus 6 digit.';
+                        document.getElementById('pin-error').classList.add('show');
+                        return;
+                    } else {
+                        document.getElementById('pin-error').classList.remove('show');
+                    }
+
+                    this.classList.add('loading');
                     setTimeout(() => {
                         transferForm.submit();
                     }, 500);
                 });
             }
 
-            const successOverlay = document.getElementById('successOverlay');
-            if (successOverlay) {
-                const modal = successOverlay.querySelector('.success-modal');
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    modal.appendChild(confetti);
-                }
-                successOverlay.addEventListener('click', () => {
-                    successOverlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
+            // Modal close handling
+            ['successModal', 'errorModal'].forEach(modalId => {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('modal-overlay')) {
+                            closeModal(modalId);
+                            if (modalId === 'successModal') {
+                                resetForm();
+                            } else {
+                                clearPinInputs(); // Clear PIN only on error
+                            }
+                        }
+                    });
                     setTimeout(() => {
-                        successOverlay.remove();
-                        resetForm();
-                    }, 500);
-                });
-            }
-
-            // Add Enter key support
-            amountInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') transferButton.click();
-            });
-            pinInputs.forEach(input => {
-                input.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter' && pinValue.value.length === 6) transferButton.click();
-                });
-            });
-
-            // Auto-remove initial alerts
-            const initialAlerts = document.querySelectorAll('.alert');
-            initialAlerts.forEach(alert => {
-                setTimeout(() => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
-                }, 3000);
+                        closeModal(modalId);
+                        if (modalId === 'successModal') {
+                            resetForm();
+                        } else {
+                            clearPinInputs(); // Clear PIN only on error
+                        }
+                    }, 5000);
+                }
             });
         });
     </script>

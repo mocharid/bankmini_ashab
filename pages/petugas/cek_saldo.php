@@ -57,24 +57,23 @@ $conn->close();
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cek Saldo - SCHOBANK SYSTEM</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" onerror="console.error('Font Awesome failed to load')">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f8faff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --text-primary: #2d3748;
+            --text-secondary: #4a5568;
+            --bg-light: #f7fafc;
+            --bg-table: #ffffff;
+            --border-color: #e2e8f0;
+            --error-color: #e74c3c;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
 
@@ -94,16 +93,18 @@ $conn->close();
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
-            padding: 15px 20px;
+            padding: 15px 30px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            position: relative;
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
@@ -119,20 +120,11 @@ $conn->close();
             width: 40px;
             height: 40px;
             transition: var(--transition);
-            margin-right: 10px;
         }
 
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
-        }
-
-        .top-nav h1 {
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
-            position: absolute;
-            left: 50%;
-            transform: translateX(-50%);
-            margin: 0;
         }
 
         .main-content {
@@ -144,7 +136,7 @@ $conn->close();
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 25px;
             border-radius: 15px;
@@ -194,84 +186,86 @@ $conn->close();
             font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        .search-card {
-            background: white;
+        .form-section {
+            background: var(--bg-table);
             border-radius: 15px;
             padding: 25px;
             box-shadow: var(--shadow-sm);
             margin-bottom: 30px;
-            transition: var(--transition);
+            animation: slideIn 0.5s ease-out;
         }
 
-        .search-card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-5px);
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
-        .search-form {
-            display: grid;
+        .form-container {
+            display: flex;
+            flex-wrap: wrap;
             gap: 20px;
         }
 
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            text-align: center;
-        }
-
-        .input-group {
+        .form-column {
+            flex: 1;
+            min-width: 300px;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 20px;
         }
 
-        .prefix {
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            font-weight: 600;
-            color: var(--text-primary);
-            padding: 12px 15px;
-            background: #f0f0f0;
-            border-radius: 10px 0 0 10px;
-            border: 1px solid #ddd;
-            border-right: none;
-        }
-
-        .digit-inputs {
+        .form-group {
             display: flex;
+            flex-direction: column;
             gap: 8px;
-            flex-wrap: wrap;
+            position: relative;
         }
 
-        .digit-input {
-            width: 40px;
-            height: 40px;
-            padding: 0;
-            text-align: center;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: clamp(1rem, 2vw, 1.1rem);
+        label {
+            font-weight: 500;
+            color: var(--text-secondary);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+        }
+
+        .input-container {
+            position: relative;
+            width: 100%;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min-height: 44px;
             transition: var(--transition);
-            background: white;
+            -webkit-user-select: text;
+            user-select: text;
+            background-color: #fff;
         }
 
-        .digit-input:focus {
+        input:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-            transform: scale(1.05);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
         }
 
-        .digit-input:invalid {
-            border-color: var(--danger-color);
+        .error-message {
+            color: var(--error-color);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            margin-top: 4px;
+            display: none;
         }
 
-        button {
-            background-color: var(--primary-color);
+        .error-message.show {
+            display: block;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             border: none;
             padding: 12px 25px;
@@ -281,33 +275,79 @@ $conn->close();
             font-weight: 500;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
             transition: var(--transition);
-            margin: 0 auto;
+            position: relative;
         }
 
-        button:hover {
-            background-color: var(--primary-dark);
+        .btn:hover {
+            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
-        button:active {
+        .btn:active {
             transform: scale(0.95);
+        }
+
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        .btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            position: absolute;
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .form-buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .results-card {
+            background: var(--bg-table);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
+            transition: var(--transition);
+        }
+
+        .results-card:hover {
+            box-shadow: var(--shadow-md);
         }
 
         .detail-row {
             display: grid;
             grid-template-columns: 1fr 2fr;
             align-items: center;
-            border-bottom: 1px solid #eee;
-            padding: 10px 0;
-            gap: 10px;
+            padding: 12px 15px;
+            gap: 8px;
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             transition: var(--transition);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .detail-row:hover {
-            background: var(--primary-light);
+            background: #f1f5f9;
         }
 
         .detail-row:last-child {
@@ -374,63 +414,7 @@ $conn->close();
             margin-top: 10px;
         }
 
-        .notification-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.4);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
-            cursor: pointer;
-        }
-
-        .notification-modal {
-            background: white;
-            border-radius: 15px;
-            padding: 15px;
-            text-align: center;
-            max-width: 80%;
-            width: 300px;
-            box-shadow: var(--shadow-md);
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.5s ease-out forwards;
-        }
-
-        .notification-modal.error {
-            border-left: 5px solid var(--danger-color);
-            background: #fff1f0;
-        }
-
-        .notification-icon {
-            font-size: clamp(2rem, 4vw, 2.5rem);
-            margin-bottom: 10px;
-        }
-
-        .notification-icon.error {
-            color: var(--danger-color);
-        }
-
-        .notification-modal h3 {
-            color: var(--text-primary);
-            font-size: clamp(1.1rem, 2.2vw, 1.2rem);
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
-
-        .notification-modal p {
-            color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.9rem);
-            line-height: 1.5;
-        }
-
-        .account-overlay {
+        .modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
@@ -442,41 +426,8 @@ $conn->close();
             align-items: center;
             z-index: 1000;
             opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
+            animation: fadeInOverlay 0.4s ease-in-out forwards;
             cursor: pointer;
-        }
-
-        .account-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: left;
-            max-width: 80%;
-            width: 350px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
-        }
-
-        .account-icon {
-            font-size: clamp(2.5rem, 5vw, 3rem);
-            color: var(--secondary-color);
-            margin-bottom: 15px;
-            text-align: center;
-            animation: bounceIn 0.6s ease-out;
-        }
-
-        .account-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: 15px;
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
-            font-weight: 600;
-            text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
         }
 
         @keyframes fadeInOverlay {
@@ -489,10 +440,44 @@ $conn->close();
             to { opacity: 0; }
         }
 
+        .success-modal, .error-modal {
+            position: relative;
+            text-align: center;
+            width: clamp(280px, 70vw, 360px);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            border-radius: 12px;
+            padding: clamp(15px, 3vw, 20px);
+            box-shadow: var(--shadow-md);
+            transform: scale(0.8);
+            opacity: 0;
+            animation: popInModal 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .error-modal {
+            background: linear-gradient(135deg, var(--error-color) 0%, #c0392b 100%);
+        }
+
+        .success-modal::before, .error-modal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
+        }
+
         @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
+            0% { transform: scale(0.8); opacity: 0; }
+            80% { transform: scale(1.05); opacity: 1; }
             100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon, .error-icon {
+            font-size: clamp(2rem, 4.5vw, 2.5rem);
+            margin: 0 auto 10px;
+            color: white;
+            animation: bounceIn 0.5s ease-out;
         }
 
         @keyframes bounceIn {
@@ -501,13 +486,20 @@ $conn->close();
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .section-title {
-            margin-bottom: 20px;
-            color: var(--primary-dark);
-            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .success-modal h3, .error-modal h3 {
+            color: white;
+            margin: 0 0 8px;
+            font-size: clamp(1rem, 2vw, 1.1rem);
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .success-modal p, .error-modal p {
+            color: white;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
+            margin: 0;
+            line-height: 1.5;
+            padding: 0 10px;
         }
 
         .form-error {
@@ -520,61 +512,14 @@ $conn->close();
             40%, 80% { transform: translateX(5px); }
         }
 
-        .btn-loading {
-            position: relative;
-            pointer-events: none;
-            min-width: 100px;
-        }
-
-        .btn-loading .btn-content {
-            visibility: hidden;
-        }
-
-        .btn-loading::after {
-            content: ". . .";
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            font-weight: 500;
-            animation: dots 1.5s infinite;
-            white-space: nowrap;
-        }
-
-        @keyframes dots {
-            0% { content: "."; }
-            33% { content: ". ."; }
-            66% { content: ". . ."; }
-            100% { content: "."; }
-        }
-
         @media (max-width: 768px) {
             .top-nav {
-                padding: 12px 15px;
-            }
-
-            .back-btn {
-                width: 36px;
-                height: 36px;
-                margin-right: 8px;
-            }
-
-            .top-nav h1 {
+                padding: 15px;
                 font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
                 padding: 15px;
-            }
-
-            .welcome-banner {
-                padding: 20px;
-            }
-
-            .search-card {
-                padding: 20px;
             }
 
             .welcome-banner h2 {
@@ -585,29 +530,23 @@ $conn->close();
                 font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
-            .section-title {
-                font-size: clamp(1rem, 2.5vw, 1.1rem);
+            .form-container {
+                flex-direction: column;
             }
 
-            .search-form {
-                gap: 15px;
+            .form-column {
+                min-width: 100%;
             }
 
-            .digit-input {
-                width: 35px;
-                height: 35px;
-                font-size: clamp(0.9rem, 2vw, 1rem);
-            }
-
-            button {
+            .btn {
                 width: 100%;
                 justify-content: center;
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
             .detail-row {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
                 grid-template-columns: 1fr 1.5fr;
+                padding: 10px 12px;
+                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
 
             .balance-label {
@@ -623,84 +562,66 @@ $conn->close();
                 font-size: clamp(0.75rem, 1.6vw, 0.8rem);
             }
 
-            .notification-modal {
-                width: 90%;
-                max-width: 280px;
-                padding: 12px;
+            .success-modal, .error-modal {
+                width: clamp(260px, 80vw, 340px);
+                padding: clamp(12px, 3vw, 15px);
             }
 
-            .notification-icon {
-                font-size: clamp(1.8rem, 3.5vw, 2rem);
+            .success-icon, .error-icon {
+                font-size: clamp(1.8rem, 4vw, 2rem);
             }
 
-            .notification-modal h3 {
-                font-size: clamp(1rem, 2vw, 1.1rem);
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(0.9rem, 1.9vw, 1rem);
             }
 
-            .notification-modal p {
-                font-size: clamp(0.8rem, 1.6vw, 0.85rem);
-            }
-
-            .account-modal {
-                width: 90%;
-                max-width: 320px;
-                padding: 15px;
-            }
-
-            .account-icon {
-                font-size: clamp(2rem, 4vw, 2.5rem);
-            }
-
-            .account-modal h3 {
-                font-size: clamp(1.1rem, 2.2vw, 1.2rem);
-            }
-
-            .detail-row {
-                font-size: clamp(0.75rem, 1.6vw, 0.85rem);
-            }
-
-            .balance-amount {
-                font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             }
         }
 
         @media (max-width: 480px) {
+            body {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
+            }
+
             .top-nav {
-                padding: 10px 12px;
-            }
-
-            .back-btn {
-                width: 32px;
-                height: 32px;
-                margin-right: 6px;
-            }
-
-            .top-nav h1 {
-                font-size: clamp(0.9rem, 2.2vw, 1.1rem);
-            }
-
-            .digit-input {
-                width: 32px;
-                height: 32px;
-                font-size: clamp(0.85rem, 1.8vw, 0.9rem);
-            }
-
-            .prefix {
-                padding: 10px 12px;
-                font-size: clamp(0.85rem, 1.8vw, 0.9rem);
-            }
-
-            .notification-modal {
-                max-width: 260px;
                 padding: 10px;
             }
 
-            .account-modal {
-                max-width: 280px;
-                padding: 12px;
+            .welcome-banner {
+                padding: 20px;
+            }
+
+            input {
+                min-height: 40px;
+            }
+
+            .detail-row {
+                grid-template-columns: 1fr 1.5fr;
+                padding: 8px 10px;
+                font-size: clamp(0.75rem, 1.7vw, 0.85rem);
+            }
+
+            .success-modal, .error-modal {
+                width: clamp(240px, 85vw, 320px);
+                padding: clamp(10px, 2.5vw, 12px);
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(1.6rem, 3.5vw, 1.8rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.7rem, 1.6vw, 0.8rem);
             }
         }
     </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
     <nav class="top-nav">
@@ -708,283 +629,271 @@ $conn->close();
             <i class="fas fa-xmark"></i>
         </button>
         <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-wallet"></i> Cek Saldo</h2>
+            <h2>Cek Saldo</h2>
             <p>Cek saldo rekening nasabah dengan mudah dan cepat</p>
         </div>
 
-        <div class="search-card">
-            <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Rekening</h3>
-            <form id="searchForm" action="" method="POST" class="search-form">
-                <div>
-                    <label for="no_rekening">No Rekening:</label>
-                    <div class="input-group">
-                        <span class="prefix">REK</span>
-                        <div class="digit-inputs">
-                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
-                            <input type="tel" class="digit-input" maxlength="1" pattern="[0-9]" inputmode="numeric" required>
+        <div id="alertContainer"></div>
+
+        <div class="form-section">
+            <form id="searchForm" action="" method="POST" class="form-container">
+                <div class="form-column">
+                    <div class="form-group">
+                        <label for="no_rekening">No Rekening</label>
+                        <div class="input-container">
+                            <input type="text" id="no_rekening" name="no_rekening" placeholder="REK diikuti 6 angka" required autofocus>
                         </div>
-                        <input type="hidden" id="no_rekening" name="no_rekening">
+                        <span class="error-message" id="no_rekening-error"></span>
                     </div>
                 </div>
-                <button type="submit" id="searchBtn">
-                    <span class="btn-content">
-                        <i class="fas fa-search"></i>
-                        <span>Cek Saldo</span>
-                    </span>
-                </button>
+                <div class="form-buttons">
+                    <button type="submit" class="btn" id="searchBtn">
+                        <span class="btn-content"><i class="fas fa-search"></i> Cek Saldo</span>
+                    </button>
+                </div>
             </form>
         </div>
-    </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script>
-        // Fallback for jQuery
-        if (typeof jQuery === 'undefined') {
-            console.error('jQuery not loaded, loading fallback');
-            document.write('<script src="/path/to/local/jquery.min.js"><\/script>');
-        }
-
-        // Prevent multi-touch zoom and gestures
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        document.addEventListener('gesturestart', function(event) {
-            event.preventDefault();
-        });
-
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, initializing script');
-            const searchForm = document.getElementById('searchForm');
-            const searchBtn = document.getElementById('searchBtn');
-            const digitInputs = document.querySelectorAll('.digit-input');
-            const noRekeningInput = document.getElementById('no_rekening');
-            const prefix = "REK";
-
-            // Initialize digit inputs
-            digitInputs.forEach((input, index) => {
-                input.addEventListener('input', function(e) {
-                    const value = this.value.replace(/[^0-9]/g, '');
-                    this.value = value;
-                    if (value && index < digitInputs.length - 1) {
-                        digitInputs[index + 1].focus();
-                    }
-                    updateNoRekening();
-                });
-
-                input.addEventListener('keydown', function(e) {
-                    if (e.key === 'Backspace' && !this.value && index > 0) {
-                        digitInputs[index - 1].focus();
-                        digitInputs[index - 1].value = '';
-                        updateNoRekening();
-                    }
-                });
-
-                input.addEventListener('paste', function(e) {
-                    e.preventDefault();
-                    const pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
-                    let currentIndex = index;
-                    for (let i = 0; i < pastedData.length && currentIndex < digitInputs.length; i++) {
-                        digitInputs[currentIndex].value = pastedData[i];
-                        currentIndex++;
-                    }
-                    if (currentIndex < digitInputs.length) {
-                        digitInputs[currentIndex].focus();
-                    }
-                    updateNoRekening();
-                });
-            });
-
-            // Update hidden no_rekening input
-            function updateNoRekening() {
-                let noRekening = prefix;
-                digitInputs.forEach(input => {
-                    noRekening += input.value || '';
-                });
-                noRekeningInput.value = noRekening;
-            }
-
-            // Clear inputs and reset focus
-            function clearInputs() {
-                console.log('Clearing inputs');
-                digitInputs.forEach(input => input.value = '');
-                noRekeningInput.value = prefix;
-                digitInputs[0].focus();
-            }
-
-            // Initialize hidden input
-            noRekeningInput.value = prefix;
-
-            // Search form handling
-            searchForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const noRekening = noRekeningInput.value;
-                console.log('Form submitted, no_rekening:', noRekening);
-                if (noRekening === prefix || noRekening.length < prefix.length + digitInputs.length) {
-                    console.log('Invalid input, showing error modal');
-                    showModal('Masukkan nomor rekening lengkap (6 digit)', 'error');
-                    digitInputs[0].classList.add('form-error');
-                    setTimeout(() => digitInputs.forEach(input => input.classList.remove('form-error')), 400);
-                    clearInputs();
-                    return;
-                }
-                searchBtn.classList.add('btn-loading');
-                setTimeout(() => {
-                    searchForm.submit();
-                }, 1000);
-            });
-
-            // Show modal for error
-            function showModal(message, type) {
-                console.log('showModal called:', message, type);
-                // Remove existing modals
-                const existingModals = document.querySelectorAll('.notification-overlay, .account-overlay');
-                existingModals.forEach(modal => {
-                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => modal.remove(), 500);
-                });
-
-                const overlay = document.createElement('div');
-                overlay.className = 'notification-overlay';
-                const icon = type === 'error' ? 'exclamation-circle' : 'check-circle';
-                const title = type === 'error' ? 'Error' : 'Berhasil';
-                overlay.innerHTML = `
-                    <div class="notification-modal ${type}">
-                        <div class="notification-icon ${type}">
-                            <i class="fas fa-${icon}"></i>
-                        </div>
-                        <h3>${title}</h3>
-                        <p>${message}</p>
-                    </div>
-                `;
-                document.body.appendChild(overlay);
-
-                overlay.addEventListener('click', () => {
-                    console.log('Closing modal');
-                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    const modal = overlay.querySelector('.notification-modal');
-                    modal.style.animation = 'popInModal 0.5s ease-out reverse';
-                    setTimeout(() => overlay.remove(), 500);
-                });
-
-                // Auto-close after 5 seconds
-                setTimeout(() => {
-                    console.log('Auto-closing modal');
-                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    const modal = overlay.querySelector('.notification-modal');
-                    modal.style.animation = 'popInModal 0.5s ease-out reverse';
-                    setTimeout(() => modal.remove(), 500);
-                }, 5000);
-            }
-
-            // Show account details modal
-            function showAccountModal(data) {
-                console.log('showAccountModal called:', data);
-                // Remove existing modals
-                const existingModals = document.querySelectorAll('.notification-overlay, .account-overlay');
-                existingModals.forEach(modal => {
-                    modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => modal.remove(), 500);
-                });
-
-                const overlay = document.createElement('div');
-                overlay.className = 'account-overlay';
-                overlay.innerHTML = `
-                    <div class="account-modal">
-                        <div class="account-icon">
-                            <i class="fas fa-user-circle"></i>
-                        </div>
-                        <h3><i class="fas fa-info-circle"></i> Detail Rekening</h3>
-                        <div class="detail-row">
-                            <div class="detail-label">Nama Nasabah:</div>
-                            <div class="detail-value">${data.nama}</div>
-                        </div>
-                        <div class="detail-row">
-                            <div class="detail-label">No. Rekening:</div>
-                            <div class="detail-value">${data.no_rekening}</div>
-                        </div>
-                        <div class="detail-row">
-                            <div class="detail-label">Kelas:</div>
-                            <div class="detail-value">${data.nama_kelas || 'N/A'}</div>
-                        </div>
-                        <div class="detail-row">
-                            <div class="detail-label">Jurusan:</div>
-                            <div class="detail-value">${data.nama_jurusan || 'N/A'}</div>
-                        </div>
-                        <div class="detail-row">
-                            <div class="detail-label">Tanggal Pembukaan:</div>
-                            <div class="detail-value">${data.created_at}</div>
-                        </div>
-                        <div class="balance-display">
-                            <div class="balance-label">Saldo Rekening Saat Ini</div>
-                            <div class="balance-amount">Rp ${data.saldo}</div>
-                            <div class="balance-info"><i class="fas fa-info-circle"></i> Saldo diperbarui per ${data.update_time} WIB</div>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(overlay);
-
-                overlay.addEventListener('click', () => {
-                    console.log('Closing account modal');
-                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    const modal = overlay.querySelector('.account-modal');
-                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
-                    setTimeout(() => overlay.remove(), 500);
-                });
-
-                // Auto-close after 5 seconds
-                setTimeout(() => {
-                    console.log('Auto-closing account modal');
-                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    const modal = overlay.querySelector('.account-modal');
-                    modal.style.animation = 'popInModal 0.7s ease-out reverse';
-                    setTimeout(() => overlay.remove(), 500);
-                }, 5000);
-            }
-
-            // Handle session-based modals
-            <?php if (isset($_SESSION['search_error'])): ?>
-                console.log('Showing error modal: <?php echo addslashes($_SESSION['search_error']); ?>');
-                showModal('<?php echo addslashes($_SESSION['search_error']); ?>', 'error');
-                clearInputs();
-                <?php unset($_SESSION['search_error']); ?>
-            <?php endif; ?>
-
+        <div id="results">
             <?php if (isset($_SESSION['search_success']) && isset($_SESSION['search_result'])): ?>
-                console.log('Showing account modal');
-                showAccountModal({
-                    nama: '<?php echo addslashes($_SESSION['search_result']['nama']); ?>',
-                    no_rekening: '<?php echo addslashes($_SESSION['search_result']['no_rekening']); ?>',
-                    nama_kelas: '<?php echo addslashes($_SESSION['search_result']['nama_kelas'] ?? 'N/A'); ?>',
-                    nama_jurusan: '<?php echo addslashes($_SESSION['search_result']['nama_jurusan'] ?? 'N/A'); ?>',
-                    created_at: '<?php echo date('d/m/Y', strtotime($_SESSION['search_result']['created_at'] ?? 'now')); ?>',
-                    saldo: '<?php echo number_format($_SESSION['search_result']['saldo'], 0, ',', '.'); ?>',
-                    update_time: '<?php echo date('d/m/Y H:i'); ?>'
-                });
+                <?php
+                $data = $_SESSION['search_result'];
+                ?>
+                <div class="results-card">
+                    <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Nasabah:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($data['nama']); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">No. Rekening:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($data['no_rekening']); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($data['nama_kelas'] ?? 'N/A'); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan:</div>
+                        <div class="detail-value"><?php echo htmlspecialchars($data['nama_jurusan'] ?? 'N/A'); ?></div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Tanggal Pembukaan:</div>
+                        <div class="detail-value"><?php echo date('d/m/Y', strtotime($data['created_at'])); ?></div>
+                    </div>
+                    <div class="balance-display">
+                        <div class="balance-label">Saldo Rekening Saat Ini</div>
+                        <div class="balance-amount">Rp <?php echo number_format($data['saldo'], 0, ',', '.'); ?></div>
+                        <div class="balance-info"><i class="fas fa-info-circle"></i> Saldo diperbarui per <?php echo date('d/m/Y H:i'); ?> WIB</div>
+                    </div>
+                </div>
                 <?php
                 unset($_SESSION['search_result']);
                 unset($_SESSION['search_success']);
                 ?>
             <?php endif; ?>
+        </div>
+    </div>
 
-            // Focus first input on load
-            clearInputs();
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Prevent zooming and double-tap issues
+            document.addEventListener('touchstart', function(event) {
+                if (event.touches.length > 1) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', function(event) {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, { passive: false });
+
+            document.addEventListener('wheel', function(event) {
+                if (event.ctrlKey) {
+                    event.preventDefault();
+                }
+            }, { passive: false });
+
+            document.addEventListener('dblclick', function(event) {
+                event.preventDefault();
+            }, { passive: false });
+
+            const searchForm = document.getElementById('searchForm');
+            const searchBtn = document.getElementById('searchBtn');
+            const inputNoRek = document.getElementById('no_rekening');
+            const alertContainer = document.getElementById('alertContainer');
+            const results = document.getElementById('results');
+            const prefix = "REK";
+
+            // Initialize rekening input
+            if (!inputNoRek.value) {
+                inputNoRek.value = prefix;
+            }
+
+            // Restrict rekening input to exactly 6 digits after prefix
+            inputNoRek.addEventListener('input', function() {
+                let value = this.value;
+                if (!value.startsWith(prefix)) {
+                    value = prefix + value.replace(prefix, '');
+                }
+                let userInput = value.slice(prefix.length).replace(/[^0-9]/g, '').slice(0, 6);
+                this.value = prefix + userInput;
+                document.getElementById('no_rekening-error').classList.remove('show');
+            });
+
+            inputNoRek.addEventListener('paste', function(e) {
+                e.preventDefault();
+                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+                this.value = prefix + pastedData;
+            });
+
+            inputNoRek.addEventListener('keydown', function(e) {
+                let cursorPos = this.selectionStart;
+                let userInput = this.value.slice(prefix.length);
+                if ((e.key === 'Backspace' || e.key === 'Delete') && cursorPos <= prefix.length) {
+                    e.preventDefault();
+                }
+                if (userInput.length >= 6 && e.key.match(/[0-9]/) && cursorPos >= prefix.length) {
+                    e.preventDefault();
+                }
+            });
+
+            inputNoRek.addEventListener('focus', function() {
+                if (this.value === prefix) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            inputNoRek.addEventListener('click', function() {
+                if (this.selectionStart < prefix.length) {
+                    this.setSelectionRange(prefix.length, prefix.length);
+                }
+            });
+
+            // Search form handling
+            searchForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (searchForm.classList.contains('submitting')) return;
+                searchForm.classList.add('submitting');
+
+                const rekening = inputNoRek.value.trim();
+                if (rekening === prefix || rekening.length !== prefix.length + 6) {
+                    showAlert('Masukkan nomor rekening yang valid (REK diikuti 6 angka)', 'error');
+                    inputNoRek.classList.add('form-error');
+                    setTimeout(() => inputNoRek.classList.remove('form-error'), 400);
+                    inputNoRek.value = prefix;
+                    inputNoRek.focus();
+                    document.getElementById('no_rekening-error').classList.add('show');
+                    document.getElementById('no_rekening-error').textContent = 'Masukkan nomor rekening yang valid (REK diikuti 6 angka)';
+                    searchForm.classList.remove('submitting');
+                    return;
+                }
+
+                searchBtn.classList.add('loading');
+                searchBtn.innerHTML = '<span class="btn-content"><i class="fas fa-spinner"></i> Memproses...</span>';
+                setTimeout(() => {
+                    searchForm.submit();
+                }, 1000);
+            });
+
+            // Show success popup only on initial search
+            <?php if (isset($_SESSION['search_success']) && isset($_SESSION['search_result'])): ?>
+                setTimeout(() => showAlert('Rekening berhasil ditemukan', 'success'), 500);
+            <?php endif; ?>
+
+            // Show error popup if there's an error
+            <?php if (isset($_SESSION['search_error'])): ?>
+                setTimeout(() => {
+                    showAlert('<?php echo addslashes($_SESSION['search_error']); ?>', 'error');
+                    document.getElementById('no_rekening').value = prefix;
+                }, 500);
+                <?php unset($_SESSION['search_error']); ?>
+            <?php endif; ?>
+
+            // Alert function
+            function showAlert(message, type) {
+                const existingAlerts = alertContainer.querySelectorAll('.modal-overlay');
+                existingAlerts.forEach(alert => {
+                    alert.style.animation = 'fadeOutOverlay 0.4s ease-in-out forwards';
+                    setTimeout(() => alert.remove(), 400);
+                });
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'modal-overlay';
+                alertDiv.innerHTML = `
+                    <div class="${type}-modal">
+                        <div class="${type}-icon">
+                            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                        </div>
+                        <h3>${type === 'success' ? 'Berhasil' : 'Gagal'}</h3>
+                        <p>${message}</p>
+                    </div>
+                `;
+                alertContainer.appendChild(alertDiv);
+                alertDiv.id = 'alert-' + Date.now();
+                alertDiv.addEventListener('click', () => {
+                    closeModal(alertDiv.id);
+                });
+                setTimeout(() => closeModal(alertDiv.id), 5000);
+            }
+
+            // Modal close handling
+            function closeModal(modalId) {
+                const modal = document.getElementById(modalId);
+                if (modal) {
+                    modal.style.animation = 'fadeOutOverlay 0.4s ease-in-out forwards';
+                    setTimeout(() => modal.remove(), 400);
+                }
+            }
+
+            // Animate results
+            const resultRows = document.querySelectorAll('.detail-row, .balance-display');
+            if (resultRows.length > 0) {
+                results.style.display = 'none';
+                setTimeout(() => {
+                    results.style.display = 'block';
+                    resultRows.forEach((row, index) => {
+                        row.style.opacity = '0';
+                        row.style.transform = 'translateY(10px)';
+                        setTimeout(() => {
+                            row.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+                            row.style.opacity = '1';
+                            row.style.transform = 'translateY(0)';
+                        }, index * 80);
+                    });
+                }, 100);
+            }
+
+            // Enter key support
+            inputNoRek.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchBtn.click();
+                }
+            });
+
+            // Prevent text selection on double-click
+            document.addEventListener('mousedown', function(e) {
+                if (e.detail > 1) {
+                    e.preventDefault();
+                }
+            });
+
+            // Fix touch issues in Safari
+            document.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
+
+            // Focus input
+            inputNoRek.focus();
         });
     </script>
 </body>

@@ -2,19 +2,59 @@
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header('Location: ../login.php');
-    exit();
-}
-
 // Prevent any output before PDF generation
 error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 ini_set('display_errors', 0);
+
+// Check if user is admin
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Akses ditolak. Silakan login sebagai admin.']);
+    exit;
+}
 
 // Get parameters
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
 $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
 $format = isset($_GET['format']) ? $_GET['format'] : 'pdf';
+
+// Validate dates
+if (empty($start_date) || empty($end_date) || !strtotime($start_date) || !strtotime($end_date)) {
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Tanggal tidak valid']);
+    exit;
+}
+if (strtotime($start_date) > strtotime($end_date)) {
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Tanggal awal tidak boleh lebih dari tanggal akhir']);
+    exit;
+}
+
+// Query for totals
+$total_query = "SELECT 
+    COUNT(*) as total_transactions,
+    SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status = 'pending') THEN jumlah ELSE 0 END) as total_setoran,
+    SUM(CASE WHEN jenis_transaksi = 'tarik' AND status = 'approved' THEN jumlah ELSE 0 END) as total_penarikan
+    FROM transaksi t
+    JOIN rekening r ON t.rekening_id = r.id
+    JOIN users u ON r.user_id = u.id
+    WHERE DATE(t.created_at) BETWEEN ? AND ?
+    AND t.jenis_transaksi IN ('setor', 'tarik')
+    AND t.petugas_id IS NULL";
+$stmt_total = $conn->prepare($total_query);
+if (!$stmt_total) {
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Gagal menyiapkan query total: ' . $conn->error]);
+    exit;
+}
+$stmt_total->bind_param("ss", $start_date, $end_date);
+$stmt_total->execute();
+$totals_result = $stmt_total->get_result();
+$totals = $totals_result->fetch_assoc();
+$totals['total_transactions'] = $totals['total_transactions'] ?? 0;
+$totals['total_setoran'] = $totals['total_setoran'] ?? 0;
+$totals['total_penarikan'] = $totals['total_penarikan'] ?? 0;
+$totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
 
 // Query for transaction details
 $query = "SELECT 
@@ -24,8 +64,7 @@ $query = "SELECT
             t.status,
             t.created_at,
             u.nama as nama_siswa,
-            u.no_rekening as no_rekening_siswa,
-            r.no_rekening as no_rekening_db,
+            r.no_rekening,
             COALESCE(k.nama_kelas, '-') as kelas,
             COALESCE(j.nama_jurusan, '-') as jurusan
           FROM transaksi t 
@@ -38,60 +77,44 @@ $query = "SELECT
           AND t.petugas_id IS NULL
           ORDER BY t.created_at DESC";
 $stmt = $conn->prepare($query);
+if (!$stmt) {
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Gagal menyiapkan query transaksi: ' . $conn->error]);
+    exit;
+}
 $stmt->bind_param("ss", $start_date, $end_date);
 $stmt->execute();
 $result = $stmt->get_result();
 
-// Calculate totals
-$total_query = "SELECT 
-    COUNT(*) as total_transactions,
-    SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_setoran,
-    SUM(CASE WHEN jenis_transaksi = 'tarik' AND status = 'approved' THEN jumlah ELSE 0 END) as total_penarikan
-    FROM transaksi t
-    JOIN rekening r ON t.rekening_id = r.id
-    JOIN users u ON r.user_id = u.id
-    WHERE DATE(t.created_at) BETWEEN ? AND ?
-    AND t.jenis_transaksi IN ('setor', 'tarik')
-    AND t.petugas_id IS NULL";
-$stmt_total = $conn->prepare($total_query);
-$stmt_total->bind_param("ss", $start_date, $end_date);
-$stmt_total->execute();
-$totals_result = $stmt_total->get_result();
-$totals = $totals_result->fetch_assoc();
-
-// Handle null values in totals array
-$totals['total_transactions'] = $totals['total_transactions'] ?? 0;
-$totals['total_setoran'] = $totals['total_setoran'] ?? 0;
-$totals['total_penarikan'] = $totals['total_penarikan'] ?? 0;
-$totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
-
-// Store transactions in array
+// Store transactions with formatted no_rekening
 $transactions = [];
 while ($row = $result->fetch_assoc()) {
-    $row['no_rekening'] = !empty($row['no_rekening_siswa']) ? $row['no_rekening_siswa'] : 
-                         (!empty($row['no_rekening_db']) ? $row['no_rekening_db'] : 'N/A'); 
+    $no_rekening = $row['no_rekening'] ?? 'N/A';
+    // Format no_rekening as REK8****6
+    if ($no_rekening !== 'N/A' && strlen($no_rekening) >= 2 && is_string($no_rekening)) {
+        $row['no_rekening'] = substr($no_rekening, 0, 1) . '****' . substr($no_rekening, -1);
+    } else {
+        $row['no_rekening'] = 'N/A';
+    }
     $transactions[] = $row;
 }
 
 // If PDF format is requested
 if ($format === 'pdf') {
+    // Check if TCPDF exists
+    if (!file_exists('../../tcpdf/tcpdf.php')) {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Modul PDF tidak tersedia. Hubungi administrator.']);
+        exit;
+    }
     require_once '../../tcpdf/tcpdf.php';
 
     class MYPDF extends TCPDF {
-        protected $footer_text = '';
-        
-        public function setFooterText($text) {
-            $this->footer_text = $text;
-        }
-        
         public function Header() {
-            // Logo
             $image_file = '../../assets/images/logo.png';
             if (file_exists($image_file)) {
                 $this->Image($image_file, 15, 5, 20, '', 'PNG');
             }
-            
-            // Header text
             $this->SetFont('helvetica', 'B', 16);
             $this->Cell(0, 10, 'SCHOBANK', 0, false, 'C', 0);
             $this->Ln(6);
@@ -104,19 +127,17 @@ if ($format === 'pdf') {
         }
     }
 
-    // Use output buffering to prevent any output before PDF generation
+    // Start output buffering
     ob_start();
     
     $pdf = new MYPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
     $pdf->SetCreator('SCHOBANK');
     $pdf->SetAuthor('SCHOBANK');
     $pdf->SetTitle('Rekapan Transaksi Admin');
-    
     $pdf->SetMargins(15, 35, 15);
-    $pdf->SetHeaderMargin(PDF_MARGIN_HEADER);
-    $pdf->SetFooterMargin(PDF_MARGIN_FOOTER);
-    $pdf->SetAutoPageBreak(TRUE, PDF_MARGIN_BOTTOM);
-    
+    $pdf->SetHeaderMargin(10);
+    $pdf->SetFooterMargin(10);
+    $pdf->SetAutoPageBreak(true, 15);
     $pdf->AddPage();
 
     $pdf->Ln(5);
@@ -136,7 +157,6 @@ if ($format === 'pdf') {
     $pdf->SetTextColor(0, 0, 0);
     
     $colWidth = $totalWidth / 4;
-    
     $pdf->SetFillColor(240, 240, 240);
     $pdf->Cell($colWidth, 6, 'Total Transaksi', 1, 0, 'C', true);
     $pdf->Cell($colWidth, 6, 'Total Setoran', 1, 0, 'C', true);
@@ -147,7 +167,6 @@ if ($format === 'pdf') {
     $pdf->Cell($colWidth, 6, $totals['total_transactions'], 1, 0, 'C');
     $pdf->Cell($colWidth, 6, 'Rp ' . number_format($totals['total_setoran'], 0, ',', '.'), 1, 0, 'C');
     $pdf->Cell($colWidth, 6, 'Rp ' . number_format($totals['total_penarikan'], 0, ',', '.'), 1, 0, 'C');
-    
     $netColor = $totals['total_net'] >= 0 ? [220, 252, 231] : [254, 226, 226];
     $pdf->SetFillColor($netColor[0], $netColor[1], $netColor[2]);
     $pdf->Cell($colWidth, 6, 'Rp ' . number_format($totals['total_net'], 0, ',', '.'), 1, 1, 'C', true);
@@ -160,8 +179,7 @@ if ($format === 'pdf') {
     $pdf->Cell($totalWidth, 7, 'DETAIL TRANSAKSI', 1, 1, 'C', true);
     $pdf->SetTextColor(0, 0, 0);
 
-    $col_width = array(10, 25, 25, 35, 25, 35, 25);
-
+    $col_width = [10, 25, 25, 35, 25, 35, 25];
     $pdf->SetFont('helvetica', 'B', 8);
     $pdf->SetFillColor(240, 240, 240);
     $header_heights = 6;
@@ -197,20 +215,24 @@ if ($format === 'pdf') {
             
             $pdf->Cell($col_width[0], $row_height, $no++, 1, 0, 'C');
             $pdf->Cell($col_width[1], $row_height, date('d/m/Y', strtotime($row['created_at'])), 1, 0, 'C');
-            $pdf->Cell($col_width[2], $row_height, $row['no_rekening'], 1, 0, 'L');
-            
+            $pdf->Cell($col_width[2], $row_height, htmlspecialchars($row['no_rekening']), 1, 0, 'L');
             $nama_siswa = $row['nama_siswa'] ?? 'N/A';
             $nama_siswa = mb_strlen($nama_siswa) > 18 ? mb_substr($nama_siswa, 0, 16) . '...' : $nama_siswa;
-            $pdf->Cell($col_width[3], $row_height, $nama_siswa, 1, 0, 'L');
-            
-            $pdf->Cell($col_width[4], $row_height, $row['kelas'], 1, 0, 'L');
-            
+            $pdf->Cell($col_width[3], $row_height, htmlspecialchars($nama_siswa), 1, 0, 'L');
+            $pdf->Cell($col_width[4], $row_height, htmlspecialchars($row['kelas']), 1, 0, 'L');
             $pdf->SetFillColor($typeColor[0], $typeColor[1], $typeColor[2]);
             $pdf->Cell($col_width[5], $row_height, $displayType, 1, 0, 'C', true);
-            
             $pdf->SetFillColor(255, 255, 255);
             $pdf->Cell($col_width[6], $row_height, 'Rp ' . number_format($row['jumlah'], 0, ',', '.'), 1, 1, 'R');
         }
+        
+        // Total row
+        $total = $total_setor - $total_tarik;
+        $totalColor = $total >= 0 ? [220, 252, 231] : [254, 226, 226];
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->Cell(array_sum(array_slice($col_width, 0, 6)), $row_height, 'Total:', 1, 0, 'C');
+        $pdf->SetFillColor($totalColor[0], $totalColor[1], $totalColor[2]);
+        $pdf->Cell($col_width[6], $row_height, 'Rp ' . number_format($total, 0, ',', '.'), 1, 1, 'R', true);
     } else {
         $pdf->Cell(array_sum($col_width), $row_height, 'Tidak ada transaksi admin dalam periode ini.', 1, 1, 'C');
     }
@@ -225,6 +247,7 @@ if ($format === 'pdf') {
 
 // If Excel format is requested
 elseif ($format === 'excel') {
+    // Start output buffering
     ob_start();
     
     header('Content-Type: application/vnd.ms-excel');
@@ -246,6 +269,7 @@ elseif ($format === 'excel') {
             .sum-header { background-color: #f0f0f0; font-weight: bold; text-align: center; }
             .positive { background-color: #dcfce7; }
             .negative { background-color: #fee2e2; }
+            .total-row { font-weight: bold; }
             table.main-table { 
                 width: 100%; 
                 border-collapse: collapse; 
@@ -258,7 +282,6 @@ elseif ($format === 'excel') {
             th.kelas { width: 15%; }
             th.jenis { width: 10%; }
             th.jumlah { width: 12%; }
-            .table-footer { font-weight: bold; }
           </style>';
     echo '</head>';
     echo '<body>';
@@ -267,7 +290,7 @@ elseif ($format === 'excel') {
     echo '<table class="main-table" border="0" cellpadding="3">';
     echo '<tr><td colspan="7" class="title">SCHOBANK</td></tr>';
     echo '<tr><td colspan="7" class="subtitle">Sistem Bank Mini Sekolah</td></tr>';
-    echo '<tr><td colspan="7" class="school-info">Jl. K.H. Saleh No.57A 43212 Cianjur Jawa Barat</td></tr>';
+    echo '<tr><td colspan="7" class="school-info">Jl. K  K.H. Saleh No.57A 43212 Cianjur Jawa Barat</td></tr>';
     echo '<tr><td colspan="7" class="title">REKAPAN TRANSAKSI ADMIN</td></tr>';
     echo '<tr><td colspan="7" class="subtitle">Periode: ' . date('d/m/Y', strtotime($start_date)) . ' - ' . date('d/m/Y', strtotime($end_date)) . '</td></tr>';
     echo '</table>';
@@ -275,7 +298,6 @@ elseif ($format === 'excel') {
     // Summary section
     echo '<table class="main-table" border="1" cellpadding="3">';
     echo '<tr><th colspan="4" class="section-header">RINGKASAN TRANSAKSI</th></tr>';
-    
     echo '<tr class="sum-header">';
     echo '<th>Total Transaksi</th>';
     echo '<th>Total Setoran</th>';
@@ -331,12 +353,20 @@ elseif ($format === 'excel') {
             echo '<td class="text-center">' . $no++ . '</td>';
             echo '<td class="text-center">' . date('d/m/Y', strtotime($row['created_at'])) . '</td>';
             echo '<td class="text-left">' . htmlspecialchars($row['no_rekening']) . '</td>';
-            echo '<td class="text-left">' . htmlspecialchars($row['nama_siswa']) . '</td>';
+            echo '<td class=" рин-left">' . htmlspecialchars($row['nama_siswa']) . '</td>';
             echo '<td class="text-left">' . htmlspecialchars($row['kelas']) . '</td>';
             echo '<td class="text-center" bgcolor="' . $bgColor . '">' . $displayType . '</td>';
             echo '<td class="text-right">Rp ' . number_format($row['jumlah'], 0, ',', '.') . '</td>';
             echo '</tr>';
         }
+        
+        // Total row
+        $total = $total_setor - $total_tarik;
+        $totalClass = $total >= 0 ? 'positive' : 'negative';
+        echo '<tr class="total-row">';
+        echo '<td colspan="6" class="text-center">Total:</td>';
+        echo '<td class="text-right ' . $totalClass . '">Rp ' . number_format($total, 0, ',', '.') . '</td>';
+        echo '</tr>';
     } else {
         echo '<tr><td colspan="7" class="text-center">Tidak ada transaksi admin dalam periode ini.</td></tr>';
     }
@@ -344,7 +374,13 @@ elseif ($format === 'excel') {
     
     echo '</body></html>';
     
+    // End output buffering
     ob_end_flush();
     exit;
 }
+
+// If format is invalid
+header('Content-Type: application/json');
+echo json_encode(['error' => 'Format tidak valid']);
+exit;
 ?>

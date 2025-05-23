@@ -5,7 +5,7 @@ require_once '../../includes/db_connection.php';
 $message = '';
 $error = '';
 
-$query = "SELECT username FROM users WHERE id = ?";
+$query = "SELECT username, email FROM users WHERE id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $_SESSION['user_id']);
 $stmt->execute();
@@ -18,10 +18,12 @@ if (!$user) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $new_username = trim($_POST['username']);
+    $new_email = trim($_POST['email']);
     $current_password = $_POST['current_password'];
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
     
+    // Validate username
     if (empty($new_username)) {
         $_SESSION['no_username_popup'] = true;
         header("Location: profile.php");
@@ -35,74 +37,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         
         if ($check_result->num_rows > 0) {
             $error = "Username sudah digunakan!";
-        } else {
-            $updates = ["username = ?"];
-            $types = "s";
-            $params = [$new_username];
-            
-            if (!empty($new_password) || !empty($confirm_password)) {
-                if (empty($current_password)) {
-                    $error = "Password saat ini harus diisi!";
-                } elseif (empty($new_password)) {
-                    $error = "Password baru harus diisi!";
-                } elseif (empty($confirm_password)) {
-                    $error = "Konfirmasi password harus diisi!";
-                } elseif ($new_password !== $confirm_password) {
-                    $error = "Password baru tidak cocok dengan konfirmasi!";
-                } elseif (strlen($new_password) < 6) {
-                    $error = "Password baru minimal 6 karakter!";
+        }
+    }
+
+    // Validate email
+    if (!empty($new_email) && !filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Format email tidak valid!";
+    } else {
+        $email_check_query = "SELECT id FROM users WHERE email = ? AND id != ? AND email != ''";
+        $email_check_stmt = $conn->prepare($email_check_query);
+        $email_check_stmt->bind_param("si", $new_email, $_SESSION['user_id']);
+        $email_check_stmt->execute();
+        $email_check_result = $email_check_stmt->get_result();
+        
+        if ($email_check_result->num_rows > 0) {
+            $error = "Email sudah digunakan!";
+        }
+    }
+
+    // Proceed if no errors
+    if (empty($error)) {
+        $updates = ["username = ?"];
+        $types = "s";
+        $params = [$new_username];
+
+        // Add email to update
+        $updates[] = "email = ?";
+        $types .= "s";
+        $params[] = $new_email ?: ''; // Use empty string if email is not provided
+
+        // Handle password update
+        if (!empty($new_password) || !empty($confirm_password)) {
+            if (empty($current_password)) {
+                $error = "Password saat ini harus diisi!";
+            } elseif (empty($new_password)) {
+                $error = "Password baru harus diisi!";
+            } elseif (empty($confirm_password)) {
+                $error = "Konfirmasi password harus diisi!";
+            } elseif ($new_password !== $confirm_password) {
+                $error = "Password baru tidak cocok dengan konfirmasi!";
+            } elseif (strlen($new_password) < 6) {
+                $error = "Password baru minimal 6 karakter!";
+            } else {
+                $verify_query = "SELECT password FROM users WHERE id = ?";
+                $verify_stmt = $conn->prepare($verify_query);
+                $verify_stmt->bind_param("i", $_SESSION['user_id']);
+                $verify_stmt->execute();
+                $verify_result = $verify_stmt->get_result();
+                $user_data = $verify_result->fetch_assoc();
+                
+                if (!$user_data || !isset($user_data['password'])) {
+                    $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
                 } else {
-                    $verify_query = "SELECT password FROM users WHERE id = ?";
-                    $verify_stmt = $conn->prepare($verify_query);
-                    $verify_stmt->bind_param("i", $_SESSION['user_id']);
-                    $verify_stmt->execute();
-                    $verify_result = $verify_stmt->get_result();
-                    $user_data = $verify_result->fetch_assoc();
+                    $stored_hash = $user_data['password'];
+                    $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
+                    $password_verified = false;
                     
-                    if (!$user_data || !isset($user_data['password'])) {
-                        $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
+                    if ($is_sha256) {
+                        $password_verified = (hash('sha256', $current_password) === $stored_hash);
                     } else {
-                        $stored_hash = $user_data['password'];
-                        $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
-                        $password_verified = false;
-                        
+                        $password_verified = password_verify($current_password, $stored_hash);
+                    }
+                    
+                    if ($password_verified) {
                         if ($is_sha256) {
-                            $password_verified = (hash('sha256', $current_password) === $stored_hash);
+                            $updates[] = "password = ?";
+                            $types .= "s";
+                            $params[] = hash('sha256', $new_password);
                         } else {
-                            $password_verified = password_verify($current_password, $stored_hash);
+                            $updates[] = "password = ?";
+                            $types .= "s";
+                            $params[] = password_hash($new_password, PASSWORD_DEFAULT);
                         }
-                        
-                        if ($password_verified) {
-                            if ($is_sha256) {
-                                $updates[] = "password = ?";
-                                $types .= "s";
-                                $params[] = hash('sha256', $new_password);
-                            } else {
-                                $updates[] = "password = ?";
-                                $types .= "s";
-                                $params[] = password_hash($new_password, PASSWORD_DEFAULT);
-                            }
-                        } else {
-                            $error = "Password saat ini tidak valid!";
-                        }
+                    } else {
+                        $error = "Password saat ini tidak valid!";
                     }
                 }
             }
+        }
+        
+        // Execute update if no errors
+        if (empty($error)) {
+            $params[] = $_SESSION['user_id'];
+            $types .= "i";
             
-            if (empty($error)) {
-                $params[] = $_SESSION['user_id'];
-                $types .= "i";
-                
-                $query = "UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?";
-                $stmt = $conn->prepare($query);
-                $stmt->bind_param($types, ...$params);
-                
-                if ($stmt->execute()) {
-                    $_SESSION['username'] = $new_username;
-                    $_SESSION['update_success'] = !empty($new_password) ? 'password' : 'username';
-                } else {
-                    $error = "Gagal memperbarui pengaturan: " . $conn->error;
-                }
+            $query = "UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param($types, ...$params);
+            
+            if ($stmt->execute()) {
+                $_SESSION['username'] = $new_username;
+                $_SESSION['email'] = $new_email;
+                $_SESSION['update_success'] = !empty($new_password) ? 'password' : (!empty($new_email) ? 'email' : 'username');
+            } else {
+                $error = "Gagal memperbarui pengaturan: " . $conn->error;
             }
         }
     }
@@ -303,6 +331,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         input[type="text"],
+        input[type="email"],
         input[type="password"] {
             width: 100%;
             padding: 12px 15px;
@@ -316,11 +345,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         input[type="text"]:hover,
+        input[type="email"]:hover,
         input[type="password"]:hover {
             border-color: var(--primary-color);
         }
 
         input[type="text"]:focus,
+        input[type="email"]:focus,
         input[type="password"]:focus {
             outline: none;
             border-color: var(--primary-color);
@@ -643,6 +674,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                     </div>
                     <div class="help-text">Username digunakan untuk login ke aplikasi.</div>
                 </div>
+
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <div class="input-wrapper">
+                        <input type="email" id="email" name="email" value="<?= htmlspecialchars($user['email']) ?>">
+                    </div>
+                    <div class="help-text">Masukkan email aktif Anda. Biarkan kosong jika tidak ingin mengubah.</div>
+                </div>
                 
                 <div class="form-separator">
                     <span>Ubah Password</span>
@@ -716,7 +755,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 <div class="success-icon">
                     <i class="fas fa-check-circle"></i>
                 </div>
-                <h3>Ubah <?php echo $_SESSION['update_success'] == 'password' ? 'Password' : 'Username'; ?> Berhasil!</h3>
+                <h3>Ubah <?php echo $_SESSION['update_success'] == 'password' ? 'Password' : ($_SESSION['update_success'] == 'email' ? 'Email' : 'Username'); ?> Berhasil!</h3>
                 <p id="countdownText">Akan keluar dalam 3 detik</p>
             </div>
         </div>
@@ -756,6 +795,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 
         const newPassword = document.getElementById('new_password');
         const confirmPassword = document.getElementById('confirm_password');
+        const emailInput = document.getElementById('email');
         const passwordMeter = document.getElementById('password-meter');
         const passwordMatch = document.getElementById('password-match');
         const passwordMismatch = document.getElementById('password-mismatch');
@@ -767,6 +807,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         
         confirmPassword.addEventListener('input', function() {
             validatePasswordMatch();
+        });
+
+        emailInput.addEventListener('input', function() {
+            validateEmail(this.value);
         });
         
         function updatePasswordStrength(password) {
@@ -835,9 +879,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
             }
         }
 
+        function validateEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (email && !emailRegex.test(email)) {
+                emailInput.style.borderColor = "#ef4444";
+            } else {
+                emailInput.style.borderColor = "#ddd";
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             updatePasswordStrength(newPassword.value);
             validatePasswordMatch();
+            validateEmail(emailInput.value);
 
             <?php if (isset($_SESSION['update_success'])): ?>
                 const successOverlay = document.getElementById('successModal');

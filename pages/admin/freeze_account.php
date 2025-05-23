@@ -31,8 +31,8 @@ function formatRekening($no_rekening) {
 // Function to send email
 function sendAccountEmail($conn, $siswa, $action, $alasan) {
     $nama_siswa = $siswa['nama'];
-    $jurusan = $siswa['nama_jurusan'] ?? '-';
-    $kelas = $siswa['nama_kelas'] ?? '-';
+    $jurusan = $siswa['nama_jurusan'] ?? 'Tidak ada';
+    $kelas = $siswa['nama_kelas'] ?? 'Tidak ada';
     $tanggal = date('d M Y H:i:s');
     $email = $siswa['email'];
 
@@ -45,141 +45,51 @@ function sendAccountEmail($conn, $siswa, $action, $alasan) {
     $subject = "Pemberitahuan {$action_text} - SCHOBANK SYSTEM";
 
     $message = "
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset=\"UTF-8\">
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-        <title>Pemberitahuan {$action_text} - SCHOBANK SYSTEM</title>
-        <style>
-            body { 
-                font-family: Arial, sans-serif; 
-                line-height: 1.5; 
-                color: #333; 
-                background-color: #f5f5f5;
-                margin: 0;
-                padding: 15px;
-                font-size: 14px;
-            }
-            .container { 
-                max-width: 580px; 
-                margin: 0 auto; 
-                padding: 20px; 
-                border: 1px solid #e0e0e0; 
-                border-radius: 6px;
-                background-color: white;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            }
-            h2 { 
-                color: #0a2e5c; 
-                border-bottom: 1px solid #e0e0e0; 
-                padding-bottom: 8px; 
-                margin-top: 0;
-                text-align: center;
-                font-size: 16px;
-                font-weight: 600;
-            }
-            .details {
-                background-color: #fafafa;
-                border: 1px solid #f0f0f0;
-                border-radius: 4px;
-                padding: 12px;
-                margin: 15px 0;
-            }
-            .detail-row {
-                display: flex;
-                padding: 6px 0;
-                border-bottom: 1px solid #f0f0f0;
-            }
-            .detail-row:last-child {
-                border-bottom: none;
-            }
-            .label {
-                font-weight: 600;
-                color: #2c3e50;
-                width: 40%;
-                position: relative;
-                padding-right: 8px;
-            }
-            .label::after {
-                content: ':';
-                position: absolute;
-                right: 8px;
-            }
-            .value {
-                width: 60%;
-                padding-left: 8px;
-                text-align: left;
-            }
-            p {
-                color: #34495e;
-                margin: 8px 0;
-            }
-            .security-notice {
-                background-color: #fff8e1;
-                border-left: 3px solid #f39c12;
-                padding: 8px 12px;
-                margin: 15px 0;
-                font-size: 12px;
-                color: #7f8c8d;
-            }
-            .footer { 
-                margin-top: 20px; 
-                font-size: 12px; 
-                color: #666; 
-                border-top: 1px solid #e0e0e0; 
-                padding-top: 10px; 
-                text-align: center;
-            }
-            @media (max-width: 600px) {
-                .container { padding: 15px; }
-                .detail-row { flex-direction: column; }
-                .label, .value { width: 100%; padding: 0; }
-                .label::after { content: ''; }
-                .value { margin-top: 4px; }
-            }
-        </style>
-    </head>
-    <body>
-        <div class=\"container\">
-            <h2>Pemberitahuan {$action_text}</h2>
-            <p>Yth. {$nama_siswa},</p>
-            <p>Kami informasikan bahwa akun Anda telah {$action_verb}. Berikut rincian:</p>
-            <div class=\"details\">
-                <div class=\"detail-row\">
-                    <div class=\"label\">Nama Pemilik</div>
-                    <div class=\"value\">{$nama_siswa}</div>
-                </div>
-                <div class=\"detail-row\">
-                    <div class=\"label\">Jurusan</div>
-                    <div class=\"value\">{$jurusan}</div>
-                </div>
-                <div class=\"detail-row\">
-                    <div class=\"label\">Kelas</div>
-                    <div class=\"value\">{$kelas}</div>
-                </div>
-                <div class=\"detail-row\">
-                    <div class=\"label\">Alasan</div>
-                    <div class=\"value\">{$alasan}</div>
-                </div>
-                <div class=\"detail-row\">
-                    <div class=\"label\">Tanggal</div>
-                    <div class=\"value\">{$tanggal} WIB</div>
-                </div>
+    <div style='font-family: Poppins, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f0f5ff; border-radius: 12px; overflow: hidden;'>
+        <div style='background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px 20px; text-align: center; color: #ffffff;'>
+            <h2 style='font-size: 24px; font-weight: 600; margin: 0;'>SCHOBANK SYSTEM</h2>
+            <p style='font-size: 16px; opacity: 0.8; margin: 5px 0 0;'>Pemberitahuan {$action_text}</p>
+        </div>
+        <div style='background: #ffffff; padding: 30px;'>
+            <h3 style='color: #1e3a8a; font-size: 20px; font-weight: 600; margin-bottom: 20px;'>Halo, {$nama_siswa}</h3>
+            <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Kami ingin memberitahu Anda bahwa akun Anda telah {$action_verb}. Berikut adalah rinciannya:</p>
+            <div style='background: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 20px;'>
+                <table style='width: 100%; font-size: 15px; color: #333333;'>
+                    <tr>
+                        <td style='padding: 8px 0; font-weight: 500;'>Nama Pemilik</td>
+                        <td style='padding: 8px 0; text-align: right;'>{$nama_siswa}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; font-weight: 500;'>Jurusan</td>
+                        <td style='padding: 8px 0; text-align: right;'>{$jurusan}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; font-weight: 500;'>Kelas</td>
+                        <td style='padding: 8px 0; text-align: right;'>{$kelas}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; font-weight: 500;'>Alasan</td>
+                        <td style='padding: 8px 0; text-align: right;'>{$alasan}</td>
+                    </tr>
+                    <tr>
+                        <td style='padding: 8px 0; font-weight: 500;'>Tanggal</td>
+                        <td style='padding: 8px 0; text-align: right;'>{$tanggal} WIB</td>
+                    </tr>
+                </table>
             </div>
-            <p>" . ($action === 'freeze' ? 'Akun Anda tidak dapat digunakan hingga dibuka kembali.' : 'Pastikan akun Anda terhindar dari aktivitas yang tidak wajar.') . " Untuk informasi lebih lanjut, silakan hubungi petugas kami.</p>
-            <div class=\"security-notice\">
-                <strong>Perhatian Keamanan:</strong> Jangan bagikan informasi rekening, kata sandi, atau detail akun kepada pihak lain. Petugas SCHOBANK tidak akan meminta informasi tersebut melalui email atau telepon.
-            </div>
-            <div class=\"footer\">
-                <p>Email ini dikirim otomatis oleh sistem, mohon tidak membalas email ini.</p>
-                <p>Jika Anda memiliki pertanyaan, silakan hubungi Bank Mini SMK Plus Ashabulyamin.</p>
-                <p>© " . date('Y') . " SCHOBANK SYSTEM - Hak cipta dilindungi.</p>
+            <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>" . ($action === 'freeze' ? 'Akun Anda tidak dapat digunakan hingga dibuka kembali.' : 'Pastikan akun Anda terhindar dari aktivitas yang tidak wajar.') . "</p>
+            <p style='color: #e74c3c; font-size: 14px; font-weight: 500; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;'>
+                <span style='font-size: 18px;'>🔒</span> Jangan bagikan informasi rekening atau kata sandi kepada pihak lain.
+            </p>
+            <div style='text-align: center; margin: 30px 0;'>
+                <a href='mailto:support@schobank.xai' style='display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%); color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 500;'>Hubungi Kami</a>
             </div>
         </div>
-    </body>
-    </html>
-    ";
+        <div style='background: #f0f5ff; padding: 15px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0;'>
+            <p style='margin: 0;'>© " . date('Y') . " SCHOBANK SYSTEM. All rights reserved.</p>
+            <p style='margin: 5px 0 0;'>Email ini otomatis. Mohon tidak membalas.</p>
+        </div>
+    </div>";
 
     try {
         $mail = new PHPMailer(true);
@@ -479,6 +389,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['ajax_search_frozen']))
     $result = $stmt->get_result();
     $accounts = [];
     while ($row = $result->fetch_assoc()) {
+        $row['nama_kelas'] = $row['nama_kelas'] ?? 'Tidak ada';
+        $row['nama_jurusan'] = $row['nama_jurusan'] ?? 'Tidak ada';
         $row['waktu'] = $row['waktu'] ? date('d-m-Y H:i', strtotime($row['waktu'])) : 'Tidak ada';
         $accounts[] = $row;
     }
@@ -588,35 +500,33 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Freeze/Unfreeze Akun - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nonaktifkan Akun - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
+            --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
-            --shadow-sm: 0 0.125rem 0.625rem rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 0.3125rem 0.9375rem rgba(0, 0, 0, 0.1);
+            --bg-light: #f0f5ff;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.4);
             --transition: all 0.3s ease;
-            --spacing-sm: 0.75rem;
-            --spacing-md: 1.25rem;
-            --spacing-lg: 2rem;
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            -webkit-text-size-adjust: 100%;
+            font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
             -webkit-user-select: none;
             user-select: none;
         }
@@ -627,60 +537,54 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            font-size: clamp(0.875rem, 2.5vw, 1rem);
-            line-height: 1.5;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
         .top-nav {
             background: var(--primary-dark);
-            padding: var(--spacing-md) var(--spacing-lg);
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             color: white;
             box-shadow: var(--shadow-sm);
-            margin-bottom: var(--spacing-lg);
-        }
-
-        .top-nav h1 {
-            font-size: clamp(1.25rem, 3vw, 1.5rem);
-            font-weight: 600;
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
             color: white;
             border: none;
-            padding: var(--spacing-sm);
+            padding: 10px;
             border-radius: 50%;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
-            width: clamp(2rem, 5vw, 2.5rem);
-            height: clamp(2rem, 5vw, 2.5rem);
+            width: 40px;
+            height: 40px;
             transition: var(--transition);
         }
 
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-0.125rem);
+            transform: translateY(-2px);
         }
 
         .main-content {
             flex: 1;
-            padding: var(--spacing-lg);
+            padding: 20px;
             width: 100%;
-            max-width: 75rem;
+            max-width: 1200px;
             margin: 0 auto;
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
-            padding: var(--spacing-lg);
-            border-radius: 0.9375rem;
-            margin-bottom: var(--spacing-lg);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
             box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
@@ -705,74 +609,87 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
         }
 
         @keyframes fadeInBanner {
-            from { opacity: 0; transform: translateY(-1.25rem); }
+            from { opacity: 0; transform: translateY(-20px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .welcome-banner h2 {
-            font-size: clamp(1.25rem, 3.5vw, 1.75rem);
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
             display: flex;
             align-items: center;
-            gap: var(--spacing-sm);
+            gap: 10px;
             position: relative;
             z-index: 1;
         }
 
-        .form-card {
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .form-section {
             background: white;
-            border-radius: 0.9375rem;
-            padding: var(--spacing-lg);
+            border-radius: 15px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: var(--spacing-lg);
+            margin-bottom: 30px;
             animation: slideIn 0.5s ease-out;
         }
 
         @keyframes slideIn {
-            from { transform: translateY(-1.25rem); opacity: 0; }
+            from { transform: translateY(-20px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
         }
 
-        form {
+        .form-container {
             display: flex;
-            flex-direction: column;
-            gap: var(--spacing-md);
+            flex-wrap: wrap;
+            gap: 20px;
         }
 
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-            gap: var(--spacing-md);
+        .form-column {
+            flex: 1;
+            min-width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: var(--spacing-sm);
+            gap: 8px;
             position: relative;
-            width: 100%;
         }
 
         label {
             font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.75rem, 1.8vw, 0.875rem);
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        input[type="text"],
-        input[type="hidden"] {
+        input, select {
             width: 100%;
-            padding: var(--spacing-sm);
+            padding: 12px 15px;
             border: 1px solid #ddd;
-            border-radius: 0.625rem;
-            font-size: clamp(0.875rem, 2vw, 1rem);
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min-height: 44px;
             transition: var(--transition);
+            -webkit-user-select: text;
+            user-select: text;
             background-color: #fff;
         }
 
-        input[type="text"]:focus {
+        input:focus, select:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.1875rem rgba(12, 77, 162, 0.1);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
         }
 
         .input-container {
@@ -782,20 +699,20 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
 
         .clear-btn {
             position: absolute;
-            right: var(--spacing-sm);
+            right: 15px;
             top: 50%;
             transform: translateY(-50%);
             background: #ddd;
             border: none;
             border-radius: 50%;
-            width: 1.5rem;
-            height: 1.5rem;
+            width: 24px;
+            height: 24px;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
             color: #666;
-            font-size: 0.75rem;
+            font-size: 12px;
             transition: var(--transition);
             display: none;
         }
@@ -812,25 +729,25 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
             right: 0;
             background: white;
             border: 1px solid #ddd;
-            border-radius: 0.625rem;
+            border-radius: 10px;
             box-shadow: var(--shadow-md);
-            max-height: 18.75rem;
+            max-height: 300px;
             overflow-y: auto;
             z-index: 1000;
-            margin-top: var(--spacing-sm);
+            margin-top: 5px;
             display: none;
         }
 
         .search-result-item {
-            padding: var(--spacing-sm) var(--spacing-md);
-            font-size: clamp(0.875rem, 2vw, 1rem);
+            padding: 12px 15px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
             color: var(--text-primary);
             cursor: pointer;
             transition: var(--transition);
         }
 
         .search-result-item:hover {
-            background-color: var(--primary-light);
+            background-color: #f0f5ff;
             color: var(--primary-dark);
         }
 
@@ -843,193 +760,91 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
             background-color: transparent;
         }
 
-        textarea {
-            width: 100%;
-            padding: var(--spacing-sm);
-            border: 1px solid #ddd;
-            border-radius: 0.625rem;
-            font-size: clamp(0.875rem, 2vw, 1rem);
-            resize: vertical;
-            min-height: 6.25rem;
-            transition: var(--transition);
+        select {
+            appearance: none;
+            position: relative;
         }
 
-        textarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 0.1875rem rgba(12, 77, 162, 0.1);
+        .select-wrapper {
+            position: relative;
         }
 
-        button[type="submit"],
+        .select-wrapper::after {
+            content: '\f078';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: var(--text-secondary);
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: clamp(0.75rem, 1.5vw, 0.8rem);
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .form-group:hover .tooltip {
+            opacity: 1;
+        }
+
         .btn {
-            background: var(--primary-color);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             border: none;
-            padding: var(--spacing-sm) var(--spacing-md);
-            border-radius: 0.625rem;
+            padding: 12px 25px;
+            border-radius: 10px;
             cursor: pointer;
-            font-size: clamp(0.875rem, 2vw, 1rem);
+            font-size: clamp(0.9rem, 2vw, 1rem);
             font-weight: 500;
-            transition: var(--transition);
             display: flex;
             align-items: center;
-            gap: var(--spacing-sm);
-            text-decoration: none;
             justify-content: center;
+            gap: 8px;
+            transition: var(--transition);
+            position: relative;
         }
 
-        button[type="submit"]:hover,
         .btn:hover {
-            background: var(--primary-dark);
-            transform: translateY(-0.125rem);
+            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
         }
 
-        .btn-confirm {
-            background: var(--secondary-color);
+        .btn:active {
+            transform: scale(0.95);
         }
 
-        .btn-confirm:hover {
-            background: var(--secondary-dark);
-        }
-
-        .btn-cancel {
-            background: #f0f0f0;
-            color: var(--text-secondary);
-            border: none;
-            padding: var(--spacing-sm) var(--spacing-md);
-            border-radius: 0.625rem;
-            cursor: pointer;
-            font-size: clamp(0.875rem, 2vw, 1rem);
-            transition: var(--transition);
-        }
-
-        .btn-cancel:hover {
-            background: #e0e0e0;
-            transform: translateY(-0.125rem);
-        }
-
-        .btn-unfreeze {
-            background: var(--secondary-color);
-        }
-
-        .btn-unfreeze:hover {
-            background: var(--secondary-dark);
-        }
-
-        .success-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
-        }
-
-        @keyframes fadeInOverlay {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .success-modal {
-            background: white;
-            border-radius: 1.25rem;
-            padding: var(--spacing-lg);
-            text-align: center;
-            max-width: 90%;
-            width: clamp(18.75rem, 80vw, 28.125rem);
-            box-shadow: 0 0.9375rem 2.5rem rgba(0, 0, 0, 0.2);
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
-        }
-
-        @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .success-icon,
-        .error-icon {
-            font-size: clamp(3rem, 8vw, 4rem);
-            margin-bottom: var(--spacing-md);
-        }
-
-        .success-icon {
-            color: var(--secondary-color);
-        }
-
-        .error-icon {
-            color: var(--danger-color);
-        }
-
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: var(--spacing-md);
-            font-size: clamp(1.25rem, 3vw, 1.5rem);
-            font-weight: 600;
-        }
-
-        .success-modal p {
-            color: var(--text-secondary);
-            font-size: clamp(0.875rem, 2.2vw, 1rem);
-            margin-bottom: var(--spacing-md);
-            line-height: 1.5;
-        }
-
-        .modal-content-confirm {
-            display: flex;
-            flex-direction: column;
-            gap: var(--spacing-md);
-            margin-bottom: var(--spacing-md);
-        }
-
-        .modal-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: var(--spacing-sm) 0;
-            border-bottom: 1px solid #eee;
-            font-size: clamp(0.875rem, 2vw, 1rem);
-        }
-
-        .modal-row:last-child {
-            border-bottom: none;
-        }
-
-        .modal-label {
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        .modal-value {
-            font-weight: 600;
-            color: var(--text-primary);
-            text-align: right;
-            max-width: 60%;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: var(--spacing-md);
-            justify-content: center;
-            margin-top: var(--spacing-md);
-            flex-wrap: wrap;
-        }
-
-        .loading {
+        .btn.loading {
             pointer-events: none;
             opacity: 0.7;
         }
 
-        .loading i {
-            animation: spin 1s linear infinite;
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        .btn.loading::after {
+            content: '\f110';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            position: absolute;
+            animation: spin 1.5s linear infinite;
         }
 
         @keyframes spin {
@@ -1037,29 +852,37 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
             100% { transform: rotate(360deg); }
         }
 
-        .table-card {
+        .form-buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            width: 100%;
+        }
+
+        .table-section {
             background: white;
-            border-radius: 0.9375rem;
-            padding: var(--spacing-lg);
+            border-radius: 15px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
-            margin-bottom: var(--spacing-lg);
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: clamp(0.875rem, 2vw, 1rem);
-            margin-top: var(--spacing-md);
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            margin-top: 20px;
         }
 
         th, td {
-            padding: var(--spacing-md);
+            padding: 12px 15px;
             text-align: left;
             border-bottom: 1px solid #eee;
         }
 
         th {
-            background: var(--primary-light);
+            background: #f0f5ff;
             color: var(--primary-dark);
             font-weight: 600;
         }
@@ -1069,77 +892,220 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
         }
 
         .action-btn {
-            padding: var(--spacing-sm);
-            font-size: clamp(0.75rem, 1.8vw, 0.875rem);
+            padding: 8px 15px;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-weight: 500;
+            border-radius: 10px;
         }
 
-        .unfreeze-modal textarea {
-            margin-top: var(--spacing-sm);
-        }
-
-        select {
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            padding: var(--spacing-sm);
-            font-size: clamp(0.875rem, 2vw, 1rem);
-            color: #333;
-            background-color: #fff;
-            border: 1px solid #ccc;
-            border-radius: 0.625rem;
-            outline: none;
-            appearance: none;
-            background-image: url('data:image/svg+xml;utf8,<svg fill="%23333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
-            background-repeat: no-repeat;
-            background-position: right var(--spacing-sm) center;
-            background-size: 16px;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.65);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-in-out forwards;
+            cursor: default;
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes fadeOutOverlay {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        .success-modal, .error-modal {
+            position: relative;
+            text-align: center;
+            width: clamp(300px, 80vw, 400px);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: var(--shadow-md);
+            transform: scale(0.7);
+            opacity: 0;
+            animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            cursor: default;
+        }
+
+        .error-modal {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+        }
+
+        .success-modal::before, .error-modal::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
+        }
+
+        @keyframes popInModal {
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.03); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-icon, .error-icon {
+            font-size: clamp(2.5rem, 5vw, 3rem);
+            margin: 0 auto 15px;
+            animation: bounceIn 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
+            color: white;
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.25); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .success-modal h3, .error-modal h3 {
+            color: white;
+            margin: 0 0 15px;
+            font-size: clamp(1.2rem, 2.2vw, 1.3rem);
+            font-weight: 600;
+            animation: slideUpText 0.5s ease-out 0.2s both;
+        }
+
+        .success-modal p, .error-modal p {
+            color: white;
+            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            margin: 0 0 20px;
+            line-height: 1.5;
+            animation: slideUpText 0.5s ease-out 0.3s both;
+        }
+
+        @keyframes slideUpText {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-content-confirm {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .modal-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            font-size: clamp(0.9rem, 1.8vw, 1rem);
+        }
+
+        .modal-label {
+            font-weight: 500;
+            color: #f0f5ff;
+            flex: 1;
+            text-align: left;
+            opacity: 0.9;
+        }
+
+        .modal-value {
+            font-weight: 600;
+            color: #ffffff;
+            flex: 1;
+            text-align: right;
+            max-width: 60%;
+        }
+
+        .modal-buttons {
+            display: flex;
+            justify-content: center;
+            margin-top: 15px;
+            gap: 15px;
+        }
+
+        .modal-cancel-btn {
+            background: #ffffff;
+            color: var(--primary-dark);
+            border: 1px solid var(--primary-dark);
+            padding: 10px 20px;
+            border-radius: 10px;
             cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            transition: var(--transition);
         }
 
-        select:focus {
-            border-color: #007bff;
-            box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+        .modal-cancel-btn:hover {
+            background: #f0f5ff;
+            transform: translateY(-2px);
         }
 
-        select:hover {
-            border-color: #999;
+        .error-message {
+            color: var(--danger-color);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            display: none;
         }
 
-        select:invalid {
-            color: #999;
-        }
-
-        select option {
-            color: #333;
+        .error-message.show {
+            display: block;
         }
 
         @media (max-width: 768px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-
             .top-nav {
-                padding: var(--spacing-sm) var(--spacing-md);
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
             .main-content {
-                padding: var(--spacing-md);
+                padding: 15px;
             }
 
             .welcome-banner h2 {
-                font-size: clamp(1.125rem, 3vw, 1.5rem);
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
 
-            .form-card {
-                padding: var(--spacing-md);
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
             }
 
-            button[type="submit"],
+            .form-container {
+                flex-direction: column;
+            }
+
+            .form-column {
+                min-width: 100%;
+            }
+
             .btn {
                 width: 100%;
+                justify-content: center;
             }
 
-            .modal-buttons {
-                flex-direction: column;
+            .success-modal, .error-modal {
+                width: clamp(280px, 85vw, 360px);
+                padding: clamp(15px, 3vw, 20px);
+                margin: 10px auto;
+            }
+
+            .success-icon, .error-icon {
+                font-size: clamp(2.3rem, 4.5vw, 2.5rem);
+            }
+
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(1rem, 2vw, 1.1rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             }
 
             table {
@@ -1151,38 +1117,83 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
 
         @media (max-width: 480px) {
             body {
-                font-size: clamp(0.75rem, 2.5vw, 0.875rem);
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
-            .top-nav h1 {
-                font-size: clamp(1rem, 2.5vw, 1.25rem);
+            .top-nav {
+                padding: 10px;
             }
 
             .welcome-banner {
-                padding: var(--spacing-md);
+                padding: 20px;
             }
 
-            .success-modal h3 {
-                font-size: clamp(1.125rem, 2.5vw, 1.25rem);
+            input, select {
+                min-height: 40px;
             }
 
-            .success-modal p {
-                font-size: clamp(0.75rem, 2vw, 0.875rem);
+            .success-modal, .error-modal {
+                width: clamp(260px, 90vw, 320px);
+                padding: clamp(12px, 2.5vw, 15px);
+                margin: 8px auto;
             }
 
-            select {
-                font-size: clamp(0.75rem, 2vw, 0.875rem);
-                padding: var(--spacing-sm);
+            .success-icon, .error-icon {
+                font-size: clamp(2rem, 4vw, 2.2rem);
             }
-        }
 
-        body {
-            touch-action: manipulation;
-            -webkit-text-size-adjust: 100%;
-            -webkit-user-select: text;
-            user-select: text;
+            .success-modal h3, .error-modal h3 {
+                font-size: clamp(0.9rem, 1.9vw, 1rem);
+            }
+
+            .success-modal p, .error-modal p {
+                font-size: clamp(0.7rem, 1.6vw, 0.8rem);
+            }
         }
     </style>
+    <script>
+        // Prevent zooming and double-tap issues
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+
+        document.addEventListener('wheel', function(event) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('dblclick', function(event) {
+            event.preventDefault();
+        }, { passive: false });
+
+        // Close modal on overlay click
+        document.addEventListener('click', (event) => {
+            const confirmModal = document.getElementById('confirmModal');
+            const unfreezeModal = document.getElementById('unfreezeModal');
+            
+            if (event.target.classList.contains('modal-overlay')) {
+                if (confirmModal && confirmModal.style.display !== 'none') {
+                    confirmModal.style.display = 'none';
+                    window.location.href = 'freeze_account.php';
+                }
+                if (unfreezeModal && unfreezeModal.style.display !== 'none') {
+                    unfreezeModal.style.display = 'none';
+                }
+            }
+        });
+    </script>
 </head>
 <body>
     <nav class="top-nav">
@@ -1190,67 +1201,70 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
             <i class="fas fa-xmark"></i>
         </button>
         <h1>SCHOBANK</h1>
-        <div style="width: clamp(2rem, 5vw, 2.5rem);"></div>
+        <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2>Nonaktifkan Akun Siswa</h2>
+            <h2><i class="fas fa-user-lock"></i> Nonaktifkan Akun Siswa</h2>
+            <p>Fitur ini memungkinkan admin untuk menonaktifkan akun siswa sementara demi keamanan atau kepatuhan terhadap kebijakan, memastikan pengelolaan akses pengguna yang aman dan terkontrol.</p>
         </div>
 
-        <div class="success-overlay" id="popupModal" style="display: none;">
-            <div class="success-modal">
-                <div class="popup-icon">
-                    <i class="fas"></i>
-                </div>
-                <h3 class="popup-title"></h3>
-                <p class="popup-message"></p>
-            </div>
-        </div>
+        <div id="alertContainer"></div>
 
-        <div class="form-card" id="freeze-form-card">
-            <form action="" method="POST" id="freeze-form">
-                <div class="form-row">
+        <div class="form-section">
+            <form action="" method="POST" id="freeze-form" class="form-container">
+                <div class="form-column">
                     <div class="form-group">
-                        <label for="search_siswa">Cari Siswa (Nama):</label>
+                        <label for="search_siswa">Cari Siswa (Nama)</label>
                         <div class="input-container">
                             <input type="text" id="search_siswa" name="search_siswa" placeholder="Ketik nama siswa..." autocomplete="off" required>
                             <button type="button" class="clear-btn" id="clear-btn"><i class="fas fa-times"></i></button>
+                            <span class="tooltip">Masukkan nama siswa untuk mencari</span>
                         </div>
                         <input type="hidden" id="siswa_id" name="siswa_id" value="">
                         <div class="search-results" id="search-results"></div>
+                        <span class="error-message" id="search_siswa-error"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="alasan">Alasan Pembekuan</label>
+                        <div class="select-wrapper">
+                            <select id="alasan" name="alasan" required>
+                                <option value="">Pilih alasan pembekuan</option>
+                                <option value="Aktivitas mencurigakan">Aktivitas mencurigakan</option>
+                                <option value="Permintaan pengguna">Permintaan pengguna</option>
+                                <option value="Pelanggaran ketentuan">Pelanggaran ketentuan</option>
+                                <option value="Lainnya">Lainnya</option>
+                            </select>
+                            <span class="tooltip">Pilih alasan pembekuan akun</span>
+                        </div>
+                        <span class="error-message" id="alasan-error"></span>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="alasan">Alasan Pembekuan:</label>
-                    <select id="alasan" name="alasan" required>
-                        <option value="" disabled selected>Pilih alasan pembekuan</option>
-                        <option value="Aktivitas mencurigakan">Aktivitas mencurigakan</option>
-                        <option value="Permintaan pengguna">Permintaan pengguna</option>
-                        <option value="Pelanggaran ketentuan">Pelanggaran ketentuan</option>
-                        <option value="Lainnya">Lainnya</option>
-                    </select>
+                <div class="form-buttons">
+                    <button type="submit" class="btn" id="submit-btn">
+                        <span class="btn-content"><i class="fas fa-lock"></i> Nonaktifkan Akun</span>
+                    </button>
                 </div>
-                <button type="submit" id="submitBtn" class="btn">
-                    <i class="fas fa-lock"></i> Nonaktifkan Akun
-                </button>
             </form>
         </div>
 
-        <div class="table-card" id="frozen-accounts-section" style="display: <?php echo $has_frozen_accounts ? 'block' : 'none'; ?>">
+        <div class="table-section" id="frozen-accounts-section" style="display: <?php echo $has_frozen_accounts ? 'block' : 'none'; ?>">
             <h3>Akun Dinonaktifkan</h3>
             <div class="form-group">
-                <label for="search_query">Cari Akun Beku (Nama):</label>
+                <label for="search_query">Cari Akun Beku (Nama)</label>
                 <div class="input-container">
                     <input type="text" id="search_query" name="search_query" placeholder="Ketik nama siswa..." autocomplete="off">
                     <button type="button" class="clear-btn" id="clear-search-btn"><i class="fas fa-times"></i></button>
+                    <span class="tooltip">Cari akun beku berdasarkan nama siswa</span>
                 </div>
+                <span class="error-message" id="search_query-error"></span>
             </div>
             <div id="frozen-accounts-table"></div>
         </div>
 
         <?php if ($show_confirm_popup): ?>
-            <div class="success-overlay no-close" id="confirmModal">
+            <div class="modal-overlay" id="confirmModal">
                 <div class="success-modal">
                     <div class="success-icon">
                         <i class="fas fa-user-shield"></i>
@@ -1279,11 +1293,11 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
                         <input type="hidden" name="alasan" value="<?php echo htmlspecialchars($alasan); ?>">
                         <input type="hidden" name="ajax_freeze" value="1">
                         <div class="modal-buttons">
-                            <button type="submit" class="btn btn-confirm" id="confirm-btn">
-                                <i class="fas fa-check"></i> Konfirmasi
+                            <button type="submit" class="btn" id="confirm-btn">
+                                <span class="btn-content">Konfirmasi</span>
                             </button>
-                            <button type="button" class="btn-cancel" onclick="window.location.href='freeze_account.php'">
-                                <i class="fas fa-times"></i> Batal
+                            <button type="button" class="modal-cancel-btn" onclick="document.getElementById('confirmModal').style.display='none'; window.location.href='freeze_account.php';">
+                                Batal
                             </button>
                         </div>
                     </form>
@@ -1291,7 +1305,7 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
             </div>
         <?php endif; ?>
 
-        <div class="success-overlay no-close" id="unfreezeModal" style="display: none;">
+        <div class="modal-overlay" id="unfreezeModal" style="display: none;">
             <div class="success-modal unfreeze-modal">
                 <div class="success-icon">
                     <i class="fas fa-unlock"></i>
@@ -1311,14 +1325,18 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
                         <span class="modal-value" id="unfreeze-jurusan"></span>
                     </div>
                     <div class="form-group">
-                        <label for="alasan_unfreeze">Alasan Pembukaan:</label>
-                        <select id="alasan_unfreeze" name="alasan_unfreeze" required>
-                            <option value="" disabled selected>Pilih alasan pembukaan</option>
-                            <option value="Verifikasi selesai">Verifikasi selesai</option>
-                            <option value="Permintaan pengguna">Permintaan pengguna</option>
-                            <option value="Kesalahan sistem">Kesalahan sistem</option>
-                            <option value="Lainnya">Lainnya</option>
-                        </select>
+                        <label for="alasan_unfreeze">Alasan Pembukaan</label>
+                        <div class="select-wrapper">
+                            <select id="alasan_unfreeze" name="alasan_unfreeze" required>
+                                <option value="">Pilih alasan pembukaan</option>
+                                <option value="Verifikasi selesai">Verifikasi selesai</option>
+                                <option value="Permintaan pengguna">Permintaan pengguna</option>
+                                <option value="Kesalahan sistem">Kesalahan sistem</option>
+                                <option value="Lainnya">Lainnya</option>
+                            </select>
+                            <span class="tooltip">Pilih alasan pembukaan akun</span>
+                        </div>
+                        <span class="error-message" id="alasan_unfreeze-error"></span>
                     </div>
                 </div>
                 <form id="unfreeze-form">
@@ -1326,11 +1344,11 @@ $has_frozen_accounts = $result && $result->fetch_assoc()['count'] > 0;
                     <input type="hidden" name="alasan_unfreeze" id="unfreeze-alasan-hidden">
                     <input type="hidden" name="ajax_unfreeze" value="1">
                     <div class="modal-buttons">
-                        <button type="submit" class="btn btn-confirm" id="unfreeze-confirm-btn">
-                            <i class="fas fa-check"></i> Konfirmasi
+                        <button type="submit" class="btn" id="unfreeze-confirm-btn">
+                            <span class="btn-content">Konfirmasi</span>
                         </button>
-                        <button type="button" class="btn-cancel" id="unfreeze-cancel-btn">
-                            <i class="fas fa-times"></i> Batal
+                        <button type="button" class="modal-cancel-btn" onclick="document.getElementById('unfreezeModal').style.display='none';">
+                            Batal
                         </button>
                     </div>
                 </form>
@@ -1353,29 +1371,48 @@ $(document).ready(function() {
     }
 
     function showAlert(message, type) {
-        const popupModal = $('#popupModal');
-        popupModal.find('.popup-title').text(type === 'success' ? 'BERHASIL' : 'PERINGATAN');
-        popupModal.find('.popup-message').text(message);
-        popupModal.find('.popup-icon')
-            .removeClass('success-icon error-icon')
-            .addClass(type === 'success' ? 'success-icon' : 'error-icon')
-            .find('i')
-            .removeClass('fa-check-circle fa-exclamation-circle')
-            .addClass(type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle');
-        popupModal.fadeIn(300);
-        setTimeout(() => {
-            popupModal.fadeOut(300);
-            $('#search_query').focus();
-        }, 3000);
+        const alertContainer = document.getElementById('alertContainer');
+        const existingAlerts = alertContainer.querySelectorAll('.modal-overlay');
+        existingAlerts.forEach(alert => {
+            alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+            setTimeout(() => alert.remove(), 500);
+        });
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'modal-overlay';
+        alertDiv.innerHTML = `
+            <div class="${type}-modal">
+                <div class="${type}-icon">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+                </div>
+                <h3>${type === 'success' ? 'Berhasil' : 'Gagal'}</h3>
+                <p>${message}</p>
+            </div>
+        `;
+        alertContainer.appendChild(alertDiv);
+        setTimeout(() => closeModal(alertDiv.id), 5000);
+        alertDiv.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal-overlay')) {
+                closeModal(alertDiv.id);
+            }
+        });
+        alertDiv.id = 'alert-' + Date.now();
+    }
+
+    function closeModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+            setTimeout(() => modal.remove(), 500);
+        }
     }
 
     function showLoadingSpinner(button) {
         console.log('[DEBUG] Showing loading spinner for button:', button.attr('id'));
         const originalContent = button.html();
-        button.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
+        button.html('<span class="btn-content"><i class="fas fa-spinner"></i> Memproses...</span>').addClass('loading');
         return {
             restore: () => {
-                button.html(originalContent).prop('disabled', false);
+                button.html(originalContent).removeClass('loading');
             }
         };
     }
@@ -1386,7 +1423,7 @@ $(document).ready(function() {
         $('#search_siswa').val('');
         $('#search-results').hide().empty();
         toggleClearButton($('#search_siswa'), $('#clear-btn'));
-        $('#freeze-form-card').fadeIn(300);
+        $('#freeze-form').fadeIn(300);
     }
 
     function updateFrozenTable(accounts, showNoResultsPopup = false, isSearch = false) {
@@ -1394,21 +1431,17 @@ $(document).ready(function() {
         const tableContainer = $('#frozen-accounts-table');
         const section = $('#frozen-accounts-section');
 
-        // Update hasFrozenAccounts based on accounts length or response
         hasFrozenAccounts = accounts.length > 0 || hasFrozenAccounts;
 
-        // Hide section if no frozen accounts exist
         if (!hasFrozenAccounts) {
             section.hide();
             tableContainer.empty();
             return;
         }
 
-        // Show section if there are frozen accounts
         section.show();
         tableContainer.empty();
 
-        // Render table structure
         let tableHtml = `
             <table>
                 <thead>
@@ -1425,26 +1458,27 @@ $(document).ready(function() {
 
         if (accounts.length > 0) {
             accounts.forEach(account => {
+                const kelas = account.nama_kelas || 'Tidak ada';
+                const jurusan = account.nama_jurusan || 'Tidak ada';
                 tableHtml += `
                     <tr data-id="${account.id}">
                         <td>${account.nama}</td>
-                        <td>${account.nama_kelas || 'Tidak ada'}</td>
-                        <td>${account.nama_jurusan || 'Tidak ada'}</td>
+                        <td>${kelas}</td>
+                        <td>${jurusan}</td>
                         <td>${account.alasan || 'Tidak ada'}</td>
                         <td>${account.waktu}</td>
                         <td>
-                            <button class="btn btn-unfreeze action-btn" 
+                            <button class="btn action-btn" 
                                     data-id="${account.id}" 
                                     data-nama="${account.nama}" 
-                                    data-kelas="${account.nama_kelas || 'Tidak ada'}" 
-                                    data-jurusan="${account.nama_jurusan || 'Tidak ada'}">
+                                    data-kelas="${kelas}" 
+                                    data-jurusan="${jurusan}">
                                 <i class="fas fa-unlock"></i> Buka
                             </button>
                         </td>
                     </tr>`;
             });
         } else {
-            // Display "Hasil tidak ditemukan" for searches with no results
             tableHtml += `
                 <tr>
                     <td colspan="6" style="text-align: center;">Hasil tidak ditemukan</td>
@@ -1482,6 +1516,7 @@ $(document).ready(function() {
         }
     });
 
+    // Student search functionality
     const searchInput = $('#search_siswa');
     const siswaIdInput = $('#siswa_id');
     const searchResults = $('#search-results');
@@ -1495,9 +1530,10 @@ $(document).ready(function() {
         const query = $(this).val().trim();
         toggleClearButton(searchInput, clearBtn);
 
-        if (query.length < 1) {
+        if (query.length < 2) {
             searchResults.hide().empty();
             siswaIdInput.val('');
+            $('#search_siswa-error').removeClass('show').text('');
             return;
         }
 
@@ -1510,34 +1546,32 @@ $(document).ready(function() {
                 success: function(response) {
                     console.log('[DEBUG] Student search response:', response);
                     searchResults.empty();
-                    if (response.status === 'success') {
-                        if (response.students.length > 0) {
-                            response.students.forEach(student => {
-                                if (student.is_frozen) return;
-                                const displayText = `${student.nama} - ${student.kelas}`;
-                                const item = $('<div>')
-                                    .addClass('search-result-item')
-                                    .html(displayText)
-                                    .data('id', student.id)
-                                    .data('display', displayText);
-                                searchResults.append(item);
-                            });
-                        } else {
-                            searchResults.append('<div class="search-result-item no-results">Tidak ada siswa ditemukan</div>');
-                        }
+                    if (response.status === 'success' && response.students.length > 0) {
+                        response.students.forEach(student => {
+                            if (student.is_frozen) return; // Skip frozen accounts
+                            const kelas = student.nama_kelas || 'Tidak ada';
+                            const jurusan = student.nama_jurusan || 'Tidak ada';
+                            const displayText = `${student.nama} - ${kelas}`;
+                            const item = $('<div>')
+                                .addClass('search-result-item')
+                                .text(displayText)
+                                .data('id', student.id)
+                                .data('display', displayText);
+                            searchResults.append(item);
+                        });
                         searchResults.show();
                     } else {
-                        showAlert(response.message || 'Gagal mencari siswa.', 'error');
-                        searchResults.hide();
+                        searchResults.append('<div class="search-result-item no-results">Tidak ada siswa ditemukan</div>');
+                        searchResults.show();
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('[DEBUG] Search AJAX error:', status, error, xhr.responseText);
+                    searchResults.empty().append('<div class="search-result-item no-results">Gagal mencari siswa</div>').show();
                     showAlert('Gagal mencari siswa. Coba lagi.', 'error');
-                    searchResults.hide();
                 }
             });
-        }, 300);
+        }, 500);
     });
 
     searchResults.on('click', '.search-result-item:not(.no-results)', function() {
@@ -1546,6 +1580,7 @@ $(document).ready(function() {
         siswaIdInput.val(selected.data('id'));
         searchResults.hide().empty();
         toggleClearButton(searchInput, clearBtn);
+        $('#search_siswa-error').removeClass('show').text('');
     });
 
     $(document).on('click', function(e) {
@@ -1560,8 +1595,10 @@ $(document).ready(function() {
         searchResults.hide().empty();
         toggleClearButton(searchInput, clearBtn);
         searchInput.focus();
+        $('#search_siswa-error').removeClass('show').text('');
     });
 
+    // Frozen accounts search
     const searchFrozenInput = $('#search_query');
     const clearSearchBtn = $('#clear-search-btn');
 
@@ -1629,17 +1666,23 @@ $(document).ready(function() {
 
     $('#freeze-form').on('submit', function(e) {
         e.preventDefault();
-        const button = $('#submitBtn');
+        const button = $('#submit-btn');
         console.log('[DEBUG] Freeze form submission');
 
         if (!siswaIdInput.val()) {
-            showAlert('Harap pilih siswa dari daftar.', 'error');
+            $('#search_siswa-error').text('Harap pilih siswa dari daftar.').addClass('show');
+            searchInput.focus();
             return;
+        } else {
+            $('#search_siswa-error').removeClass('show').text('');
         }
 
         if (!$('#alasan').val()) {
-            showAlert('Harap pilih alasan pembekuan.', 'error');
+            $('#alasan-error').text('Harap pilih alasan pembekuan.').addClass('show');
+            $('#alasan').focus();
             return;
+        } else {
+            $('#alasan-error').removeClass('show').text('');
         }
 
         const spinner = showLoadingSpinner(button);
@@ -1681,7 +1724,7 @@ $(document).ready(function() {
         });
     });
 
-    $(document).on('click', '.btn-unfreeze', function() {
+    $(document).on('click', '.action-btn', function() {
         const siswaId = $(this).data('id');
         const nama = $(this).data('nama');
         const kelas = $(this).data('kelas');
@@ -1702,8 +1745,11 @@ $(document).ready(function() {
 
         const alasan = $('#alasan_unfreeze').val();
         if (!alasan) {
-            showAlert('Harap pilih alasan pembukaan.', 'error');
+            $('#alasan_unfreeze-error').text('Harap pilih alasan pembukaan.').addClass('show');
+            $('#alasan_unfreeze').focus();
             return;
+        } else {
+            $('#alasan_unfreeze-error').removeClass('show').text('');
         }
 
         $('#unfreeze-alasan-hidden').val(alasan);
@@ -1730,24 +1776,12 @@ $(document).ready(function() {
             error: function(xhr, status, error) {
                 spinner.restore();
                 console.error('[DEBUG] Unfreeze AJAX error:', status, error, xhr.responseText);
-                showAlert('Gagal mengaktifkan akun. Coba lagi.', 'error');
+                showAlert('Gagal membuka akun. Coba lagi.', 'error');
             }
         });
     });
 
-    $('#unfreeze-cancel-btn').on('click', function() {
-        console.log('[DEBUG] Cancel unfreeze');
-        $('#unfreezeModal').fadeOut(300, () => {
-            resetForm();
-        });
-    });
-
-    $('.success-overlay:not(.no-close)').on('click', function(e) {
-        if ($(e.target).hasClass('success-overlay')) {
-            $(this).fadeOut(300);
-        }
-    });
-
+    // Handle session-based popup
     <?php if (isset($_SESSION['show_popup'])): ?>
         showAlert('<?php echo addslashes($_SESSION['show_popup']['message']); ?>', '<?php echo $_SESSION['show_popup']['type']; ?>');
         <?php unset($_SESSION['show_popup']); ?>

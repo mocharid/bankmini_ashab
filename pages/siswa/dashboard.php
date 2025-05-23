@@ -24,11 +24,9 @@ function getAccountStatus($user_data, $current_time) {
     }
 }
 
-// Fetch user details including status fields
-$query = "SELECT u.nama, u.username, u.is_frozen, u.pin_block_until, j.nama_jurusan, k.nama_kelas 
+// Fetch user details
+$query = "SELECT u.nama, u.username, u.is_frozen, u.pin_block_until, u.avatar, u.email, u.pin 
           FROM users u 
-          LEFT JOIN jurusan j ON u.jurusan_id = j.id 
-          LEFT JOIN kelas k ON u.kelas_id = k.id 
           WHERE u.id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $user_id);
@@ -61,71 +59,12 @@ if ($rekening_data) {
 }
 
 // Cek PIN
-$query_pin = "SELECT pin FROM users WHERE id = ?";
-$stmt_pin = $conn->prepare($query_pin);
-$stmt_pin->bind_param("i", $user_id);
-$stmt_pin->execute();
-$result_pin = $stmt_pin->get_result();
-$user_pin_data = $result_pin->fetch_assoc();
-$has_pin = !empty($user_pin_data['pin']);
+$has_pin = !empty($user_data['pin']);
 
 // Cek email
-$query_email = "SELECT email FROM users WHERE id = ?";
-$stmt_email = $conn->prepare($query_email);
-$stmt_email->bind_param("i", $user_id);
-$stmt_email->execute();
-$result_email = $stmt_email->get_result();
-$user_email_data = $result_email->fetch_assoc();
-$has_email = !empty($user_email_data['email']);
+$has_email = !empty($user_data['email']);
 
-// Pagination settings
-$limit = 5;
-$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-$offset = ($page - 1) * $limit;
-
-// Fetch transactions
-$query = "SELECT 
-            t.no_transaksi, 
-            t.jenis_transaksi, 
-            t.jumlah, 
-            t.status, 
-            t.created_at, 
-            t.rekening_id, 
-            t.rekening_tujuan_id,
-            r1.no_rekening as rekening_asal,
-            r2.no_rekening as rekening_tujuan,
-            u1.nama as nama_pengirim,
-            u2.nama as nama_penerima,
-            p.nama as petugas_nama,
-            DATE(t.created_at) as transaksi_tanggal
-          FROM transaksi t
-          LEFT JOIN rekening r1 ON t.rekening_id = r1.id
-          LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
-          LEFT JOIN users u1 ON r1.user_id = u1.id
-          LEFT JOIN users u2 ON r2.user_id = u2.id
-          LEFT JOIN users p ON t.petugas_id = p.id
-          WHERE r1.user_id = ? OR r2.user_id = ?
-          ORDER BY t.created_at DESC 
-          LIMIT ? OFFSET ?";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("iiii", $user_id, $user_id, $limit, $offset);
-$stmt->execute();
-$transaksi_result = $stmt->get_result();
-
-// Total transactions
-$query_total = "SELECT COUNT(*) as total 
-                FROM transaksi t 
-                JOIN rekening r ON (t.rekening_id = r.id OR t.rekening_tujuan_id = r.id) 
-                WHERE r.user_id = ?";
-$stmt_total = $conn->prepare($query_total);
-$stmt_total->bind_param("i", $user_id);
-$stmt_total->execute();
-$total_result = $stmt_total->get_result();
-$total_row = $total_result->fetch_assoc();
-$total_transaksi = $total_row['total'];
-$total_pages = ceil($total_transaksi / $limit);
-
-// Fetch notifications (all notifications)
+// Fetch notifications
 $query = "SELECT * FROM notifications 
           WHERE user_id = ? 
           ORDER BY created_at DESC";
@@ -145,75 +84,61 @@ $unread_result = $stmt_unread->get_result();
 $unread_row = $unread_result->fetch_assoc();
 $unread_notifications = $unread_row['unread'];
 
-// Fungsi tanggal Indonesia
-function tanggal_indonesia($tanggal) {
-    $bulan = [
-        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 
-        6 => 'Juni', 7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 
-        11 => 'November', 12 => 'Desember'
-    ];
-    $hari = [
-        'Sunday' => 'Minggu', 'Monday' => 'Senin', 'Tuesday' => 'Selasa', 
-        'Wednesday' => 'Rabu', 'Thursday' => 'Kamis', 'Friday' => 'Jumat', 
-        'Saturday' => 'Sabtu'
-    ];
-    $tanggal = strtotime($tanggal);
-    $hari_ini = $hari[date('l', $tanggal)];
-    $tanggal_format = date('d', $tanggal);
-    $bulan_ini = $bulan[date('n', $tanggal)];
-    $tahun = date('Y', $tanggal);
-    return "$hari_ini, $tanggal_format $bulan_ini $tahun";
-}
-
-// Fungsi detail transaksi
-function tampilkanDetailTransaksi($transaksi, $conn) {
-    $detail = '';
-    if ($transaksi['jenis_transaksi'] == 'transfer') {
-        if ($transaksi['rekening_tujuan_id'] == $GLOBALS['rekening_id']) {
-            $detail = '<div class="transaction-detail">
-                          <p><strong>Dari:</strong> '.htmlspecialchars($transaksi['nama_pengirim']).' ('.htmlspecialchars($transaksi['rekening_asal']).')</p>
-                          <p><strong>Ke:</strong> Anda ('.htmlspecialchars($transaksi['rekening_tujuan']).')</p>
-                       </div>';
-        } else {
-            $detail = '<div class="transaction-detail">
-                          <p><strong>Dari:</strong> Anda ('.htmlspecialchars($transaksi['rekening_asal']).')</p>
-                          <p><strong>Ke:</strong> '.htmlspecialchars($transaksi['nama_penerima']).' ('.htmlspecialchars($transaksi['rekening_tujuan']).')</p>
-                       </div>';
+// Fetch recent transactions (last 5)
+$recent_transactions = [];
+if ($rekening_id) {
+    $query = "SELECT t.jenis_transaksi, t.jumlah, t.created_at, t.status, t.rekening_tujuan_id, 
+                     (SELECT u.nama FROM users u JOIN rekening r ON u.id = r.user_id WHERE r.id = t.rekening_tujuan_id) as nama_tujuan
+              FROM transaksi t
+              WHERE t.rekening_id = ?
+              ORDER BY t.created_at DESC
+              LIMIT 5";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("i", $rekening_id);
+    $stmt->execute();
+    $recent_transactions_result = $stmt->get_result();
+    while ($row = $recent_transactions_result->fetch_assoc()) {
+        // Map status to Indonesian terms
+        if ($row['status'] == 'approved') {
+            $row['status'] = 'berhasil';
+        } elseif ($row['status'] == 'pending') {
+            $row['status'] = 'menunggu';
+        } elseif ($row['status'] == 'failed') {
+            $row['status'] = 'gagal';
         }
-    } elseif ($transaksi['jenis_transaksi'] == 'setor' || $transaksi['jenis_transaksi'] == 'tarik') {
-        $query = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("s", $transaksi['transaksi_tanggal']);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result->num_rows > 0) {
-            $petugas_data = $result->fetch_assoc();
-            $petugas1 = htmlspecialchars($petugas_data['petugas1_nama']);
-            $petugas2 = htmlspecialchars($petugas_data['petugas2_nama']);
-            $detail = '<div class="transaction-detail">
-                          <p><strong>Ditangani oleh Warna : <span class="warna">Merah</span></strong> '.$petugas1.' dan '.$petugas2.'</p>
-                       </div>';
-        } else {
-            $detail = '<div class="transaction-detail">
-                          <p><strong>Ditangani oleh:</strong> '.($transaksi['petugas_nama'] ? htmlspecialchars($transaksi['petugas_nama']) : 'Sistem').'</p>
-                       </div>';
-        }
+        $recent_transactions[] = $row;
     }
-    return $detail;
 }
 
 // Quotes penyemangat
 $quotes = [
-    "Tabungan kecil hari ini, langkah besar untuk masa depanmu!",
-    "Setiap rupiah yang kamu simpan adalah investasi untuk impianmu.",
-    "Menabung adalah cara terbaik untuk menghargai kerja kerasmu.",
-    "Jangan tunda menabung, masa depanmu menunggu!",
-    "Uang yang disimpan hari ini adalah senyuman di hari esok.",
-    "Kebiasaan menabung membawa kebebasan finansial.",
-    "Simpan sedikit hari ini, nikmati banyak di masa depan."
+    "Belajar dan menabung, kunci sukses masa depanmu!",
+    "Setiap tabungan adalah langkah menuju mimpimu!",
+    "Simpan sedikit hari ini, wujudkan impian besar besok!",
+    "Keberhasilan dimulai dari kebiasaan menabung!",
+    "Tabunganmu adalah investasi untuk masa depan cerah!",
+    "Menabung itu keren, seperti superhero keuangan!",
+    "Simpan sekarang, tersenyum di masa depan!"
 ];
 $day_index = date('w');
 $daily_quote = $quotes[$day_index];
+
+// Avatar handling
+$avatar_style = $user_data['avatar'] ?? 'avataaars';
+$avatar_url = "https://api.dicebear.com/8.x/{$avatar_style}/svg?seed={$user_id}";
+
+// Fungsi untuk format bulan dalam bahasa Indonesia
+function formatIndonesianDate($date) {
+    $months = [
+        1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    $dateObj = new DateTime($date);
+    $day = $dateObj->format('d');
+    $month = (int)$dateObj->format('m');
+    $hour = $dateObj->format('H:i');
+    return "$day {$months[$month]}, $hour";
+}
 ?>
 
 <!DOCTYPE html>
@@ -223,7 +148,7 @@ $daily_quote = $quotes[$day_index];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-                @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
 
@@ -251,6 +176,12 @@ $daily_quote = $quotes[$day_index];
         .wrapper {
             flex: 1;
             padding-bottom: clamp(2rem, 4vw, 2.5rem);
+        }
+
+        @media (max-width: 768px) {
+            .wrapper {
+                padding-bottom: clamp(5rem, 10vw, 6rem);
+            }
         }
 
         :root {
@@ -412,6 +343,9 @@ $daily_quote = $quotes[$day_index];
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
             position: relative;
             overflow: hidden;
+            display: flex;
+            align-items: center;
+            gap: clamp(1rem, 2vw, 1.5rem);
         }
 
         .welcome-banner::before {
@@ -426,6 +360,153 @@ $daily_quote = $quotes[$day_index];
             pointer-events: none;
         }
 
+        .avatar {
+            width: clamp(60px, 15vw, 80px);
+            height: clamp(60px, 15vw, 80px);
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #1e3c72;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .avatar:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .avatar-selection {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: clamp(1.5rem, 3vw, 2rem);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            max-width: 90%;
+            width: clamp(320px, 60vw, 450px);
+            max-height: 80vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .avatar-selection-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 1rem;
+        }
+
+        .avatar-selection-header h3 {
+            font-size: var(--font-size-lg);
+            font-weight: 600;
+            color: #1e3c72;
+        }
+
+        .avatar-selection-close {
+            background: none;
+            border: none;
+            font-size: var(--font-size-md);
+            color: #666;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .avatar-selection-close:hover {
+            color: #1e3c72;
+        }
+
+        .avatar-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 1.2rem;
+            padding: 0.5rem;
+        }
+
+        .avatar-option {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            object-fit: cover;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+            background-color: #f5f7fa;
+        }
+
+        .avatar-option:hover {
+            border-color: #1e3c72;
+            transform: scale(1.15);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .avatar-option.selected {
+            border-color: #28a745;
+            box-shadow: 0 0 15px rgba(40, 167, 69, 0.5);
+            transform: scale(1.1);
+        }
+
+        .avatar-loading {
+            display: none;
+            text-align: center;
+            padding: 1rem;
+            font-size: var(--font-size-sm);
+            color: #1e3c72;
+            font-weight: 500;
+        }
+
+        .avatar-preview {
+            margin: 1rem 0;
+            text-align: center;
+        }
+
+        .avatar-preview img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 3px solid #1e3c72;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .avatar-confirm {
+            display: block;
+            margin: 1rem auto;
+            padding: 0.8rem 2rem;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: var(--font-size-md);
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .avatar-confirm:hover {
+            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .avatar-confirm:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .welcome-content {
+            flex: 1;
+            min-width: 0;
+        }
+
         .welcome-banner h2 {
             font-size: var(--font-size-xxl);
             font-weight: 700;
@@ -435,20 +516,34 @@ $daily_quote = $quotes[$day_index];
             -webkit-text-fill-color: transparent;
             letter-spacing: -1px;
             line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .welcome-info, .date {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
+        .welcome-info {
             font-size: var(--font-size-md);
             color: #555;
             margin-top: 0.6rem;
             font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .welcome-info i, .date i {
-            color: #1e3c72;
+        .status-aktif {
+            color: #28a745;
+            font-weight: 500;
+        }
+
+        .status-dibekukan {
+            color: #dc3545;
+            font-weight: 500;
+        }
+
+        .status-terblokir_sementara {
+            color: #ffc107;
+            font-weight: 500;
         }
 
         .quote-container {
@@ -624,78 +719,84 @@ $daily_quote = $quotes[$day_index];
         }
 
         .stats-container {
-            padding: clamp(1rem, 3vw, 1.5rem);
+            padding: clamp(1.5rem, 4vw, 2rem);
             margin: clamp(1.5rem, 3vw, 2rem) clamp(1rem, 3vw, 1.5rem);
-        }
-
-        .stat-box {
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            border-radius: 24px;
-            padding: clamp(1.5rem, 4vw, 2.5rem);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
             position: relative;
             overflow: hidden;
-            box-shadow: 0 15px 35px rgba(42, 82, 152, 0.2);
+            color: white;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
 
-        .bubble-1, .bubble-2, .bubble-3, .bubble-4 {
+        .stats-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2), 0 0 30px rgba(71, 118, 201, 0.5);
+        }
+
+        .sparkle {
             position: absolute;
+            background: rgba(255, 255, 255, 0.8);
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+            animation: sparkle 2s infinite;
         }
 
-        .bubble-1 {
-            width: clamp(80px, 15vw, 120px);
-            height: clamp(80px, 15vw, 120px);
-            bottom: -60px;
-            right: 10%;
-            animation: float 12s infinite ease-in-out;
+        .sparkle-1 {
+            width: 5px;
+            height: 5px;
+            top: 20%;
+            left: 10%;
+            animation-delay: 0s;
         }
 
-        .bubble-2 {
-            width: clamp(60px, 10vw, 80px);
-            height: clamp(60px, 10vw, 80px);
-            top: 30px;
-            right: 25%;
-            animation: float 9s infinite ease-in-out 1s;
+        .sparkle-2 {
+            width: 7px;
+            height: 7px;
+            top: 60%;
+            left: 30%;
+            animation-delay: 0.5s;
         }
 
-        .bubble-3 {
-            width: clamp(40px, 8vw, 50px);
-            height: clamp(40px, 8vw, 50px);
-            bottom: 60px;
-            left: 15%;
-            animation: float 10s infinite ease-in-out 2s;
+        .sparkle-3 {
+            width: 4px;
+            height: 4px;
+            top: 40%;
+            right: 20%;
+            animation-delay: 1s;
         }
 
-        .bubble-4 {
-            width: clamp(70px, 12vw, 100px);
-            height: clamp(70px, 12vw, 100px);
-            top: -40px;
-            left: 25%;
-            animation: float 13s infinite ease-in-out 3s;
+        .sparkle-4 {
+            width: 6px;
+            height: 6px;
+            bottom: 15%;
+            right: 15%;
+            animation-delay: 1.5s;
         }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0) scale(1); }
-            50% { transform: translateY(-20px) scale(1.05); }
+        @keyframes sparkle {
+            0% { opacity: 0; transform: scale(0); }
+            50% { opacity: 1; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0); }
         }
 
         .stat-title {
-            font-size: var(--font-size-md);
+            font-size: var(--font-size-lg);
             margin-bottom: 1.2rem;
-            font-weight: 500;
+            font-weight: 600;
             z-index: 1;
             letter-spacing: 0.5px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            color: #ffffff;
         }
 
         .stat-title .toggle-balance {
             background: rgba(255, 255, 255, 0.2);
             border: none;
-            color: white;
+            color: #ffffff;
             width: clamp(30px, 6vw, 36px);
             height: clamp(30px, 6vw, 36px);
             border-radius: 50%;
@@ -721,22 +822,27 @@ $daily_quote = $quotes[$day_index];
             align-items: center;
         }
 
-        .balance-hidden .balance-box {
-            filter: blur(8px);
+        .balance-hidden .balance-box .balance {
+            display: none;
         }
 
-        .balance-hidden .blur-overlay {
-            opacity: 1;
+        .balance-hidden .balance-box .currency {
+            display: none;
+        }
+
+        .balance-hidden .balance-box .hidden-balance {
+            display: inline-block;
         }
 
         .balance-box {
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: var(--font-size-xxl);
+            font-size: clamp(2rem, 6vw, 2.5rem);
             font-weight: 700;
-            letter-spacing: -1px;
+            letter-spacing: 1px;
             transition: all 0.3s ease;
+            color: #ffffff;
         }
 
         .balance {
@@ -745,27 +851,19 @@ $daily_quote = $quotes[$day_index];
             text-align: center;
         }
 
-        .blur-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: var(--font-size-lg);
-            font-weight: 600;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            pointer-events: none;
+        .hidden-balance {
+            display: none;
+            font-size: clamp(2rem, 6vw, 2.5rem);
+            font-weight: 700;
+            color: #ffffff;
         }
 
         .currency {
-            font-size: var(--font-size-xl);
-            margin-right: 0.05rem;
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            margin-right: 0.5rem;
             opacity: 0.9;
             font-weight: 500;
+            color: #ffffff;
         }
 
         .stat-info {
@@ -785,15 +883,16 @@ $daily_quote = $quotes[$day_index];
             transition: all 0.2s;
             font-weight: 500;
             letter-spacing: 0.5px;
+            color: #ffffff;
         }
 
         .rekening-info:hover {
             background-color: rgba(255, 255, 255, 0.3);
-            transform: translateY(-3px);
         }
 
         .copy-icon {
             font-size: var(--font-size-sm);
+            color: #ffffff;
         }
 
         .tooltip {
@@ -822,187 +921,6 @@ $daily_quote = $quotes[$day_index];
         .tooltip:hover .tooltiptext {
             visibility: visible;
             opacity: 1;
-        }
-
-        .transactions-container {
-            width: clamp(90%, 95vw, 95%);
-            max-width: 1200px;
-            margin: clamp(1.5rem, 3vw, 2rem) auto;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            background-color: #fff;
-            overflow: hidden;
-        }
-
-        .transactions-header {
-            background-color: #f5f5f5;
-            padding: clamp(12px, 2.5vw, 15px) clamp(15px, 3vw, 20px);
-            border-bottom: 1px solid #eaeaea;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .transactions-title {
-            margin: 0;
-            font-size: var(--font-size-lg);
-            color: #333;
-            font-weight: 600;
-        }
-
-        .toggle-transactions {
-            background: #1e3c72;
-            color: white;
-            border: none;
-            padding: clamp(6px, 1.5vw, 8px) clamp(12px, 2.5vw, 15px);
-            border-radius: 50px;
-            cursor: pointer;
-            font-size: var(--font-size-sm);
-            transition: background-color 0.3s ease;
-        }
-
-        .toggle-transactions:hover {
-            background-color: #2a5298;
-        }
-
-        .table-container {
-            width: 100%;
-            overflow-x: auto;
-            padding: clamp(10px, 2vw, 15px);
-            display: none;
-        }
-
-        .table-container.active {
-            display: block;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: clamp(10px, 2vw, 15px) 0;
-        }
-
-        thead th {
-            background-color: #f9f9f9;
-            padding: clamp(10px, 2vw, 12px) clamp(12px, 2.5vw, 15px);
-            text-align: left;
-            font-weight: 600;
-            color: #555;
-            border-bottom: 2px solid #eaeaea;
-            font-size: var(--font-size-sm);
-        }
-
-        tbody td {
-            padding: clamp(10px, 2vw, 12px) clamp(12px, 2.5vw, 15px);
-            border-bottom: 1px solid #eaeaea;
-            color: #333;
-            font-size: var(--font-size-sm);
-        }
-
-        tbody tr:last-child td {
-            border-bottom: none;
-        }
-
-        tbody tr:hover {
-            background-color: rgba(245, 247, 250, 0.7);
-        }
-
-        .amount-positive {
-            color: #10b981;
-            font-weight: 600;
-        }
-
-        .amount-negative {
-            color: #ef4444;
-            font-weight: 600;
-        }
-
-        .status-badge {
-            padding: clamp(3px, 1vw, 4px) clamp(6px, 1.5vw, 8px);
-            border-radius: 4px;
-            font-size: var(--font-size-xs);
-            font-weight: 600;
-        }
-
-        .status-sukses {
-            background-color: #d1fae5;
-            color: #065f46;
-        }
-
-        .status-pending {
-            background-color: #fef3c7;
-            color: #92400e;
-        }
-
-        .status-gagal {
-            background-color: #fee2e2;
-            color: #b91c1c;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: clamp(30px, 5vw, 40px) clamp(15px, 3vw, 20px);
-        }
-
-        .empty-state i {
-            display: block;
-            font-size: clamp(36px, 8vw, 48px);
-            color: #d1d5db;
-            margin-bottom: 16px;
-        }
-
-        .empty-state p {
-            margin: 0;
-            color: #6b7280;
-            font-size: var(--font-size-md);
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            gap: clamp(0.4rem, 1vw, 0.6rem);
-            padding: clamp(1.2rem, 3vw, 1.8rem);
-            display: none;
-            margin: clamp(1.5rem, 3vw, 2rem) auto;
-        }
-
-        .pagination.active {
-            display: flex;
-        }
-
-        .pagination-link {
-            display: inline-block;
-            padding: clamp(0.5rem, 1.5vw, 0.6rem) clamp(0.8rem, 2vw, 1rem);
-            border-radius: 50px;
-            text-decoration: none;
-            color: #555;
-            background-color: #f5f7fa;
-            transition: all 0.2s;
-            font-weight: 500;
-            font-size: var(--font-size-sm);
-        }
-
-        .pagination-link:hover {
-            background-color: #e0e0e0;
-            transform: translateY(-2px);
-        }
-
-        .pagination-link.active {
-            background-color: #1e3c72;
-            color: white;
-            box-shadow: 0 4px 10px rgba(30, 60, 114, 0.3);
-        }
-
-        .transaksi-setor {
-            background-color: rgba(236, 253, 245, 0.4);
-        }
-
-        .transaksi-tarik {
-            background-color: rgba(254, 242, 242, 0.4);
-        }
-
-        .transaksi-transfer {
-            background-color: rgba(239, 246, 255, 0.4);
         }
 
         .pin-alert {
@@ -1088,94 +1006,228 @@ $daily_quote = $quotes[$day_index];
             margin: 0.5rem auto;
         }
 
-        .transaction-detail {
-            padding: clamp(8px, 2vw, 10px);
-            background-color: rgba(255, 255, 255, 0.7);
-            border-radius: 8px;
-            margin-top: 8px;
-            font-size: var(--font-size-sm);
-        }
-
-        .transaction-detail p {
-            margin: 5px 0;
-            color: #555;
-        }
-
-        .detail-toggle {
-            padding: clamp(5px, 1.5vw, 6px) clamp(10px, 2vw, 12px);
-            background-color: #1e3c72;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: var(--font-size-sm);
-            transition: background-color 0.2s;
-        }
-
-        .detail-toggle:hover {
-            background-color: #2a5298;
-        }
-
-        .hidden-detail {
+        .bottom-nav {
             display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            padding: clamp(0.8rem, 2vw, 1rem);
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
         }
 
-        .footer {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            text-align: center;
-            padding: clamp(1rem, 3vw, 1.5rem);
-            border-top-left-radius: 16px;
-            border-top-right-radius: 16px;
-            box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+        .bottom-nav-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .bottom-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #1e3c72;
+            text-decoration: none;
             font-size: var(--font-size-sm);
-            letter-spacing: 0.5px;
+            padding: clamp(0.6rem, 1.5vw, 0.8rem);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .bottom-nav-item i {
+            font-size: clamp(1.4rem, 3.5vw, 1.8rem);
+            margin-bottom: 0.4rem;
+            transition: all 0.3s ease;
+            background: linear-gradient(135deg, #1e3c72 0%, #4776c9 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .bottom-nav-item span {
+            font-weight: 500;
+        }
+
+        .bottom-nav-item:hover {
+            background-color: rgba(30, 60, 114, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .bottom-nav-item:hover i {
+            transform: scale(1.2);
+        }
+
+        .bottom-nav-item.disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .bottom-nav-item.disabled:hover {
+            background-color: transparent;
+            transform: none;
+        }
+
+        .bottom-nav-item.disabled:hover i {
+            transform: none;
+        }
+
+        .bottom-nav-item::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #1e3c72, #4776c9);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .bottom-nav-item:hover::after {
+            width: 60%;
+        }
+
+        /* Recent Transactions Styles */
+        .recent-transactions {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            margin: clamp(1.5rem, 3vw, 2rem) clamp(1rem, 3vw, 1.5rem);
+            padding: clamp(1rem, 2vw, 1.5rem);
             position: relative;
             overflow: hidden;
-            margin-top: clamp(2rem, 4vw, 2.5rem);
         }
 
-        .footer::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.1);
-            clip-path: circle(20% at 10% 10%);
-            opacity: 0.3;
+        .recent-transactions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
         }
 
-        .footer::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            right: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.1);
-            clip-path: circle(15% at 90% 90%);
-            opacity: 0.3;
+        .recent-transactions-header h3 {
+            font-size: var(--font-size-lg);
+            font-weight: 600;
+            color: #333;
         }
 
-        .footer span {
-            position: relative;
-            z-index: 1;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        .recent-transactions-header a {
+            font-size: var(--font-size-sm);
+            color: #1e3c72;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s ease;
         }
 
-        @media (max-width: 1024px) {
-            .card-menu {
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            }
+        .recent-transactions-header a:hover {
+            color: #4776c9;
+        }
 
-            .notification-dropdown-content {
-                min-width: clamp(250px, 80vw, 300px);
-            }
+        .transaction-item {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .transaction-item:last-child {
+            border-bottom: none;
+        }
+
+        .transaction-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            flex-shrink: 0;
+        }
+
+        .transaction-icon.in {
+            background-color: #e6f4ea;
+        }
+
+        .transaction-icon.out {
+            background-color: #fee2e2;
+        }
+
+        .transaction-icon i {
+            font-size: 1.2rem;
+        }
+
+        .transaction-icon.in i {
+            color: #28a745;
+        }
+
+        .transaction-icon.out i {
+            color: #dc3545;
+        }
+
+        .transaction-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .transaction-description {
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 0.3rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .transaction-time {
+            font-size: var(--font-size-xs);
+            color: #666;
+        }
+
+        .transaction-amount {
+            font-size: var(--font-size-sm);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .transaction-amount.in {
+            color: #28a745;
+        }
+
+        .transaction-amount.out {
+            color: #dc3545;
+        }
+
+        .transaction-status {
+            font-size: var(--font-size-xs);
+            padding: 0.3rem 0.8rem;
+            border-radius: 12px;
+            margin-left: 1rem;
+        }
+
+        .transaction-status.success {
+            background-color: #e6f4ea;
+            color: #28a745;
+        }
+
+        .transaction-status.pending {
+            background-color: #fff3cd;
+            color: #856404;
         }
 
         @media (max-width: 768px) {
+            .bottom-nav {
+                display: block;
+            }
+
             .header {
                 flex-direction: column;
                 align-items: flex-start;
@@ -1205,10 +1257,22 @@ $daily_quote = $quotes[$day_index];
             .welcome-banner {
                 margin: clamp(1rem, 2vw, 1.5rem);
                 padding: clamp(1.2rem, 3vw, 1.8rem);
+                flex-direction: row;
+                align-items: center;
+                gap: clamp(0.8rem, 2vw, 1.2rem);
+            }
+
+            .avatar {
+                width: clamp(50px, 12vw, 60px);
+                height: clamp(50px, 12vw, 60px);
             }
 
             .welcome-banner h2 {
                 font-size: var(--font-size-xl);
+            }
+
+            .welcome-info {
+                font-size: var(--font-size-sm);
             }
 
             .card-menu {
@@ -1218,36 +1282,49 @@ $daily_quote = $quotes[$day_index];
             }
 
             .stats-container {
-                padding: clamp(0.8rem, 2vw, 1rem);
+                padding: clamp(1rem, 2vw, 1.5rem);
                 margin: clamp(1rem, 2vw, 1.5rem);
             }
 
-            .transactions-container {
-                width: clamp(88%, 92vw, 92%);
-                margin: clamp(1rem, 2vw, 1.5rem) auto;
+            .balance-box {
+                font-size: clamp(1.8rem, 5vw, 2.2rem);
             }
 
-            .balance-box {
-                font-size: var(--font-size-xl);
+            .hidden-balance {
+                font-size: clamp(1.8rem, 5vw, 2.2rem);
             }
 
             .currency {
-                font-size: var(--font-size-lg);
-                margin-right: 0.05rem;
+                font-size: clamp(1.2rem, 3.5vw, 1.5rem);
+                margin-right: 0.5rem;
             }
 
-            table {
-                min-width: clamp(600px, 100vw, 650px);
+            .recent-transactions {
+                margin: clamp(1rem, 2vw, 1.5rem);
+                padding: clamp(0.8rem, 1.5vw, 1rem);
             }
 
-            thead th, tbody td {
-                padding: clamp(8px, 1.5vw, 10px);
+            .transaction-description {
                 font-size: var(--font-size-xs);
             }
 
-            .status-badge {
-                padding: clamp(2px, 0.8vw, 3px) clamp(4px, 1vw, 6px);
+            .transaction-time {
                 font-size: calc(var(--font-size-xs) * 0.9);
+            }
+
+            .transaction-amount {
+                font-size: var(--font-size-xs);
+            }
+
+            .transaction-status {
+                font-size: calc(var(--font-size-xs) * 0.9);
+                padding: 0.2rem 0.6rem;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .bottom-nav {
+                display: none !important;
             }
         }
 
@@ -1265,8 +1342,13 @@ $daily_quote = $quotes[$day_index];
                 font-size: var(--font-size-lg);
             }
 
-            .welcome-info, .date {
-                font-size: var(--font-size-sm);
+            .welcome-info {
+                font-size: var(--font-size-xs);
+            }
+
+            .avatar {
+                width: clamp(40px, 10vw, 50px);
+                height: clamp(40px, 10vw, 50px);
             }
 
             .card {
@@ -1281,27 +1363,8 @@ $daily_quote = $quotes[$day_index];
                 font-size: var(--font-size-xs);
             }
 
-            .transactions-container {
-                width: clamp(85%, 90vw, 90%);
-                margin: clamp(1rem, 2vw, 1.5rem) auto;
-            }
-
-            .transactions-title {
-                font-size: var(--font-size-md);
-            }
-
-            thead th, tbody td {
-                padding: clamp(6px, 1.2vw, 8px) clamp(4px, 1vw, 6px);
-                font-size: calc(var(--font-size-xs) * 0.95);
-            }
-
-            .table-container {
-                padding: clamp(8px, 1.5vw, 10px);
-            }
-
-            .status-badge {
-                font-size: calc(var(--font-size-xs) * 0.85);
-                padding: clamp(2px, 0.5vw, 3px) clamp(3px, 0.8vw, 4px);
+            .stats-container {
+                margin: clamp(1rem, 2vw, 1.5rem);
             }
 
             .notification-dropdown-content {
@@ -1327,9 +1390,9 @@ $daily_quote = $quotes[$day_index];
         }
 
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(30, 60, 114, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(30, 60, 114, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(30, 60, 114, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(71, 118, 201, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(71, 118, 201, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(71, 118, 201, 0); }
         }
 
         .rekening-info {
@@ -1350,21 +1413,8 @@ $daily_quote = $quotes[$day_index];
         .card:nth-child(2) { --i: 2; }
         .card:nth-child(3) { --i: 3; }
 
-        .header, .welcome-banner, .stats-container, .transactions-container {
+        .header, .welcome-banner, .stats-container {
             transition: all 0.3s ease;
-        }
-        /* CSS untuk status akun */
-        .status-aktif {
-            color: #28a745;
-            font-weight: 500;
-        }
-        .status-dibekukan {
-            color: #dc3545;
-            font-weight: 500;
-        }
-        .status-terblokir_sementara {
-            color: #ffc107;
-            font-weight: 500;
         }
     </style>
 </head>
@@ -1388,7 +1438,7 @@ $daily_quote = $quotes[$day_index];
                                     <a href="#" class="notification-link">
                                         <div class="notification-message"><?= htmlspecialchars($row['message']) ?></div>
                                         <div class="notification-time">
-                                            <?= date('d M Y H:i', strtotime($row['created_at'])) ?>
+                                            <?= formatIndonesianDate($row['created_at']) ?>
                                         </div>
                                     </a>
                                     <button class="swipe-delete">Hapus</button>
@@ -1409,18 +1459,60 @@ $daily_quote = $quotes[$day_index];
 
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2>Hai, <?= htmlspecialchars($user_data['nama']) ?>!</h2>
-            <div class="welcome-info">
-                <i class="fas fa-user-graduate"></i> <?= htmlspecialchars($user_data['nama_kelas'] . ' - ' . $user_data['nama_jurusan']) ?>
+            <img src="<?= htmlspecialchars($avatar_url) ?>" alt="Avatar" class="avatar" id="userAvatar" onclick="openAvatarSelection()">
+            <div class="welcome-content">
+                <h2>Hai, <?= htmlspecialchars($user_data['nama']) ?>!</h2>
+                <div class="welcome-info">
+                    Status Akun: 
+                    <span class="status-<?= strtolower($account_status) ?>">
+                        <?= ucfirst(str_replace('_', ' ', $account_status)) ?>
+                    </span>
+                </div>
             </div>
-            <div class="welcome-info">
-                <i class="fas fa-shield-alt"></i> Status Akun: 
-                <span class="status-<?= strtolower($account_status) ?>">
-                    <?= ucfirst(str_replace('_', ' ', $account_status)) ?>
-                </span>
+        </div>
+
+        <!-- Avatar Selection Modal -->
+        <div class="avatar-selection" id="avatarSelection">
+            <div class="avatar-selection-header">
+                <h3>Pilih Avatar Pelajarmu!</h3>
+                <button class="avatar-selection-close" onclick="closeAvatarSelection()">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div class="date">
-                <i class="far fa-calendar-alt"></i> <?= tanggal_indonesia(date('Y-m-d')) ?>
+            <div class="avatar-preview" id="avatarPreview">
+                <img src="<?= htmlspecialchars($avatar_url) ?>" alt="Current Avatar" id="previewAvatar">
+            </div>
+            <div class="avatar-grid" id="avatarGrid"></div>
+            <button class="avatar-confirm" id="confirmAvatar" disabled>Simpan Avatar</button>
+            <div class="avatar-loading" id="avatarLoading">Memuat...</div>
+        </div>
+
+        <!-- Stats Container -->
+        <div class="stats-container">
+            <div class="sparkle sparkle-1"></div>
+            <div class="sparkle sparkle-2"></div>
+            <div class="sparkle sparkle-3"></div>
+            <div class="sparkle sparkle-4"></div>
+            <div class="stat-title">
+                Saldo Anda
+                <button class="toggle-balance" id="toggleBalance" title="Sembunyikan/Tampilkan Saldo">
+                    <i class="fas fa-eye-slash" id="eyeIcon"></i>
+                </button>
+            </div>
+            <div class="balance-container" id="balanceContainer">
+                <div class="balance-box">
+                    <span class="currency">Rp</span>
+                    <span class="balance" id="balanceCounter"><?= number_format($saldo, 0, ',', '.') ?></span>
+                    <span class="hidden-balance">Rp. *****</span>
+                </div>
+            </div>
+            <div class="stat-info">
+                <div class="rekening-info tooltip" onclick="copyToClipboard('<?= $no_rekening ?>')">
+                    <i class="fas fa-credit-card"></i>
+                    <span id="rekening-text">No. Rekening: <?= $no_rekening ?></span>
+                    <i class="fas fa-copy copy-icon"></i>
+                    <span class="tooltiptext" id="copy-tooltip">Klik untuk menyalin</span>
+                </div>
             </div>
         </div>
 
@@ -1435,7 +1527,7 @@ $daily_quote = $quotes[$day_index];
             <div class="pin-alert-content">
                 <i class="fas fa-exclamation-triangle"></i>
                 <div class="pin-alert-text">
-                    <strong>Perhatian!</strong> Anda belum mengatur PIN keamanan.  
+                    <strong>Perhatian!</strong> Kamu belum mengatur PIN keamanan.  
                     <a href="profil.php#account-tab" class="pin-alert-button">Atur PIN Sekarang</a>
                 </div>
                 <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
@@ -1445,12 +1537,13 @@ $daily_quote = $quotes[$day_index];
         </div>
         <?php endif; ?>
 
+        <!-- Email Alert -->
         <?php if (!$has_email): ?>
         <div class="pin-alert">
             <div class="pin-alert-content">
                 <i class="fas fa-exclamation-triangle"></i>
                 <div class="pin-alert-text">
-                    <strong>Perhatian!</strong> Anda belum menambahkan email.  
+                    <strong>Perhatian!</strong> Kamu belum menambahkan email.  
                     <a href="profil.php#account-tab" class="pin-alert-button">Tambahkan Email Sekarang</a>
                 </div>
                 <button class="pin-alert-close" onclick="this.parentElement.parentElement.style.display='none';">
@@ -1470,14 +1563,14 @@ $daily_quote = $quotes[$day_index];
                     <i class="fas fa-user-cog"></i>
                 </div>
                 <h3>Profil</h3>
-                <p>Kelola informasi akun Anda dengan mudah dan aman</p>
+                <p>Kelola informasi akunmu dengan mudah dan aman</p>
             </div>
             <div class="card" onclick="window.location.href='cek_mutasi.php'">
                 <div class="card-icon">
                     <i class="fas fa-list-alt"></i>
                 </div>
                 <h3>Cek Mutasi</h3>
-                <p>Pantau dan lihat semua riwayat transaksi terbaru Anda</p>
+                <p>Lihat semua riwayat transaksimu dengan mudah</p>
             </div>
             <div class="card <?php echo !$has_pin ? 'disabled' : ''; ?>" 
                  <?php echo $has_pin ? 'onclick="window.location.href=\'transfer_pribadi.php\'"' : 'onclick="showPinAlert()" title="Harap atur PIN terlebih dahulu"'; ?>>
@@ -1485,133 +1578,206 @@ $daily_quote = $quotes[$day_index];
                     <i class="fas fa-paper-plane"></i>
                 </div>
                 <h3>Transfer Lokal</h3>
-                <p>Kirim uang dengan cepat dan aman ke rekening Lokal</p>
+                <p>Kirim uang dengan cepat ke teman atau keluarga</p>
             </div>
         </div>
 
-        <!-- Stats Container -->
-        <div class="stats-container">
-            <div class="stat-box">
-                <div class="bubble-1"></div>
-                <div class="bubble-2"></div>
-                <div class="bubble-3"></div>
-                <div class="bubble-4"></div>
-                <div class="stat-title">
-                    Saldo Anda
-                    <button class="toggle-balance" id="toggleBalance" title="Sembunyikan/Tampilkan Saldo">
-                        <i class="fas fa-eye-slash" id="eyeIcon"></i>
-                    </button>
-                </div>
-                <div class="balance-container" id="balanceContainer">
-                    <div class="balance-box">
-                        <span class="currency">Rp</span>
-                        <span class="balance" id="balanceCounter"><?= number_format($saldo, 0, ',', '.') ?></span>
-                    </div>
-                    <div class="blur-overlay">
-                        <span>Rp.*****</span>
-                    </div>
-                </div>
-                <div class="stat-info">
-                    <div class="rekening-info tooltip" onclick="copyToClipboard('<?= $no_rekening ?>')">
-                        <i class="fas fa-credit-card"></i>
-                        <span id="rekening-text">No. Rekening: <?= $no_rekening ?></span>
-                        <i class="fas fa-copy copy-icon"></i>
-                        <span class="tooltiptext" id="copy-tooltip">Klik untuk menyalin</span>
-                    </div>
-                </div>
+        <!-- Recent Transactions -->
+        <div class="recent-transactions">
+            <div class="recent-transactions-header">
+                <h3>Transaksi Terakhir</h3>
+                <a href="cek_mutasi.php">Lihat Semua</a>
             </div>
-        </div>
+            <?php if (count($recent_transactions) > 0): ?>
+                <?php foreach ($recent_transactions as $transaction): ?>
+                    <?php
+                        $is_incoming = $transaction['jenis_transaksi'] == 'setor';
+                        $description = '';
+                        $icon_class = $is_incoming ? 'in' : 'out';
+                        $amount_class = $is_incoming ? 'in' : 'out';
+                        $amount_prefix = $is_incoming ? '+' : '-';
+                        $icon = $is_incoming ? 'fa-arrow-down' : 'fa-arrow-up';
 
-        <!-- Transactions Container -->
-        <div class="transactions-container">
-            <div class="transactions-header">
-                <h3 class="transactions-title">Riwayat Transaksi Terakhir</h3>
-                <button class="toggle-transactions" id="toggleTransactions">Sembunyikan</button>
-            </div>
-            <div class="table-container active" id="tableContainer">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>No</th>
-                            <th>No Transaksi</th>
-                            <th>Tanggal</th>
-                            <th>Jenis</th>
-                            <th>Jumlah</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if ($transaksi_result->num_rows > 0): ?>
-                            <?php 
-                                $items_per_page = 5; // 5 item per halaman
-                                $nomor_urut = ($page - 1) * $items_per_page + 1; 
-                            ?>
-                            <?php while ($row = $transaksi_result->fetch_assoc()): 
-                                $jenis = strtolower($row['jenis_transaksi']);
-                                $is_transfer_masuk = ($jenis == 'transfer' && $row['rekening_tujuan_id'] == $rekening_id);
-                                $amount_class = ($jenis == 'setor' || $is_transfer_masuk) ? 'amount-positive' : 'amount-negative';
-                                $row_class = 'transaksi-' . $jenis;
-                            ?>
-                                <tr class="<?= $row_class ?>">
-                                    <td class="nomor-urut"><?= $nomor_urut++ ?></td>
-                                    <td><?= htmlspecialchars($row['no_transaksi']) ?></td>
-                                    <td><?= date('d M Y H:i', strtotime($row['created_at'])) ?></td>
-                                    <td>
-                                        <?php if ($jenis == 'setor'): ?>
-                                            <i class="fas fa-arrow-down text-green-600 mr-2"></i> Setor
-                                        <?php elseif ($jenis == 'tarik'): ?>
-                                            <i class="fas fa-arrow-up text-red-600 mr-2"></i> Tarik
-                                        <?php elseif ($jenis == 'transfer'): ?>
-                                            <?php if ($is_transfer_masuk): ?>
-                                                <i class="fas fa-arrow-down text-green-600 mr-2"></i> Transfer Masuk
-                                            <?php else: ?>
-                                                <i class="fas fa-arrow-up text-red-600 mr-2"></i> Transfer Keluar
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="<?= $amount_class ?>">
-                                        <?= ($jenis == 'setor' || $is_transfer_masuk) ? '+' : '-' ?> Rp <?= number_format($row['jumlah'], 0, ',', '.') ?>
-                                    </td>
-                                    <td>
-                                        <span class="status-badge status-<?= strtolower($row['status']) ?>">
-                                            <?php 
-                                                $status_display = ($row['status'] === 'approved') ? 'Berhasil' : ucfirst($row['status']);
-                                                echo $status_display;
-                                            ?>
-                                        </span>
-                                    </td>
-                                </tr>
-                            <?php endwhile; ?>
-                        <?php else: ?>
-                            <tr>
-                                <td colspan="6" class="empty-state">
-                                    <i class="fas fa-receipt"></i>
-                                    <p>Belum ada riwayat transaksi.</p>
-                                </td>
-                            </tr>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Pagination -->
-        <div class="pagination active">
-            <?php if ($page > 1): ?>
-                <a href="javascript:void(0);" onclick="loadPage(<?= $page - 1 ?>)" class="pagination-link">« Sebelumnya</a>
-            <?php endif; ?>
-            <?php if ($page < $total_pages): ?>
-                <a href="javascript:void(0);" onclick="loadPage(<?= $page + 1 ?>)" class="pagination-link">Selanjutnya »</a>
+                        if ($transaction['jenis_transaksi'] == 'setor') {
+                            $description = 'Setoran Tunai';
+                        } elseif ($transaction['jenis_transaksi'] == 'tarik') {
+                            $description = 'Penarikan';
+                        } elseif ($transaction['jenis_transaksi'] == 'transfer') {
+                            if ($transaction['nama_tujuan']) {
+                                $description = $is_incoming ? 
+                                    "Transfer Masuk dari " . htmlspecialchars($transaction['nama_tujuan']) : 
+                                    "Transfer Keluar ke " . htmlspecialchars($transaction['nama_tujuan']);
+                            } else {
+                                $description = $is_incoming ? 
+                                    "Transfer Masuk dari Orang Tua" : 
+                                    "Transfer Keluar";
+                            }
+                        }
+                    ?>
+                    <div class="transaction-item">
+                        <div class="transaction-icon <?php echo $icon_class; ?>">
+                            <i class="fas <?php echo $icon; ?>"></i>
+                        </div>
+                        <div class="transaction-details">
+                            <div class="transaction-description"><?php echo $description; ?></div>
+                            <div class="transaction-time">
+                                <?php echo formatIndonesianDate($transaction['created_at']); ?>
+                            </div>
+                        </div>
+                        <div class="transaction-amount <?php echo $amount_class; ?>">
+                            <?php echo $amount_prefix . ' Rp ' . number_format($transaction['jumlah'], 0, ',', '.'); ?>
+                        </div>
+                        <span class="transaction-status <?php echo strtolower($transaction['status']); ?>">
+                            <?php echo ucfirst($transaction['status']); ?>
+                        </span>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="transaction-item">
+                    <div class="transaction-details">
+                        <div class="transaction-description">Belum ada transaksi</div>
+                    </div>
+                </div>
             <?php endif; ?>
         </div>
-    </div>
 
-    <!-- Footer -->
-    <div class="footer">
-        <span>Kerja Praktek - Universitas Suryakancana Cianjur 2025</span>
+        <!-- Bottom Navigation Bar -->
+        <div class="bottom-nav">
+            <div class="bottom-nav-container">
+                <a href="profil.php" class="bottom-nav-item">
+                    <i class="fas fa-user-cog"></i>
+                    <span>Profil</span>
+                </a>
+                <a href="cek_mutasi.php" class="bottom-nav-item">
+                    <i class="fas fa-list-alt"></i>
+                    <span>Mutasi</span>
+                </a>
+                <a href="<?php echo $has_pin ? 'transfer_pribadi.php' : 'javascript:void(0);'; ?>" 
+                   class="bottom-nav-item <?php echo !$has_pin ? 'disabled' : ''; ?>" 
+                   <?php echo !$has_pin ? 'onclick="showPinAlert()"' : ''; ?>>
+                    <i class="fas fa-paper-plane"></i>
+                    <span>Transfer</span>
+                </a>
+            </div>
+        </div>
     </div>
 
     <script>
+        // Expanded student-friendly avatar styles
+        const avatarStyles = [
+            { style: 'avataaars', name: 'Pelajar Animasi' },
+            { style: 'open-peeps', name: 'Gaya Komik' },
+            { style: 'bottts', name: 'Robot Pelajar' },
+            { style: 'pixel-art', name: 'Pixel Pelajar' },
+            { style: 'adventurer', name: 'Petualang Belajar' },
+            { style: 'micah', name: 'Siswa Keren' },
+            { style: 'croodles', name: 'Doodle Pelajar' },
+            { style: 'lorelei', name: 'Pelajar Fantasi' }
+        ];
+
+        let selectedAvatarStyle = '<?php echo $avatar_style; ?>';
+
+        // Open avatar selection modal
+        function openAvatarSelection() {
+            const modal = document.getElementById('avatarSelection');
+            const grid = document.getElementById('avatarGrid');
+            const loading = document.getElementById('avatarLoading');
+            const confirmButton = document.getElementById('confirmAvatar');
+            grid.innerHTML = '';
+            loading.style.display = 'block';
+
+            avatarStyles.forEach(({ style, name }) => {
+                const container = document.createElement('div');
+                container.className = 'avatar-option-container';
+                container.style.textAlign = 'center';
+
+                const img = document.createElement('img');
+                img.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
+                img.className = 'avatar-option';
+                img.dataset.style = style;
+                img.title = name;
+                if (style === selectedAvatarStyle) {
+                    img.classList.add('selected');
+                }
+                img.addEventListener('click', () => previewAvatar(style));
+
+                const label = document.createElement('div');
+                label.textContent = name;
+                label.style.fontSize = 'var(--font-size-xs)';
+                label.style.marginTop = '0.5rem';
+                label.style.color = '#1e3c72';
+
+                container.appendChild(img);
+                container.appendChild(label);
+                grid.appendChild(container);
+            });
+
+            loading.style.display = 'none';
+            modal.style.display = 'block';
+            confirmButton.disabled = true;
+        }
+
+        // Preview selected avatar
+        function previewAvatar(style) {
+            const previewAvatar = document.getElementById('previewAvatar');
+            previewAvatar.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
+            selectedAvatarStyle = style;
+            updateAvatarSelectionUI(style);
+            document.getElementById('confirmAvatar').disabled = false;
+        }
+
+        // Update avatar selection UI
+        function updateAvatarSelectionUI(selectedStyle) {
+            const avatarOptions = document.querySelectorAll('.avatar-option');
+            avatarOptions.forEach(option => {
+                option.classList.remove('selected');
+                if (option.dataset.style === selectedStyle) {
+                    option.classList.add('selected');
+                }
+            });
+        }
+
+        // Close avatar selection modal
+        function closeAvatarSelection() {
+            document.getElementById('avatarSelection').style.display = 'none';
+            selectedAvatarStyle = '<?php echo $avatar_style; ?>';
+            updateAvatarSelectionUI(selectedAvatarStyle);
+            document.getElementById('previewAvatar').src = '<?php echo htmlspecialchars($avatar_url); ?>';
+            document.getElementById('confirmAvatar').disabled = true;
+        }
+
+        // Save selected avatar
+        document.getElementById('confirmAvatar').addEventListener('click', () => {
+            const loading = document.getElementById('avatarLoading');
+            loading.style.display = 'block';
+
+            fetch('update_avatar.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'avatar_style=' + encodeURIComponent(selectedAvatarStyle)
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                loading.style.display = 'none';
+                if (data.status === 'success') {
+                    const userAvatar = document.getElementById('userAvatar');
+                    userAvatar.src = `https://api.dicebear.com/8.x/${selectedAvatarStyle}/svg?seed=${<?php echo $user_id; ?>}`;
+                    closeAvatarSelection();
+                } else {
+                    console.error('Failed to update avatar:', data.message);
+                }
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                console.error('Error updating avatar:', error);
+            });
+        });
+
         // Toggle saldo visibility
         document.addEventListener('DOMContentLoaded', function() {
             const toggleBtn = document.getElementById('toggleBalance');
@@ -1642,18 +1808,9 @@ $daily_quote = $quotes[$day_index];
                     balanceElement.textContent = finalBalance.toLocaleString('id-ID');
                 }
             }
-            updateBalance();
-
-            // Toggle transactions visibility
-            const toggleTransactionsBtn = document.getElementById('toggleTransactions');
-            const tableContainer = document.getElementById('tableContainer');
-            const pagination = document.querySelector('.pagination');
-            
-            toggleTransactionsBtn.addEventListener('click', function() {
-                tableContainer.classList.toggle('active');
-                pagination.classList.toggle('active');
-                toggleTransactionsBtn.textContent = tableContainer.classList.contains('active') ? 'Sembunyikan' : 'Tampilkan';
-            });
+            if (!balanceContainer.classList.contains('balance-hidden')) {
+                updateBalance();
+            }
         });
 
         // Copy rekening number
@@ -1680,6 +1837,7 @@ $daily_quote = $quotes[$day_index];
             if (dropdownContent.style.display === 'block') {
                 dropdownContent.style.display = 'none';
             }
+            closeAvatarSelection();
         });
 
         // Initialize swipe to delete and click to read
@@ -1804,17 +1962,17 @@ $daily_quote = $quotes[$day_index];
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    element.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
-                    element.style.transform = 'translateX(-100%)';
-                    element.style.opacity = '0';
-                    setTimeout(() => {
-                        element.remove();
-                        updateNotificationBadge();
+                    element.remove();
+                    updateNotificationBadge();
+                    const notificationItems = document.querySelectorAll('.notification-item');
+                    if (notificationItems.length === 0) {
                         const dropdownContent = document.querySelector('.notification-dropdown-content');
-                        if (dropdownContent.querySelectorAll('.notification-item').length === 0) {
-                            dropdownContent.innerHTML = '<div class="notification-item"><div class="notification-message">Tidak ada notifikasi baru</div></div>';
-                        }
-                    }, 300);
+                        dropdownContent.innerHTML = `
+                            <div class="notification-item">
+                                <div class="notification-message">Tidak ada notifikasi baru</div>
+                            </div>
+                        `;
+                    }
                 } else {
                     console.error('Failed to delete notification:', data.message);
                 }
@@ -1822,56 +1980,20 @@ $daily_quote = $quotes[$day_index];
             .catch(error => console.error('Error deleting notification:', error));
         }
 
-        // Update notification badge
+        // Update notification badge (corrected to match s1 behavior)
         function updateNotificationBadge() {
             fetch('check_notifications.php')
                 .then(response => response.json())
                 .then(data => {
                     const badge = document.querySelector('.notification-badge');
-                    if (data.unread > 0) {
-                        if (badge) {
-                            badge.textContent = data.unread;
-                        } else {
-                            const notificationLink = document.querySelector('.notification-toggle');
-                            notificationLink.insertAdjacentHTML('beforeend', `<span class="notification-badge">${data.unread}</span>`);
-                        }
+                    if (data.unread_count > 0) {
+                        badge.textContent = data.unread_count;
+                        badge.style.display = 'flex';
                     } else {
-                        if (badge) badge.remove();
+                        badge.style.display = 'none';
                     }
                 })
-                .catch(error => console.error('Error updating badge:', error));
-        }
-
-        // Check for new notifications
-        function checkNewNotifications() {
-            fetch('check_notifications.php')
-                .then(response => response.json())
-                .then(data => {
-                    const dropdownContent = document.querySelector('.notification-dropdown-content');
-                    if (data.notifications.length > 0) {
-                        dropdownContent.innerHTML = '';
-                        data.notifications.forEach(notification => {
-                            const notificationItem = document.createElement('div');
-                            notificationItem.className = `notification-item ${notification.is_read ? '' : 'unread'}`;
-                            notificationItem.dataset.id = notification.id;
-                            notificationItem.innerHTML = `
-                                <a href="#" class="notification-link">
-                                    <div class="notification-message">${notification.message}</div>
-                                    <div class="notification-time">${new Date(notification.created_at).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-                                </a>
-                                <button class="swipe-delete">Hapus</button>
-                            `;
-                            dropdownContent.appendChild(notificationItem);
-                        });
-                        initializeSwipe();
-                        updateNotificationBadge();
-                    } else {
-                        dropdownContent.innerHTML = '<div class="notification-item"><div class="notification-message">Tidak ada notifikasi baru</div></div>';
-                        const badge = document.querySelector('.notification-badge');
-                        if (badge) badge.remove();
-                    }
-                })
-                .catch(error => console.error('Error checking notifications:', error));
+                .catch(error => console.error('Error updating notification badge:', error));
         }
 
         // Toggle notification dropdown
@@ -1879,9 +2001,6 @@ $daily_quote = $quotes[$day_index];
             e.preventDefault();
             const dropdownContent = document.querySelector('.notification-dropdown-content');
             dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block';
-            if (dropdownContent.style.display === 'block') {
-                checkNewNotifications();
-            }
         });
 
         // Close dropdown when clicking outside
@@ -1893,26 +2012,58 @@ $daily_quote = $quotes[$day_index];
             }
         });
 
-        // Periodically check for new notifications
-        setInterval(checkNewNotifications, 60000);
+        // Prevent dropdown from closing when clicking inside
+        document.querySelector('.notification-dropdown-content').addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
 
         // Initialize swipe on page load
         initializeSwipe();
 
-        // Load page for pagination
-        function loadPage(page) {
-            window.location.href = `dashboard.php?page=${page}`;
-        }
+        // Lazy load images
+        document.addEventListener('DOMContentLoaded', () => {
+            const images = document.querySelectorAll('img');
+            if ('IntersectionObserver' in window) {
+                const observer = new IntersectionObserver((entries, observer) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const img = entry.target;
+                            img.src = img.dataset.src || img.src;
+                            observer.unobserve(img);
+                        }
+                    });
+                });
+                images.forEach(img => observer.observe(img));
+            } else {
+                images.forEach(img => img.src = img.dataset.src || img.src);
+            }
+        });
 
-        // Detail toggle for transactions
-        document.querySelectorAll('.detail-toggle').forEach(button => {
-            button.addEventListener('click', function() {
-                const detailRow = this.closest('tr').nextElementSibling;
-                if (detailRow && detailRow.classList.contains('detail-row')) {
-                    detailRow.classList.toggle('hidden-detail');
-                    this.textContent = detailRow.classList.contains('hidden-detail') ? 'Lihat Detail' : 'Sembunyikan';
+        // Optimize scroll performance
+        let isScrolling;
+        window.addEventListener('scroll', () => {
+            clearTimeout(isScrolling);
+            isScrolling = setTimeout(() => {
+                // Add any scroll-related optimizations here
+            }, 150);
+        }, { passive: true });
+
+        // Prevent text selection on double-click
+        document.addEventListener('mousedown', (e) => {
+            if (e.detail > 1) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Keyboard accessibility for avatar selection
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeAvatarSelection();
+                const dropdownContent = document.querySelector('.notification-dropdown-content');
+                if (dropdownContent.style.display === 'block') {
+                    dropdownContent.style.display = 'none';
                 }
-            });
+            }
         });
     </script>
 </body>

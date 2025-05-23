@@ -1,104 +1,162 @@
 <?php
-session_start();
 require_once '../../includes/db_connection.php';
+date_default_timezone_set('Asia/Jakarta');
 
-$error = '';
-$success = '';
+// Initialize variables
+$token = filter_input(INPUT_GET, 'token', FILTER_UNSAFE_RAW) ?? '';
+$token = trim(preg_replace('/[^a-f0-9]/i', '', $token)); // Sanitize to alphanumeric (hex) only
+$error_message = '';
+$success_message = '';
+$user_data = null;
 $verification_success = false;
-$otp_target = ''; // Untuk menyimpan email atau nomor WhatsApp tujuan OTP
-$otp_type = ''; // Untuk menentukan jenis perubahan: 'email' atau 'no_wa'
 
 // Check for session-stored messages from previous submission
+session_start();
 if (isset($_SESSION['otp_success'])) {
-    $success = $_SESSION['otp_success'];
+    $success_message = $_SESSION['otp_success'];
     $verification_success = true;
     unset($_SESSION['otp_success']);
     // Set redirect header for success case
-    header("Refresh: 3; url=../../pages/siswa/profil.php");
+    header("Refresh: 3; url=../login.php");
 } elseif (isset($_SESSION['otp_error'])) {
-    $error = $_SESSION['otp_error'];
+    $error_message = $_SESSION['otp_error'];
     unset($_SESSION['otp_error']);
 }
 
-// Tentukan jenis perubahan dan target OTP
-if (isset($_SESSION['new_email']) && !empty($_SESSION['new_email'])) {
-    $otp_type = 'email';
-    $otp_target = $_SESSION['new_email'];
-} elseif (isset($_SESSION['new_no_wa']) || $_SESSION['new_no_wa'] === '') {
-    $otp_type = 'no_wa';
-    // Ambil nomor WhatsApp tujuan OTP dari user saat ini jika menghapus
-    if ($_SESSION['new_no_wa'] === '') {
-        $query = "SELECT no_wa FROM users WHERE id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $_SESSION['user_id']);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $user = $result->fetch_assoc();
-        $otp_target = $user['no_wa'] ?? '';
-    } else {
-        $otp_target = $_SESSION['new_no_wa'];
-    }
+// Verify token
+if (empty($token)) {
+    $error_message = "Token tidak valid atau telah kedaluarsa.";
+} elseif (strlen($token) !== 64 || !preg_match('/^[a-f0-9]{64}$/i', $token)) {
+    $error_message = "Format token tidak valid.";
 } else {
-    // Jika tidak ada sesi new_email atau new_no_wa, redirect ke profil
-    $_SESSION['otp_error'] = "Sesi verifikasi tidak valid. Silakan coba lagi.";
-    header("Location: ../../pages/siswa/profil.php");
-    exit();
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Combine all OTP inputs into one string
-    $otp = '';
-    for ($i = 1; $i <= 6; $i++) {
-        $otp .= isset($_POST['otp' . $i]) ? trim($_POST['otp' . $i]) : '';
-    }
-
-    // Validasi input OTP
-    if (empty($otp) || strlen($otp) !== 6 || !ctype_digit($otp)) {
-        $_SESSION['otp_error'] = "Kode OTP harus terdiri dari 6 digit angka!";
+    // Check token in database
+    $query = "SELECT pr.*, u.nama, u.id AS user_id, u.email, u.otp, u.otp_expiry 
+              FROM password_reset pr
+              JOIN users u ON pr.user_id = u.id
+              WHERE pr.token = ? AND pr.expiry > NOW()";
+    $stmt = $conn->prepare($query);
+    
+    if ($stmt === false) {
+        error_log("Prepare failed: " . $conn->error);
+        $error_message = "Terjadi kesalahan sistem. Silakan coba lagi nanti.";
     } else {
-        // Fetch OTP from database
-        $query = "SELECT otp, otp_expiry FROM users WHERE id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $_SESSION['user_id']);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $user = $result->fetch_assoc();
-
-        if ($user && $user['otp'] === $otp && strtotime($user['otp_expiry']) > time()) {
-            // OTP valid, lakukan pembaruan berdasarkan jenis perubahan
-            if ($otp_type === 'email') {
-                $new_email = $_SESSION['new_email'];
-                $update_query = "UPDATE users SET email = ?, otp = NULL, otp_expiry = NULL WHERE id = ?";
-                $update_stmt = $conn->prepare($update_query);
-                $update_stmt->bind_param("si", $new_email, $_SESSION['user_id']);
-
-                if ($update_stmt->execute()) {
-                    $_SESSION['otp_success'] = "Email berhasil diperbarui menjadi: " . htmlspecialchars($new_email);
-                    unset($_SESSION['new_email']);
-                } else {
-                    $_SESSION['otp_error'] = "Gagal memperbarui email. Silakan coba lagi.";
-                }
-            } elseif ($otp_type === 'no_wa') {
-                $new_no_wa = $_SESSION['new_no_wa'] === '' ? NULL : $_SESSION['new_no_wa'];
-                $update_query = "UPDATE users SET no_wa = ?, otp = NULL, otp_expiry = NULL WHERE id = ?";
-                $update_stmt = $conn->prepare($update_query);
-                $update_stmt->bind_param("si", $new_no_wa, $_SESSION['user_id']);
-
-                if ($update_stmt->execute()) {
-                    $success_message = $new_no_wa === NULL ? "Nomor WhatsApp berhasil dihapus." : "Nomor WhatsApp berhasil diperbarui menjadi: " . htmlspecialchars($new_no_wa);
-                    $_SESSION['otp_success'] = $success_message;
-                    unset($_SESSION['new_no_wa']);
-                } else {
-                    $_SESSION['otp_error'] = "Gagal memperbarui nomor WhatsApp. Silakan coba lagi.";
+        $stmt->bind_param("s", $token);
+        if (!$stmt->execute()) {
+            error_log("Execute failed: " . $stmt->error);
+            $error_message = "Terjadi kesalahan sistem. Silakan coba lagi nanti.";
+        } else {
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows === 0) {
+                error_log("Invalid or expired token: $token");
+                $error_message = "Token tidak valid atau telah kedaluarsa.";
+            } else {
+                $user_data = $result->fetch_assoc();
+                if (empty($user_data['new_email']) || empty($user_data['otp'])) {
+                    $error_message = "Data pemulihan tidak lengkap. Silakan ulangi proses.";
                 }
             }
+        }
+        $stmt->close();
+    }
+}
+
+// Process form submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($user_data)) {
+    // Combine all OTP inputs into one string
+    $entered_otp = '';
+    for ($i = 1; $i <= 6; $i++) {
+        $entered_otp .= $_POST['otp' . $i] ?? '';
+    }
+    
+    // Validate OTP
+    if (empty($entered_otp) || !preg_match('/^[0-9]{6}$/', $entered_otp)) {
+        $_SESSION['otp_error'] = "OTP harus berupa 6 digit angka.";
+    } else {
+        // Check rate limit for OTP attempts
+        $cooldown_query = "SELECT COUNT(*) as attempts 
+                          FROM reset_request_cooldown 
+                          WHERE user_id = ? AND method = 'otp' 
+                          AND last_reset_request > NOW() - INTERVAL 1 HOUR";
+        $cooldown_stmt = $conn->prepare($cooldown_query);
+        if ($cooldown_stmt === false) {
+            error_log("Prepare failed for cooldown check: " . $conn->error);
+            $_SESSION['otp_error'] = "Terjadi kesalahan sistem. Silakan coba lagi nanti.";
         } else {
-            $_SESSION['otp_error'] = "Kode OTP tidak valid atau telah kedaluwarsa!";
+            $cooldown_stmt->bind_param("i", $user_data['user_id']);
+            $cooldown_stmt->execute();
+            $cooldown_result = $cooldown_stmt->get_result()->fetch_assoc();
+            
+            if ($cooldown_result['attempts'] >= 5) {
+                $_SESSION['otp_error'] = "Terlalu banyak percobaan OTP. Silakan coba lagi dalam satu jam.";
+            } else {
+                // Log OTP attempt
+                $upsert_query = "INSERT INTO reset_request_cooldown (user_id, method, last_reset_request) 
+                                VALUES (?, 'otp', NOW()) 
+                                ON DUPLICATE KEY UPDATE last_reset_request = NOW()";
+                $upsert_stmt = $conn->prepare($upsert_query);
+                if ($upsert_stmt === false) {
+                    error_log("Prepare failed for cooldown upsert: " . $conn->error);
+                    $_SESSION['otp_error'] = "Terjadi kesalahan sistem. Silakan coba lagi nanti.";
+                } else {
+                    $upsert_stmt->bind_param("i", $user_data['user_id']);
+                    $upsert_stmt->execute();
+                    $upsert_stmt->close();
+                    
+                    // Verify OTP
+                    if ($user_data['otp_expiry'] < date('Y-m-d H:i:s')) {
+                        $_SESSION['otp_error'] = "OTP telah kedaluarsa. Silakan ulangi proses pemulihan.";
+                    } elseif ($user_data['otp'] !== $entered_otp) {
+                        $_SESSION['otp_error'] = "OTP tidak valid.";
+                    } else {
+                        // Update email
+                        $update_query = "UPDATE users SET email = ?, otp = NULL, otp_expiry = NULL WHERE id = ?";
+                        $update_stmt = $conn->prepare($update_query);
+                        if ($update_stmt === false) {
+                            error_log("Prepare failed for email update: " . $conn->error);
+                            $_SESSION['otp_error'] = "Terjadi kesalahan sistem. Silakan coba lagi nanti.";
+                        } else {
+                            $update_stmt->bind_param("si", $user_data['new_email'], $user_data['user_id']);
+                            if ($update_stmt->execute()) {
+                                // Log activity
+                                $log_query = "INSERT INTO log_aktivitas (petugas_id, siswa_id, jenis_pemulihan, nilai_baru, waktu, alasan) 
+                                             VALUES (?, ?, 'email', ?, NOW(), 'Pemulihan email melalui OTP')";
+                                $log_stmt = $conn->prepare($log_query);
+                                if ($log_stmt) {
+                                    $petugas_id = $user_data['user_id']; // User acts as their own petugas
+                                    $log_stmt->bind_param("iis", $petugas_id, $user_data['user_id'], $user_data['new_email']);
+                                    $log_stmt->execute();
+                                    $log_stmt->close();
+                                } else {
+                                    error_log("Prepare failed for log_aktivitas: " . $conn->error);
+                                }
+                                
+                                // Clear password_reset entry
+                                $delete_query = "DELETE FROM password_reset WHERE token = ?";
+                                $delete_stmt = $conn->prepare($delete_query);
+                                if ($delete_stmt) {
+                                    $delete_stmt->bind_param("s", $token);
+                                    $delete_stmt->execute();
+                                    $delete_stmt->close();
+                                } else {
+                                    error_log("Prepare failed for token deletion: " . $conn->error);
+                                }
+                                
+                                $_SESSION['otp_success'] = "Email berhasil diubah menjadi: " . htmlspecialchars($user_data['new_email']);
+                            } else {
+                                error_log("Failed to update email for user_id {$user_data['user_id']}: " . $update_stmt->error);
+                                $_SESSION['otp_error'] = "Gagal mengubah email. Silakan coba lagi.";
+                            }
+                            $update_stmt->close();
+                        }
+                    }
+                }
+            }
+            $cooldown_stmt->close();
         }
     }
-
-    // Redirect untuk mencegah resubmission
-    header("Location: " . $_SERVER['PHP_SELF']);
+    // Redirect to prevent form resubmission
+    header("Location: " . $_SERVER['PHP_SELF'] . "?token=" . urlencode($token));
     exit();
 }
 ?>
@@ -106,9 +164,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Verifikasi OTP - SCHOBANK SYSTEM</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Verifikasi OTP - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
@@ -199,8 +257,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 8px;
             background: #fbfdff;
             transition: var(--transition);
-            -webkit-user-select: text;
-            user-select: text;
         }
 
         .otp-inputs input:focus {
@@ -370,49 +426,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <i class="fas fa-check-circle success-icon"></i>
             <div class="success-message" id="success-alert">
                 <i class="fas fa-check-circle"></i>
-                <?php echo htmlspecialchars($success); ?>
+                <?php echo htmlspecialchars($success_message); ?>
             </div>
-            <p>
-                <?php echo $otp_type === 'email' ? 
-                    'Email Anda telah berhasil diperbarui.' : 
-                    'Nomor WhatsApp Anda telah berhasil diperbarui.'; ?>
-                Anda akan diarahkan ke halaman profil dalam 3 detik...
-            </p>
-            <a href="../../pages/siswa/profil.php" class="back-button">Kembali ke Profil</a>
-        <?php else: ?>
-            <p>
-                Masukkan kode OTP yang telah dikirim ke 
-                <?php echo $otp_type === 'email' ? 
-                    'email Anda: ' . htmlspecialchars($otp_target) : 
-                    'nomor WhatsApp Anda: ' . htmlspecialchars($otp_target); ?>.
-            </p>
+            <p>Email Anda telah berhasil diubah. Anda akan diarahkan ke halaman login dalam 3 detik...</p>
+            <a href="../login.php" class="back-button">Kembali ke Login</a>
+        <?php elseif ($user_data): ?>
+            <p>Masukkan kode OTP yang telah dikirim ke email baru Anda, <strong><?php echo htmlspecialchars($user_data['nama']); ?></strong>.</p>
 
-            <?php if (!empty($error)): ?>
+            <?php if (!empty($error_message)): ?>
                 <div class="error-message" id="error-alert">
                     <i class="fas fa-exclamation-circle"></i>
-                    <?php echo htmlspecialchars($error); ?>
+                    <?php echo htmlspecialchars($error_message); ?>
                 </div>
             <?php endif; ?>
 
-            <form method="POST" id="otpForm">
+            <form method="POST" id="otpForm" action="<?php echo htmlspecialchars($_SERVER['PHP_SELF'] . '?token=' . urlencode($token)); ?>">
                 <div class="otp-inputs">
                     <?php for ($i = 1; $i <= 6; $i++): ?>
-                        <input type="tel" inputmode="numeric" name="otp<?= $i ?>" maxlength="1" 
-                               class="otp-input" data-index="<?= $i ?>" 
-                               pattern="[0-9]" required>
+                        <input type="tel" inputmode="numeric" name="otp<?php echo $i; ?>" maxlength="1" oninput="moveToNext(this, <?php echo $i; ?>)" onkeydown="moveToPrevious(this, <?php echo $i; ?>)" pattern="[0-9]" required>
                     <?php endfor; ?>
                 </div>
                 <button type="submit" id="verifyButton">
                     <span class="button-text">Verifikasi</span>
                 </button>
             </form>
-            <a href="../../pages/siswa/profil.php" class="back-button">Batal</a>
+            <a href="../login.php" class="back-button">Batal</a>
+        <?php else: ?>
+            <p>Link verifikasi tidak valid atau telah kedaluarsa.</p>
+            <div class="error-message" id="error-alert">
+                <i class="fas fa-exclamation-circle"></i>
+                <?php echo htmlspecialchars($error_message); ?>
+            </div>
+            <a href="../../index.php" class="back-button">Kembali ke Beranda</a>
         <?php endif; ?>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Mencegah zoom
+            // Prevent zoom
             document.addEventListener('wheel', (e) => {
                 if (e.ctrlKey) e.preventDefault();
             }, { passive: false });
@@ -435,42 +486,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 e.preventDefault();
             });
 
-            // Penanganan formulir
+            // Form handling
             const otpForm = document.getElementById('otpForm');
             const verifyButton = document.getElementById('verifyButton');
             const errorAlert = document.getElementById('error-alert');
             const successAlert = document.getElementById('success-alert');
-            const otpInputs = document.querySelectorAll('.otp-inputs input');
 
             if (otpForm && verifyButton) {
-                otpForm.addEventListener('submit', function(e) {
-                    // Validasi semua input diisi dan hanya angka
-                    let isValid = true;
-                    otpInputs.forEach(input => {
-                        if (!input.value.match(/^[0-9]$/)) {
-                            isValid = false;
-                        }
-                    });
-
-                    if (!isValid) {
-                        e.preventDefault();
-                        const errorDiv = document.createElement('div');
-                        errorDiv.className = 'error-message';
-                        errorDiv.innerHTML = '<i class="fas fa-exclamation-circle"></i> Masukkan 6 digit angka!';
-                        document.querySelector('.otp-container').insertBefore(errorDiv, otpForm);
-                        setTimeout(() => {
-                            errorDiv.classList.add('fade-out');
-                            setTimeout(() => errorDiv.remove(), 500);
-                        }, 3000);
-                        return;
-                    }
-
+                otpForm.addEventListener('submit', function() {
                     verifyButton.classList.add('loading');
                     verifyButton.disabled = true;
                 });
             }
 
-            // Auto-dismiss pesan
+            // Auto-dismiss messages
             if (errorAlert) {
                 setTimeout(() => {
                     errorAlert.classList.add('fade-out');
@@ -488,76 +517,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     successAlert.style.display = 'none';
                 }, 3500);
             }
-
-            // Navigasi antar input OTP
-            otpInputs.forEach((input, index) => {
-                input.addEventListener('input', (e) => {
-                    const value = e.target.value;
-                    // Hanya izinkan angka
-                    if (value && !/^[0-9]$/.test(value)) {
-                        e.target.value = '';
-                        return;
-                    }
-
-                    // Pindah ke input berikutnya jika sudah diisi
-                    if (value && index < otpInputs.length - 1) {
-                        otpInputs[index + 1].focus();
-                    }
-
-                    // Jika ini adalah input terakhir, fokus tetap di sini
-                    if (index === otpInputs.length - 1) {
-                        input.blur();
-                    }
-                });
-
-                input.addEventListener('keydown', (e) => {
-                    const currentIndex = index;
-
-                    // Pindah ke input sebelumnya saat tombol Backspace ditekan
-                    if (e.key === 'Backspace' && !input.value && currentIndex > 0) {
-                        otpInputs[currentIndex - 1].focus();
-                        otpInputs[currentIndex - 1].value = '';
-                    }
-
-                    // Pindah ke input berikutnya saat tombol panah kanan ditekan
-                    if (e.key === 'ArrowRight' && currentIndex < otpInputs.length - 1) {
-                        e.preventDefault();
-                        otpInputs[currentIndex + 1].focus();
-                    }
-
-                    // Pindah ke input sebelumnya saat tombol panah kiri ditekan
-                    if (e.key === 'ArrowLeft' && currentIndex > 0) {
-                        e.preventDefault();
-                        otpInputs[currentIndex - 1].focus();
-                    }
-                });
-
-                // Menangani paste OTP
-                input.addEventListener('paste', (e) => {
-                    e.preventDefault();
-                    const pastedData = (e.clipboardData || window.clipboardData).getData('text').trim();
-                    if (/^\d{1,6}$/.test(pastedData)) {
-                        const digits = pastedData.split('');
-                        otpInputs.forEach((inp, i) => {
-                            if (i < digits.length) {
-                                inp.value = digits[i];
-                            } else {
-                                inp.value = '';
-                            }
-                        });
-                        // Fokus ke input terakhir yang diisi atau input terakhir
-                        const lastFilledIndex = Math.min(digits.length - 1, otpInputs.length - 1);
-                        otpInputs[lastFilledIndex].focus();
-                    }
-                });
-            });
-
-            // Fokus otomatis pada input pertama saat halaman dimuat
-            const firstInput = document.querySelector('input[name="otp1"]');
-            if (firstInput) {
-                firstInput.focus();
-            }
         });
+
+        function moveToNext(input, currentIndex) {
+            if (input.value.length === 1 && /[0-9]/.test(input.value)) {
+                const nextInput = document.querySelector(`input[name="otp${currentIndex + 1}"]`);
+                if (nextInput) {
+                    nextInput.focus();
+                }
+            } else {
+                input.value = ''; // Clear non-numeric input
+            }
+        }
+
+        function moveToPrevious(input, currentIndex) {
+            if (event.key === 'Backspace' && input.value.length === 0) {
+                const previousInput = document.querySelector(`input[name="otp${currentIndex - 1}"]`);
+                if (previousInput) {
+                    previousInput.focus();
+                }
+            }
+        }
     </script>
 </body>
 </html>

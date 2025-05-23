@@ -45,7 +45,7 @@ if ($user_data['is_frozen']) {
         /* Body styles */
         body {
             font-family: 'Poppins', sans-serif;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f1f5f9 100%);
             color: #333;
             display: flex;
             flex-direction: column;
@@ -81,11 +81,12 @@ if ($user_data['is_frozen']) {
             color: white;
             font-size: 24px;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, transform 0.2s;
         }
 
         .back-btn:hover {
             opacity: 0.8;
+            transform: scale(1.1);
         }
 
         .back-btn i {
@@ -99,45 +100,63 @@ if ($user_data['is_frozen']) {
             align-items: center;
             justify-content: center;
             flex-grow: 1;
-            padding: 20px;
+            padding: 24px;
             margin-top: 70px; /* Account for fixed nav */
             text-align: center;
-            max-width: 500px;
+            max-width: 512px;
             margin-left: auto;
             margin-right: auto;
+        }
+
+        /* Inner card container */
+        .error-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            border: 1px solid #e5e7eb;
+            animation: slideUp 0.8s ease-out;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
 
         .error-icon {
             font-size: 64px;
             color: #d32f2f;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+            animation: pulse 2s infinite ease-in-out;
         }
 
-        .error-container h2 {
+        .error-card h2 {
             font-size: 24px;
             font-weight: 600;
             color: #0a2e5c;
             margin-bottom: 16px;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
         }
 
-        .error-container h2 i {
+        .error-card h2 i {
             color: #d32f2f;
         }
 
-        .error-container p {
+        .error-card p {
             font-size: 16px;
-            color: #666;
-            line-height: 1.5;
+            color: #4b5563;
+            line-height: 1.6;
             margin-bottom: 24px;
+            animation: fadeIn 1s ease-out;
         }
 
         /* Contact button */
         .contact-btn {
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
             background-color: #0a2e5c;
             color: white;
@@ -148,6 +167,8 @@ if ($user_data['is_frozen']) {
             border-radius: 8px;
             cursor: pointer;
             transition: background-color 0.2s, transform 0.1s;
+            animation: fadeIn 1s ease-out;
+            width: fit-content;
         }
 
         .contact-btn:hover {
@@ -162,8 +183,42 @@ if ($user_data['is_frozen']) {
             font-size: 18px;
         }
 
+        /* Animations */
+        @keyframes slideUp {
+            from {
+                transform: translateY(24px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.08);
+            }
+        }
+
         /* Responsive adjustments */
-        @media (max-width: 480px) {
+        @media (max-width: 768px) {
+            .top-nav {
+                padding: 10px 12px;
+            }
+
             .top-nav h1 {
                 font-size: 18px;
             }
@@ -176,15 +231,26 @@ if ($user_data['is_frozen']) {
                 font-size: 20px;
             }
 
-            .error-icon {
-                font-size: 48px;
+            .error-container {
+                padding: 16px;
+                margin-top: 60px;
+                max-width: 448px;
             }
 
-            .error-container h2 {
+            .error-card {
+                padding: 24px;
+            }
+
+            .error-icon {
+                font-size: 56px;
+                margin-bottom: 20px;
+            }
+
+            .error-card h2 {
                 font-size: 20px;
             }
 
-            .error-container p {
+            .error-card p {
                 font-size: 14px;
             }
 
@@ -195,6 +261,62 @@ if ($user_data['is_frozen']) {
 
             .contact-btn i {
                 font-size: 16px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .top-nav {
+                padding: 8px 10px;
+            }
+
+            .top-nav h1 {
+                font-size: 16px;
+            }
+
+            .back-btn {
+                font-size: 18px;
+            }
+
+            .back-btn i {
+                font-size: 18px;
+            }
+
+            .error-container {
+                padding: 12px;
+                margin-top: 56px;
+                max-width: 90%;
+            }
+
+            .error-card {
+                padding: 16px;
+            }
+
+            .error-icon {
+                font-size: 48px;
+                margin-bottom: 16px;
+            }
+
+            .error-card h2 {
+                font-size: 18px;
+                gap: 6px;
+            }
+
+            .error-card h2 i {
+                font-size: 16px;
+            }
+
+            .error-card p {
+                font-size: 13px;
+                margin-bottom: 16px;
+            }
+
+            .contact-btn {
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+
+            .contact-btn i {
+                font-size: 14px;
             }
         }
     </style>
@@ -208,12 +330,14 @@ if ($user_data['is_frozen']) {
         <div style="width: 40px;"></div>
     </nav>
     <div class="error-container">
-        <i class="fas fa-lock error-icon"></i>
-        <h2><i class="fas fa-exclamation-triangle"></i> Akun Dinonaktifkan</h2>
-        <p><?php echo htmlspecialchars($error); ?></p>
-        <button class="contact-btn" onclick="window.location.href='contact_admin.php'">
-            <i class="fas fa-headset"></i> Hubungi Admin
-        </button>
+        <div class="error-card">
+            <i class="fas fa-lock error-icon"></i>
+            <h2><i class="fas fa-exclamation-triangle"></i> Akun Dinonaktifkan</h2>
+            <p><?php echo htmlspecialchars($error); ?></p>
+            <button class="contact-btn" onclick="window.location.href='contact_admin.php'">
+                <i class="fas fa-headset"></i> Hubungi Admin
+            </button>
+        </div>
     </div>
 </body>
 </html>
@@ -246,7 +370,7 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
         /* Body styles */
         body {
             font-family: 'Poppins', sans-serif;
-            background-color: #f5f5f5;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f1f5f9 100%);
             color: #333;
             display: flex;
             flex-direction: column;
@@ -282,11 +406,12 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
             color: white;
             font-size: 24px;
             cursor: pointer;
-            transition: opacity 0.2s;
+            transition: opacity 0.2s, transform 0.2s;
         }
 
         .back-btn:hover {
             opacity: 0.8;
+            transform: scale(1.1);
         }
 
         .back-btn i {
@@ -300,42 +425,90 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
             align-items: center;
             justify-content: center;
             flex-grow: 1;
-            padding: 20px;
+            padding: 24px;
             margin-top: 70px; /* Account for fixed nav */
             text-align: center;
-            max-width: 500px;
+            max-width: 512px;
             margin-left: auto;
             margin-right: auto;
+        }
+
+        /* Inner card container */
+        .error-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            border: 1px solid #e5e7eb;
+            animation: slideUp 0.8s ease-out;
         }
 
         .error-icon {
             font-size: 64px;
             color: #d32f2f;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
+            animation: pulse 2s infinite ease-in-out;
         }
 
-        .error-container h2 {
+        .error-card h2 {
             font-size: 24px;
             font-weight: 600;
             color: #0a2e5c;
             margin-bottom: 16px;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
         }
 
-        .error-container h2 i {
+        .error-card h2 i {
             color: #d32f2f;
         }
 
-        .error-container p {
+        .error-card p {
             font-size: 16px;
-            color: #666;
-            line-height: 1.5;
+            color: #4b5563;
+            line-height: 1.6;
+            animation: fadeIn 1s ease-out;
+        }
+
+        /* Animations */
+        @keyframes slideUp {
+            from {
+                transform: translateY(24px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.08);
+            }
         }
 
         /* Responsive adjustments */
-        @media (max-width: 480px) {
+        @media (max-width: 768px) {
+            .top-nav {
+                padding: 10px 12px;
+            }
+
             .top-nav h1 {
                 font-size: 18px;
             }
@@ -348,16 +521,73 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
                 font-size: 20px;
             }
 
-            .error-icon {
-                font-size: 48px;
+            .error-container {
+                padding: 16px;
+                margin-top: 60px;
+                max-width: 448px;
             }
 
-            .error-container h2 {
+            .error-card {
+                padding: 24px;
+            }
+
+            .error-icon {
+                font-size: 56px;
+                margin-bottom: 20px;
+            }
+
+            .error-card h2 {
                 font-size: 20px;
             }
 
-            .error-container p {
+            .error-card p {
                 font-size: 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .top-nav {
+                padding: 8px 10px;
+            }
+
+            .top-nav h1 {
+                font-size: 16px;
+            }
+
+            .back-btn {
+                font-size: 18px;
+            }
+
+            .back-btn i {
+                font-size: 18px;
+            }
+
+            .error-container {
+                padding: 12px;
+                margin-top: 56px;
+                max-width: 90%;
+            }
+
+            .error-card {
+                padding: 16px;
+            }
+
+            .error-icon {
+                font-size: 48px;
+                margin-bottom: 16px;
+            }
+
+            .error-card h2 {
+                font-size: 18px;
+                gap: 6px;
+            }
+
+            .error-card h2 i {
+                font-size: 16px;
+            }
+
+            .error-card p {
+                font-size: 13px;
             }
         }
     </style>
@@ -371,9 +601,11 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
         <div style="width: 40px;"></div>
     </nav>
     <div class="error-container">
-        <i class="fas fa-lock error-icon"></i>
-        <h2><i class="fas fa-exclamation-triangle"></i> Akun Diblokir</h2>
-        <p><?php echo htmlspecialchars($error); ?></p>
+        <div class="error-card">
+            <i class="fas fa-lock error-icon"></i>
+            <h2><i class="fas fa-exclamation-triangle"></i> Akun Diblokir</h2>
+            <p><?php echo htmlspecialchars($error); ?></p>
+        </div>
     </div>
 </body>
 </html>
