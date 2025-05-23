@@ -84,17 +84,30 @@ $unread_result = $stmt_unread->get_result();
 $unread_row = $unread_result->fetch_assoc();
 $unread_notifications = $unread_row['unread'];
 
-// Fetch recent transactions (last 5)
+// Fetch recent transactions (last 5, including all types)
 $recent_transactions = [];
 if ($rekening_id) {
-    $query = "SELECT t.jenis_transaksi, t.jumlah, t.created_at, t.status, t.rekening_tujuan_id, 
-                     (SELECT u.nama FROM users u JOIN rekening r ON u.id = r.user_id WHERE r.id = t.rekening_tujuan_id) as nama_tujuan
+    $query = "SELECT 
+                t.jenis_transaksi, 
+                t.jumlah, 
+                t.created_at, 
+                t.status, 
+                t.rekening_tujuan_id, 
+                t.rekening_id,
+                r1.no_rekening as rekening_asal,
+                r2.no_rekening as rekening_tujuan,
+                u1.nama as nama_pengirim,
+                u2.nama as nama_penerima
               FROM transaksi t
-              WHERE t.rekening_id = ?
+              LEFT JOIN rekening r1 ON t.rekening_id = r1.id
+              LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
+              LEFT JOIN users u1 ON r1.user_id = u1.id
+              LEFT JOIN users u2 ON r2.user_id = u2.id
+              WHERE (t.rekening_id = ? OR t.rekening_tujuan_id = ?)
               ORDER BY t.created_at DESC
               LIMIT 5";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $rekening_id);
+    $stmt->bind_param("ii", $rekening_id, $rekening_id);
     $stmt->execute();
     $recent_transactions_result = $stmt->get_result();
     while ($row = $recent_transactions_result->fetch_assoc()) {
@@ -1103,6 +1116,7 @@ function formatIndonesianDate($date) {
             padding: clamp(1rem, 2vw, 1.5rem);
             position: relative;
             overflow: hidden;
+            margin-bottom: clamp(2rem, 4vw, 2.5rem); /* Added spacing */
         }
 
         .recent-transactions-header {
@@ -1302,6 +1316,7 @@ function formatIndonesianDate($date) {
             .recent-transactions {
                 margin: clamp(1rem, 2vw, 1.5rem);
                 padding: clamp(0.8rem, 1.5vw, 1rem);
+                margin-bottom: clamp(2rem, 4vw, 2.5rem); /* Added spacing */
             }
 
             .transaction-description {
@@ -1591,7 +1606,9 @@ function formatIndonesianDate($date) {
             <?php if (count($recent_transactions) > 0): ?>
                 <?php foreach ($recent_transactions as $transaction): ?>
                     <?php
-                        $is_incoming = $transaction['jenis_transaksi'] == 'setor';
+                        $is_incoming = ($transaction['jenis_transaksi'] == 'setor' || 
+                                       ($transaction['jenis_transaksi'] == 'transfer' && 
+                                        $transaction['rekening_tujuan'] == $no_rekening));
                         $description = '';
                         $icon_class = $is_incoming ? 'in' : 'out';
                         $amount_class = $is_incoming ? 'in' : 'out';
@@ -1599,18 +1616,14 @@ function formatIndonesianDate($date) {
                         $icon = $is_incoming ? 'fa-arrow-down' : 'fa-arrow-up';
 
                         if ($transaction['jenis_transaksi'] == 'setor') {
-                            $description = 'Setoran Tunai';
+                            $description = 'Setoran Tunai Tabungan';
                         } elseif ($transaction['jenis_transaksi'] == 'tarik') {
-                            $description = 'Penarikan';
+                            $description = 'Penarikan Tunai Saldo';
                         } elseif ($transaction['jenis_transaksi'] == 'transfer') {
-                            if ($transaction['nama_tujuan']) {
-                                $description = $is_incoming ? 
-                                    "Transfer Masuk dari " . htmlspecialchars($transaction['nama_tujuan']) : 
-                                    "Transfer Keluar ke " . htmlspecialchars($transaction['nama_tujuan']);
+                            if ($transaction['rekening_asal'] == $no_rekening) {
+                                $description = 'Transfer Keluar ke ' . htmlspecialchars($transaction['nama_penerima'] ?? 'N/A');
                             } else {
-                                $description = $is_incoming ? 
-                                    "Transfer Masuk dari Orang Tua" : 
-                                    "Transfer Keluar";
+                                $description = 'Transfer Masuk dari ' . htmlspecialchars($transaction['nama_pengirim'] ?? 'N/A');
                             }
                         }
                     ?>
@@ -1662,409 +1675,409 @@ function formatIndonesianDate($date) {
         </div>
     </div>
 
-    <script>
-        // Expanded student-friendly avatar styles
-        const avatarStyles = [
-            { style: 'avataaars', name: 'Pelajar Animasi' },
-            { style: 'open-peeps', name: 'Gaya Komik' },
-            { style: 'bottts', name: 'Robot Pelajar' },
-            { style: 'pixel-art', name: 'Pixel Pelajar' },
-            { style: 'adventurer', name: 'Petualang Belajar' },
-            { style: 'micah', name: 'Siswa Keren' },
-            { style: 'croodles', name: 'Doodle Pelajar' },
-            { style: 'lorelei', name: 'Pelajar Fantasi' }
-        ];
+<script>
+// Expanded student-friendly avatar styles
+const avatarStyles = [
+    { style: 'avataaars', name: 'Pelajar Animasi' },
+    { style: 'open-peeps', name: 'Gaya Komik' },
+    { style: 'bottts', name: 'Robot Pelajar' },
+    { style: 'pixel-art', name: 'Pixel Pelajar' },
+    { style: 'adventurer', name: 'Petualang Belajar' },
+    { style: 'micah', name: 'Siswa Keren' },
+    { style: 'croodles', name: 'Doodle Pelajar' },
+    { style: 'lorelei', name: 'Pelajar Fantasi' }
+];
 
-        let selectedAvatarStyle = '<?php echo $avatar_style; ?>';
+let selectedAvatarStyle = '<?php echo $avatar_style; ?>';
 
-        // Open avatar selection modal
-        function openAvatarSelection() {
-            const modal = document.getElementById('avatarSelection');
-            const grid = document.getElementById('avatarGrid');
-            const loading = document.getElementById('avatarLoading');
-            const confirmButton = document.getElementById('confirmAvatar');
-            grid.innerHTML = '';
-            loading.style.display = 'block';
+// Open avatar selection modal
+function openAvatarSelection() {
+    const modal = document.getElementById('avatarSelection');
+    const grid = document.getElementById('avatarGrid');
+    const loading = document.getElementById('avatarLoading');
+    const confirmButton = document.getElementById('confirmAvatar');
+    grid.innerHTML = '';
+    loading.style.display = 'block';
 
-            avatarStyles.forEach(({ style, name }) => {
-                const container = document.createElement('div');
-                container.className = 'avatar-option-container';
-                container.style.textAlign = 'center';
+    avatarStyles.forEach(({ style, name }) => {
+        const container = document.createElement('div');
+        container.className = 'avatar-option-container';
+        container.style.textAlign = 'center';
 
-                const img = document.createElement('img');
-                img.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
-                img.className = 'avatar-option';
-                img.dataset.style = style;
-                img.title = name;
-                if (style === selectedAvatarStyle) {
-                    img.classList.add('selected');
-                }
-                img.addEventListener('click', () => previewAvatar(style));
-
-                const label = document.createElement('div');
-                label.textContent = name;
-                label.style.fontSize = 'var(--font-size-xs)';
-                label.style.marginTop = '0.5rem';
-                label.style.color = '#1e3c72';
-
-                container.appendChild(img);
-                container.appendChild(label);
-                grid.appendChild(container);
-            });
-
-            loading.style.display = 'none';
-            modal.style.display = 'block';
-            confirmButton.disabled = true;
+        const img = document.createElement('img');
+        img.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
+        img.className = 'avatar-option';
+        img.dataset.style = style;
+        img.title = name;
+        if (style === selectedAvatarStyle) {
+            img.classList.add('selected');
         }
+        img.addEventListener('click', () => previewAvatar(style));
 
-        // Preview selected avatar
-        function previewAvatar(style) {
-            const previewAvatar = document.getElementById('previewAvatar');
-            previewAvatar.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
-            selectedAvatarStyle = style;
-            updateAvatarSelectionUI(style);
-            document.getElementById('confirmAvatar').disabled = false;
+        const label = document.createElement('div');
+        label.textContent = name;
+        label.style.fontSize = 'var(--font-size-xs)';
+        label.style.marginTop = '0.5rem';
+        label.style.color = '#1e3c72';
+
+        container.appendChild(img);
+        container.appendChild(label);
+        grid.appendChild(container);
+    });
+
+    loading.style.display = 'none';
+    modal.style.display = 'block';
+    confirmButton.disabled = true;
+}
+
+// Preview selected avatar
+function previewAvatar(style) {
+    const previewAvatar = document.getElementById('previewAvatar');
+    previewAvatar.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
+    selectedAvatarStyle = style;
+    updateAvatarSelectionUI(style);
+    document.getElementById('confirmAvatar').disabled = false;
+}
+
+// Update avatar selection UI
+function updateAvatarSelectionUI(selectedStyle) {
+    const avatarOptions = document.querySelectorAll('.avatar-option');
+    avatarOptions.forEach(option => {
+        option.classList.remove('selected');
+        if (option.dataset.style === selectedStyle) {
+            option.classList.add('selected');
         }
+    });
+}
 
-        // Update avatar selection UI
-        function updateAvatarSelectionUI(selectedStyle) {
-            const avatarOptions = document.querySelectorAll('.avatar-option');
-            avatarOptions.forEach(option => {
-                option.classList.remove('selected');
-                if (option.dataset.style === selectedStyle) {
-                    option.classList.add('selected');
-                }
-            });
+// Close avatar selection modal
+function closeAvatarSelection() {
+    document.getElementById('avatarSelection').style.display = 'none';
+    selectedAvatarStyle = '<?php echo $avatar_style; ?>';
+    updateAvatarSelectionUI(selectedAvatarStyle);
+    document.getElementById('previewAvatar').src = '<?php echo htmlspecialchars($avatar_url); ?>';
+    document.getElementById('confirmAvatar').disabled = true;
+}
+
+// Save selected avatar
+document.getElementById('confirmAvatar').addEventListener('click', () => {
+    const loading = document.getElementById('avatarLoading');
+    loading.style.display = 'block';
+
+    fetch('update_avatar.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'avatar_style=' + encodeURIComponent(selectedAvatarStyle)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-
-        // Close avatar selection modal
-        function closeAvatarSelection() {
-            document.getElementById('avatarSelection').style.display = 'none';
-            selectedAvatarStyle = '<?php echo $avatar_style; ?>';
-            updateAvatarSelectionUI(selectedAvatarStyle);
-            document.getElementById('previewAvatar').src = '<?php echo htmlspecialchars($avatar_url); ?>';
-            document.getElementById('confirmAvatar').disabled = true;
-        }
-
-        // Save selected avatar
-        document.getElementById('confirmAvatar').addEventListener('click', () => {
-            const loading = document.getElementById('avatarLoading');
-            loading.style.display = 'block';
-
-            fetch('update_avatar.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'avatar_style=' + encodeURIComponent(selectedAvatarStyle)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                loading.style.display = 'none';
-                if (data.status === 'success') {
-                    const userAvatar = document.getElementById('userAvatar');
-                    userAvatar.src = `https://api.dicebear.com/8.x/${selectedAvatarStyle}/svg?seed=${<?php echo $user_id; ?>}`;
-                    closeAvatarSelection();
-                } else {
-                    console.error('Failed to update avatar:', data.message);
-                }
-            })
-            .catch(error => {
-                loading.style.display = 'none';
-                console.error('Error updating avatar:', error);
-            });
-        });
-
-        // Toggle saldo visibility
-        document.addEventListener('DOMContentLoaded', function() {
-            const toggleBtn = document.getElementById('toggleBalance');
-            const balanceContainer = document.getElementById('balanceContainer');
-            const eyeIcon = document.getElementById('eyeIcon');
-            
-            toggleBtn.addEventListener('click', function() {
-                balanceContainer.classList.toggle('balance-hidden');
-                eyeIcon.classList.toggle('fa-eye-slash');
-                eyeIcon.classList.toggle('fa-eye');
-            });
-
-            // Animate balance counter
-            const balanceElement = document.getElementById('balanceCounter');
-            const finalBalance = parseInt(balanceElement.textContent.replace(/[,.]/g, '')) || 0;
-            let currentBalance = 0;
-            const increment = finalBalance / 100;
-            const duration = 2000;
-            const stepTime = duration / 100;
-
-            function updateBalance() {
-                if (currentBalance < finalBalance) {
-                    currentBalance += increment;
-                    if (currentBalance > finalBalance) currentBalance = finalBalance;
-                    balanceElement.textContent = Math.floor(currentBalance).toLocaleString('id-ID');
-                    setTimeout(updateBalance, stepTime);
-                } else {
-                    balanceElement.textContent = finalBalance.toLocaleString('id-ID');
-                }
-            }
-            if (!balanceContainer.classList.contains('balance-hidden')) {
-                updateBalance();
-            }
-        });
-
-        // Copy rekening number
-        function copyToClipboard(text) {
-            const tempInput = document.createElement("input");
-            tempInput.value = text;
-            document.body.appendChild(tempInput);
-            tempInput.select();
-            document.execCommand("copy");
-            document.body.removeChild(tempInput);
-            const tooltip = document.getElementById("copy-tooltip");
-            tooltip.innerHTML = "Tersalin!";
-            setTimeout(() => tooltip.innerHTML = "Klik untuk menyalin", 2000);
-        }
-
-        // Show PIN alert
-        function showPinAlert() {
-            alert("Harap atur PIN terlebih dahulu di menu Profil sebelum menggunakan fitur Transfer Lokal.");
-        }
-
-        // Close dropdown on scroll
-        window.addEventListener('scroll', () => {
-            const dropdownContent = document.querySelector('.notification-dropdown-content');
-            if (dropdownContent.style.display === 'block') {
-                dropdownContent.style.display = 'none';
-            }
+        return response.json();
+    })
+    .then(data => {
+        loading.style.display = 'none';
+        if (data.status === 'success') {
+            const userAvatar = document.getElementById('userAvatar');
+            userAvatar.src = `https://api.dicebear.com/8.x/${selectedAvatarStyle}/svg?seed=${<?php echo $user_id; ?>}`;
             closeAvatarSelection();
-        });
-
-        // Initialize swipe to delete and click to read
-        function initializeSwipe() {
-            const notificationItems = document.querySelectorAll('.notification-item');
-            notificationItems.forEach(item => {
-                let startX, currentX;
-                let isSwiping = false;
-                let isDragging = false;
-
-                // Touch events
-                item.addEventListener('touchstart', (e) => {
-                    startX = e.touches[0].clientX;
-                    isSwiping = true;
-                    item.classList.add('swiping');
-                }, { passive: true });
-
-                item.addEventListener('touchmove', (e) => {
-                    if (!isSwiping) return;
-                    currentX = e.touches[0].clientX;
-                    const diff = startX - currentX;
-                    if (diff > 0) {
-                        item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
-                    }
-                }, { passive: true });
-
-                item.addEventListener('touchend', () => {
-                    isSwiping = false;
-                    item.classList.remove('swiping');
-                    const diff = startX - currentX;
-                    if (diff > 50) {
-                        item.style.transform = 'translateX(-80px)';
-                        item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
-                    } else {
-                        item.style.transform = 'translateX(0)';
-                        item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
-                    }
-                });
-
-                // Mouse events
-                item.addEventListener('mousedown', (e) => {
-                    startX = e.clientX;
-                    isDragging = true;
-                    item.classList.add('swiping');
-                });
-
-                item.addEventListener('mousemove', (e) => {
-                    if (!isDragging) return;
-                    currentX = e.clientX;
-                    const diff = startX - currentX;
-                    if (diff > 0) {
-                        item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
-                    }
-                });
-
-                item.addEventListener('mouseup', () => {
-                    isDragging = false;
-                    item.classList.remove('swiping');
-                    const diff = startX - currentX;
-                    if (diff > 50) {
-                        item.style.transform = 'translateX(-80px)';
-                        item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
-                    } else {
-                        item.style.transform = 'translateX(0)';
-                        item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
-                    }
-                });
-
-                item.addEventListener('mouseleave', () => {
-                    if (isDragging) {
-                        isDragging = false;
-                        item.classList.remove('swiping');
-                        item.style.transform = 'translateX(0)';
-                        item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
-                    }
-                });
-
-                // Delete button
-                const deleteButton = item.querySelector('.swipe-delete');
-                deleteButton.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    deleteNotification(item.dataset.id, item);
-                });
-
-                // Click to mark as read
-                const notificationLink = item.querySelector('.notification-link');
-                notificationLink.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    if (item.classList.contains('unread')) {
-                        markNotificationAsRead(item.dataset.id, item);
-                    }
-                });
-            });
+        } else {
+            console.error('Failed to update avatar:', data.message);
         }
+    })
+    .catch(error => {
+        loading.style.display = 'none';
+        console.error('Error updating avatar:', error);
+    });
+});
 
-        // Mark notification as read
-        function markNotificationAsRead(notificationId, element) {
-            fetch('mark_notification_as_read.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'id=' + encodeURIComponent(notificationId)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    element.classList.remove('unread');
-                    updateNotificationBadge();
-                } else {
-                    console.error('Failed to mark notification as read:', data.message);
-                }
-            })
-            .catch(error => console.error('Error marking notification:', error));
+// Toggle saldo visibility
+document.addEventListener('DOMContentLoaded', function() {
+    const toggleBtn = document.getElementById('toggleBalance');
+    const balanceContainer = document.getElementById('balanceContainer');
+    const eyeIcon = document.getElementById('eyeIcon');
+    
+    toggleBtn.addEventListener('click', function() {
+        balanceContainer.classList.toggle('balance-hidden');
+        eyeIcon.classList.toggle('fa-eye-slash');
+        eyeIcon.classList.toggle('fa-eye');
+    });
+
+    // Animate balance counter
+    const balanceElement = document.getElementById('balanceCounter');
+    const finalBalance = parseInt(balanceElement.textContent.replace(/[,.]/g, '')) || 0;
+    let currentBalance = 0;
+    const increment = finalBalance / 100;
+    const duration = 2000;
+    const stepTime = duration / 100;
+
+    function updateBalance() {
+        if (currentBalance < finalBalance) {
+            currentBalance += increment;
+            if (currentBalance > finalBalance) currentBalance = finalBalance;
+            balanceElement.textContent = Math.floor(currentBalance).toLocaleString('id-ID');
+            setTimeout(updateBalance, stepTime);
+        } else {
+            balanceElement.textContent = finalBalance.toLocaleString('id-ID');
         }
+    }
+    if (!balanceContainer.classList.contains('balance-hidden')) {
+        updateBalance();
+    }
+});
 
-        // Delete notification
-        function deleteNotification(notificationId, element) {
-            fetch('delete_notification.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'id=' + encodeURIComponent(notificationId)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    element.remove();
-                    updateNotificationBadge();
-                    const notificationItems = document.querySelectorAll('.notification-item');
-                    if (notificationItems.length === 0) {
-                        const dropdownContent = document.querySelector('.notification-dropdown-content');
-                        dropdownContent.innerHTML = `
-                            <div class="notification-item">
-                                <div class="notification-message">Tidak ada notifikasi baru</div>
-                            </div>
-                        `;
-                    }
-                } else {
-                    console.error('Failed to delete notification:', data.message);
-                }
-            })
-            .catch(error => console.error('Error deleting notification:', error));
-        }
+// Copy rekening number
+function copyToClipboard(text) {
+    const tempInput = document.createElement("input");
+    tempInput.value = text;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand("copy");
+    document.body.removeChild(tempInput);
+    const tooltip = document.getElementById("copy-tooltip");
+    tooltip.innerHTML = "Tersalin!";
+    setTimeout(() => tooltip.innerHTML = "Klik untuk menyalin", 2000);
+}
 
-        // Update notification badge (corrected to match s1 behavior)
-        function updateNotificationBadge() {
-            fetch('check_notifications.php')
-                .then(response => response.json())
-                .then(data => {
-                    const badge = document.querySelector('.notification-badge');
-                    if (data.unread_count > 0) {
-                        badge.textContent = data.unread_count;
-                        badge.style.display = 'flex';
-                    } else {
-                        badge.style.display = 'none';
-                    }
-                })
-                .catch(error => console.error('Error updating notification badge:', error));
-        }
+// Show PIN alert
+function showPinAlert() {
+    alert("Harap atur PIN terlebih dahulu di menu Profil sebelum menggunakan fitur Transfer Lokal.");
+}
 
-        // Toggle notification dropdown
-        document.querySelector('.notification-toggle').addEventListener('click', (e) => {
-            e.preventDefault();
-            const dropdownContent = document.querySelector('.notification-dropdown-content');
-            dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block';
-        });
+// Close dropdown on scroll
+window.addEventListener('scroll', () => {
+    const dropdownContent = document.querySelector('.notification-dropdown-content');
+    if (dropdownContent.style.display === 'block') {
+        dropdownContent.style.display = 'none';
+    }
+    closeAvatarSelection();
+});
 
-        // Close dropdown when clicking outside
-        document.addEventListener('click', (e) => {
-            const dropdown = document.querySelector('.notification-dropdown');
-            const dropdownContent = document.querySelector('.notification-dropdown-content');
-            if (!dropdown.contains(e.target) && dropdownContent.style.display === 'block') {
-                dropdownContent.style.display = 'none';
-            }
-        });
+// Initialize swipe to delete and click to read
+function initializeSwipe() {
+    const notificationItems = document.querySelectorAll('.notification-item');
+    notificationItems.forEach(item => {
+        let startX, currentX;
+        let isSwiping = false;
+        let isDragging = false;
 
-        // Prevent dropdown from closing when clicking inside
-        document.querySelector('.notification-dropdown-content').addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-
-        // Initialize swipe on page load
-        initializeSwipe();
-
-        // Lazy load images
-        document.addEventListener('DOMContentLoaded', () => {
-            const images = document.querySelectorAll('img');
-            if ('IntersectionObserver' in window) {
-                const observer = new IntersectionObserver((entries, observer) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            const img = entry.target;
-                            img.src = img.dataset.src || img.src;
-                            observer.unobserve(img);
-                        }
-                    });
-                });
-                images.forEach(img => observer.observe(img));
-            } else {
-                images.forEach(img => img.src = img.dataset.src || img.src);
-            }
-        });
-
-        // Optimize scroll performance
-        let isScrolling;
-        window.addEventListener('scroll', () => {
-            clearTimeout(isScrolling);
-            isScrolling = setTimeout(() => {
-                // Add any scroll-related optimizations here
-            }, 150);
+        // Touch events
+        item.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            isSwiping = true;
+            item.classList.add('swiping');
         }, { passive: true });
 
-        // Prevent text selection on double-click
-        document.addEventListener('mousedown', (e) => {
-            if (e.detail > 1) {
-                e.preventDefault();
+        item.addEventListener('touchmove', (e) => {
+            if (!isSwiping) return;
+            currentX = e.touches[0].clientX;
+            const diff = startX - currentX;
+            if (diff > 0) {
+                item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
             }
-        }, { passive: false });
+        }, { passive: true });
 
-        // Keyboard accessibility for avatar selection
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                closeAvatarSelection();
-                const dropdownContent = document.querySelector('.notification-dropdown-content');
-                if (dropdownContent.style.display === 'block') {
-                    dropdownContent.style.display = 'none';
-                }
+        item.addEventListener('touchend', () => {
+            isSwiping = false;
+            item.classList.remove('swiping');
+            const diff = startX - currentX;
+            if (diff > 50) {
+                item.style.transform = 'translateX(-80px)';
+                item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
+            } else {
+                item.style.transform = 'translateX(0)';
+                item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
             }
         });
-    </script>
+
+        // Mouse events
+        item.addEventListener('mousedown', (e) => {
+            startX = e.clientX;
+            isDragging = true;
+            item.classList.add('swiping');
+        });
+
+        item.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            currentX = e.clientX;
+            const diff = startX - currentX;
+            if (diff > 0) {
+                item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
+            }
+        });
+
+        item.addEventListener('mouseup', () => {
+            isDragging = false;
+            item.classList.remove('swiping');
+            const diff = startX - currentX;
+            if (diff > 50) {
+                item.style.transform = 'translateX(-80px)';
+                item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
+            } else {
+                item.style.transform = 'translateX(0)';
+                item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
+            }
+        });
+
+        item.addEventListener('mouseleave', () => {
+            if (isDragging) {
+                isDragging = false;
+                item.classList.remove('swiping');
+                item.style.transform = 'translateX(0)';
+                item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
+            }
+        });
+
+        // Delete button
+        const deleteButton = item.querySelector('.swipe-delete');
+        deleteButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            deleteNotification(item.dataset.id, item);
+        });
+
+        // Click to mark as read
+        const notificationLink = item.querySelector('.notification-link');
+        notificationLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (item.classList.contains('unread')) {
+                markNotificationAsRead(item.dataset.id, item);
+            }
+        });
+    });
+}
+
+// Mark notification as read
+function markNotificationAsRead(notificationId, element) {
+    fetch('mark_notification_as_read.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'id=' + encodeURIComponent(notificationId)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            element.classList.remove('unread');
+            updateNotificationBadge();
+        } else {
+            console.error('Failed to mark notification as read:', data.message);
+        }
+    })
+    .catch(error => console.error('Error marking notification:', error));
+}
+
+// Delete notification
+function deleteNotification(notificationId, element) {
+    fetch('delete_notification.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'id=' + encodeURIComponent(notificationId)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            element.remove();
+            updateNotificationBadge();
+            const notificationItems = document.querySelectorAll('.notification-item');
+            if (notificationItems.length === 0) {
+                const dropdownContent = document.querySelector('.notification-dropdown-content');
+                dropdownContent.innerHTML = `
+                    <div class="notification-item">
+                        <div class="notification-message">Tidak ada notifikasi baru</div>
+                    </div>
+                `;
+            }
+        } else {
+            console.error('Failed to delete notification:', data.message);
+        }
+    })
+    .catch(error => console.error('Error deleting notification:', error));
+}
+
+// Update notification badge
+function updateNotificationBadge() {
+    fetch('check_notifications.php')
+        .then(response => response.json())
+        .then(data => {
+            const badge = document.querySelector('.notification-badge');
+            if (data.unread > 0) {
+                badge.textContent = data.unread;
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        })
+        .catch(error => console.error('Error updating notification badge:', error));
+}
+
+// Toggle notification dropdown
+document.querySelector('.notification-toggle').addEventListener('click', (e) => {
+    e.preventDefault();
+    const dropdownContent = document.querySelector('.notification-dropdown-content');
+    dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block';
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    const dropdown = document.querySelector('.notification-dropdown');
+    const dropdownContent = document.querySelector('.notification-dropdown-content');
+    if (!dropdown.contains(e.target) && dropdownContent.style.display === 'block') {
+        dropdownContent.style.display = 'none';
+    }
+});
+
+// Prevent dropdown from closing when clicking inside
+document.querySelector('.notification-dropdown-content').addEventListener('click', (e) => {
+    e.stopPropagation();
+});
+
+// Initialize swipe on page load
+initializeSwipe();
+
+// Lazy load images
+document.addEventListener('DOMContentLoaded', () => {
+    const images = document.querySelectorAll('img');
+    if ('IntersectionObserver' in window) {
+        const observer = new IntersectionObserver((entries, observer) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const img = entry.target;
+                    img.src = img.dataset.src || img.src;
+                    observer.unobserve(img);
+                }
+            });
+        });
+        images.forEach(img => observer.observe(img));
+    } else {
+        images.forEach(img => img.src = img.dataset.src || img.src);
+    }
+});
+
+// Optimize scroll performance
+let isScrolling;
+window.addEventListener('scroll', () => {
+    clearTimeout(isScrolling);
+    isScrolling = setTimeout(() => {
+        // Add any scroll-related optimizations here
+    }, 150);
+}, { passive: true });
+
+// Prevent text selection on double-click
+document.addEventListener('mousedown', (e) => {
+    if (e.detail > 1) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+// Keyboard accessibility for avatar selection
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeAvatarSelection();
+        const dropdownContent = document.querySelector('.notification-dropdown-content');
+        if (dropdownContent.style.display === 'block') {
+            dropdownContent.style.display = 'none';
+        }
+    }
+});
+</script>
 </body>
 </html>
