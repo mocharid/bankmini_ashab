@@ -15,6 +15,7 @@ $username = $_SESSION['username'] ?? 'Admin';
 <head>
     <title>Setor Saldo Siswa - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -156,15 +157,15 @@ $username = $_SESSION['username'] ?? 'Admin';
             display: flex;
             flex-direction: column;
             gap: 30px;
-            max-width: 600px;
+            max-width: 1200px;
             margin-left: auto;
             margin-right: auto;
         }
 
-        .steps-container {
+        .steps-section {
             display: flex;
             justify-content: space-between;
-            gap: 20px;
+            gap: 30px;
             position: relative;
         }
 
@@ -260,20 +261,14 @@ $username = $_SESSION['username'] ?? 'Admin';
             to { width: calc(100% - 48px); }
         }
 
-        .transaction-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 20px;
-            width: 100%;
-        }
-
         .deposit-card, .account-details {
             background: #f9fafb;
             border-radius: 10px;
-            padding: 20px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
             width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
             transition: var(--transition);
         }
 
@@ -294,7 +289,7 @@ $username = $_SESSION['username'] ?? 'Admin';
         .deposit-form {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 25px;
             align-items: center;
             justify-content: center;
         }
@@ -360,19 +355,19 @@ $username = $_SESSION['username'] ?? 'Admin';
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             flex-wrap: nowrap;
-            max-width: 100%;
+            max-width: 400px;
             margin: 0 auto;
-            box-sizing: border-box;
-            padding: 0 8px;
+            visibility: visible;
+            overflow: visible;
         }
 
         .rek-prefix {
             font-size: clamp(1rem, 2vw, 1.1rem);
             color: var(--text-secondary);
             font-weight: 500;
-            margin-right: 8px;
+            margin-right: 10px;
             flex-shrink: 0;
             line-height: 48px;
         }
@@ -381,22 +376,17 @@ $username = $_SESSION['username'] ?? 'Admin';
             width: 48px;
             height: 48px;
             text-align: center;
-            vertical-align: middle;
-            font-size: clamp(0.9rem, 1.8vw, 1rem);
+            font-size: clamp(1rem, 2vw, 1.1rem);
             border: 1px solid #ddd;
             border-radius: 10px;
             background: #fff;
             transition: var(--transition);
             line-height: 48px;
-            padding: 4px;
-            min-width: 44px;
-            box-sizing: border-box;
             display: inline-block;
-            overflow: visible;
-            color: var(--text-primary);
-            appearance: none;
+            visibility: visible;
             -webkit-appearance: none;
-            -moz-appearance: none;
+            -moz-appearance: textfield;
+            appearance: none;
         }
 
         .rek-input:focus {
@@ -441,7 +431,7 @@ $username = $_SESSION['username'] ?? 'Admin';
             transition: var(--transition);
             width: var(--button-width);
             height: var(--button-height);
-            margin: 0 auto;
+            margin: 0;
         }
 
         .btn:hover {
@@ -486,7 +476,7 @@ $username = $_SESSION['username'] ?? 'Admin';
             color: white;
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             position: absolute;
-            animation: spin 1.5s linear infinite;
+            animation: spin 1s linear infinite;
         }
 
         @keyframes spin {
@@ -526,8 +516,8 @@ $username = $_SESSION['username'] ?? 'Admin';
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
-            margin: 20px auto 0;
+            gap: 15px;
+            margin: 25px auto 0;
             width: 100%;
             max-width: 310px;
             box-sizing: border-box;
@@ -569,8 +559,15 @@ $username = $_SESSION['username'] ?? 'Admin';
             opacity: 0;
             animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
             overflow: hidden;
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             cursor: default;
+        }
+
+        .modal-content.success {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+        }
+
+        .modal-content.error {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
         }
 
         .modal-content::before {
@@ -664,9 +661,10 @@ $username = $_SESSION['username'] ?? 'Admin';
                 max-width: 100%;
             }
 
-            .steps-container {
+            .steps-section {
                 flex-direction: column;
                 align-items: flex-start;
+                gap: 15px;
             }
 
             .step-item {
@@ -696,10 +694,6 @@ $username = $_SESSION['username'] ?? 'Admin';
                 margin-bottom: 0;
             }
 
-            .transaction-container {
-                max-width: 100%;
-            }
-
             .deposit-card, .account-details {
                 padding: 15px;
                 max-width: 100%;
@@ -710,23 +704,20 @@ $username = $_SESSION['username'] ?? 'Admin';
             }
 
             .rek-container {
-                gap: 6px;
-                padding: 0 6px;
+                gap: 5px;
+                padding: 0 5px;
             }
 
             .rek-input {
-                width: 44px;
-                height: 44px;
-                font-size: clamp(0.85rem, 1.6vw, 0.95rem);
-                line-height: 44px;
-                padding: 4px;
-                min-width: 40px;
+                width: 36px;
+                height: 36px;
+                font-size: clamp(0.9rem, 1.8vw, 1rem);
+                line-height: 36px;
             }
 
             .rek-prefix {
-                font-size: clamp(0.85rem, 1.6vw, 0.95rem);
-                margin-right: 6px;
-                line-height: 44px;
+                font-size: clamp(0.9rem, 1.8vw, 1rem);
+                line-height: 36px;
             }
 
             .btn {
@@ -782,18 +773,15 @@ $username = $_SESSION['username'] ?? 'Admin';
             }
 
             .rek-input {
-                width: 40px;
-                height: 40px;
+                width: 36px;
+                height: 36px;
                 font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-                line-height: 40px;
-                padding: 4px;
-                min-width: 36px;
+                line-height: 36px;
             }
 
             .rek-prefix {
                 font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-                margin-right: 5px;
-                line-height: 40px;
+                line-height: 36px;
             }
 
             .btn {
@@ -830,7 +818,7 @@ $username = $_SESSION['username'] ?? 'Admin';
 <body>
     <nav class="top-nav">
         <button class="back-btn" id="backBtn">
-            <i class="fas fa-xmark"></i>
+            <span class="btn-content"><i class="fas fa-xmark"></i></span>
         </button>
         <h1>SCHOBANK</h1>
         <div style="width: 40px;"></div>
@@ -843,7 +831,7 @@ $username = $_SESSION['username'] ?? 'Admin';
         </div>
 
         <div class="combined-container">
-            <div class="steps-container">
+            <div class="steps-section">
                 <div class="step-item active" id="step1-indicator">
                     <div class="step-number">1</div>
                     <div class="step-text">Cek Rekening</div>
@@ -1024,6 +1012,7 @@ $username = $_SESSION['username'] ?? 'Admin';
 
             // Ensure rek-container and inputs are visible
             rekContainer.style.display = 'flex';
+            rekContainer.style.visibility = 'visible';
             rekInputs.forEach(input => {
                 input.style.display = 'inline-block';
                 input.style.visibility = 'visible';
@@ -1039,16 +1028,24 @@ $username = $_SESSION['username'] ?? 'Admin';
                 modalTitle.textContent = title;
                 modalMessage.textContent = message;
                 modalIcon.className = `fas modal-icon ${isSuccess ? 'fa-check-circle success-icon' : 'fa-exclamation-circle error-icon'}`;
+                modalContent.className = `modal-content ${isSuccess ? 'success' : 'error'}`;
                 modalOverlay.classList.add('show');
                 modalOverlay.focus();
+                // Auto-close modal after 2 seconds
+                setTimeout(() => {
+                    closeModal();
+                    if (isSuccess) {
+                        resetForm();
+                    }
+                }, 2000);
             }
 
             function closeModal() {
                 modalOverlay.classList.remove('show');
             }
 
-            // Close modal when clicking outside the modal content
-            modalOverlay.addEventListener('click', function(e) {
+            // Close modal when clicking anywhere
+            modalOverlay.addEventListener('click', function() {
                 closeModal();
             });
 
@@ -1138,6 +1135,9 @@ $username = $_SESSION['username'] ?? 'Admin';
             // Amount Input Handling
             inputJumlah.addEventListener('input', function(e) {
                 let value = this.value.replace(/[^0-9]/g, '');
+                if (value.length > 8) {
+                    value = value.slice(0, 8);
+                }
                 if (value === '') {
                     this.value = '';
                     return;
@@ -1213,6 +1213,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                         document.getElementById('displayJurusan').textContent = accountData.jurusan;
                         document.getElementById('displayKelas').textContent = accountData.kelas;
                         showStep(2);
+                        inputJumlah.focus();
                     } else {
                         showModal('Error', data.message || 'Rekening tidak ditemukan.', false);
                         clearRekForm();
@@ -1227,13 +1228,18 @@ $username = $_SESSION['username'] ?? 'Admin';
 
             // Step 2: Input Amount
             confirmAmount.addEventListener('click', function() {
+                confirmAmount.classList.add('loading');
                 let amount = parseInt(inputJumlah.value.replace(/[^0-9]/g, '')) || 0;
                 if (amount < 1000) {
+                    confirmAmount.classList.remove('loading');
                     showModal('Error', 'Jumlah penyetoran minimal Rp 1.000.', false);
+                    inputJumlah.focus();
                     return;
                 }
                 if (amount > 99999999) {
+                    confirmAmount.classList.remove('loading');
                     showModal('Error', 'Jumlah penyetoran maksimal Rp 99.999.999.', false);
+                    inputJumlah.focus();
                     return;
                 }
 
@@ -1243,10 +1249,17 @@ $username = $_SESSION['username'] ?? 'Admin';
                 document.getElementById('confirmJurusan').textContent = accountData.jurusan;
                 document.getElementById('confirmKelas').textContent = accountData.kelas;
                 document.getElementById('confirmJumlah').textContent = formatRupiah(amount);
+                confirmAmount.classList.remove('loading');
                 showStep(3);
             });
 
-            cancelAmount.addEventListener('click', resetForm);
+            cancelAmount.addEventListener('click', function() {
+                cancelAmount.classList.add('loading');
+                setTimeout(() => {
+                    cancelAmount.classList.remove('loading');
+                    resetForm();
+                }, 500);
+            });
 
             // Step 3: Process Deposit
             processDeposit.addEventListener('click', function() {
@@ -1261,10 +1274,6 @@ $username = $_SESSION['username'] ?? 'Admin';
                     processDeposit.classList.remove('loading');
                     if (data.status === 'success') {
                         showModal('Sukses', 'Penyetoran berhasil diproses.', true);
-                        modalOverlay.addEventListener('click', function handler() {
-                            resetForm();
-                            modalOverlay.removeEventListener('click', handler);
-                        }, { once: true });
                     } else {
                         showModal('Error', data.message || 'Gagal memproses penyetoran.', false);
                     }
@@ -1276,7 +1285,12 @@ $username = $_SESSION['username'] ?? 'Admin';
             });
 
             backToAmount.addEventListener('click', function() {
-                showStep(2);
+                backToAmount.classList.add('loading');
+                setTimeout(() => {
+                    backToAmount.classList.remove('loading');
+                    showStep(2);
+                    inputJumlah.focus();
+                }, 500);
             });
         });
     </script>

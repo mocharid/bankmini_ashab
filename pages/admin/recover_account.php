@@ -51,13 +51,13 @@ function sendEmail($toEmail, $toName, $subject, $htmlContent) {
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
-        $mail->Username = 'mocharid.ip@gmail.com';
-        $mail->Password = 'spjs plkg ktuu lcxh';
+        $mail->Username = 'schobanksystem@gmail.com';
+        $mail->Password = 'dgry fzmc mfrd hzzq';
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
 
-        $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+        $mail->setFrom('schobanksystem@gmail.com', 'SCHOBANK SYSTEM');
         $mail->addAddress($toEmail, $toName);
         $mail->addReplyTo('no-reply@schobank.com', 'No Reply');
 
@@ -478,6 +478,7 @@ _Solusi Perbankan Digital Anda_
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pemulihan Akun - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">

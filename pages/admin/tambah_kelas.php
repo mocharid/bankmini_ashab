@@ -48,6 +48,7 @@ if (isset($_POST['edit_confirm'])) {
     $id = intval($_POST['edit_id']);
     $nama = trim($_POST['edit_nama']);
     $jurusan_id = intval($_POST['edit_jurusan']);
+    $tingkatan_kelas_id = intval($_POST['edit_tingkatan']);
     
     if (empty($nama)) {
         header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas tidak boleh kosong!"));
@@ -58,20 +59,23 @@ if (isset($_POST['edit_confirm'])) {
     } elseif (empty($jurusan_id)) {
         header('Location: tambah_kelas.php?error=' . urlencode("Silakan pilih jurusan!"));
         exit();
+    } elseif (empty($tingkatan_kelas_id)) {
+        header('Location: tambah_kelas.php?error=' . urlencode("Silakan pilih tingkatan kelas!"));
+        exit();
     } else {
-        $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ? AND id != ?";
+        $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ? AND tingkatan_kelas_id = ? AND id != ?";
         $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("sii", $nama, $jurusan_id, $id);
+        $check_stmt->bind_param("siii", $nama, $jurusan_id, $tingkatan_kelas_id, $id);
         $check_stmt->execute();
         $result = $check_stmt->get_result();
         
         if ($result->num_rows > 0) {
-            header('Location: tambah_kelas.php?error=' . urlencode("Kelas dengan nama tersebut sudah ada di jurusan ini!"));
+            header('Location: tambah_kelas.php?error=' . urlencode("Kelas dengan nama tersebut sudah ada di jurusan dan tingkatan ini!"));
             exit();
         } else {
-            $update_query = "UPDATE kelas SET nama_kelas = ?, jurusan_id = ? WHERE id = ?";
+            $update_query = "UPDATE kelas SET nama_kelas = ?, jurusan_id = ?, tingkatan_kelas_id = ? WHERE id = ?";
             $update_stmt = $conn->prepare($update_query);
-            $update_stmt->bind_param("sii", $nama, $jurusan_id, $id);
+            $update_stmt->bind_param("siii", $nama, $jurusan_id, $tingkatan_kelas_id, $id);
             
             if ($update_stmt->execute()) {
                 header('Location: tambah_kelas.php?edit_success=1');
@@ -88,6 +92,7 @@ if (isset($_POST['edit_confirm'])) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isset($_POST['edit_id']) && !isset($_POST['edit_confirm'])) {
     $nama_kelas = trim($_POST['nama_kelas']);
     $jurusan_id = intval($_POST['jurusan_id']);
+    $tingkatan_kelas_id = intval($_POST['tingkatan_id']);
     
     if (empty($nama_kelas)) {
         header('Location: tambah_kelas.php?error=' . urlencode("Nama kelas tidak boleh kosong!"));
@@ -98,41 +103,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
     } elseif (empty($jurusan_id)) {
         header('Location: tambah_kelas.php?error=' . urlencode("Silakan pilih jurusan!"));
         exit();
+    } elseif (empty($tingkatan_kelas_id)) {
+        header('Location: tambah_kelas.php?error=' . urlencode("Silakan pilih tingkatan kelas!"));
+        exit();
     }
 
-    // Check for duplicate kelas name before showing confirmation
-    $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ?";
+    // Check for duplicate kelas
+    $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ? AND tingkatan_kelas_id = ?";
     $check_stmt = $conn->prepare($check_query);
-    $check_stmt->bind_param("si", $nama_kelas, $jurusan_id);
+    $check_stmt->bind_param("sii", $nama_kelas, $jurusan_id, $tingkatan_kelas_id);
     $check_stmt->execute();
     $result = $check_stmt->get_result();
     
     if ($result->num_rows > 0) {
-        header('Location: tambah_kelas.php?error=' . urlencode("Kelas sudah ada di jurusan ini!"));
+        header('Location: tambah_kelas.php?error=' . urlencode("Kelas sudah ada di jurusan dan tingkatan ini!"));
         exit();
     }
 
     if (!isset($_POST['confirm'])) {
         // Show confirmation modal
-        header('Location: tambah_kelas.php?confirm=1&nama=' . urlencode($nama_kelas) . '&jurusan_id=' . $jurusan_id);
+        header('Location: tambah_kelas.php?confirm=1&nama=' . urlencode($nama_kelas) . '&jurusan_id=' . $jurusan_id . '&tingkatan_id=' . $tingkatan_kelas_id);
         exit();
     }
 
-    // Process confirmed submission (redundant check for safety)
-    $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ?";
-    $check_stmt = $conn->prepare($check_query);
-    $check_stmt->bind_param("si", $nama_kelas, $jurusan_id);
-    $check_stmt->execute();
-    $result = $check_stmt->get_result();
-    
-    if ($result->num_rows > 0) {
-        header('Location: tambah_kelas.php?error=' . urlencode("Kelas sudah ada di jurusan ini!"));
-        exit();
-    }
-
-    $query = "INSERT INTO kelas (nama_kelas, jurusan_id) VALUES (?, ?)";
+    // Process confirmed submission
+    $query = "INSERT INTO kelas (nama_kelas, jurusan_id, tingkatan_kelas_id) VALUES (?, ?, ?)";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("si", $nama_kelas, $jurusan_id);
+    $stmt->bind_param("sii", $nama_kelas, $jurusan_id, $tingkatan_kelas_id);
     
     if ($stmt->execute()) {
         header('Location: tambah_kelas.php?success=1');
@@ -143,17 +140,21 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['delete_id']) && !isse
     }
 }
 
-// Ambil data jurusan for dropdowns
+// Fetch jurusan and tingkatan kelas for dropdowns
 $query_jurusan = "SELECT * FROM jurusan ORDER BY nama_jurusan ASC";
 $result_jurusan = $conn->query($query_jurusan);
 
-// Fetch existing kelas with jurusan info and total students for the current page
-$query_list = "SELECT j.nama_jurusan, k.id as kelas_id, k.nama_kelas, k.jurusan_id, COUNT(u.id) as total_siswa 
+$query_tingkatan = "SELECT * FROM tingkatan_kelas ORDER BY nama_tingkatan ASC";
+$result_tingkatan = $conn->query($query_tingkatan);
+
+// Fetch existing kelas with jurusan and tingkatan info
+$query_list = "SELECT j.nama_jurusan, tk.nama_tingkatan, k.id as kelas_id, k.nama_kelas, k.jurusan_id, k.tingkatan_kelas_id, COUNT(u.id) as total_siswa 
                FROM kelas k 
                LEFT JOIN jurusan j ON k.jurusan_id = j.id
+               LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                LEFT JOIN users u ON k.id = u.kelas_id 
                GROUP BY k.id 
-               ORDER BY j.nama_jurusan ASC, k.nama_kelas ASC 
+               ORDER BY j.nama_jurusan ASC, tk.nama_tingkatan ASC, k.nama_kelas ASC 
                LIMIT ? OFFSET ?";
 $stmt = $conn->prepare($query_list);
 $stmt->bind_param("ii", $items_per_page, $offset);
@@ -177,8 +178,9 @@ if ($result && $result->num_rows > 0) {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tambah Kelas - SCHOBANK SYSTEM</title>
+    <title>Kelola Kelas - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -456,7 +458,7 @@ if ($result && $result->num_rows > 0) {
         }
 
         .btn.loading::after {
-            content: '\f110'; /* Font Awesome spinner icon */
+            content: '\f110';
             font-family: 'Font Awesome 6 Free';
             font-weight: 900;
             color: white;
@@ -706,11 +708,7 @@ if ($result && $result->num_rows > 0) {
             filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
         }
 
-        .success-icon {
-            color: white;
-        }
-
-        .error-icon {
+        .success-icon, .error-icon {
             color: white;
         }
 
@@ -885,12 +883,6 @@ if ($result && $result->num_rows > 0) {
                 padding: 8px 12px;
                 font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
-
-            input[type="text"],
-            select {
-                padding: 10px 12px;
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            }
         }
 
         @media (max-width: 480px) {
@@ -926,7 +918,7 @@ if ($result && $result->num_rows > 0) {
             }
 
             .action-buttons .btn i {
-                margin-right: 3px;
+                margin-right: 4px;
                 font-size: 0.7rem;
             }
 
@@ -976,13 +968,27 @@ if ($result && $result->num_rows > 0) {
     <div class="main-content">
         <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <h2>Tambah Kelas</h2>
+            <h2>Kelola Kelas</h2>
             <p>Kelola data kelas untuk sistem SCHOBANK</p>
         </div>
 
         <!-- Form Section -->
         <div class="form-card">
             <form action="" method="POST" id="kelas-form">
+                <div class="form-group">
+                    <label for="tingkatan_id">Tingkatan Kelas</label>
+                    <select id="tingkatan_id" name="tingkatan_id" required>
+                        <option value="">Pilih Tingkatan</option>
+                        <?php 
+                        $result_tingkatan->data_seek(0);
+                        while ($row = $result_tingkatan->fetch_assoc()): 
+                        ?>
+                            <option value="<?php echo $row['id']; ?>" <?php echo (isset($_POST['tingkatan_id']) && $_POST['tingkatan_id'] == $row['id']) ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($row['nama_tingkatan']); ?>
+                            </option>
+                        <?php endwhile; ?>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label for="jurusan_id">Jurusan</label>
                     <select id="jurusan_id" name="jurusan_id" required>
@@ -1003,7 +1009,7 @@ if ($result && $result->num_rows > 0) {
                            placeholder="Masukkan nama kelas" value="<?php echo isset($_POST['nama_kelas']) ? htmlspecialchars($_POST['nama_kelas']) : ''; ?>">
                 </div>
                 <button type="submit" class="btn" id="submit-btn">
-                    <span class="btn-content">Tambah</span>
+                    <span class="btn-content"><i class="fas fa-plus"></i> Tambah</span>
                 </button>
             </form>
         </div>
@@ -1019,6 +1025,7 @@ if ($result && $result->num_rows > 0) {
                             <thead>
                                 <tr>
                                     <th>No</th>
+                                    <th>Tingkatan</th>
                                     <th>Nama Kelas</th>
                                     <th>Jumlah Siswa</th>
                                     <th>Aksi</th>
@@ -1031,16 +1038,15 @@ if ($result && $result->num_rows > 0) {
                                 ?>
                                     <tr id="row-<?php echo $row['kelas_id']; ?>">
                                         <td><?php echo $no++; ?></td>
+                                        <td><?php echo htmlspecialchars($row['nama_tingkatan']); ?></td>
                                         <td><?php echo htmlspecialchars($row['nama_kelas']); ?></td>
                                         <td>
-                                            <span class="total-siswa">
-                                                <?php echo $row['total_siswa']; ?> Siswa
-                                            </span>
+                                            <span class="total-siswa"><?php echo $row['total_siswa']; ?> Siswa</span>
                                         </td>
                                         <td>
                                             <div class="action-buttons">
                                                 <button class="btn btn-edit" 
-                                                        onclick="showEditModal(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars(addslashes($row['nama_kelas'])); ?>', <?php echo $row['jurusan_id']; ?>)">
+                                                        onclick="showEditModal(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars(addslashes($row['nama_kelas'])); ?>', <?php echo $row['jurusan_id']; ?>, <?php echo $row['tingkatan_kelas_id']; ?>)">
                                                     <i class="fas fa-edit"></i> Edit
                                                 </button>
                                                 <button class="btn btn-delete" 
@@ -1063,15 +1069,15 @@ if ($result && $result->num_rows > 0) {
                 <!-- Pagination -->
                 <div class="pagination">
                     <?php if ($page > 1): ?>
-                        <a href="?page=<?php echo $page - 1; ?>">« Previous</a>
+                        <a href="?page=<?php echo $page - 1; ?>">Previous</a>
                     <?php else: ?>
-                        <a class="disabled">« Previous</a>
+                        <a class="disabled">Previous</a>
                     <?php endif; ?>
                     <span class="current-page"><?php echo $page; ?></span>
                     <?php if ($page < $total_pages): ?>
-                        <a href="?page=<?php echo $page + 1; ?>">Next »</a>
+                        <a href="?page=<?php echo $page + 1; ?>">Next</a>
                     <?php else: ?>
-                        <a class="disabled">Next »</a>
+                        <a class="disabled">Next</a>
                     <?php endif; ?>
                 </div>
             <?php else: ?>
@@ -1083,7 +1089,7 @@ if ($result && $result->num_rows > 0) {
         </div>
 
         <!-- Confirmation Modal for Adding Kelas -->
-        <?php if (isset($_GET['confirm']) && isset($_GET['nama']) && isset($_GET['jurusan_id'])): ?>
+        <?php if (isset($_GET['confirm']) && isset($_GET['nama']) && isset($_GET['jurusan_id']) && isset($_GET['tingkatan_id'])): ?>
             <div class="success-overlay" id="confirmModal">
                 <div class="success-modal">
                     <div class="success-icon">
@@ -1107,10 +1113,24 @@ if ($result && $result->num_rows > 0) {
                                 ?>
                             </span>
                         </div>
+                        <div class="modal-row">
+                            <span class="modal-value">
+                                <?php
+                                $tingkatan_kelas_id = intval($_GET['tingkatan_id']);
+                                $tingk_query = "SELECT nama_tingkatan FROM tingkatan_kelas WHERE id = ?";
+                                $tingk_stmt = $conn->prepare($tingk_query);
+                                $tingk_stmt->bind_param("i", $tingkatan_kelas_id);
+                                $tingk_stmt->execute();
+                                $tingk_result = $tingk_stmt->get_result()->fetch_assoc();
+                                echo htmlspecialchars($tingk_result['nama_tingkatan'] ?? 'Unknown');
+                                ?>
+                            </span>
+                        </div>
                     </div>
                     <form action="" method="POST" id="confirm-form">
                         <input type="hidden" name="nama_kelas" value="<?php echo htmlspecialchars(urldecode($_GET['nama'])); ?>">
                         <input type="hidden" name="jurusan_id" value="<?php echo htmlspecialchars($_GET['jurusan_id']); ?>">
+                        <input type="hidden" name="tingkatan_id" value="<?php echo htmlspecialchars($_GET['tingkatan_id']); ?>">
                         <input type="hidden" name="confirm" value="1">
                         <div class="modal-buttons">
                             <button type="submit" class="btn btn-confirm" id="confirm-btn">
@@ -1176,107 +1196,126 @@ if ($result && $result->num_rows > 0) {
                 </div>
             </div>
         <?php endif; ?>
-    </div>
 
-    <!-- Edit Modal -->
-    <div id="editModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-title">
-                <i class="fas fa-edit"></i> Edit Kelas
+        <!-- Edit Modal -->
+        <div id="editModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-title">
+                    <i class="fas fa-edit"></i> Edit Kelas
+                </div>
+                <form id="editForm" method="POST" action="">
+                    <input type="hidden" name="edit_id" id="edit_id">
+                    <div class="form-group">
+                        <label for="edit_tingkatan">Tingkatan Kelas</label>
+                        <select id="edit_tingkatan" name="edit_tingkatan" required>
+                            <option value="">Pilih Tingkatan</option>
+                            <?php 
+                            $result_tingkatan->data_seek(0);
+                            while ($row = $result_tingkatan->fetch_assoc()): 
+                            ?>
+                                <option value="<?php echo $row['id']; ?>">
+                                    <?php echo htmlspecialchars($row['nama_tingkatan']); ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_jurusan">Jurusan</label>
+                        <select id="edit_jurusan" name="edit_jurusan" required>
+                            <option value="">Pilih Jurusan</option>
+                            <?php 
+                            $result_jurusan->data_seek(0);
+                            while ($row = $result_jurusan->fetch_assoc()): 
+                            ?>
+                                <option value="<?php echo $row['id']; ?>">
+                                    <?php echo htmlspecialchars($row['nama_jurusan']); ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_nama">Nama Kelas</label>
+                        <input type="text" id="edit_nama" name="edit_nama" required>
+                    </div>
+                    <div class="modal-buttons">
+                        <button type="button" class="btn btn-cancel" onclick="hideEditModal()">
+                            <span class="btn-content">Batal</span>
+                        </button>
+                        <button type="submit" class="btn btn-edit" id="edit-submit-btn" onclick="return showEditConfirmation()">
+                            <span class="btn-content"><i class="fas fa-save"></i> Simpan</span>
+                        </button>
+                    </div>
+                </form>
             </div>
-            <form id="editForm" method="POST" action="">
-                <input type="hidden" name="edit_id" id="edit_id">
-                <div class="form-group">
-                    <label for="edit_nama">Nama Kelas</label>
-                    <input type="text" id="edit_nama" name="edit_nama" required>
-                </div>
-                <div class="form-group">
-                    <label for="edit_jurusan">Jurusan</label>
-                    <select id="edit_jurusan" name="edit_jurusan" required>
-                        <option value="">Pilih Jurusan</option>
-                        <?php 
-                        $result_jurusan->data_seek(0);
-                        while ($row = $result_jurusan->fetch_assoc()): 
-                        ?>
-                            <option value="<?php echo $row['id']; ?>">
-                                <?php echo htmlspecialchars($row['nama_jurusan']); ?>
-                            </option>
-                        <?php endwhile; ?>
-                    </select>
-                </div>
-                <div class="modal-buttons">
-                    <button type="button" class="btn btn-cancel" onclick="hideEditModal()">
-                        <span class="btn-content">Batal</span>
-                    </button>
-                    <button type="submit" class="btn btn-edit" id="edit-submit-btn" onclick="return showEditConfirmation()">
-                        <span class="btn-content"><i class="fas fa-save"></i> Simpan</span>
-                    </button>
-                </div>
-            </form>
         </div>
-    </div>
 
-    <!-- Edit Confirmation Modal -->
-    <div class="success-overlay" id="editConfirmModal" style="display: none;">
-        <div class="success-modal">
-            <div class="success-icon">
-                <i class="fas fa-graduation-cap"></i>
+        <!-- Edit Confirmation Modal -->
+        <div class="success-overlay" id="editConfirmModal" style="display: none;">
+            <div class="success-modal">
+                <div class="success-icon">
+                    <i class="fas fa-graduation-cap"></i>
+                </div>
+                <h3>Konfirmasi Edit Kelas</h3>
+                <div class="modal-content-confirm">
+                    <div class="modal-row">
+                        <span class="modal-value" id="editConfirmTingkatan"></span>
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-value" id="editConfirmJurusan"></span>
+                    </div>
+                    <div class="modal-row">
+                        <span class="modal-value" id="editConfirmNama"></span>
+                    </div>
+                </div>
+                <form action="" method="POST" id="editConfirmForm">
+                    <input type="hidden" name="edit_id" id="edit-form-id">
+                    <input type="hidden" name="edit_tingkatan" id="edit-form-tingkatan-id">
+                    <input type="hidden" name="edit_jurusan" id="edit-form-jurusan-id">
+                    <input type="hidden" name="edit_nama" id="edit-form-nama">
+                    <input type="hidden" name="edit_confirm" value="1">
+                    <div class="modal-buttons">
+                        <button type="submit" class="btn btn-confirm" id="edit-confirm-btn">
+                            <span class="btn-content"><i class="fas fa-check"></i> Konfirmasi</span>
+                        </button>
+                        <button type="button" class="btn btn-cancel" onclick="hideEditConfirmModal()">
+                            <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
+                        </button>
+                    </div>
+                </form>
             </div>
-            <h3>Konfirmasi Edit Kelas</h3>
-            <div class="modal-content-confirm">
-                <div class="modal-row">
-                    <span class="modal-value" id="editConfirmNama"></span>
-                </div>
-                <div class="modal-row">
-                    <span class="modal-value" id="editConfirmJurusan"></span>
-                </div>
-            </div>
-            <form action="" method="POST" id="editConfirmForm">
-                <input type="hidden" name="edit_id" id="editConfirmId">
-                <input type="hidden" name="edit_nama" id="editConfirmNamaInput">
-                <input type="hidden" name="edit_jurusan" id="editConfirmJurusanInput">
-                <input type="hidden" name="edit_confirm" value="1">
-                <div class="modal-buttons">
-                    <button type="submit" class="btn btn-confirm" id="edit-confirm-btn">
-                        <span class="btn-content"><i class="fas fa-check"></i> Konfirmasi</span>
-                    </button>
-                    <button type="button" class="btn btn-cancel" onclick="hideEditConfirmModal()">
-                        <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
-                    </button>
-                </div>
-            </form>
         </div>
-    </div>
 
-    <!-- Delete Modal -->
-    <div id="deleteModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-title">
-                <i class="fas fa-trash"></i> Hapus Kelas
-            </div>
-            <p>Apakah Anda yakin ingin menghapus kelas <strong id="delete_nama"></strong>?</p>
-            <form id="deleteForm" method="POST" action="">
-                <input type="hidden" name="delete_id" id="delete_id">
-                <div class="modal-buttons">
-                    <button type="button" class="btn btn-cancel" onclick="hideDeleteModal()">
-                        <span class="btn-content">Batal</span>
-                    </button>
-                    <button type="submit" class="btn btn-delete" id="delete-submit-btn">
-                        <span class="btn-content"><i class="fas fa-trash"></i> Hapus</span>
-                    </button>
+        <!-- Delete Modal -->
+        <div id="deleteModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-title">
+                    <i class="fas fa-trash"></i> Hapus Kelas
                 </div>
-            </form>
+                <p>Apakah Anda yakin ingin menghapus kelas <strong id="delete_nama"></strong>?</p>
+                <form id="deleteForm" method="POST" action="">
+                    <input type="hidden" name="delete_id" id="delete_id">
+                    <div class="modal-buttons">
+                        <button type="button" class="btn btn-cancel" onclick="hideDeleteModal()">
+                            <span class="btn-content">Batal</span>
+                        </button>
+                        <button type="submit" class="btn btn-delete" id="delete-submit-btn">
+                            <span class="btn-content"><i class="fas fa-trash"></i> Hapus</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <script>
         // Edit Modal Functions
-        function showEditModal(id, nama, jurusanId) {
-            console.log('showEditModal called with:', { id, nama, jurusanId });
+        function showEditModal(id, nama, jurusanId, tingkatanKelasId) {
+            console.log('showEditModal called with:', { id, nama, jurusanId, tingkatanKelasId });
             try {
                 document.getElementById('edit_id').value = id;
                 document.getElementById('edit_nama').value = nama;
                 document.getElementById('edit_jurusan').value = jurusanId;
+                document.getElementById('edit_tingkatan').value = tingkatanKelasId;
                 document.getElementById('editModal').style.display = 'flex';
             } catch (error) {
                 console.error('Error in showEditModal:', error);
@@ -1289,22 +1328,34 @@ if ($result && $result->num_rows > 0) {
         }
 
         function showEditConfirmation() {
-            const nama = document.getElementById('edit_nama').value.trim();
+            const tingkId = document.getElementById('edit_tingkatan').value;
             const jurusanId = document.getElementById('edit_jurusan').value;
-            if (nama.length < 3) {
-                showErrorModal('Nama kelas harus minimal 3 karakter!');
+            const nama = document.getElementById('edit_nama').value.trim();
+            
+            if (!tingkId) {
+                showErrorModal('Silakan pilih tingkatan!');
                 return false;
             }
             if (!jurusanId) {
                 showErrorModal('Silakan pilih jurusan!');
                 return false;
             }
-            document.getElementById('editConfirmId').value = document.getElementById('edit_id').value;
-            document.getElementById('editConfirmNama').textContent = nama;
-            document.getElementById('editConfirmNamaInput').value = nama;
-            document.getElementById('editConfirmJurusanInput').value = jurusanId;
+            if (nama.length < 3) {
+                showErrorModal('Nama kelas harus minimal 3 karakter!');
+                return false;
+            }
+            
+            document.getElementById('edit-form-id').value = document.getElementById('edit_id').value;
+            document.getElementById('edit-form-tingkatan-id').value = tingkId;
+            document.getElementById('edit-form-jurusan-id').value = jurusanId;
+            document.getElementById('edit-form-nama').value = nama;
+            
+            const tingkText = document.querySelector(`#edit_tingkatan option[value="${tingkId}"]`).textContent.trim();
+            document.getElementById('editConfirmTingkatan').textContent = tingkText;
             const jurusanText = document.querySelector(`#edit_jurusan option[value="${jurusanId}"]`).textContent.trim();
             document.getElementById('editConfirmJurusan').textContent = jurusanText;
+            document.getElementById('editConfirmNama').textContent = nama;
+            
             document.getElementById('editConfirmModal').style.display = 'flex';
             document.getElementById('editModal').style.display = 'none';
             return false;
@@ -1393,6 +1444,7 @@ if ($result && $result->num_rows > 0) {
                     console.log('Submitting kelas-form');
                     const nama = document.getElementById('nama_kelas').value.trim();
                     const jurusan = document.getElementById('jurusan_id').value;
+                    const tingkatan = document.getElementById('tingkatan_id').value;
                     if (nama.length < 3) {
                         e.preventDefault();
                         showErrorModal('Nama kelas harus minimal 3 karakter!');
@@ -1403,17 +1455,22 @@ if ($result && $result->num_rows > 0) {
                         showErrorModal('Silakan pilih jurusan!');
                         submitBtn.classList.remove('loading');
                         submitBtn.innerHTML = '<span class="btn-content"><i class="fas fa-plus"></i> Tambah</span>';
+                    } else if (!tingkatan) {
+                        e.preventDefault();
+                        showErrorModal('Silakan pilih tingkatan kelas!');
+                        submitBtn.classList.remove('loading');
+                        submitBtn.innerHTML = '<span class="btn-content"><i class="fas fa-plus"></i> Tambah</span>';
                     } else {
                         e.preventDefault();
                         submitBtn.classList.add('loading');
                         setTimeout(() => {
                             kelasForm.submit();
-                        }, 1500);
+                        }, 300);
                     }
                 });
             }
 
-            // Confirm form handling (Konfirmasi Tambah)
+            // Confirm Form Handling (Konfirmasi Tambah)
             const confirmForm = document.getElementById('confirm-form');
             const confirmBtn = document.getElementById('confirm-btn');
             
@@ -1424,11 +1481,11 @@ if ($result && $result->num_rows > 0) {
                     confirmBtn.classList.add('loading');
                     setTimeout(() => {
                         confirmForm.submit();
-                    }, 1500);
+                    }, 300);
                 });
             }
 
-            // Edit form handling (Simpan Edit)
+            // Edit Form handling (Simpan Edit)
             const editForm = document.getElementById('editForm');
             const editSubmitBtn = document.getElementById('edit-submit-btn');
             
@@ -1437,6 +1494,7 @@ if ($result && $result->num_rows > 0) {
                     console.log('Submitting editForm');
                     const nama = document.getElementById('edit_nama').value.trim();
                     const jurusanId = document.getElementById('edit_jurusan').value;
+                    const tingkId = document.getElementById('edit_tingkatan').value;
                     if (nama.length < 3) {
                         e.preventDefault();
                         showErrorModal('Nama kelas harus minimal 3 karakter!');
@@ -1445,11 +1503,15 @@ if ($result && $result->num_rows > 0) {
                         e.preventDefault();
                         showErrorModal('Silakan pilih jurusan!');
                         editSubmitBtn.classList.remove('loading');
+                    } else if (!tingkId) {
+                        e.preventDefault();
+                        showErrorModal('Silakan pilih tingkatan!');
+                        editSubmitBtn.classList.remove('loading');
                     }
                 });
             }
 
-            // Edit confirm form handling (Konfirmasi Edit)
+            // Edit Confirm Form handling (Konfirmasi Edit)
             const editConfirmForm = document.getElementById('editConfirmForm');
             const editConfirmBtn = document.getElementById('edit-confirm-btn');
             
@@ -1460,11 +1522,11 @@ if ($result && $result->num_rows > 0) {
                     editConfirmBtn.classList.add('loading');
                     setTimeout(() => {
                         editConfirmForm.submit();
-                    }, 1500);
+                    }, 300);
                 });
             }
 
-            // Delete form handling
+            // Delete Form Handling
             const deleteForm = document.getElementById('deleteForm');
             const deleteSubmitBtn = document.getElementById('delete-submit-btn');
             
@@ -1480,7 +1542,7 @@ if ($result && $result->num_rows > 0) {
                     }
                     setTimeout(() => {
                         deleteForm.submit();
-                    }, 1500);
+                    }, 300);
                 });
             }
         });
@@ -1513,6 +1575,36 @@ if ($result && $result->num_rows > 0) {
         document.addEventListener('dblclick', function(event) {
             event.preventDefault();
         }, { passive: false });
+
+        // Input validation
+        const namaKelasInputs = document.querySelectorAll('#nama_kelas, #edit_nama');
+        namaKelasInputs.forEach(input => {
+            input.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^A-Za-z0-9\s-]/g, '');
+                if (this.value.length > 50) {
+                    this.value = this.value.substring(0, 50);
+                    showErrorModal('Nama kelas tidak boleh lebih dari 50 karakter!');
+                }
+            });
+        });
+
+        // Handle Window Resize for Responsive Modals
+        window.addEventListener('resize', function() {
+            const modals = document.querySelectorAll('.modal, .success-overlay');
+            modals.forEach(modal => {
+                if (modal.style.display === 'flex') {
+                    modal.style.height = window.innerHeight + 'px';
+                }
+            });
+        });
+
+        // Initialize Modal Heights
+        document.addEventListener('DOMContentLoaded', function() {
+            const modals = document.querySelectorAll('.modal, .success-overlay');
+            modals.forEach(modal => {
+                modal.style.height = window.innerHeight + 'px';
+            });
+        });
     </script>
 </body>
 </html>

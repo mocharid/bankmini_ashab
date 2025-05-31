@@ -1,4 +1,5 @@
 <?php
+
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
@@ -25,12 +26,24 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
     die(json_encode(['error' => 'Format tanggal tidak valid']));
 }
 
+// Function to format date in Indonesian
+function formatIndonesianDate($date) {
+    $days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    $months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    $timestamp = strtotime($date);
+    $day_name = $days[date('w', $timestamp)];
+    $day = date('d', $timestamp);
+    $month = $months[date('n', $timestamp) - 1];
+    $year = date('Y', $timestamp);
+    return "$day_name, $day $month $year";
+}
+
 try {
     // Get officer information
     $officer_query = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = ?";
     $officer_stmt = $conn->prepare($officer_query);
     if (!$officer_stmt) {
-        throw new Exception("Failed to prepare officer query: " . $conn->error);
+        throw new Exception("Gagal menyiapkan kueri petugas: " . $conn->error);
     }
     $officer_stmt->bind_param("s", $date);
     $officer_stmt->execute();
@@ -45,7 +58,7 @@ try {
     }
     $officer_stmt->close();
 
-    // Get transaction data (aligned with laporan.php, including nama_kelas)
+    // Get transaction data
     $query = "SELECT 
         t.no_transaksi,
         t.jenis_transaksi,
@@ -64,7 +77,7 @@ try {
         ORDER BY t.created_at DESC";
     $stmt = $conn->prepare($query);
     if (!$stmt) {
-        throw new Exception("Failed to prepare transaction query: " . $conn->error);
+        throw new Exception("Gagal menyiapkan kueri transaksi: " . $conn->error);
     }
     $stmt->bind_param("s", $date);
     $stmt->execute();
@@ -81,7 +94,7 @@ try {
         AND petugas_id IS NOT NULL";
     $stmt_total = $conn->prepare($total_query);
     if (!$stmt_total) {
-        throw new Exception("Failed to prepare total query: " . $conn->error);
+        throw new Exception("Gagal menyiapkan kueri total: " . $conn->error);
     }
     $stmt_total->bind_param("s", $date);
     $stmt_total->execute();
@@ -114,7 +127,7 @@ try {
     // Generate PDF
     if ($format === 'pdf') {
         if (!file_exists('../../tcpdf/tcpdf.php')) {
-            throw new Exception("TCPDF library not found at ../../tcpdf/tcpdf.php");
+            throw new Exception("Pustaka TCPDF tidak ditemukan di ../../tcpdf/tcpdf.php");
         }
         require_once '../../tcpdf/tcpdf.php';
 
@@ -146,9 +159,9 @@ try {
         // Title
         $pdf->Ln(5);
         $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 8, 'LAPORAN HARIAN TRANSAKSI', 0, 1, 'C');
+        $pdf->Cell(0, 8, 'LAPORAN TRANSAKSI PETUGAS', 0, 1, 'C');
         $pdf->SetFont('helvetica', '', 10);
-        $pdf->Cell(0, 6, 'Tanggal: ' . date('d/m/Y', strtotime($date)), 0, 1, 'C');
+        $pdf->Cell(0, 6, 'Tanggal: ' . formatIndonesianDate($date), 0, 1, 'C');
 
         // Officer Information
         $pdf->Ln(5);
@@ -226,7 +239,6 @@ try {
         throw new Exception("Format tidak valid. Hanya 'pdf' yang didukung.");
     }
 } catch (Exception $e) {
-    error_log("Error in download_laporan.php: " . $e->getMessage());
     header('HTTP/1.1 500 Internal Server Error');
     header('Content-Type: application/json');
     echo json_encode(['error' => 'Gagal menghasilkan laporan: ' . $e->getMessage()]);

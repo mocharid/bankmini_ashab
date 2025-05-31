@@ -14,6 +14,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 <html lang="id">
 <head>
     <title>Tarik Tunai - SCHOBANK SYSTEM</title>
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -83,25 +84,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
-        }
-
-        .back-btn.loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .back-btn.loading .btn-content {
-            visibility: hidden;
-        }
-
-        .back-btn.loading::after {
-            content: '\f110';
-            font-family: 'Font Awesome 6 Free';
-            font-weight: 900;
-            color: white;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            position: absolute;
-            animation: spin 1s linear infinite;
         }
 
         .main-content {
@@ -175,7 +157,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             display: flex;
             flex-direction: column;
             gap: 30px;
-            max-width: 600px;
+            max-width: 1200px;
             margin-left: auto;
             margin-right: auto;
         }
@@ -183,7 +165,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .steps-section {
             display: flex;
             justify-content: space-between;
-            gap: 20px;
+            gap: 30px;
             position: relative;
         }
 
@@ -282,9 +264,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .deposit-card, .account-details {
             background: #f9fafb;
             border-radius: 10px;
-            padding: 20px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
             width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
             transition: var(--transition);
         }
 
@@ -305,7 +289,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .deposit-form {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 25px;
             align-items: center;
             justify-content: center;
         }
@@ -405,6 +389,10 @@ $username = $_SESSION['username'] ?? 'Petugas';
             appearance: none;
         }
 
+        .pin-input {
+            font-family: 'Courier New', Courier, monospace;
+        }
+
         .rek-input:focus, .pin-input:focus {
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
@@ -423,7 +411,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
         @keyframes shake {
             0%, 100% { transform: translateX(0); }
-            20%, 60% { transform: translateX(- sistemsistem5px); }
+            20%, 60% { transform: translateX(-5px); }
             40%, 80% { transform: translateX(5px); }
         }
 
@@ -447,8 +435,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transition: var(--transition);
             width: var(--button-width);
             height: var(--button-height);
-            margin: 0 auto;
-            position: relative;
+            margin: 0;
         }
 
         .btn:hover {
@@ -533,8 +520,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
-            margin: 20px auto 0;
+            gap: 15px;
+            margin: 25px auto 0;
             width: 100%;
             max-width: 310px;
             box-sizing: border-box;
@@ -576,8 +563,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
             opacity: 0;
             animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
             overflow: hidden;
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             cursor: default;
+        }
+
+        .modal-content.success {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+        }
+
+        .modal-content.error {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
         }
 
         .modal-content::before {
@@ -671,9 +665,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 max-width: 100%;
             }
 
+            .deposit-card, .account-details {
+                padding: 15px;
+                max-width: 100%;
+            }
+
             .steps-section {
                 flex-direction: column;
                 align-items: flex-start;
+                gap: 15px;
             }
 
             .step-item {
@@ -719,7 +719,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         <button class="back-btn" id="backBtn">
             <span class="btn-content"><i class="fas fa-xmark"></i></span>
         </button>
-        <h1>SCHOBANK</h1>
+        <h1>SchoBank</h1>
         <div style="width: 40px;"></div>
     </nav>
 
@@ -833,16 +833,16 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 </div>
                 <form id="formPin" class="deposit-form">
                     <div class="form-group">
-                        <label>Masukkan PIN (6 Digit):</label>
+                        <label for="pin">Masukkan PIN (6 Digit):</label>
                         <div class="pin-container">
-                            <input type="text" class="pin-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="pin-input" maxlength="1" data-index="6" inputmode="numeric" pattern="[0-9]*">
+                            <input type="password" class="pin-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*">
+                            <input type="password" class="pin-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*">
+                            <input type="password" class="pin-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*">
+                            <input type="password" class="pin-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*">
+                            <input type="password" class="pin-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*">
+                            <input type="password" class="pin-input" maxlength="1" data-index="6" inputmode="numeric" pattern="[0-9]*">
                         </div>
-                        <input type="hidden" id="pin">
+                        <input type="hidden" id="pin" name="pin">
                     </div>
                     <div class="confirm-buttons">
                         <button type="button" id="verifyPin" class="btn btn-confirm">
@@ -985,38 +985,30 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 modalTitle.textContent = title;
                 modalMessage.textContent = message;
                 modalIcon.className = `fas modal-icon ${isSuccess ? 'fa-check-circle success-icon' : 'fa-exclamation-circle error-icon'}`;
+                modalContent.className = `modal-content ${isSuccess ? 'success' : 'error'}`;
                 modalOverlay.classList.add('show');
                 modalOverlay.focus();
-                // Auto-close modal after 2 seconds for success, keep open for errors
-                if (isSuccess) {
-                    setTimeout(() => {
-                        closeModal();
+                setTimeout(() => {
+                    closeModal();
+                    if (isSuccess) {
                         resetForm();
-                    }, 2000);
-                }
+                    }
+                }, 2000);
             }
 
             function closeModal() {
                 modalOverlay.classList.remove('show');
             }
 
-            // Close modal when clicking outside the modal content
-            modalOverlay.addEventListener('click', function() {
-                closeModal();
-            });
+            modalOverlay.addEventListener('click', closeModal);
+            modalContent.addEventListener('click', e => e.stopPropagation());
 
-            // Prevent clicks on modal content from closing the modal
-            modalContent.addEventListener('click', function(e) {
-                e.stopPropagation();
-            });
-
-            // Back Button Handler
-            backBtn.addEventListener('click', function() {
-                backBtn.classList.add('loading');
+            // Back Button Handler (No Loading Spinner)
+            backBtn.addEventListener('click', () => {
                 window.location.href = 'dashboard.php';
             });
 
-            // Function to clear inputs
+            // Clear Form Functions
             function clearRekForm() {
                 rekInputs.forEach(input => {
                     input.value = '';
@@ -1053,19 +1045,19 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.addEventListener('input', function(e) {
                     let value = this.value.replace(/[^0-9]/g, '');
                     if (value.length === 1) {
+                        this.value = value;
                         this.classList.add('filled');
                         this.dataset.originalValue = value;
-                        this.value = value;
                         updateHiddenNoRek();
-                        if (index < 5) {
+                        if (index < rekInputs.length - 1) {
                             rekInputs[index + 1].focus();
                         } else if (hiddenNoRek.value.length === 9) {
                             cekButton.click();
                         }
                     } else {
+                        this.value = '';
                         this.classList.remove('filled');
                         this.dataset.originalValue = '';
-                        this.value = '';
                         updateHiddenNoRek();
                     }
                 });
@@ -1073,9 +1065,9 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.addEventListener('keydown', function(e) {
                     if (e.key === 'Backspace' && !this.dataset.originalValue && index > 0) {
                         rekInputs[index - 1].focus();
+                        rekInputs[index - 1].value = '';
                         rekInputs[index - 1].classList.remove('filled');
                         rekInputs[index - 1].dataset.originalValue = '';
-                        rekInputs[index - 1].value = '';
                         updateHiddenNoRek();
                     }
                 });
@@ -1083,19 +1075,16 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.addEventListener('paste', function(e) {
                     e.preventDefault();
                     let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-                    rekInputs.forEach((inp, i) => {
-                        inp.value = '';
-                        inp.classList.remove('filled');
-                        inp.dataset.originalValue = '';
-                    });
-                    for (let i = 0; i < 6 && i < pastedData.length; i++) {
+                    clearRekForm();
+                    for (let i = 0; i < pastedData.length && i < rekInputs.length; i++) {
                         rekInputs[i].value = pastedData[i];
-                        rekInputs[i].dataset.originalValue = pastedData[i];
                         rekInputs[i].classList.add('filled');
+                        rekInputs[i].dataset.originalValue = pastedData[i];
                     }
                     updateHiddenNoRek();
                     if (pastedData.length > 0) {
-                        rekInputs[Math.min(pastedData.length - 1, 5)].focus();
+                        const focusIndex = Math.min(pastedData.length - 1, rekInputs.length - 1);
+                        rekInputs[focusIndex].focus();
                     }
                     if (hiddenNoRek.value.length === 9) {
                         cekButton.click();
@@ -1110,7 +1099,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     if (value.length === 1) {
                         this.classList.add('filled');
                         this.dataset.originalValue = value;
-                        this.value = value;
+                        this.value = '*';
                         updateHiddenPin();
                         if (index < 5) {
                             pinInputs[index + 1].focus();
@@ -1138,13 +1127,9 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.addEventListener('paste', function(e) {
                     e.preventDefault();
                     let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-                    pinInputs.forEach((inp, i) => {
-                        inp.value = '';
-                        inp.classList.remove('filled');
-                        inp.dataset.originalValue = '';
-                    });
-                    for (let i = 0; i < 6 && i < pastedData.length; i++) {
-                        pinInputs[i].value = pastedData[i];
+                    clearPinForm();
+                    for (let i = 0; i < pastedData.length && i < 6; i++) {
+                        pinInputs[i].value = '*';
                         pinInputs[i].dataset.originalValue = pastedData[i];
                         pinInputs[i].classList.add('filled');
                     }
@@ -1161,6 +1146,9 @@ $username = $_SESSION['username'] ?? 'Petugas';
             // Amount Input Handling
             inputJumlah.addEventListener('input', function(e) {
                 let value = this.value.replace(/[^0-9]/g, '');
+                if (value.length > 8) {
+                    value = value.slice(0, 8);
+                }
                 if (value === '') {
                     this.value = '';
                     return;
@@ -1177,24 +1165,17 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 return 'Rp ' + value.toLocaleString('id-ID', { minimumFractionDigits: 0 });
             }
 
+            // Step Indicator Updates
             function updateStepIndicators(activeStep) {
                 step1Indicator.className = 'step-item';
                 step2Indicator.className = 'step-item';
                 step3Indicator.className = 'step-item';
                 step4Indicator.className = 'step-item';
 
-                if (activeStep >= 1) {
-                    step1Indicator.className = activeStep > 1 ? 'step-item completed' : 'step-item active';
-                }
-                if (activeStep >= 2) {
-                    step2Indicator.className = activeStep > 2 ? 'step-item completed' : 'step-item active';
-                }
-                if (activeStep >= 3) {
-                    step3Indicator.className = activeStep > 3 ? 'step-item completed' : 'step-item active';
-                }
-                if (activeStep === 4) {
-                    step4Indicator.className = 'step-item active';
-                }
+                if (activeStep >= 1) step1Indicator.className = activeStep > 1 ? 'step-item completed' : 'step-item active';
+                if (activeStep >= 2) step2Indicator.className = activeStep > 2 ? 'step-item completed' : 'step-item active';
+                if (activeStep >= 3) step3Indicator.className = activeStep > 3 ? 'step-item completed' : 'step-item active';
+                if (activeStep === 4) step4Indicator.className = 'step-item active';
             }
 
             function showStep(step) {
@@ -1216,6 +1197,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 accountData = {};
             }
 
+            // Form Submission Handlers
             cekForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 const rekening = hiddenNoRek.value;
@@ -1233,9 +1215,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     body: `action=cek_rekening&no_rekening=${encodeURIComponent(rekening)}`
                 })
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(data => {
@@ -1270,15 +1250,19 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     inputJumlah.focus();
                     return;
                 }
+                if (jumlah.toString().length > 8) {
+                    confirmAmount.classList.remove('loading');
+                    showModal('Error', 'Jumlah penarikan maksimal 8 digit (Rp 99.999.999)', false);
+                    inputJumlah.focus();
+                    return;
+                }
                 fetch('proses_tarik.php', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: `action=check_balance&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${jumlah}`
                 })
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(data => {
@@ -1330,9 +1314,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     body: `action=verify_pin&user_id=${accountData.user_id}&pin=${pin}`
                 })
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(data => {
@@ -1377,9 +1359,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     body: `action=tarik_tunai&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${accountData.jumlah}&petugas_id=${encodeURIComponent(<?php echo $_SESSION['user_id']; ?>)}`
                 })
                 .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(data => {

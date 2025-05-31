@@ -51,7 +51,7 @@ if (!$rekening_data) {
     }
 
     // Pagination handling
-    $items_per_page = 10;
+    $items_per_page = 5; // 5 dates per page
     $current_page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
     $offset = ($current_page - 1) * $items_per_page;
 
@@ -110,8 +110,9 @@ if (!$rekening_data) {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cek Mutasi - SCHOBANK SYSTEM</title>
+    <title>Mutasi - SchoBank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -148,7 +149,7 @@ if (!$rekening_data) {
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
         }
 
         .top-nav {
@@ -201,6 +202,7 @@ if (!$rekening_data) {
             overflow: hidden;
             animation: fadeInBanner 0.8s ease-out;
             border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
         }
 
         .welcome-banner::before {
@@ -232,36 +234,10 @@ if (!$rekening_data) {
             display: flex;
             align-items: center;
             gap: 10px;
+            justify-content: center;
             position: relative;
             z-index: 1;
             text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .welcome-banner p {
-            font-size: clamp(0.85rem, 1.7vw, 0.95rem);
-            position: relative;
-            z-index: 1;
-            opacity: 0.95;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .welcome-banner .detail-row {
-            display: flex;
-            align-items: center;
-        }
-
-        .welcome-banner .detail-label {
-            width: 110px;
-            font-weight: 500;
-            color: #ffffff;
-        }
-
-        .welcome-banner .detail-value {
-            flex: 1;
-            color: #ffffff;
         }
 
         .filter-card {
@@ -397,6 +373,17 @@ if (!$rekening_data) {
             color: white;
         }
 
+        .btn-toggle {
+            background-color: var(--accent-color);
+            margin: 10px auto;
+            display: block;
+            min-width: 150px;
+        }
+
+        .btn-toggle:hover {
+            background-color: #f57c00;
+        }
+
         .spinner {
             display: none;
             width: 14px;
@@ -498,18 +485,14 @@ if (!$rekening_data) {
         .table-container {
             position: relative;
             width: 100%;
-            max-height: 400px;
-            overflow-y: auto;
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            border-radius: 6px;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
         }
 
         table {
             width: 100%;
-            min-width: 600px;
             border-collapse: collapse;
-            table-layout: auto;
+            table-layout: fixed;
             user-select: none;
             -webkit-user-drag: none;
             -webkit-touch-callout: none;
@@ -522,24 +505,29 @@ if (!$rekening_data) {
         }
 
         th, td {
-            padding: 12px;
+            padding: 8px 10px;
             text-align: left;
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-            border-bottom: 1px solid #eee;
+            font-size: clamp(0.7rem, 1.4vw, 0.8rem);
+            border-bottom: 1px solid #e5e7eb;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         th {
             background: var(--primary-light);
-            color: var(--text-secondary);
+            color: var(--text-primary);
             font-weight: 600;
             position: sticky;
             top: 0;
             z-index: 10;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         td {
             color: var(--text-primary);
+            font-weight: 400;
         }
 
         tr:nth-child(even) {
@@ -547,40 +535,40 @@ if (!$rekening_data) {
         }
 
         tr:hover {
-            background-color: #f8faff;
+            background-color: var(--primary-light);
+            transition: background-color 0.2s ease;
         }
 
-        .amount-debit, .amount-kredit {
+        .amount {
             text-align: right;
             font-weight: 500;
+            font-family: 'Poppins', sans-serif;
         }
 
-        .amount-debit {
+        .amount.incoming {
             color: var(--success-color);
         }
 
-        .amount-kredit {
+        .amount.outgoing {
             color: var(--danger-color);
         }
 
         .no-transaksi {
-            border: none;
+            font-weight: 500;
+            color: var(--text-secondary);
         }
 
         .detail-cell {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
             position: relative;
         }
 
         .detail-cell .tooltip {
             visibility: hidden;
-            width: 200px;
-            background-color: #ffffff;
+            width: 180px;
+            background-color: white;
             color: var(--text-primary);
             text-align: left;
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 8px;
             position: absolute;
             z-index: 10;
@@ -588,10 +576,10 @@ if (!$rekening_data) {
             left: 0;
             opacity: 0;
             transition: opacity 0.3s, transform 0.3s;
-            font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            box-shadow: var(--shadow-md);
-            border: 1px solid #ddd;
-            transform: translateY(10px);
+            font-size: clamp(0.7rem, 1.4vw, 0.8rem);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border: 1px solid #e5e7eb;
+            transform: translateY(8px);
         }
 
         .detail-cell:hover .tooltip {
@@ -608,16 +596,17 @@ if (!$rekening_data) {
 
         .petugas-label {
             font-weight: 500;
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            font-size: clamp(0.7rem, 1.4vw, 0.8rem);
+            color: var(--text-primary);
         }
 
         .petugas-item {
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            font-size: clamp(0.65rem, 1.3vw, 0.75rem);
+            color: var(--text-secondary);
             max-width: 150px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            cursor: pointer;
         }
 
         .no-data {
@@ -646,7 +635,7 @@ if (!$rekening_data) {
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
         }
 
-        .pagination button, .pagination a {
+        .pagination button {
             background-color: #e0e0e0;
             color: var(--text-primary);
             border: none;
@@ -654,11 +643,10 @@ if (!$rekening_data) {
             border-radius: 6px;
             cursor: pointer;
             transition: var(--transition);
-            text-decoration: none;
             font-weight: 500;
         }
 
-        .pagination button:hover, .pagination a:hover {
+        .pagination button:hover {
             background-color: var(--primary-color);
             color: white;
         }
@@ -669,9 +657,13 @@ if (!$rekening_data) {
             cursor: not-allowed;
         }
 
-        .pagination .active {
-            background-color: var(--primary-color);
-            color: white;
+        .pagination .page-info {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .hidden-transaction {
+            display: none;
         }
 
         @media (max-width: 768px) {
@@ -691,14 +683,6 @@ if (!$rekening_data) {
 
             .welcome-banner h2 {
                 font-size: clamp(1.2rem, 2.4vw, 1.4rem);
-            }
-
-            .welcome-banner p {
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-            }
-
-            .welcome-banner .detail-label {
-                width: 100px;
             }
 
             .filter-card {
@@ -751,6 +735,12 @@ if (!$rekening_data) {
                 font-size: clamp(0.8rem, 1.6vw, 0.9rem);
             }
 
+            .btn-toggle {
+                min-width: 120px;
+                padding: 8px 16px;
+                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            }
+
             .transactions-container {
                 padding: 15px;
             }
@@ -771,12 +761,13 @@ if (!$rekening_data) {
             }
 
             th, td {
-                padding: 8px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+                padding: 6px 8px;
+                font-size: clamp(0.65rem, 1.3vw, 0.75rem);
             }
 
             .petugas-item {
                 max-width: 120px;
+                font-size: clamp(0.6rem, 1.2vw, 0.7rem);
             }
 
             .pagination {
@@ -784,7 +775,7 @@ if (!$rekening_data) {
                 margin-top: 15px;
             }
 
-            .pagination button, .pagination a {
+            .pagination button {
                 padding: 6px 10px;
                 font-size: clamp(0.8rem, 1.6vw, 0.9rem);
             }
@@ -792,7 +783,7 @@ if (!$rekening_data) {
 
         @media (max-width: 480px) {
             body {
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
 
             .top-nav {
@@ -810,14 +801,6 @@ if (!$rekening_data) {
 
             .welcome-banner h2 {
                 font-size: clamp(1.1rem, 2.2vw, 1.3rem);
-            }
-
-            .welcome-banner p {
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            }
-
-            .welcome-banner .detail-label {
-                width: 90px;
             }
 
             .filter-card {
@@ -861,6 +844,12 @@ if (!$rekening_data) {
                 font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
 
+            .btn-toggle {
+                min-width: 100px;
+                padding: 7px 12px;
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+            }
+
             .transactions-container {
                 padding: 12px;
             }
@@ -888,7 +877,7 @@ if (!$rekening_data) {
                 margin-top: 12px;
             }
 
-            .pagination button, .pagination a {
+            .pagination button {
                 padding: 5px 8px;
                 font-size: clamp(0.75rem, 1.5vw, 0.85rem);
             }
@@ -900,23 +889,15 @@ if (!$rekening_data) {
         <button class="back-btn" onclick="window.location.href='dashboard.php'">
             <i class="fas fa-xmark"></i>
         </button>
-        <h1>SCHOBANK</h1>
+        <h1>SchoBank</h1>
         <div style="width: 36px;"></div>
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
             <h2 style="font-family: 'Poppins', sans-serif; font-weight: 700;">
-                <i class="fas fa-file-invoice-dollar"></i> Mutasi Rekening
+                Mutasi Rekening
             </h2>
-            <p class="detail-row" style="font-family: 'Poppins', sans-serif; font-weight: 500;">
-                <span class="detail-label">Nomor Rekening:</span>
-                <span class="detail-value"><?= htmlspecialchars($no_rekening ?? 'N/A') ?></span>
-            </p>
-            <p class="detail-row" style="font-family: 'Poppins', sans-serif; font-weight: 500;">
-                <span class="detail-label">Nama Pemilik:</span>
-                <span class="detail-value"><?= htmlspecialchars($nama_pemilik) ?></span>
-            </p>
         </div>
 
         <div id="alertContainer">
@@ -985,25 +966,24 @@ if (!$rekening_data) {
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>Jenis</th>
-                                            <th>Debit</th>
-                                            <th>Kredit</th>
-                                            <th>No Transaksi</th>
+                                            <th>Jenis Transaksi</th>
+                                            <th>Jumlah</th>
+                                            <th>No. Transaksi</th>
                                             <th>Detail</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php foreach ($daily_transactions as $transaksi): 
+                                        <?php 
+                                        $visible_count = 5;
+                                        $index = 0;
+                                        foreach ($daily_transactions as $transaksi): 
                                             $is_transfer_masuk = $transaksi['jenis_transaksi'] === 'transfer' && 
                                                                 $transaksi['rekening_tujuan'] === $no_rekening;
-                                            $debit_amount = ($transaksi['jenis_transaksi'] === 'setor' || $is_transfer_masuk) 
-                                                          ? $transaksi['jumlah'] : 0;
-                                            $kredit_amount = ($transaksi['jenis_transaksi'] === 'tarik' || 
-                                                             ($transaksi['jenis_transaksi'] === 'transfer' && 
-                                                              $transaksi['rekening_asal'] === $no_rekening)) 
-                                                          ? $transaksi['jumlah'] : 0;
+                                            $is_incoming = $transaksi['jenis_transaksi'] === 'setor' || $is_transfer_masuk;
+                                            $amount = $transaksi['jumlah'];
+                                            $is_hidden = $index >= $visible_count ? 'hidden-transaction' : '';
                                         ?>
-                                            <tr>
+                                            <tr class="<?= $is_hidden ?>" data-date="<?= htmlspecialchars($date) ?>">
                                                 <td>
                                                     <?php if ($transaksi['jenis_transaksi'] === 'setor'): ?>
                                                         Debit
@@ -1017,19 +997,8 @@ if (!$rekening_data) {
                                                         <?php endif; ?>
                                                     <?php endif; ?>
                                                 </td>
-                                                <td class="amount-debit">
-                                                    <?php if ($debit_amount > 0): ?>
-                                                        Rp <?= number_format($debit_amount, 0, ',', '.') ?>
-                                                    <?php else: ?>
-                                                        -
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td class="amount-kredit">
-                                                    <?php if ($kredit_amount > 0): ?>
-                                                        Rp <?= number_format($kredit_amount, 0, ',', '.') ?>
-                                                    <?php else: ?>
-                                                        -
-                                                    <?php endif; ?>
+                                                <td class="amount <?= $is_incoming ? 'incoming' : 'outgoing' ?>">
+                                                    Rp <?= number_format($amount, 0, ',', '.') ?>
                                                 </td>
                                                 <td class="no-transaksi">
                                                     <?= htmlspecialchars($transaksi['no_transaksi'] ?? 'N/A') ?>
@@ -1063,18 +1032,23 @@ if (!$rekening_data) {
                                                         </span>
                                                     <?php elseif ($transaksi['jenis_transaksi'] === 'transfer'): ?>
                                                         <?php if ($transaksi['rekening_asal'] === $no_rekening): ?>
-                                                            Ke: <?= htmlspecialchars($transaksi['rekening_tujuan'] ?? 'N/A') ?> 
-                                                            (<?= htmlspecialchars($transaksi['nama_penerima'] ?? 'N/A') ?>)
+                                                            Ke: <?= htmlspecialchars($transaksi['nama_penerima'] ?? 'N/A') ?>
                                                         <?php else: ?>
-                                                            Dari: <?= htmlspecialchars($transaksi['rekening_asal'] ?? 'N/A') ?> 
-                                                            (<?= htmlspecialchars($transaksi['nama_pengirim'] ?? 'N/A') ?>)
+                                                            Dari: <?= htmlspecialchars($transaksi['nama_pengirim'] ?? 'N/A') ?>
                                                         <?php endif; ?>
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>
-                                        <?php endforeach; ?>
+                                        <?php 
+                                            $index++;
+                                        endforeach; ?>
                                     </tbody>
                                 </table>
+                                <?php if (count($daily_transactions) > $visible_count): ?>
+                                    <button class="btn btn-toggle" onclick="toggleTransactions('<?= htmlspecialchars($date) ?>')">
+                                        <span class="toggle-text">Lihat Lainnya</span>
+                                    </button>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -1083,12 +1057,7 @@ if (!$rekening_data) {
                             <button onclick="changePage(<?= $current_page - 1 ?>)" <?= $current_page <= 1 ? 'disabled' : '' ?>>
                                 <i class="fas fa-chevron-left"></i> Sebelumnya
                             </button>
-                            <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                                <a href="?start_date=<?= htmlspecialchars($start_date) ?>&end_date=<?= htmlspecialchars($end_date) ?>&filter_type=<?= htmlspecialchars($filter_type) ?>&page=<?= $i ?>" 
-                                   class="<?= $i === $current_page ? 'active' : '' ?>">
-                                    <?= $i ?>
-                                </a>
-                            <?php endfor; ?>
+                            <span class="page-info"><?= $current_page ?></span>
                             <button onclick="changePage(<?= $current_page + 1 ?>)" <?= $current_page >= $total_pages ? 'disabled' : '' ?>>
                                 Berikutnya <i class="fas fa-chevron-right"></i>
                             </button>
@@ -1114,8 +1083,7 @@ if (!$rekening_data) {
             if (type === 'error') icon = 'exclamation-circle';
             alertDiv.innerHTML = `
                 <i class="fas fa-${icon}"></i>
-                <span>${message}</span>
-            `;
+                <span>${message}</span>`;
             alertContainer.appendChild(alertDiv);
             setTimeout(() => {
                 alertDiv.classList.add('hide');
@@ -1158,7 +1126,7 @@ if (!$rekening_data) {
                 document.querySelector(`.btn-preset[onclick="setFilter('${type}')"]`).classList.add('active');
             }
 
-            document.getElementById('page').value = 1; // Reset to page 1 on filter change
+            document.getElementById('page').value = 1;
             document.getElementById('filterForm').submit();
         }
 
@@ -1187,6 +1155,26 @@ if (!$rekening_data) {
             if (page < 1 || page > <?= $total_pages ?>) return;
             document.getElementById('page').value = page;
             document.getElementById('filterForm').submit();
+        }
+
+        function toggleTransactions(date) {
+            const rows = document.querySelectorAll(`tr[data-date="${date}"]`);
+            const button = document.querySelector(`button[onclick="toggleTransactions('${date}')"]`);
+            const text = button.querySelector('.toggle-text');
+            let isHidden = false;
+
+            rows.forEach((row, index) => {
+                if (index >= 5) {
+                    if (row.classList.contains('hidden-transaction')) {
+                        row.classList.remove('hidden-transaction');
+                    } else {
+                        row.classList.add('hidden-transaction');
+                        isHidden = true;
+                    }
+                }
+            });
+
+            text.textContent = isHidden ? 'Lihat Lainnya' : 'Tutup';
         }
 
         document.addEventListener('DOMContentLoaded', () => {
@@ -1231,7 +1219,7 @@ if (!$rekening_data) {
                         input.value = today;
                     }
                     document.getElementById('filter_type').value = 'custom';
-                    document.getElementById('page').value = 1; // Reset to page 1 on date change
+                    document.getElementById('page').value = 1;
                     document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
                 });
             });
@@ -1239,17 +1227,6 @@ if (!$rekening_data) {
             const tables = document.querySelectorAll('table');
             tables.forEach(table => {
                 table.addEventListener('dragstart', (e) => e.preventDefault());
-                table.addEventListener('touchmove', (e) => {
-                    const touch = e.touches[0];
-                    const deltaX = touch.clientX - (table.dataset.lastX || touch.clientX);
-                    table.dataset.lastX = touch.clientX;
-                    if (Math.abs(deltaX) > 0) {
-                        e.preventDefault();
-                    }
-                }, { passive: false });
-                table.addEventListener('touchend', () => {
-                    delete table.dataset.lastX;
-                });
             });
         });
 

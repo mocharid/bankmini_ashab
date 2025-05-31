@@ -24,20 +24,131 @@ function maskNoRekening($no_rekening) {
 
 // Initialize filter parameters
 $jurusan_id = isset($_GET['jurusan_id']) ? intval($_GET['jurusan_id']) : 0;
+$tingkatan_id = isset($_GET['tingkatan_id']) ? intval($_GET['tingkatan_id']) : 0;
 $kelas_id = isset($_GET['kelas_id']) ? intval($_GET['kelas_id']) : 0;
 $page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $limit = 10;
 $offset = ($page - 1) * $limit;
 
+// Handle AJAX table refresh
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'refresh_table') {
+    ob_start();
+    // Fetch students
+    $query = "SELECT u.id, u.nama, r.no_rekening, j.nama_jurusan, CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas, r.saldo 
+              FROM users u
+              LEFT JOIN rekening r ON u.id = r.user_id
+              LEFT JOIN jurusan j ON u.jurusan_id = j.id
+              LEFT JOIN kelas k ON u.kelas_id = k.id
+              LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
+              WHERE u.role = 'siswa'";
+    $count_query = "SELECT COUNT(*) as total FROM users u WHERE u.role = 'siswa'";
+    $params = [];
+    $types = '';
+
+    if ($jurusan_id > 0) {
+        $query .= " AND u.jurusan_id = ?";
+        $count_query .= " AND u.jurusan_id = ?";
+        $params[] = $jurusan_id;
+        $types .= 'i';
+    }
+    if ($tingkatan_id > 0) {
+        $query .= " AND k.tingkatan_kelas_id = ?";
+        $count_query .= " AND u.kelas_id IN (SELECT id FROM kelas WHERE tingkatan_kelas_id = ?)";
+        $params[] = $tingkatan_id;
+        $types .= 'i';
+    }
+    if ($kelas_id > 0) {
+        $query .= " AND u.kelas_id = ?";
+        $count_query .= " AND u.kelas_id = ?";
+        $params[] = $kelas_id;
+        $types .= 'i';
+    }
+
+    $display_query = $query . " ORDER BY u.nama LIMIT ? OFFSET ?";
+    $params_display = array_merge($params, [$limit, $offset]);
+    $types_display = $types . 'ii';
+
+    $stmt_siswa = $conn->prepare($display_query);
+    if (!empty($params_display)) {
+        $stmt_siswa->bind_param($types_display, ...$params_display);
+    }
+    $stmt_siswa->execute();
+    $siswa = $stmt_siswa->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt_siswa->close();
+
+    $stmt_count = $conn->prepare($count_query);
+    if (!empty($params)) {
+        $stmt_count->bind_param($types, ...$params);
+    }
+    $stmt_count->execute();
+    $total_records = $stmt_count->get_result()->fetch_assoc()['total'];
+    $total_pages = ceil($total_records / $limit);
+    $stmt_count->close();
+
+    // Generate table HTML
+    $output = '';
+    if (empty($siswa)) {
+        $output .= '<div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <p>Tidak ada data siswa yang ditemukan</p>
+                    </div>';
+    } else {
+        $output .= '<table class="summary-table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAll"></th>
+                                <th>No</th>
+                                <th>Nama</th>
+                                <th>No Rekening</th>
+                                <th>Jurusan</th>
+                                <th>Kelas</th>
+                                <th>Saldo</th>
+                            </tr>
+                        </thead>
+                        <tbody>';
+        $no = $offset + 1;
+        foreach ($siswa as $row) {
+            $output .= "<tr>
+                            <td><input type='checkbox' name='selected_ids[]' value='{$row['id']}' class='select-item'></td>
+                            <td>$no</td>
+                            <td>" . htmlspecialchars($row['nama'] ?? '-') . "</td>
+                            <td>" . htmlspecialchars(maskNoRekening($row['no_rekening'])) . "</td>
+                            <td>" . htmlspecialchars($row['nama_jurusan'] ?? '-') . "</td>
+                            <td>" . htmlspecialchars($row['nama_kelas'] ?? '-') . "</td>
+                            <td>Rp " . number_format($row['saldo'] ?? 0, 0, ',', '.') . "</td>
+                        </tr>";
+            $no++;
+        }
+        $output .= '</tbody></table>';
+    }
+
+    if ($total_pages > 1) {
+        $output .= '<div class="pagination">
+                        <a href="?page=' . max(1, $page - 1) . '&jurusan_id=' . htmlspecialchars($jurusan_id) . '&tingkatan_id=' . htmlspecialchars($tingkatan_id) . '&kelas_id=' . htmlspecialchars($kelas_id) . '" 
+                           class="pagination-link ' . ($page <= 1 ? 'disabled' : '') . '">« Sebelumnya</a>
+                        <a href="?page=' . min($total_pages, $page + 1) . '&jurusan_id=' . htmlspecialchars($jurusan_id) . '&tingkatan_id=' . htmlspecialchars($tingkatan_id) . '&kelas_id=' . htmlspecialchars($kelas_id) . '" 
+                           class="pagination-link ' . ($page >= $total_pages ? 'disabled' : '') . '">Selanjutnya »</a>
+                    </div>';
+    }
+
+    $response = [
+        'success' => true,
+        'html' => $output,
+        'total_siswa' => count($siswa)
+    ];
+    header('Content-Type: application/json');
+    echo json_encode($response);
+    ob_end_flush();
+    exit();
+}
+
 // Handle account deletion
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_selected'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_selected']) && !isset($_POST['action'])) {
     $selected_ids = isset($_POST['selected_ids']) && is_array($_POST['selected_ids']) ? array_map('intval', $_POST['selected_ids']) : [];
-    error_log("Received selected_ids: " . json_encode($selected_ids));
     $success_count = 0;
     $failed_accounts = [];
 
     if (!empty($selected_ids)) {
-        error_log("Processing deletion for user IDs: " . implode(', ', $selected_ids));
         foreach ($selected_ids as $user_id) {
             $conn->begin_transaction();
             try {
@@ -47,9 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_selected'])) {
                                         LEFT JOIN rekening r ON u.id = r.user_id 
                                         WHERE u.id = ? AND u.role = 'siswa'");
                 $stmt->bind_param("i", $user_id);
-                if (!$stmt->execute()) {
-                    throw new Exception("Failed to fetch user ID $user_id: " . $stmt->error);
-                }
+                $stmt->execute();
                 $result = $stmt->get_result();
                 if ($result->num_rows === 0) {
                     throw new Exception("User ID $user_id not found or not a student.");
@@ -61,46 +170,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_selected'])) {
                 $saldo = $user['saldo'] ?? 0;
                 $no_rekening = $user['no_rekening'] ?? '';
 
-                // Check if saldo is not zero
                 if (!is_null($saldo) && $saldo != 0) {
                     $failed_accounts[] = "Akun $no_rekening (Saldo: Rp " . number_format($saldo, 0, ',', '.') . ")";
-                    error_log("Skipping deletion for user ID $user_id: Non-zero saldo ($saldo)");
                     $conn->rollback();
                     continue;
                 }
 
-                // Delete related mutasi
                 if ($rekening_id) {
                     $stmt = $conn->prepare("DELETE m FROM mutasi m 
                                             JOIN transaksi t ON m.transaksi_id = t.id 
                                             WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?");
                     $stmt->bind_param("ii", $rekening_id, $rekening_id);
-                    if (!$stmt->execute()) {
-                        throw new Exception("Failed to delete mutasi for rekening ID $rekening_id: " . $stmt->error);
-                    }
-                    error_log("Deleted mutasi for rekening ID $rekening_id");
+                    $stmt->execute();
                     $stmt->close();
 
-                    // Delete related transaksi
                     $stmt = $conn->prepare("DELETE FROM transaksi WHERE rekening_id = ? OR rekening_tujuan_id = ?");
                     $stmt->bind_param("ii", $rekening_id, $rekening_id);
-                    if (!$stmt->execute()) {
-                        throw new Exception("Failed to delete transaksi for rekening ID $rekening_id: " . $stmt->error);
-                    }
-                    error_log("Deleted transaksi for rekening ID $rekening_id");
+                    $stmt->execute();
                     $stmt->close();
 
-                    // Delete rekening
                     $stmt = $conn->prepare("DELETE FROM rekening WHERE id = ?");
                     $stmt->bind_param("i", $rekening_id);
-                    if (!$stmt->execute()) {
-                        throw new Exception("Failed to delete rekening ID $rekening_id: " . $stmt->error);
-                    }
-                    error_log("Deleted rekening ID $rekening_id");
+                    $stmt->execute();
                     $stmt->close();
                 }
 
-                // Delete related user data
                 $tables = [
                     'account_freeze_log' => ['column' => 'siswa_id', 'type' => 'i'],
                     'active_sessions' => ['column' => 'user_id', 'type' => 'i'],
@@ -113,24 +207,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_selected'])) {
                     if ($conn->query("SHOW TABLES LIKE '$table'")->num_rows > 0) {
                         $stmt = $conn->prepare("DELETE FROM $table WHERE {$config['column']} = ?");
                         $stmt->bind_param($config['type'], $user_id);
-                        if (!$stmt->execute()) {
-                            throw new Exception("Failed to delete from $table for user ID $user_id: " . $stmt->error);
-                        }
-                        error_log("Deleted from $table for user ID $user_id");
+                        $stmt->execute();
                         $stmt->close();
                     }
                 }
 
-                // Delete user
                 $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
                 $stmt->bind_param("i", $user_id);
-                if (!$stmt->execute()) {
-                    throw new Exception("Failed to delete user ID $user_id: " . $stmt->error);
-                }
-                error_log("Deleted user ID $user_id");
+                $stmt->execute();
                 $stmt->close();
 
-                // Verify deletion
                 $stmt = $conn->prepare("SELECT id FROM users WHERE id = ?");
                 $stmt->bind_param("i", $user_id);
                 $stmt->execute();
@@ -142,33 +228,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_selected'])) {
 
                 $conn->commit();
                 $success_count++;
-                error_log("Successfully deleted user ID $user_id");
             } catch (Exception $e) {
                 $conn->rollback();
-                error_log("Deletion error for user ID $user_id: " . $e->getMessage());
                 $failed_accounts[] = "Akun $no_rekening (Error: " . htmlspecialchars($e->getMessage()) . ")";
             }
         }
 
-        if ($success_count > 0) {
-            $_SESSION['success_message'] = "$success_count akun berhasil dihapus.";
-        }
-
-        if (!empty($failed_accounts)) {
-            $_SESSION['error_message'] = "Gagal menghapus beberapa akun:<br>" . implode("<br>", $failed_accounts);
-        } elseif ($success_count === 0) {
-            $_SESSION['error_message'] = "Tidak ada akun yang berhasil dihapus.";
-        }
+        $response = [
+            'success' => $success_count > 0,
+            'message' => $success_count > 0 ? "$success_count akun berhasil dihapus." : "Tidak ada akun yang berhasil dihapus.",
+            'errors' => !empty($failed_accounts) ? implode("<br>", $failed_accounts) : null
+        ];
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit();
     } else {
-        $_SESSION['error_message'] = "Tidak ada akun yang dipilih untuk dihapus.";
-        error_log("No selected_ids received in POST data: " . json_encode($_POST));
+        $response = [
+            'success' => false,
+            'message' => 'Tidak ada akun yang dipilih untuk dihapus.',
+            'errors' => null
+        ];
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit();
     }
-
-    // Redirect with cache-busting
-    $redirect_url = "data_siswa.php?page=$page&jurusan_id=$jurusan_id&kelas_id=$kelas_id&t=" . time();
-    error_log("Redirecting to: $redirect_url");
-    header("Location: $redirect_url");
-    exit();
 }
 
 // Start output buffering
@@ -176,30 +259,32 @@ ob_start();
 
 // Fetch jurusan options
 $stmt_jurusan = $conn->prepare("SELECT id, nama_jurusan FROM jurusan ORDER BY nama_jurusan");
-if (!$stmt_jurusan->execute()) {
-    error_log('[DEBUG] Error fetching jurusan: ' . $conn->error);
-    ob_end_clean();
-    die("Error fetching jurusan: " . $conn->error);
-}
+$stmt_jurusan->execute();
 $jurusan_options = $stmt_jurusan->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt_jurusan->close();
 
 // Base query for fetching students
-$query = "SELECT u.id, u.nama, r.no_rekening, j.nama_jurusan, k.nama_kelas, r.saldo 
+$query = "SELECT u.id, u.nama, r.no_rekening, j.nama_jurusan, CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas, r.saldo 
           FROM users u
           LEFT JOIN rekening r ON u.id = r.user_id
           LEFT JOIN jurusan j ON u.jurusan_id = j.id
           LEFT JOIN kelas k ON u.kelas_id = k.id
+          LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
           WHERE u.role = 'siswa'";
 $count_query = "SELECT COUNT(*) as total FROM users u WHERE u.role = 'siswa'";
 $params = [];
 $types = '';
 
-// Apply filters
 if ($jurusan_id > 0) {
     $query .= " AND u.jurusan_id = ?";
     $count_query .= " AND u.jurusan_id = ?";
     $params[] = $jurusan_id;
+    $types .= 'i';
+}
+if ($tingkatan_id > 0) {
+    $query .= " AND k.tingkatan_kelas_id = ?";
+    $count_query .= " AND u.kelas_id IN (SELECT id FROM kelas WHERE tingkatan_kelas_id = ?)";
+    $params[] = $tingkatan_id;
     $types .= 'i';
 }
 if ($kelas_id > 0) {
@@ -209,34 +294,23 @@ if ($kelas_id > 0) {
     $types .= 'i';
 }
 
-// Add pagination
 $display_query = $query . " ORDER BY u.nama LIMIT ? OFFSET ?";
 $params_display = array_merge($params, [$limit, $offset]);
 $types_display = $types . 'ii';
 
-// Fetch students
 $stmt_siswa = $conn->prepare($display_query);
 if (!empty($params_display)) {
     $stmt_siswa->bind_param($types_display, ...$params_display);
 }
-if (!$stmt_siswa->execute()) {
-    error_log('[DEBUG] Error fetching siswa: ' . $conn->error);
-    ob_end_clean();
-    die("Error fetching siswa: " . $conn->error);
-}
+$stmt_siswa->execute();
 $siswa = $stmt_siswa->get_result()->fetch_all(MYSQLI_ASSOC);
 $stmt_siswa->close();
 
-// Count total records
 $stmt_count = $conn->prepare($count_query);
 if (!empty($params)) {
     $stmt_count->bind_param($types, ...$params);
 }
-if (!$stmt_count->execute()) {
-    error_log('[DEBUG] Error counting records: ' . $conn->error);
-    ob_end_clean();
-    die("Error counting records: " . $conn->error);
-}
+$stmt_count->execute();
 $total_records = $stmt_count->get_result()->fetch_assoc()['total'];
 $total_pages = ceil($total_records / $limit);
 $stmt_count->close();
@@ -252,9 +326,22 @@ if ($jurusan_id > 0) {
     $stmt_jurusan_name->close();
 }
 
+$filter_tingkatan = 'Semua Tingkatan';
+if ($tingkatan_id > 0) {
+    $stmt_tingkatan_name = $conn->prepare("SELECT nama_tingkatan FROM tingkatan_kelas WHERE id = ?");
+    $stmt_tingkatan_name->bind_param("i", $tingkatan_id);
+    if ($stmt_tingkatan_name->execute()) {
+        $filter_tingkatan = $stmt_tingkatan_name->get_result()->fetch_assoc()['nama_tingkatan'] ?? 'Semua Tingkatan';
+    }
+    $stmt_tingkatan_name->close();
+}
+
 $filter_kelas = 'Semua Kelas';
 if ($kelas_id > 0) {
-    $stmt_kelas_name = $conn->prepare("SELECT nama_kelas FROM kelas WHERE id = ?");
+    $stmt_kelas_name = $conn->prepare("SELECT CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas 
+                                       FROM kelas k 
+                                       JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id 
+                                       WHERE k.id = ?");
     $stmt_kelas_name->bind_param("i", $kelas_id);
     if ($stmt_kelas_name->execute()) {
         $filter_kelas = $stmt_kelas_name->get_result()->fetch_assoc()['nama_kelas'] ?? 'Semua Kelas';
@@ -273,16 +360,11 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         if (!empty($params)) {
             $stmt_export->bind_param($types, ...$params);
         }
-        if (!$stmt_export->execute()) {
-            error_log('[DEBUG] Error exporting to PDF: ' . $conn->error);
-            http_response_code(500);
-            die('Error exporting to PDF');
-        }
+        $stmt_export->execute();
         $all_siswa = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt_export->close();
 
         if (empty($all_siswa)) {
-            error_log('[DEBUG] No data found for PDF export');
             http_response_code(404);
             die('No data found for export');
         }
@@ -344,8 +426,9 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         $pdf->SetFillColor(220, 220, 220);
         $pdf->Cell(180, 7, 'KETERANGAN', 1, 1, 'C', true);
         $pdf->SetFont('helvetica', '', 9);
-        $pdf->Cell(90, 6, 'Jurusan: ' . $filter_jurusan, 1, 0, 'L');
-        $pdf->Cell(90, 6, 'Kelas: ' . $filter_kelas, 1, 1, 'L');
+        $pdf->Cell(60, 6, 'Jurusan: ' . $filter_jurusan, 1, 0, 'L');
+        $pdf->Cell(60, 6, 'Tingkatan: ' . $filter_tingkatan, 1, 0, 'L');
+        $pdf->Cell(60, 6, 'Kelas: ' . $filter_kelas, 1, 1, 'L');
 
         $pdf->Ln(5);
         $pdf->SetFont('helvetica', 'B', 10);
@@ -402,6 +485,7 @@ ob_end_flush();
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Data Siswa - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -420,10 +504,6 @@ ob_end_flush();
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
-            --setor-bg: #d1fae5;
-            --tarik-bg: #fee2e2;
-            --net-positive-bg: #d1fae5;
-            --net-negative-bg: #fee2e2;
         }
 
         * {
@@ -1109,12 +1189,41 @@ ob_end_flush();
                     <span class="tooltip">Pilih jurusan siswa</span>
                 </div>
                 <div class="form-group">
+                    <label for="tingkatan_id">Tingkatan</label>
+                    <select id="tingkatan_id" name="tingkatan_id">
+                        <option value="0">Semua Tingkatan</option>
+                        <?php if ($jurusan_id > 0):
+                            $stmt_tingkatan = $conn->prepare("SELECT DISTINCT tk.id, tk.nama_tingkatan 
+                                                             FROM tingkatan_kelas tk
+                                                             JOIN kelas k ON tk.id = k.tingkatan_kelas_id 
+                                                             WHERE k.jurusan_id = ? 
+                                                             ORDER BY tk.nama_tingkatan");
+                            $stmt_tingkatan->bind_param("i", $jurusan_id);
+                            if ($stmt_tingkatan->execute()) {
+                                $tingkatan_options = $stmt_tingkatan->get_result()->fetch_all(MYSQLI_ASSOC);
+                                foreach ($tingkatan_options as $tingkatan): ?>
+                                    <option value="<?= $tingkatan['id'] ?>" <?= $tingkatan_id == $tingkatan['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($tingkatan['nama_tingkatan']) ?>
+                                    </option>
+                                <?php endforeach;
+                            }
+                            $stmt_tingkatan->close();
+                        endif; ?>
+                    </select>
+                    <span class="tooltip">Pilih tingkatan kelas</span>
+                    <i class="fas fa-spinner loading-spinner" id="tingkatan-loading"></i>
+                </div>
+                <div class="form-group">
                     <label for="kelas_id">Kelas</label>
                     <select id="kelas_id" name="kelas_id">
                         <option value="0">Semua Kelas</option>
-                        <?php if ($jurusan_id > 0):
-                            $stmt_kelas = $conn->prepare("SELECT id, nama_kelas FROM kelas WHERE jurusan_id = ? ORDER BY nama_kelas");
-                            $stmt_kelas->bind_param("i", $jurusan_id);
+                        <?php if ($jurusan_id > 0 && $tingkatan_id > 0):
+                            $stmt_kelas = $conn->prepare("SELECT k.id, CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas 
+                                                         FROM kelas k 
+                                                         JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id 
+                                                         WHERE k.jurusan_id = ? AND k.tingkatan_kelas_id = ? 
+                                                         ORDER BY tk.nama_tingkatan, k.nama_kelas");
+                            $stmt_kelas->bind_param("ii", $jurusan_id, $tingkatan_id);
                             if ($stmt_kelas->execute()) {
                                 $kelas_options = $stmt_kelas->get_result()->fetch_all(MYSQLI_ASSOC);
                                 foreach ($kelas_options as $kelas): ?>
@@ -1136,7 +1245,7 @@ ob_end_flush();
                     <button type="button" id="exportPdfButton" class="btn">
                         <span class="btn-content"><i class="fas fa-file-pdf"></i> Ekspor PDF</span>
                     </button>
-                    <button type="submit" id="deleteButton" form="deleteForm" class="btn btn-disabled" disabled>
+                    <button type="button" id="deleteButton" class="btn btn-disabled" disabled>
                         <span class="btn-content"><i class="fas fa-trash"></i> Hapus Terpilih</span>
                     </button>
                 </div>
@@ -1145,15 +1254,15 @@ ob_end_flush();
 
         <div class="summary-container">
             <h3 class="summary-title">Daftar Siswa</h3>
-            <div id="tableContainer">
-                <?php if (empty($siswa)): ?>
-                    <div class="empty-state">
-                        <i class="fas fa-users"></i>
-                        <p>Tidak ada data siswa yang ditemukan</p>
-                    </div>
-                <?php else: ?>
-                    <form id="deleteForm" method="POST">
-                        <input type="hidden" name="delete_selected" value="1">
+            <form id="deleteForm" method="POST">
+                <input type="hidden" name="delete_selected" value="1">
+                <div id="tableContainer">
+                    <?php if (empty($siswa)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-users"></i>
+                            <p>Tidak ada data siswa yang ditemukan</p>
+                        </div>
+                    <?php else: ?>
                         <table class="summary-table">
                             <thead>
                                 <tr>
@@ -1180,249 +1289,180 @@ ob_end_flush();
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
-                    </form>
-                <?php endif; ?>
-                <?php if ($total_pages > 1): ?>
-                    <div class="pagination">
-                        <a href="?page=<?= max(1, $page - 1) ?>&jurusan_id=<?= htmlspecialchars($jurusan_id) ?>&kelas_id=<?= htmlspecialchars($kelas_id) ?>" 
-                           class="pagination-link <?= $page <= 1 ? 'disabled' : '' ?>">« Sebelumnya</a>
-                        <a href="?page=<?= min($total_pages, $page + 1) ?>&jurusan_id=<?= htmlspecialchars($jurusan_id) ?>&kelas_id=<?= htmlspecialchars($kelas_id) ?>" 
-                           class="pagination-link <?= $page >= $total_pages ? 'disabled' : '' ?>">Selanjutnya »</a>
-                    </div>
-                <?php endif; ?>
-            </div>
+                    <?php endif; ?>
+                    <?php if ($total_pages > 1): ?>
+                        <div class="pagination">
+                            <a href="?page=<?= max(1, $page - 1) ?>&jurusan_id=<?= htmlspecialchars($jurusan_id) ?>&tingkatan_id=<?= htmlspecialchars($tingkatan_id) ?>&kelas_id=<?= htmlspecialchars($kelas_id) ?>" 
+                               class="pagination-link <?= $page <= 1 ? 'disabled' : '' ?>">« Sebelumnya</a>
+                            <a href="?page=<?= min($total_pages, $page + 1) ?>&jurusan_id=<?= htmlspecialchars($jurusan_id) ?>&tingkatan_id=<?= htmlspecialchars($tingkatan_id) ?>&kelas_id=<?= htmlspecialchars($kelas_id) ?>" 
+                               class="pagination-link <?= $page >= $total_pages ? 'disabled' : '' ?>">Selanjutnya »</a>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </form>
             <input type="hidden" id="totalSiswa" value="<?= count($siswa) ?>">
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Prevent zooming and double-tap issues
-            document.addEventListener('touchstart', function(event) {
-                if (event.touches.length > 1) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
-
-            let lastTouchEnd = 0;
-            document.addEventListener('touchend', function(event) {
-                const now = (new Date()).getTime();
-                if (now - lastTouchEnd <= 300) {
-                    event.preventDefault();
-                }
-                lastTouchEnd = now;
-            }, { passive: false });
-
-            document.addEventListener('wheel', function(event) {
-                if (event.ctrlKey) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
-
-            document.addEventListener('dblclick', function(event) {
+    document.addEventListener('DOMContentLoaded', function() {
+        // Prevent zooming and double-tap issues
+        document.addEventListener('touchstart', function(event) {
+            if (event.touches.length > 1) {
                 event.preventDefault();
-            }, { passive: false });
+            }
+        }, { passive: false });
 
-            // Alert function
-            function showAlert(message, type, isConfirm = false, confirmCallback = null) {
-                const alertContainer = document.getElementById('alertContainer');
-                const existingAlerts = alertContainer.querySelectorAll('.success-overlay');
-                existingAlerts.forEach(alert => {
-                    alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => alert.remove(), 500);
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, { passive: false });
+
+        document.addEventListener('wheel', function(event) {
+            if (event.ctrlKey) {
+                event.preventDefault();
+            }
+        }, { passive: false });
+
+        document.addEventListener('dblclick', function(event) {
+            event.preventDefault();
+        }, { passive: false });
+
+        // Alert function
+        function showAlert(message, type, isConfirm = false, confirmCallback = null) {
+            const alertContainer = document.getElementById('alertContainer');
+            const existingAlerts = alertContainer.querySelectorAll('.success-overlay');
+            existingAlerts.forEach(alert => {
+                alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => alert.remove(), 500);
+            });
+
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'success-overlay';
+            alertDiv.innerHTML = `
+                <div class="${type}-modal">
+                    <div class="${type}-icon">
+                        <i class="fas fa-${type === 'success' ? 'check-circle' : isConfirm ? 'exclamation-triangle' : 'exclamation-circle'}"></i>
+                    </div>
+                    <h3>${type === 'success' ? 'Berhasil' : isConfirm ? 'Konfirmasi Penghapusan' : 'Gagal'}</h3>
+                    <p>${message}</p>
+                    ${isConfirm ? `
+                        <div class="modal-footer">
+                            <button type="button" class="btn modal-close-btn">
+                                <i class="fas fa-xmark"></i> Batal
+                            </button>
+                            <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                                <i class="fas fa-trash-alt"></i> Ya, Hapus
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            alertContainer.appendChild(alertDiv);
+
+            if (!isConfirm) {
+                setTimeout(() => {
+                    alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                    setTimeout(() => alertDiv.remove(), 500);
+                }, 3000); // Success/error popup disappears after 3 seconds
+            } else {
+                alertDiv.addEventListener('click', function(event) {
+                    if (!event.target.closest('.error-modal')) {
+                        alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        setTimeout(() => alertDiv.remove(), 500);
+                    }
                 });
 
-                const alertDiv = document.createElement('div');
-                alertDiv.className = 'success-overlay';
-                alertDiv.innerHTML = `
-                    <div class="${type}-modal">
-                        <div class="${type}-icon">
-                            <i class="fas fa-${type === 'success' ? 'check-circle' : isConfirm ? 'exclamation-triangle' : 'exclamation-circle'}"></i>
-                        </div>
-                        <h3>${type === 'success' ? 'Berhasil' : isConfirm ? 'Konfirmasi Penghapusan' : 'Gagal'}</h3>
-                        <p>${message}</p>
-                        ${isConfirm ? `
-                            <div class="modal-footer">
-                                <button type="button" class="btn modal-close-btn">
-                                    <i class="fas fa-xmark"></i> Batal
-                                </button>
-                                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
-                                    <i class="fas fa-trash-alt"></i> Ya, Hapus
-                                </button>
-                            </div>
-                        ` : ''}
-                    </div>
-                `;
-                alertContainer.appendChild(alertDiv);
+                const confirmBtn = alertDiv.querySelector('#confirmDeleteBtn');
+                const cancelBtn = alertDiv.querySelector('.modal-close-btn');
 
-                if (!isConfirm) {
-                    // Auto-close success/error modals after 5 seconds
-                    setTimeout(() => {
-                        alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                if (confirmBtn) {
+                    confirmBtn.addEventListener('click', function() {
+                        const spinner = showLoadingSpinner(this);
                         setTimeout(() => {
-                            alertDiv.remove();
-                            if (type === 'success') {
-                                window.location.href = 'data_siswa.php?page=<?= $page ?>&jurusan_id=<?= $jurusan_id ?>&kelas_id=<?= $kelas_id ?>&t=' + new Date().getTime();
-                            }
-                        }, 500);
-                    }, 5000);
-
-                    // Close success/error modals on any click
-                    alertDiv.addEventListener('click', function() {
-                        alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                        setTimeout(() => {
-                            alertDiv.remove();
-                            if (type === 'success') {
-                                window.location.href = 'data_siswa.php?page=<?= $page ?>&jurusan_id=<?= $jurusan_id ?>&kelas_id=<?= $kelas_id ?>&t=' + new Date().getTime();
-                            }
-                        }, 500);
-                    });
-                } else {
-                    // Close confirmation modal on outside click
-                    alertDiv.addEventListener('click', function(event) {
-                        if (!event.target.closest('.error-modal')) {
+                            spinner.restore();
                             alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                            setTimeout(() => alertDiv.remove(), 500);
-                        }
-                    });
-
-                    // Handle confirmation modal buttons
-                    const confirmBtn = alertDiv.querySelector('#confirmDeleteBtn');
-                    const cancelBtn = alertDiv.querySelector('.modal-close-btn');
-
-                    if (confirmBtn) {
-                        confirmBtn.addEventListener('click', function() {
-                            const spinner = showLoadingSpinner(this);
                             setTimeout(() => {
-                                spinner.restore();
-                                alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                                setTimeout(() => {
-                                    alertDiv.remove();
-                                    if (confirmCallback) confirmCallback();
-                                }, 500);
-                            }, 1000);
-                        });
-                    }
+                                alertDiv.remove();
+                                if (confirmCallback) confirmCallback();
+                            }, 500);
+                        }, 1000);
+                    });
+                }
 
-                    if (cancelBtn) {
-                        cancelBtn.addEventListener('click', function() {
-                            alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                            setTimeout(() => alertDiv.remove(), 500);
-                        });
-                    }
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', function() {
+                        alertDiv.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                        setTimeout(() => alertDiv.remove(), 500);
+                    });
                 }
             }
+        }
 
-            // Show loading spinner
-            function showLoadingSpinner(element, isButton = true) {
-                console.log('[DEBUG] Showing loading spinner for element:', element.id || element.className);
-                const originalContent = element.innerHTML;
-                element.innerHTML = isButton 
-                    ? '<span class="btn-content"><i class="fas fa-spinner fa-spin"></i> Memproses...</span>'
-                    : '<i class="fas fa-spinner fa-spin"></i> Memproses...';
-                element.classList.add('loading');
-                element.disabled = true;
-                return {
-                    restore: () => {
-                        element.innerHTML = originalContent;
-                        element.classList.remove('loading');
-                        element.disabled = false;
+        // Show loading spinner
+        function showLoadingSpinner(element, isButton = true) {
+            console.log('[DEBUG] Showing loading spinner for element:', element.id || element.className);
+            const originalContent = element.innerHTML;
+            element.innerHTML = isButton 
+                ? '<span class="btn-content"><i class="fas fa-spinner fa-spin"></i> Memproses...</span>'
+                : '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+            element.classList.add('loading');
+            element.disabled = true;
+            return {
+                restore: () => {
+                    element.innerHTML = originalContent;
+                    element.classList.remove('loading');
+                    element.disabled = false;
+                }
+            };
+        }
+
+        // Refresh table via AJAX
+        function refreshTable() {
+            console.log('[DEBUG] Refreshing table');
+            const jurusan_id = $('#jurusan_id').val();
+            const tingkatan_id = $('#tingkatan_id').val();
+            const kelas_id = $('#kelas_id').val();
+            const page = <?= $page ?>;
+
+            $.ajax({
+                url: 'data_siswa.php',
+                type: 'POST',
+                data: {
+                    action: 'refresh_table',
+                    jurusan_id: jurusan_id,
+                    tingkatan_id: tingkatan_id,
+                    kelas_id: kelas_id,
+                    page: page
+                },
+                dataType: 'json',
+                success: function(response) {
+                    console.log('[DEBUG] Table refresh success:', response);
+                    if (response.success) {
+                        $('#tableContainer').html(response.html);
+                        $('#totalSiswa').val(response.total_siswa);
+                        bindCheckboxEvents();
+                    } else {
+                        showAlert('Gagal memuat ulang tabel.', 'error');
                     }
-                };
-            }
+                },
+                error: function(xhr, status, error) {
+                    console.error('[DEBUG] Error refreshing table:', status, error, xhr.responseText);
+                    showAlert('Gagal memuat ulang tabel.', 'error');
+                }
+            });
+        }
 
-            // Filter form handling
-            const filterForm = document.getElementById('filterForm');
-            const filterButton = document.getElementById('filterButton');
-            const exportPdfButton = document.getElementById('exportPdfButton');
-            const jurusanSelect = document.getElementById('jurusan_id');
-            const kelasSelect = document.getElementById('kelas_id');
-            const kelasLoading = document.getElementById('kelas-loading');
-            const totalSiswa = parseInt(document.getElementById('totalSiswa').value);
-            const deleteForm = document.getElementById('deleteForm');
-            const deleteButton = document.getElementById('deleteButton');
+        // Bind checkbox events
+        function bindCheckboxEvents() {
+            console.log('[DEBUG] Binding checkbox events');
             const selectAll = document.getElementById('selectAll');
             const selectItems = document.querySelectorAll('.select-item');
 
-            if (filterForm && filterButton) {
-                filterForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    const spinner = showLoadingSpinner(filterButton);
-                    setTimeout(() => {
-                        spinner.restore();
-                        filterForm.submit();
-                    }, 1000);
-                });
-            }
-
-            // Build export URL
-            function buildExportUrl(format) {
-                const jurusan_id = jurusanSelect.value;
-                const kelas_id = kelasSelect.value;
-                let url = `?export=${format}`;
-                if (jurusan_id !== '0') url += `&jurusan_id=${encodeURIComponent(jurusan_id)}`;
-                if (kelas_id !== '0') url += `&kelas_id=${encodeURIComponent(kelas_id)}`;
-                return url;
-            }
-
-            // Handle PDF export
-            if (exportPdfButton) {
-                exportPdfButton.addEventListener('click', function() {
-                    if (totalSiswa === 0) {
-                        showAlert('Tidak ada data untuk diekspor.', 'error');
-                        return;
-                    }
-                    const spinner = showLoadingSpinner(exportPdfButton);
-                    const url = buildExportUrl('pdf');
-                    setTimeout(() => {
-                        spinner.restore();
-                        window.location.href = url;
-                    }, 1000);
-                });
-            }
-
-            // Function to toggle delete button state
-            function toggleDeleteButton() {
-                const checkedItems = document.querySelectorAll('.select-item:checked');
-                if (checkedItems.length > 0) {
-                    deleteButton.classList.remove('btn-disabled');
-                    deleteButton.classList.add('btn-danger');
-                    deleteButton.disabled = false;
-                } else {
-                    deleteButton.classList.add('btn-disabled');
-                    deleteButton.classList.remove('btn-danger');
-                    deleteButton.disabled = true;
-                }
-            }
-
-            // Handle delete form submission
-            if (deleteForm && deleteButton) {
-                deleteForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    const checkedItems = document.querySelectorAll('.select-item:checked');
-                    if (checkedItems.length === 0) {
-                        showAlert('Pilih setidaknya satu akun untuk dihapus.', 'error');
-                        return;
-                    }
-
-                    console.log('Selected IDs for deletion:', Array.from(checkedItems).map(item => item.value));
-
-                    showAlert(
-                        `PERINGATAN: Anda akan menghapus ${checkedItems.length} akun secara permanen. Pastikan semua saldo akun nol sebelum melanjutkan. Apakah Anda yakin?`,
-                        'error',
-                        true,
-                        () => {
-                            const spinner = showLoadingSpinner(deleteButton);
-                            setTimeout(() => {
-                                spinner.restore();
-                                deleteForm.submit();
-                            }, 1000);
-                        }
-                    );
-                });
-            }
-
-            // Handle select all checkbox
             if (selectAll) {
                 selectAll.addEventListener('change', function() {
                     selectItems.forEach(item => {
@@ -1432,7 +1472,6 @@ ob_end_flush();
                 });
             }
 
-            // Handle individual checkbox changes
             selectItems.forEach(item => {
                 item.addEventListener('change', function() {
                     if (!this.checked) {
@@ -1444,57 +1483,209 @@ ob_end_flush();
                 });
             });
 
-            // Initial check for delete button state
             toggleDeleteButton();
+        }
 
-            // Dynamic kelas loading
-            if (jurusanSelect && kelasSelect) {
-                jurusanSelect.addEventListener('change', function() {
-                    const jurusan_id = this.value;
-                    kelasLoading.style.display = 'block';
-                    $.ajax({
-                        url: 'get_kelas_by_jurusan.php',
-                        type: 'GET',
-                        data: { jurusan_id: jurusan_id },
-                        success: function(response) {
-                            kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>' + response;
-                            kelasLoading.style.display = 'none';
-                        },
-                        error: function(xhr, status, error) {
-                            console.error('[DEBUG] Error fetching kelas:', status, error, xhr.responseText);
-                            showAlert('Gagal memuat data kelas', 'error');
-                            kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>';
-                            kelasLoading.style.display = 'none';
-                        }
-                    });
+        // Toggle delete button state
+        function toggleDeleteButton() {
+            const checkedItems = document.querySelectorAll('.select-item:checked');
+            const deleteButton = document.getElementById('deleteButton');
+            console.log('[DEBUG] Checked items:', checkedItems.length);
+            if (checkedItems.length > 0) {
+                deleteButton.classList.remove('btn-disabled');
+                deleteButton.classList.add('btn-danger');
+                deleteButton.disabled = false;
+            } else {
+                deleteButton.classList.add('btn-disabled');
+                deleteButton.classList.remove('btn-danger');
+                deleteButton.disabled = true;
+            }
+        }
+
+        // Filter form handling
+        const filterForm = document.getElementById('filterForm');
+        const filterButton = document.getElementById('filterButton');
+        const exportPdfButton = document.getElementById('exportPdfButton');
+        const jurusanSelect = document.getElementById('jurusan_id');
+        const tingkatanSelect = document.getElementById('tingkatan_id');
+        const kelasSelect = document.getElementById('kelas_id');
+        const tingkatanLoading = document.getElementById('tingkatan-loading');
+        const kelasLoading = document.getElementById('kelas-loading');
+        const totalSiswa = document.getElementById('totalSiswa');
+        const deleteButton = document.getElementById('deleteButton');
+
+        if (filterForm && filterButton) {
+            filterForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const spinner = showLoadingSpinner(filterButton);
+                setTimeout(() => {
+                    spinner.restore();
+                    window.location.href = `data_siswa.php?page=1&jurusan_id=${jurusanSelect.value}&tingkatan_id=${tingkatanSelect.value}&kelas_id=${kelasSelect.value}`;
+                }, 1000);
+            });
+        }
+
+        // Build export URL
+        function buildExportUrl(format) {
+            const jurusan_id = jurusanSelect.value;
+            const tingkatan_id = tingkatanSelect.value;
+            const kelas_id = kelasSelect.value;
+            let url = `?export=${format}`;
+            if (jurusan_id !== '0') url += `&jurusan_id=${encodeURIComponent(jurusan_id)}`;
+            if (tingkatan_id !== '0') url += `&tingkatan_id=${encodeURIComponent(tingkatan_id)}`;
+            if (kelas_id !== '0') url += `&kelas_id=${encodeURIComponent(kelas_id)}`;
+            return url;
+        }
+
+        // Handle PDF export
+        if (exportPdfButton) {
+            exportPdfButton.addEventListener('click', function() {
+                if (parseInt(totalSiswa.value) === 0) {
+                    showAlert('Tidak ada data untuk diekspor.', 'error');
+                    return;
+                }
+                const spinner = showLoadingSpinner(exportPdfButton);
+                const url = buildExportUrl('pdf');
+                setTimeout(() => {
+                    spinner.restore();
+                    window.location.href = url;
+                }, 1000);
+            });
+        }
+
+        // Handle delete button click
+        if (deleteButton) {
+            deleteButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('[DEBUG] Delete button clicked');
+                const checkedItems = document.querySelectorAll('.select-item:checked');
+                if (checkedItems.length === 0) {
+                    showAlert('Pilih setidaknya satu akun untuk dihapus.', 'error');
+                    return;
+                }
+
+                console.log('[DEBUG] Selected items for deletion:', Array.from(checkedItems).map(item => item.value));
+
+                showAlert(
+                    `PERINGATAN: Anda akan menghapus ${checkedItems.length} akun secara permanen. Pastikan semua saldo akun nol sebelum melanjutkan. Apakah Anda yakin?`,
+                    'error',
+                    true,
+                    () => {
+                        const spinner = showLoadingSpinner(deleteButton);
+                        const formData = new FormData();
+                        formData.append('delete_selected', '1');
+                        checkedItems.forEach(item => {
+                            formData.append('selected_ids[]', item.value);
+                        });
+
+                        $.ajax({
+                            url: 'data_siswa.php',
+                            type: 'POST',
+                            data: formData,
+                            processData: false,
+                            contentType: false,
+                            dataType: 'json',
+                            success: function(response) {
+                                console.log('[DEBUG] Deletion response:', response);
+                                spinner.restore();
+                                if (response.success) {
+                                    showAlert(response.message, 'success');
+                                    refreshTable();
+                                } else {
+                                    showAlert(response.message, 'error');
+                                }
+                                if (response.errors) {
+                                    showAlert(response.errors, 'error');
+                                }
+                            },
+                            error: function(xhr, status, error) {
+                                spinner.restore();
+                                console.error('[DEBUG] Error deleting accounts:', status, error, xhr.responseText);
+                                showAlert('Gagal menghapus akun.', 'error');
+                            }
+                        });
+                    }
+                );
+            });
+        }
+
+        // Dynamic tingkatan and kelas loading
+        if (jurusanSelect && tingkatanSelect && kelasSelect) {
+            jurusanSelect.addEventListener('change', function() {
+                const jurusan_id = this.value;
+                tingkatanLoading.style.display = 'block';
+                kelasLoading.style.display = 'block';
+                $.ajax({
+                    url: 'get_kelas_by_jurusan_dan_tingkatan.php',
+                    type: 'GET',
+                    data: { jurusan_id: jurusan_id, action: 'get_tingkatan' },
+                    success: function(response) {
+                        tingkatanSelect.innerHTML = '<option value="0">Semua Tingkatan</option>' + response;
+                        kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>';
+                        tingkatanLoading.style.display = 'none';
+                        kelasLoading.style.display = 'none';
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('[DEBUG] Error fetching tingkatan:', status, error, xhr.responseText);
+                        showAlert('Gagal memuat data tingkatan', 'error');
+                        tingkatanSelect.innerHTML = '<option value="0">Semua Tingkatan</option>';
+                        kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>';
+                        tingkatanLoading.style.display = 'none';
+                        kelasLoading.style.display = 'none';
+                    }
                 });
-            }
-
-            // Prevent text selection on double-click
-            document.addEventListener('mousedown', function(e) {
-                if (e.detail > 1) {
-                    e.preventDefault();
-                }
             });
 
-            // Keyboard accessibility
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
-                    filterForm.dispatchEvent(new Event('submit'));
-                }
+            tingkatanSelect.addEventListener('change', function() {
+                const jurusan_id = jurusanSelect.value;
+                const tingkatan_id = this.value;
+                kelasLoading.style.display = 'block';
+                $.ajax({
+                    url: 'get_kelas_by_jurusan_dan_tingkatan.php',
+                    type: 'GET',
+                    data: { jurusan_id: jurusan_id, tingkatan_id: tingkatan_id, action: 'get_kelas' },
+                    success: function(response) {
+                        kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>' + response;
+                        kelasLoading.style.display = 'none';
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('[DEBUG] Error fetching kelas:', status, error, xhr.responseText);
+                        showAlert('Gagal memuat data kelas', 'error');
+                        kelasSelect.innerHTML = '<option value="0">Semua Kelas</option>';
+                        kelasLoading.style.display = 'none';
+                    }
+                });
             });
+        }
 
-            // Ensure responsive table scroll
-            const table = document.querySelector('.summary-table');
-            if (table) {
-                table.parentElement.style.overflowX = 'auto';
+        // Prevent text selection on double-click
+        document.addEventListener('mousedown', function(e) {
+            if (e.detail > 1) {
+                e.preventDefault();
             }
-
-            // Fix touch issues in Safari
-            document.addEventListener('touchstart', function(e) {
-                e.stopPropagation();
-            }, { passive: true });
         });
+
+        // Keyboard accessibility
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
+                filterForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        // Ensure responsive table scroll
+        const table = document.querySelector('.summary-table');
+        if (table) {
+            table.parentElement.style.overflowX = 'auto';
+        }
+
+        // Fix touch issues in Safari
+        document.addEventListener('touchstart', function(e) {
+            e.stopPropagation();
+        }, { passive: true });
+
+        // Bind initial checkbox events
+        bindCheckboxEvents();
+    });
     </script>
 </body>
 </html>

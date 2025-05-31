@@ -111,12 +111,14 @@ try {
         t.created_at,
         u.nama AS nama_siswa,
         k.nama_kelas,
+        tk.nama_tingkatan,
         p.nama AS nama_petugas
         FROM transaksi t 
         JOIN rekening r ON t.rekening_id = r.id 
         JOIN users u ON r.user_id = u.id 
         LEFT JOIN users p ON t.petugas_id = p.id 
         LEFT JOIN kelas k ON u.kelas_id = k.id 
+        LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
         WHERE DATE(t.created_at) BETWEEN ? AND ?
         AND t.jenis_transaksi IN ('setor', 'tarik') 
         AND (
@@ -153,6 +155,7 @@ function formatRupiah($amount) {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rekapitulasi Transaksi - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -998,12 +1001,12 @@ function formatRupiah($amount) {
                     <thead>
                         <tr>
                             <th>No</th>
+                            <th>Tanggal</th>
                             <th>No Transaksi</th>
                             <th>Nama Siswa</th>
                             <th>Kelas</th>
                             <th>Jenis</th>
                             <th>Jumlah</th>
-                            <th>Waktu</th>
                             <th>Oleh</th>
                         </tr>
                     </thead>
@@ -1013,17 +1016,20 @@ function formatRupiah($amount) {
                             $typeClass = $transaction['jenis_transaksi'] === 'setor' ? 'type-debit' : 'type-kredit';
                             $displayType = $transaction['jenis_transaksi'] === 'setor' ? 'Debit' : 'Kredit';
                             $noUrut = (($current_page - 1) * $items_per_page) + $index + 1;
-                            $nama_kelas = trim($transaction['nama_kelas'] ?? '') ?: 'N/A';
+                            // Combine nama_tingkatan and nama_kelas
+                            $nama_kelas = trim($transaction['nama_tingkatan'] ?? '') && trim($transaction['nama_kelas'] ?? '') 
+                                ? htmlspecialchars($transaction['nama_tingkatan'] . ' ' . $transaction['nama_kelas'])
+                                : 'N/A';
                             $nama_petugas = trim($transaction['nama_petugas'] ?? '') ?: 'Admin';
                             ?>
                             <tr>
                                 <td><?= $noUrut ?></td>
+                                <td><?= date('d/m/Y', strtotime($transaction['created_at'])) ?></td>
                                 <td><?= htmlspecialchars($transaction['no_transaksi'] ?? 'N/A') ?></td>
                                 <td><?= htmlspecialchars($transaction['nama_siswa'] ?? 'N/A') ?></td>
-                                <td><?= htmlspecialchars($nama_kelas) ?></td>
+                                <td><?= $nama_kelas ?></td>
                                 <td><span class="transaction-type <?= $typeClass ?>"><?= $displayType ?></span></td>
                                 <td><?= formatRupiah($transaction['jumlah']) ?></td>
-                                <td><?= date('H:i', strtotime($transaction['created_at'])) ?></td>
                                 <td><?= htmlspecialchars($nama_petugas) ?></td>
                             </tr>
                         <?php endforeach; ?>
@@ -1036,7 +1042,7 @@ function formatRupiah($amount) {
             <?php else: ?>
                 <div class="empty-state">
                     <i class="fas fa-receipt"></i>
-                    <p>Tidak ada transaksi dalam periode ini. Coba ubah <a href="#" onclick="document.getElementById('start_date').focus();">periode tanggal</a>.</p>
+                    <p>Tidak ada transaksi dalam periode ini.</p>
                 </div>
             <?php endif; ?>
         </div>
@@ -1107,22 +1113,23 @@ function formatRupiah($amount) {
             const amounts = document.querySelectorAll('.summary-box .amount, .stat-box .stat-value');
             amounts.forEach(amount => {
                 const target = parseFloat(amount.getAttribute('data-target'));
-                const isCurrency = amount.classList.contains('amount') && amount.parentElement.querySelector('h3').textContent.includes('Debit') || 
-                                   amount.classList.contains('amount') && amount.parentElement.querySelector('h3').textContent.includes('Kredit') || 
-                                   amount.classList.contains('stat-value');
+                const isCurrency = amount.classList.contains('amount') && (
+                    amount.parentElement.querySelector('h3').textContent.includes('Debit') || 
+                    amount.parentElement.querySelector('h3').textContent.includes('Kredit')
+                ) || amount.classList.contains('stat-value');
                 countUp(amount, target, 1500, isCurrency); // 1.5s duration
             });
 
             // Alert function
             function showAlert(message, type) {
                 const alertContainer = document.getElementById('alertContainer');
-                const existingAlerts = alertContainer.querySelectorAll('.alert');
+                const existingAlerts = alertContainer.querySelectorAll('.success-overlay');
                 existingAlerts.forEach(alert => {
                     alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => alert.remove(), 500);
                 });
                 const alertDiv = document.createElement('div');
-                alertDiv.className = `success-overlay`;
+                alertDiv.className = 'success-overlay';
                 alertDiv.innerHTML = `
                     <div class="${type}-modal">
                         <div class="${type}-icon">

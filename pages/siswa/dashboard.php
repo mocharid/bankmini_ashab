@@ -13,7 +13,7 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
-// Function to determine account status
+// Function to determine account status (kept for logic but not displayed)
 function getAccountStatus($user_data, $current_time) {
     if ($user_data['is_frozen']) {
         return 'dibekukan';
@@ -24,8 +24,31 @@ function getAccountStatus($user_data, $current_time) {
     }
 }
 
+// Function to determine card level and style based on balance
+function getCardLevelAndStyle($saldo) {
+    if ($saldo < 100000) {
+        return [
+            'level' => 'Tunas',
+            'gradient' => 'linear-gradient(135deg, #2E5BBA 0%, #1e3c72 100%)',
+            'fallback' => 'linear-gradient(135deg, #2E5BBA 0%, #1e3c72 30%, #2a5298 60%, #1c4591 85%, #1a3c78 100%)'
+        ];
+    } elseif ($saldo >= 100000 && $saldo <= 250000) {
+        return [
+            'level' => 'Tumbuh',
+            'gradient' => 'linear-gradient(135deg, #4B5E6A 0%, #2F3E46 100%)',
+            'fallback' => 'linear-gradient(135deg, #4B5E6A 0%, #2F3E46 30%, #3A4A56 60%, #2F3E46 85%, #263238 100%)'
+        ];
+    } else {
+        return [
+            'level' => 'Cakrawala',
+            'gradient' => 'linear-gradient(135deg, #1C2526 0%, #434C5E 100%)',
+            'fallback' => 'linear-gradient(135deg, #1C2526 0%, #434C5E 30%, #2E3440 60%, #1C2526 85%, #0D1B2A 100%)'
+        ];
+    }
+}
+
 // Fetch user details
-$query = "SELECT u.nama, u.username, u.is_frozen, u.pin_block_until, u.avatar, u.email, u.pin 
+$query = "SELECT u.nama, u.username, u.is_frozen, u.pin_block_until, u.email, u.pin 
           FROM users u 
           WHERE u.id = ?";
 $stmt = $conn->prepare($query);
@@ -57,6 +80,9 @@ if ($rekening_data) {
     $no_rekening = 'N/A';
     $rekening_id = null;
 }
+
+// Determine card level and style
+$card_info = getCardLevelAndStyle($saldo);
 
 // Cek PIN
 $has_pin = !empty($user_data['pin']);
@@ -136,10 +162,6 @@ $quotes = [
 $day_index = date('w');
 $daily_quote = $quotes[$day_index];
 
-// Avatar handling
-$avatar_style = $user_data['avatar'] ?? 'avataaars';
-$avatar_url = "https://api.dicebear.com/8.x/{$avatar_style}/svg?seed={$user_id}";
-
 // Fungsi untuk format bulan dalam bahasa Indonesia
 function formatIndonesianDate($date) {
     $months = [
@@ -155,9 +177,10 @@ function formatIndonesianDate($date) {
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
     <title>Dashboard - SCHOBANK SYSTEM</title>
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -204,6 +227,10 @@ function formatIndonesianDate($date) {
             --font-size-lg: clamp(18px, 3.5vw, 22px);
             --font-size-xl: clamp(24px, 4vw, 28px);
             --font-size-xxl: clamp(28px, 5vw, 36px);
+            --primary-color: #0c4da2;
+            --primary-dark: #0a2e5c;
+            --primary-light: #e0e9f5;
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
 
         .header {
@@ -348,215 +375,143 @@ function formatIndonesianDate($date) {
             transform: translateX(0);
         }
 
-        .welcome-banner {
-            background: linear-gradient(135deg, #ffffff 0%, #f5f7fa 100%);
-            padding: clamp(1.5rem, 4vw, 2.5rem);
-            margin: clamp(1.5rem, 3vw, 2rem) clamp(1rem, 3vw, 1.5rem);
-            border-radius: 24px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+        .card-wrapper {
             position: relative;
+            width: clamp(320px, 45vw, 400px);
+            height: clamp(200px, 28vw, 250px);
+            border-radius: 12px;
             overflow: hidden;
-            display: flex;
-            align-items: center;
-            gap: clamp(1rem, 2vw, 1.5rem);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            background: #fff;
+            margin: clamp(1.5rem, 3vw, 2rem) auto;
         }
 
-        .welcome-banner::before {
-            content: '';
+        .card-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .card-info-overlay {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%23bbdefb' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E");
-            opacity: 0.5;
-            pointer-events: none;
+            padding: 25px;
+            color: white;
+            background: rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
-        .avatar {
-            width: clamp(60px, 15vw, 80px);
-            height: clamp(60px, 15vw, 80px);
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid #1e3c72;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-            flex-shrink: 0;
-            cursor: pointer;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .avatar:hover {
-            transform: scale(1.1);
-            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        .avatar-selection {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: white;
-            padding: clamp(1.5rem, 3vw, 2rem);
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            max-width: 90%;
-            width: clamp(320px, 60vw, 450px);
-            max-height: 80vh;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .avatar-selection-header {
+        .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.5rem;
-            border-bottom: 1px solid #e0e0e0;
-            padding-bottom: 1rem;
         }
 
-        .avatar-selection-header h3 {
-            font-size: var(--font-size-lg);
+        .bank-name {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .card-type-badge {
+            background: rgba(255,255,255,0.3);
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-size: 12px;
             font-weight: 600;
-            color: #1e3c72;
+            backdrop-filter: blur(10px);
         }
 
-        .avatar-selection-close {
-            background: none;
-            border: none;
-            font-size: var(--font-size-md);
-            color: #666;
-            cursor: pointer;
-            transition: color 0.3s ease;
+        .account-number {
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: 3px;
+            margin: 20px 0;
+            font-family: 'Courier New', monospace;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
 
-        .avatar-selection-close:hover {
-            color: #1e3c72;
+        .card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
         }
 
-        .avatar-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-            gap: 1.2rem;
-            padding: 0.5rem;
-        }
-
-        .avatar-option {
-            width: 100px;
-            height: 100px;
-            border-radius: 50%;
-            object-fit: cover;
-            cursor: pointer;
-            border: 3px solid transparent;
-            transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
-            background-color: #f5f7fa;
-        }
-
-        .avatar-option:hover {
-            border-color: #1e3c72;
-            transform: scale(1.15);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        .avatar-option.selected {
-            border-color: #28a745;
-            box-shadow: 0 0 15px rgba(40, 167, 69, 0.5);
-            transform: scale(1.1);
-        }
-
-        .avatar-loading {
-            display: none;
-            text-align: center;
-            padding: 1rem;
-            font-size: var(--font-size-sm);
-            color: #1e3c72;
-            font-weight: 500;
-        }
-
-        .avatar-preview {
-            margin: 1rem 0;
-            text-align: center;
-        }
-
-        .avatar-preview img {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            border: 3px solid #1e3c72;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-
-        .avatar-confirm {
-            display: block;
-            margin: 1rem auto;
-            padding: 0.8rem 2rem;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: var(--font-size-md);
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .avatar-confirm:hover {
-            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        }
-
-        .avatar-confirm:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
-        }
-
-        .welcome-content {
+        .holder-info {
             flex: 1;
-            min-width: 0;
         }
 
-        .welcome-banner h2 {
-            font-size: var(--font-size-xxl);
+        .info-label {
+            font-size: 12px;
+            opacity: 0.9;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .holder-name {
+            font-size: 16px;
             font-weight: 700;
-            margin-bottom: 0.8rem;
-            background: linear-gradient(135deg, #1e3c72 0%, #4776c9 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -1px;
-            line-height: 1.2;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .balance-section {
+            text-align: right;
+            position: relative;
+        }
+
+        .balance-amount {
+            font-size: 18px;
+            font-weight: 800;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+        }
+
+        .card-fallback {
+            background: <?php echo $card_info['fallback']; ?>;
+            width: 100%;
+            height: 100%;
+            display: none;
+            position: relative;
             overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
 
-        .welcome-info {
-            font-size: var(--font-size-md);
-            color: #555;
-            margin-top: 0.6rem;
-            font-weight: 500;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+        .card-fallback::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Cg opacity='0.1' fill='white'%3E%3Cpath d='M50 50h40v60h-40z'/%3E%3Cpath d='M100 50h40v60h-40z'/%3E%3Cpath d='M150 50h40v60h-40z'/%3E%3Cpath d='M200 50h40v60h-40z'/%3E%3Cpath d='M250 50h40v60h-40z'/%3E%3Cpath d='M300 50h40v60h-40z'/%3E%3Cpath d='M75 120h40v60h-40z'/%3E%3Cpath d='M125 120h40v60h-40z'/%3E%3Cpath d='M175 120h40v60h-40z'/%3E%3Cpath d='M225 120h40v60h-40z'/%3E%3Cpath d='M275 120h40v60h-40z'/%3E%3Cpath d='M100 190h40v60h-40z'/%3E%3Cpath d='M150 190h40v60h-40z'/%3E%3Cpath d='M200 190h40v60h-40z'/%3E%3Cpath d='M250 190h40v60h-40z'/%3E%3C/g%3E%3C/svg%3E"),
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Cg opacity='0.08' fill='white'%3E%3Cpath d='M320 80c0-20 16-36 36-36s36 16 36 36-16 36-36 36-36-16-36-36z'/%3E%3Cpath d='M10 200c0-15 12-27 27-27s27 12 27 27-12 27-27 27-27-12-27-27z'/%3E%3Cpath d='M150 30l15 30h30l-25 20 10 30-30-20-30 20 10-30-25-20h30z'/%3E%3C/g%3E%3C/svg%3E"),
+                radial-gradient(circle at 20% 80%, rgba(255,255,255,0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255,255,255,0.08) 0%, transparent 50%);
+            background-size: 120px 90px, 150px 120px, 200px 200px, 250px 250px;
+            background-position: -10px -10px, 250px 150px, 0% 100%, 100% 0%;
+            background-repeat: no-repeat;
         }
 
-        .status-aktif {
-            color: #28a745;
-            font-weight: 500;
-        }
-
-        .status-dibekukan {
-            color: #dc3545;
-            font-weight: 500;
-        }
-
-        .status-terblokir_sementara {
-            color: #ffc107;
-            font-weight: 500;
+        .card-fallback::after {
+            content: '';
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg opacity='0.15' fill='white'%3E%3Cpath d='M20 20h60v10H20z'/%3E%3Cpath d='M20 35h40v5H20z'/%3E%3Cpath d='M20 45h50v5H20z'/%3E%3Cpath d='M20 55h35v5H20z'/%3E%3Cpath d='M15 70c0-8 6-14 14-14h42c8 0 14 6 14 14v15H15z'/%3E%3Cpath d='M40 25c0-8 6-14 14-14s14 6 14 14c0 4-2 8-5 10v5c0 2-2 4-4 4h-10c-2 0-4-2-4-4v-5c-3-2-5-6-5-10z'/%3E%3C/g%3E%3C/svg%3E");
+            background-size: contain;
+            background-repeat: no-repeat;
         }
 
         .quote-container {
@@ -731,211 +686,6 @@ function formatIndonesianDate($date) {
             margin-top: 1rem;
         }
 
-        .stats-container {
-            padding: clamp(1.5rem, 4vw, 2rem);
-            margin: clamp(1.5rem, 3vw, 2rem) clamp(1rem, 3vw, 1.5rem);
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-            position: relative;
-            overflow: hidden;
-            color: white;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .stats-container:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2), 0 0 30px rgba(71, 118, 201, 0.5);
-        }
-
-        .sparkle {
-            position: absolute;
-            background: rgba(255, 255, 255, 0.8);
-            border-radius: 50%;
-            pointer-events: none;
-            animation: sparkle 2s infinite;
-        }
-
-        .sparkle-1 {
-            width: 5px;
-            height: 5px;
-            top: 20%;
-            left: 10%;
-            animation-delay: 0s;
-        }
-
-        .sparkle-2 {
-            width: 7px;
-            height: 7px;
-            top: 60%;
-            left: 30%;
-            animation-delay: 0.5s;
-        }
-
-        .sparkle-3 {
-            width: 4px;
-            height: 4px;
-            top: 40%;
-            right: 20%;
-            animation-delay: 1s;
-        }
-
-        .sparkle-4 {
-            width: 6px;
-            height: 6px;
-            bottom: 15%;
-            right: 15%;
-            animation-delay: 1.5s;
-        }
-
-        @keyframes sparkle {
-            0% { opacity: 0; transform: scale(0); }
-            50% { opacity: 1; transform: scale(1); }
-            100% { opacity: 0; transform: scale(0); }
-        }
-
-        .stat-title {
-            font-size: var(--font-size-lg);
-            margin-bottom: 1.2rem;
-            font-weight: 600;
-            z-index: 1;
-            letter-spacing: 0.5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: #ffffff;
-        }
-
-        .stat-title .toggle-balance {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            color: #ffffff;
-            width: clamp(30px, 6vw, 36px);
-            height: clamp(30px, 6vw, 36px);
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-        }
-
-        .stat-title .toggle-balance:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(1.1);
-        }
-
-        .balance-container {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 1.8rem;
-            z-index: 1;
-            transition: all 0.3s ease;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .balance-hidden .balance-box .balance {
-            display: none;
-        }
-
-        .balance-hidden .balance-box .currency {
-            display: none;
-        }
-
-        .balance-hidden .balance-box .hidden-balance {
-            display: inline-block;
-        }
-
-        .balance-box {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: clamp(2rem, 6vw, 2.5rem);
-            font-weight: 700;
-            letter-spacing: 1px;
-            transition: all 0.3s ease;
-            color: #ffffff;
-        }
-
-        .balance {
-            display: inline-block;
-            width: clamp(150px, 25vw, 200px);
-            text-align: center;
-        }
-
-        .hidden-balance {
-            display: none;
-            font-size: clamp(2rem, 6vw, 2.5rem);
-            font-weight: 700;
-            color: #ffffff;
-        }
-
-        .currency {
-            font-size: clamp(1.5rem, 4vw, 2rem);
-            margin-right: 0.5rem;
-            opacity: 0.9;
-            font-weight: 500;
-            color: #ffffff;
-        }
-
-        .stat-info {
-            display: flex;
-            justify-content: center;
-            z-index: 1;
-        }
-
-        .rekening-info {
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-            background-color: rgba(255, 255, 255, 0.2);
-            padding: clamp(0.6rem, 1.5vw, 0.8rem) clamp(1rem, 2vw, 1.4rem);
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            color: #ffffff;
-        }
-
-        .rekening-info:hover {
-            background-color: rgba(255, 255, 255, 0.3);
-        }
-
-        .copy-icon {
-            font-size: var(--font-size-sm);
-            color: #ffffff;
-        }
-
-        .tooltip {
-            position: relative;
-        }
-
-        .tooltiptext {
-            visibility: hidden;
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            text-align: center;
-            border-radius: 8px;
-            padding: clamp(0.4rem, 1vw, 0.5rem) clamp(0.6rem, 1.5vw, 0.8rem);
-            font-size: var(--font-size-xs);
-            font-weight: 500;
-            letter-spacing: 0.3px;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            transform: translateX(-50%);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        .tooltip:hover .tooltiptext {
-            visibility: visible;
-            opacity: 1;
-        }
-
         .pin-alert {
             margin: clamp(1.5rem, 3vw, 2rem) clamp(1rem, 3vw, 1.5rem);
             padding: 0;
@@ -1107,7 +857,6 @@ function formatIndonesianDate($date) {
             width: 60%;
         }
 
-        /* Recent Transactions Styles */
         .recent-transactions {
             background: white;
             border-radius: 16px;
@@ -1116,7 +865,7 @@ function formatIndonesianDate($date) {
             padding: clamp(1rem, 2vw, 1.5rem);
             position: relative;
             overflow: hidden;
-            margin-bottom: clamp(2rem, 4vw, 2.5rem); /* Added spacing */
+            margin-bottom: clamp(2rem, 4vw, 2.5rem);
         }
 
         .recent-transactions-header {
@@ -1268,55 +1017,20 @@ function formatIndonesianDate($date) {
                 -webkit-overflow-scrolling: touch;
             }
 
-            .welcome-banner {
-                margin: clamp(1rem, 2vw, 1.5rem);
-                padding: clamp(1.2rem, 3vw, 1.8rem);
-                flex-direction: row;
-                align-items: center;
-                gap: clamp(0.8rem, 2vw, 1.2rem);
-            }
-
-            .avatar {
-                width: clamp(50px, 12vw, 60px);
-                height: clamp(50px, 12vw, 60px);
-            }
-
-            .welcome-banner h2 {
-                font-size: var(--font-size-xl);
-            }
-
-            .welcome-info {
-                font-size: var(--font-size-sm);
+            .card-wrapper {
+                width: clamp(280px, 80vw, 360px);
+                height: clamp(180px, 50vw, 225px);
             }
 
             .card-menu {
                 padding: clamp(0.8rem, 2vw, 1rem);
-                grid-template-columns: 1fr;
                 margin: clamp(1rem, 2vw, 1.5rem) auto;
-            }
-
-            .stats-container {
-                padding: clamp(1rem, 2vw, 1.5rem);
-                margin: clamp(1rem, 2vw, 1.5rem);
-            }
-
-            .balance-box {
-                font-size: clamp(1.8rem, 5vw, 2.2rem);
-            }
-
-            .hidden-balance {
-                font-size: clamp(1.8rem, 5vw, 2.2rem);
-            }
-
-            .currency {
-                font-size: clamp(1.2rem, 3.5vw, 1.5rem);
-                margin-right: 0.5rem;
             }
 
             .recent-transactions {
                 margin: clamp(1rem, 2vw, 1.5rem);
                 padding: clamp(0.8rem, 1.5vw, 1rem);
-                margin-bottom: clamp(2rem, 4vw, 2.5rem); /* Added spacing */
+                margin-bottom: clamp(2rem, 4vw, 2.5rem);
             }
 
             .transaction-description {
@@ -1353,33 +1067,25 @@ function formatIndonesianDate($date) {
                 padding: clamp(0.4rem, 1vw, 0.5rem) clamp(0.8rem, 1.5vw, 1rem);
             }
 
-            .welcome-banner h2 {
-                font-size: var(--font-size-lg);
+            .card-wrapper {
+                width: clamp(260px, 90vw, 340px);
+                height: clamp(160px, 55vw, 200px);
             }
 
-            .welcome-info {
-                font-size: var(--font-size-xs);
+            .bank-name {
+                font-size: 18px;
             }
 
-            .avatar {
-                width: clamp(40px, 10vw, 50px);
-                height: clamp(40px, 10vw, 50px);
+            .account-number {
+                font-size: 20px;
             }
 
-            .card {
-                flex: 1 1 100%;
+            .holder-name {
+                font-size: 14px;
             }
 
-            .card h3 {
-                font-size: var(--font-size-md);
-            }
-
-            .card p {
-                font-size: var(--font-size-xs);
-            }
-
-            .stats-container {
-                margin: clamp(1rem, 2vw, 1.5rem);
+            .balance-amount {
+                font-size: 16px;
             }
 
             .notification-dropdown-content {
@@ -1404,16 +1110,6 @@ function formatIndonesianDate($date) {
             }
         }
 
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(71, 118, 201, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(71, 118, 201, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(71, 118, 201, 0); }
-        }
-
-        .rekening-info {
-            animation: pulse 2s infinite;
-        }
-
         @keyframes cardEntrance {
             from { opacity: 0; transform: translateY(25px); }
             to { opacity: 1; transform: translateY(0); }
@@ -1428,7 +1124,7 @@ function formatIndonesianDate($date) {
         .card:nth-child(2) { --i: 2; }
         .card:nth-child(3) { --i: 3; }
 
-        .header, .welcome-banner, .stats-container {
+        .header, .card-wrapper, .recent-transactions {
             transition: all 0.3s ease;
         }
     </style>
@@ -1472,61 +1168,30 @@ function formatIndonesianDate($date) {
             </div>
         </div>
 
-        <!-- Welcome Banner -->
-        <div class="welcome-banner">
-            <img src="<?= htmlspecialchars($avatar_url) ?>" alt="Avatar" class="avatar" id="userAvatar" onclick="openAvatarSelection()">
-            <div class="welcome-content">
-                <h2>Hai, <?= htmlspecialchars($user_data['nama']) ?>!</h2>
-                <div class="welcome-info">
-                    Status Akun: 
-                    <span class="status-<?= strtolower($account_status) ?>">
-                        <?= ucfirst(str_replace('_', ' ', $account_status)) ?>
-                    </span>
+        <!-- Card Wrapper -->
+        <div class="card-wrapper">
+            <img src="/bankmini/assets/images/card.png" 
+                 alt="SchoBank Card" 
+                 class="card-image"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            <div class="card-fallback" style="display: none;"></div>
+            <div class="card-info-overlay">
+                <div class="card-header">
+                    <h2 class="bank-name">SchoBank</h2>
+                    <span class="card-type-badge"><?php echo htmlspecialchars($card_info['level']); ?></span>
                 </div>
-            </div>
-        </div>
-
-        <!-- Avatar Selection Modal -->
-        <div class="avatar-selection" id="avatarSelection">
-            <div class="avatar-selection-header">
-                <h3>Pilih Avatar Pelajarmu!</h3>
-                <button class="avatar-selection-close" onclick="closeAvatarSelection()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="avatar-preview" id="avatarPreview">
-                <img src="<?= htmlspecialchars($avatar_url) ?>" alt="Current Avatar" id="previewAvatar">
-            </div>
-            <div class="avatar-grid" id="avatarGrid"></div>
-            <button class="avatar-confirm" id="confirmAvatar" disabled>Simpan Avatar</button>
-            <div class="avatar-loading" id="avatarLoading">Memuat...</div>
-        </div>
-
-        <!-- Stats Container -->
-        <div class="stats-container">
-            <div class="sparkle sparkle-1"></div>
-            <div class="sparkle sparkle-2"></div>
-            <div class="sparkle sparkle-3"></div>
-            <div class="sparkle sparkle-4"></div>
-            <div class="stat-title">
-                Saldo Anda
-                <button class="toggle-balance" id="toggleBalance" title="Sembunyikan/Tampilkan Saldo">
-                    <i class="fas fa-eye-slash" id="eyeIcon"></i>
-                </button>
-            </div>
-            <div class="balance-container" id="balanceContainer">
-                <div class="balance-box">
-                    <span class="currency">Rp</span>
-                    <span class="balance" id="balanceCounter"><?= number_format($saldo, 0, ',', '.') ?></span>
-                    <span class="hidden-balance">Rp. *****</span>
+                <div class="account-number">
+                    <?= htmlspecialchars($no_rekening) ?>
                 </div>
-            </div>
-            <div class="stat-info">
-                <div class="rekening-info tooltip" onclick="copyToClipboard('<?= $no_rekening ?>')">
-                    <i class="fas fa-credit-card"></i>
-                    <span id="rekening-text">No. Rekening: <?= $no_rekening ?></span>
-                    <i class="fas fa-copy copy-icon"></i>
-                    <span class="tooltiptext" id="copy-tooltip">Klik untuk menyalin</span>
+                <div class="card-footer">
+                    <div class="holder-info">
+                        <div class="info-label">Pemilik</div>
+                        <div class="holder-name"><?= htmlspecialchars(strtoupper($user_data['nama'])) ?></div>
+                    </div>
+                    <div class="balance-section" id="balanceContainer">
+                        <div class="info-label">Saldo</div>
+                        <div class="balance-amount" id="balanceCounter"><?= number_format($saldo, 0, ',', '.') ?></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1593,14 +1258,14 @@ function formatIndonesianDate($date) {
                     <i class="fas fa-paper-plane"></i>
                 </div>
                 <h3>Transfer Lokal</h3>
-                <p>Kirim uang dengan cepat ke teman atau keluarga</p>
+                <p>Kirim uang dengan cepat ke teman kamu</p>
             </div>
         </div>
 
         <!-- Recent Transactions -->
         <div class="recent-transactions">
             <div class="recent-transactions-header">
-                <h3>Transaksi Terakhir</h3>
+                <h3>Aktivitas Keuangan Kamu</h3>
                 <a href="cek_mutasi.php">Lihat Semua</a>
             </div>
             <?php if (count($recent_transactions) > 0): ?>
@@ -1675,409 +1340,282 @@ function formatIndonesianDate($date) {
         </div>
     </div>
 
-<script>
-// Expanded student-friendly avatar styles
-const avatarStyles = [
-    { style: 'avataaars', name: 'Pelajar Animasi' },
-    { style: 'open-peeps', name: 'Gaya Komik' },
-    { style: 'bottts', name: 'Robot Pelajar' },
-    { style: 'pixel-art', name: 'Pixel Pelajar' },
-    { style: 'adventurer', name: 'Petualang Belajar' },
-    { style: 'micah', name: 'Siswa Keren' },
-    { style: 'croodles', name: 'Doodle Pelajar' },
-    { style: 'lorelei', name: 'Pelajar Fantasi' }
-];
-
-let selectedAvatarStyle = '<?php echo $avatar_style; ?>';
-
-// Open avatar selection modal
-function openAvatarSelection() {
-    const modal = document.getElementById('avatarSelection');
-    const grid = document.getElementById('avatarGrid');
-    const loading = document.getElementById('avatarLoading');
-    const confirmButton = document.getElementById('confirmAvatar');
-    grid.innerHTML = '';
-    loading.style.display = 'block';
-
-    avatarStyles.forEach(({ style, name }) => {
-        const container = document.createElement('div');
-        container.className = 'avatar-option-container';
-        container.style.textAlign = 'center';
-
-        const img = document.createElement('img');
-        img.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
-        img.className = 'avatar-option';
-        img.dataset.style = style;
-        img.title = name;
-        if (style === selectedAvatarStyle) {
-            img.classList.add('selected');
-        }
-        img.addEventListener('click', () => previewAvatar(style));
-
-        const label = document.createElement('div');
-        label.textContent = name;
-        label.style.fontSize = 'var(--font-size-xs)';
-        label.style.marginTop = '0.5rem';
-        label.style.color = '#1e3c72';
-
-        container.appendChild(img);
-        container.appendChild(label);
-        grid.appendChild(container);
-    });
-
-    loading.style.display = 'none';
-    modal.style.display = 'block';
-    confirmButton.disabled = true;
-}
-
-// Preview selected avatar
-function previewAvatar(style) {
-    const previewAvatar = document.getElementById('previewAvatar');
-    previewAvatar.src = `https://api.dicebear.com/8.x/${style}/svg?seed=${<?php echo $user_id; ?>}`;
-    selectedAvatarStyle = style;
-    updateAvatarSelectionUI(style);
-    document.getElementById('confirmAvatar').disabled = false;
-}
-
-// Update avatar selection UI
-function updateAvatarSelectionUI(selectedStyle) {
-    const avatarOptions = document.querySelectorAll('.avatar-option');
-    avatarOptions.forEach(option => {
-        option.classList.remove('selected');
-        if (option.dataset.style === selectedStyle) {
-            option.classList.add('selected');
-        }
-    });
-}
-
-// Close avatar selection modal
-function closeAvatarSelection() {
-    document.getElementById('avatarSelection').style.display = 'none';
-    selectedAvatarStyle = '<?php echo $avatar_style; ?>';
-    updateAvatarSelectionUI(selectedAvatarStyle);
-    document.getElementById('previewAvatar').src = '<?php echo htmlspecialchars($avatar_url); ?>';
-    document.getElementById('confirmAvatar').disabled = true;
-}
-
-// Save selected avatar
-document.getElementById('confirmAvatar').addEventListener('click', () => {
-    const loading = document.getElementById('avatarLoading');
-    loading.style.display = 'block';
-
-    fetch('update_avatar.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'avatar_style=' + encodeURIComponent(selectedAvatarStyle)
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        loading.style.display = 'none';
-        if (data.status === 'success') {
-            const userAvatar = document.getElementById('userAvatar');
-            userAvatar.src = `https://api.dicebear.com/8.x/${selectedAvatarStyle}/svg?seed=${<?php echo $user_id; ?>}`;
-            closeAvatarSelection();
-        } else {
-            console.error('Failed to update avatar:', data.message);
-        }
-    })
-    .catch(error => {
-        loading.style.display = 'none';
-        console.error('Error updating avatar:', error);
-    });
-});
-
-// Toggle saldo visibility
-document.addEventListener('DOMContentLoaded', function() {
-    const toggleBtn = document.getElementById('toggleBalance');
-    const balanceContainer = document.getElementById('balanceContainer');
-    const eyeIcon = document.getElementById('eyeIcon');
-    
-    toggleBtn.addEventListener('click', function() {
-        balanceContainer.classList.toggle('balance-hidden');
-        eyeIcon.classList.toggle('fa-eye-slash');
-        eyeIcon.classList.toggle('fa-eye');
-    });
-
-    // Animate balance counter
-    const balanceElement = document.getElementById('balanceCounter');
-    const finalBalance = parseInt(balanceElement.textContent.replace(/[,.]/g, '')) || 0;
-    let currentBalance = 0;
-    const increment = finalBalance / 100;
-    const duration = 2000;
-    const stepTime = duration / 100;
-
-    function updateBalance() {
-        if (currentBalance < finalBalance) {
-            currentBalance += increment;
-            if (currentBalance > finalBalance) currentBalance = finalBalance;
-            balanceElement.textContent = Math.floor(currentBalance).toLocaleString('id-ID');
-            setTimeout(updateBalance, stepTime);
-        } else {
-            balanceElement.textContent = finalBalance.toLocaleString('id-ID');
-        }
-    }
-    if (!balanceContainer.classList.contains('balance-hidden')) {
-        updateBalance();
-    }
-});
-
-// Copy rekening number
-function copyToClipboard(text) {
-    const tempInput = document.createElement("input");
-    tempInput.value = text;
-    document.body.appendChild(tempInput);
-    tempInput.select();
-    document.execCommand("copy");
-    document.body.removeChild(tempInput);
-    const tooltip = document.getElementById("copy-tooltip");
-    tooltip.innerHTML = "Tersalin!";
-    setTimeout(() => tooltip.innerHTML = "Klik untuk menyalin", 2000);
-}
-
-// Show PIN alert
-function showPinAlert() {
-    alert("Harap atur PIN terlebih dahulu di menu Profil sebelum menggunakan fitur Transfer Lokal.");
-}
-
-// Close dropdown on scroll
-window.addEventListener('scroll', () => {
-    const dropdownContent = document.querySelector('.notification-dropdown-content');
-    if (dropdownContent.style.display === 'block') {
-        dropdownContent.style.display = 'none';
-    }
-    closeAvatarSelection();
-});
-
-// Initialize swipe to delete and click to read
-function initializeSwipe() {
-    const notificationItems = document.querySelectorAll('.notification-item');
-    notificationItems.forEach(item => {
-        let startX, currentX;
-        let isSwiping = false;
-        let isDragging = false;
-
-        // Touch events
-        item.addEventListener('touchstart', (e) => {
-            startX = e.touches[0].clientX;
-            isSwiping = true;
-            item.classList.add('swiping');
-        }, { passive: true });
-
-        item.addEventListener('touchmove', (e) => {
-            if (!isSwiping) return;
-            currentX = e.touches[0].clientX;
-            const diff = startX - currentX;
-            if (diff > 0) {
-                item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
+    <script>
+        // Prevent pinch-to-zoom and double-tap zoom on mobile
+        document.addEventListener('touchmove', function (event) {
+            if (event.scale !== 1) {
+                event.preventDefault();
             }
-        }, { passive: true });
+        }, { passive: false });
 
-        item.addEventListener('touchend', () => {
-            isSwiping = false;
-            item.classList.remove('swiping');
-            const diff = startX - currentX;
-            if (diff > 50) {
-                item.style.transform = 'translateX(-80px)';
-                item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
-            } else {
-                item.style.transform = 'translateX(0)';
-                item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
+        // Add CSS to prevent double-tap zoom
+        const style = document.createElement('style');
+        style.textContent = `
+            html, body {
+                touch-action: pan-x pan-y;
             }
-        });
+        `;
+        document.head.appendChild(style);
 
-        // Mouse events
-        item.addEventListener('mousedown', (e) => {
-            startX = e.clientX;
-            isDragging = true;
-            item.classList.add('swiping');
-        });
+        // Animate balance counter
+        document.addEventListener('DOMContentLoaded', function() {
+            const balanceElement = document.getElementById('balanceCounter');
+            const finalBalance = parseInt(balanceElement.textContent.replace(/[,.]/g, '')) || 0;
+            let currentBalance = 0;
+            const increment = finalBalance / 100;
+            const duration = 2000;
+            const stepTime = duration / 100;
 
-        item.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            currentX = e.clientX;
-            const diff = startX - currentX;
-            if (diff > 0) {
-                item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
-            }
-        });
-
-        item.addEventListener('mouseup', () => {
-            isDragging = false;
-            item.classList.remove('swiping');
-            const diff = startX - currentX;
-            if (diff > 50) {
-                item.style.transform = 'translateX(-80px)';
-                item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
-            } else {
-                item.style.transform = 'translateX(0)';
-                item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
-            }
-        });
-
-        item.addEventListener('mouseleave', () => {
-            if (isDragging) {
-                isDragging = false;
-                item.classList.remove('swiping');
-                item.style.transform = 'translateX(0)';
-                item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
-            }
-        });
-
-        // Delete button
-        const deleteButton = item.querySelector('.swipe-delete');
-        deleteButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            deleteNotification(item.dataset.id, item);
-        });
-
-        // Click to mark as read
-        const notificationLink = item.querySelector('.notification-link');
-        notificationLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            if (item.classList.contains('unread')) {
-                markNotificationAsRead(item.dataset.id, item);
-            }
-        });
-    });
-}
-
-// Mark notification as read
-function markNotificationAsRead(notificationId, element) {
-    fetch('mark_notification_as_read.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + encodeURIComponent(notificationId)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            element.classList.remove('unread');
-            updateNotificationBadge();
-        } else {
-            console.error('Failed to mark notification as read:', data.message);
-        }
-    })
-    .catch(error => console.error('Error marking notification:', error));
-}
-
-// Delete notification
-function deleteNotification(notificationId, element) {
-    fetch('delete_notification.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'id=' + encodeURIComponent(notificationId)
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            element.remove();
-            updateNotificationBadge();
-            const notificationItems = document.querySelectorAll('.notification-item');
-            if (notificationItems.length === 0) {
-                const dropdownContent = document.querySelector('.notification-dropdown-content');
-                dropdownContent.innerHTML = `
-                    <div class="notification-item">
-                        <div class="notification-message">Tidak ada notifikasi baru</div>
-                    </div>
-                `;
-            }
-        } else {
-            console.error('Failed to delete notification:', data.message);
-        }
-    })
-    .catch(error => console.error('Error deleting notification:', error));
-}
-
-// Update notification badge
-function updateNotificationBadge() {
-    fetch('check_notifications.php')
-        .then(response => response.json())
-        .then(data => {
-            const badge = document.querySelector('.notification-badge');
-            if (data.unread > 0) {
-                badge.textContent = data.unread;
-                badge.style.display = 'flex';
-            } else {
-                badge.style.display = 'none';
-            }
-        })
-        .catch(error => console.error('Error updating notification badge:', error));
-}
-
-// Toggle notification dropdown
-document.querySelector('.notification-toggle').addEventListener('click', (e) => {
-    e.preventDefault();
-    const dropdownContent = document.querySelector('.notification-dropdown-content');
-    dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block';
-});
-
-// Close dropdown when clicking outside
-document.addEventListener('click', (e) => {
-    const dropdown = document.querySelector('.notification-dropdown');
-    const dropdownContent = document.querySelector('.notification-dropdown-content');
-    if (!dropdown.contains(e.target) && dropdownContent.style.display === 'block') {
-        dropdownContent.style.display = 'none';
-    }
-});
-
-// Prevent dropdown from closing when clicking inside
-document.querySelector('.notification-dropdown-content').addEventListener('click', (e) => {
-    e.stopPropagation();
-});
-
-// Initialize swipe on page load
-initializeSwipe();
-
-// Lazy load images
-document.addEventListener('DOMContentLoaded', () => {
-    const images = document.querySelectorAll('img');
-    if ('IntersectionObserver' in window) {
-        const observer = new IntersectionObserver((entries, observer) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const img = entry.target;
-                    img.src = img.dataset.src || img.src;
-                    observer.unobserve(img);
+            function updateBalance() {
+                if (currentBalance < finalBalance) {
+                    currentBalance += increment;
+                    if (currentBalance > finalBalance) currentBalance = finalBalance;
+                    balanceElement.textContent = Math.floor(currentBalance).toLocaleString('id-ID');
+                    setTimeout(updateBalance, stepTime);
+                } else {
+                    balanceElement.textContent = finalBalance.toLocaleString('id-ID');
                 }
-            });
+            }
+            updateBalance();
         });
-        images.forEach(img => observer.observe(img));
-    } else {
-        images.forEach(img => img.src = img.dataset.src || img.src);
-    }
-});
 
-// Optimize scroll performance
-let isScrolling;
-window.addEventListener('scroll', () => {
-    clearTimeout(isScrolling);
-    isScrolling = setTimeout(() => {
-        // Add any scroll-related optimizations here
-    }, 150);
-}, { passive: true });
-
-// Prevent text selection on double-click
-document.addEventListener('mousedown', (e) => {
-    if (e.detail > 1) {
-        e.preventDefault();
-    }
-}, { passive: false });
-
-// Keyboard accessibility for avatar selection
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        closeAvatarSelection();
-        const dropdownContent = document.querySelector('.notification-dropdown-content');
-        if (dropdownContent.style.display === 'block') {
-            dropdownContent.style.display = 'none';
+        // Show PIN alert
+        function showPinAlert() {
+            alert("Harap atur PIN terlebih dahulu di menu Profil sebelum menggunakan fitur Transfer Lokal.");
         }
-    }
-});
-</script>
+
+        // Close dropdown on scroll
+        window.addEventListener('scroll', () => {
+            const dropdownContent = document.querySelector('.notification-dropdown-content');
+            if (dropdownContent.style.display === 'block') {
+                dropdownContent.style.display = 'none';
+            }
+        });
+
+        // Initialize swipe to delete and click to read
+        function initializeSwipe() {
+            const notificationItems = document.querySelectorAll('.notification-item');
+            notificationItems.forEach(item => {
+                let startX, currentX;
+                let isSwiping = false;
+                let isDragging = false;
+
+                // Touch events
+                item.addEventListener('touchstart', (e) => {
+                    startX = e.touches[0].clientX;
+                    isSwiping = true;
+                    item.classList.add('swiping');
+                }, { passive: true });
+
+                item.addEventListener('touchmove', (e) => {
+                    if (!isSwiping) return;
+                    currentX = e.touches[0].clientX;
+                    const diff = startX - currentX;
+                    if (diff > 0) {
+                        item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
+                    }
+                }, { passive: true });
+
+                item.addEventListener('touchend', () => {
+                    isSwiping = false;
+                    item.classList.remove('swiping');
+                    const diff = startX - currentX;
+                    if (diff > 50) {
+                        item.style.transform = 'translateX(-80px)';
+                        item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
+                    } else {
+                        item.style.transform = 'translateX(0)';
+                        item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
+                    }
+                });
+
+                // Mouse events
+                item.addEventListener('mousedown', (e) => {
+                    startX = e.clientX;
+                    isDragging = true;
+                    item.classList.add('swiping');
+                });
+
+                item.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    currentX = e.clientX;
+                    const diff = startX - currentX;
+                    if (diff > 0) {
+                        item.style.transform = `translateX(-${Math.min(diff, 80)}px)`;
+                    }
+                });
+
+                item.addEventListener('mouseup', () => {
+                    isDragging = false;
+                    item.classList.remove('swiping');
+                    const diff = startX - currentX;
+                    if (diff > 50) {
+                        item.style.transform = 'translateX(-80px)';
+                        item.querySelector('.swipe-delete').style.transform = 'translateX(0)';
+                    } else {
+                        item.style.transform = 'translateX(0)';
+                        item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
+                    }
+                });
+
+                item.addEventListener('mouseleave', () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        item.classList.remove('swiping');
+                        item.style.transform = 'translateX(0)';
+                        item.querySelector('.swipe-delete').style.transform = 'translateX(100%)';
+                    }
+                });
+
+                // Delete button
+                const deleteButton = item.querySelector('.swipe-delete');
+                deleteButton.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    deleteNotification(item.dataset.id, item);
+                });
+
+                // Click to mark as read
+                const notificationLink = item.querySelector('.notification-link');
+                notificationLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (item.classList.contains('unread')) {
+                        markNotificationAsRead(item.dataset.id, item);
+                    }
+                });
+            });
+        }
+
+        // Mark notification as read
+        function markNotificationAsRead(notificationId, element) {
+            fetch('mark_notification_as_read.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'id=' + encodeURIComponent(notificationId)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    element.classList.remove('unread');
+                    updateNotificationBadge();
+                } else {
+                    console.error('Failed to mark notification as read:', data.message);
+                }
+            })
+            .catch(error => console.error('Error marking notification:', error));
+        }
+
+        // Delete notification
+        function deleteNotification(notificationId, element) {
+            fetch('delete_notification.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'id=' + encodeURIComponent(notificationId)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    element.remove();
+                    updateNotificationBadge();
+                    const notificationItems = document.querySelectorAll('.notification-item');
+                    if (notificationItems.length === 0) {
+                        const dropdownContent = document.querySelector('.notification-dropdown-content');
+                        dropdownContent.innerHTML = `
+                            <div class="notification-item">
+                                <div class="notification-message">Tidak ada notifikasi baru</div>
+                            </div>
+                        `;
+                    }
+                } else {
+                    console.error('Failed to delete notification:', data.message);
+                }
+            })
+            .catch(error => console.error('Error deleting notification:', error));
+        }
+
+        // Update notification badge
+        function updateNotificationBadge() {
+            fetch('check_notifications.php')
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.querySelector('.notification-badge');
+                    if (data.unread > 0) {
+                        badge.textContent = data.unread;
+                        badge.style.display = 'flex';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(error => console.error('Error updating notification badge:', error));
+        }
+
+        // Toggle notification dropdown
+        document.querySelector('.notification-toggle').addEventListener('click', (e) => {
+            e.preventDefault();
+            const dropdownContent = document.querySelector('.notification-dropdown-content');
+            dropdownContent.style.display = dropdownContent.style.display === 'block' ? 'none' : 'block';
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            const dropdown = document.querySelector('.notification-dropdown');
+            const dropdownContent = document.querySelector('.notification-dropdown-content');
+            if (!dropdown.contains(e.target) && dropdownContent.style.display === 'block') {
+                dropdownContent.style.display = 'none';
+            }
+        });
+
+        // Prevent dropdown from closing when clicking inside
+        document.querySelector('.notification-dropdown-content').addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Initialize swipe on page load
+        initializeSwipe();
+
+        // Lazy load images
+        document.addEventListener('DOMContentLoaded', () => {
+            const images = document.querySelectorAll('img');
+            if ('IntersectionObserver' in window) {
+                const observer = new IntersectionObserver((entries, observer) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const img = entry.target;
+                            img.src = img.dataset.src || img.src;
+                            observer.unobserve(img);
+                        }
+                    });
+                });
+                images.forEach(img => observer.observe(img));
+            } else {
+                images.forEach(img => img.src = img.dataset.src || img.src);
+            }
+        });
+
+        // Optimize scroll performance
+        let isScrolling;
+        window.addEventListener('scroll', () => {
+            clearTimeout(isScrolling);
+            isScrolling = setTimeout(() => {
+                // Add any scroll-related optimizations here
+            }, 150);
+        }, { passive: true });
+
+        // Prevent text selection on double-click
+        document.addEventListener('mousedown', (e) => {
+            if (e.detail > 1) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Keyboard accessibility
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const dropdownContent = document.querySelector('.notification-dropdown-content');
+                if (dropdownContent.style.display === 'block') {
+                    dropdownContent.style.display = 'none';
+                }
+            }
+        });
+    </script>
 </body>
 </html>

@@ -29,10 +29,11 @@ $user_id = $_SESSION['user_id'];
 
 // Get user data
 try {
-    $user_query = "SELECT u.nama, r.no_rekening, k.nama_kelas, j.nama_jurusan, r.saldo 
+    $user_query = "SELECT u.nama, r.no_rekening, k.nama_kelas, tk.nama_tingkatan, j.nama_jurusan 
                    FROM users u 
                    JOIN rekening r ON u.id = r.user_id 
                    LEFT JOIN kelas k ON u.kelas_id = k.id 
+                   LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                    LEFT JOIN jurusan j ON u.jurusan_id = j.id 
                    WHERE u.id = ?";
     
@@ -52,6 +53,11 @@ try {
     if (!$user_data) {
         handleError("No user data found.");
     }
+    
+    // Combine nama_tingkatan and nama_kelas
+    $kelas_full = trim($user_data['nama_tingkatan'] ?? '') && trim($user_data['nama_kelas'] ?? '')
+        ? $user_data['nama_tingkatan'] . ' ' . $user_data['nama_kelas']
+        : ($user_data['nama_kelas'] ?? 'N/A');
     
     $stmt->close();
 } catch (Exception $e) {
@@ -141,33 +147,31 @@ try {
     $result = $stmt->get_result();
 
     $transactions = [];
-    $running_balance = 0;
     $total_setor = 0;
     $total_tarik = 0;
     $total_transfer_masuk = 0;
     $total_transfer_keluar = 0;
+    $total_nominal = 0;
 
     while ($row = $result->fetch_assoc()) {
         switch ($row['jenis_mutasi']) {
             case 'setor':
-                $running_balance += $row['jumlah'];
                 $total_setor += $row['jumlah'];
+                $total_nominal += $row['jumlah'];
                 break;
             case 'tarik':
-                $running_balance -= $row['jumlah'];
                 $total_tarik += $row['jumlah'];
+                $total_nominal -= $row['jumlah'];
                 break;
             case 'transfer_keluar':
-                $running_balance -= $row['jumlah'];
                 $total_transfer_keluar += $row['jumlah'];
+                $total_nominal -= $row['jumlah'];
                 break;
             case 'transfer_masuk':
-                $running_balance += $row['jumlah'];
                 $total_transfer_masuk += $row['jumlah'];
+                $total_nominal += $row['jumlah'];
                 break;
         }
-
-        $row['running_balance'] = $running_balance;
         $transactions[] = $row;
     }
 
@@ -177,23 +181,33 @@ try {
 }
 
 class MYPDF extends TCPDF {
+    private $isFirstPage = true;
+
     public function Header() {
-        // Logo
-        $image_file = '../../schobank/assets/images/lbank.png';
-        if (file_exists($image_file)) {
-            $this->Image($image_file, 15, 5, 20, '', 'PNG');
+        if ($this->isFirstPage) {
+            // First page header
+            $image_file = '../../schobank/assets/images/lbank.png';
+            if (file_exists($image_file)) {
+                $this->Image($image_file, 15, 5, 20, '', 'PNG');
+            }
+            
+            $this->SetFont('helvetica', 'B', 16);
+            $this->Cell(0, 10, 'SCHOBANK', 0, false, 'C', 0);
+            $this->Ln(6);
+            $this->SetFont('helvetica', '', 10);
+            $this->Cell(0, 10, 'Sistem Bank Mini Sekolah', 0, false, 'C', 0);
+            $this->Ln(5);
+            $this->SetFont('helvetica', '', 8);
+            $this->Cell(0, 10, 'Jl. K.H. Saleh No.57A 43212 Cianjur Jawa Barat', 0, false, 'C', 0);
+            $this->Line(15, 30, 195, 30);
+            $this->isFirstPage = false;
+        } else {
+            // Subsequent pages header
+            $this->SetFont('helvetica', 'B', 16);
+            $this->Cell(0, 10, 'SCHOBANK', 0, false, 'C', 0);
+            $this->Ln(5);
+            $this->Line(15, 20, 195, 20);
         }
-        
-        // Header text
-        $this->SetFont('helvetica', 'B', 16);
-        $this->Cell(0, 10, 'SCHOBANK', 0, false, 'C', 0);
-        $this->Ln(6);
-        $this->SetFont('helvetica', '', 10);
-        $this->Cell(0, 10, 'Sistem Bank Mini Sekolah', 0, false, 'C', 0);
-        $this->Ln(5);
-        $this->SetFont('helvetica', '', 8);
-        $this->Cell(0, 10, 'Jl. K.H. Saleh No.57A 43212 Cianjur Jawa Barat', 0, false, 'C', 0);
-        $this->Line(15, 30, 195, 30);
     }
 
     public function Footer() {
@@ -230,7 +244,7 @@ try {
     $pdf->SetFont('helvetica', '', 10);
     $pdf->Cell(0, 7, 'Periode: ' . date('d/m/Y', strtotime($start_date)) . ' - ' . date('d/m/Y', strtotime($end_date)), 0, 1, 'C');
 
-    // Customer Information (Vertical List)
+    // Customer Information
     $pdf->Ln(3);
     $pdf->SetFont('helvetica', 'B', 10);
     $pdf->SetFillColor(0, 0, 0);
@@ -241,7 +255,7 @@ try {
     $customer_info = [
         ['Nama', $user_data['nama']],
         ['No. Rekening', $user_data['no_rekening']],
-        ['Kelas', $user_data['nama_kelas'] ?? 'N/A'],
+        ['Kelas', $kelas_full],
         ['Jurusan', $user_data['nama_jurusan'] ?? 'N/A']
     ];
 
@@ -252,54 +266,53 @@ try {
     }
 
     // Summary Section
-    $pdf->Ln(3);
+    $pdf->Ln(5);
     $pdf->SetFont('helvetica', 'B', 10);
     $pdf->SetFillColor(0, 0, 0);
     $pdf->SetTextColor(255, 255, 255);
     $pdf->Cell(180, 7, 'RINGKASAN TRANSAKSI', 1, 1, 'C', true);
     $pdf->SetTextColor(0, 0, 0);
 
-    $colWidth = 180 / 4;
+    $summary_col_width = 45; // 180mm / 4
     $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->SetFillColor(240, 240, 240);
-    $pdf->Cell($colWidth, 6, 'Total Setoran', 1, 0, 'C', true);
-    $pdf->Cell($colWidth, 6, 'Total Penarikan', 1, 0, 'C', true);
-    $pdf->Cell($colWidth, 6, 'Total Transfer Masuk', 1, 0, 'C', true);
-    $pdf->Cell($colWidth, 6, 'Total Transfer Keluar', 1, 1, 'C', true);
+    $pdf->SetFillColor(220, 220, 220);
+    $pdf->Cell($summary_col_width, 6, 'Total Setoran', 1, 0, 'C', true);
+    $pdf->Cell($summary_col_width, 6, 'Total Penarikan', 1, 0, 'C', true);
+    $pdf->Cell($summary_col_width, 6, 'Total Transfer Masuk', 1, 0, 'C', true);
+    $pdf->Cell($summary_col_width, 6, 'Total Transfer Keluar', 1, 1, 'C', true);
 
     $pdf->SetFont('helvetica', '', 8);
-    $pdf->Cell($colWidth, 6, 'Rp ' . number_format($total_setor, 0, ',', '.'), 1, 0, 'C');
-    $pdf->Cell($colWidth, 6, 'Rp ' . number_format($total_tarik, 0, ',', '.'), 1, 0, 'C');
-    $pdf->Cell($colWidth, 6, 'Rp ' . number_format($total_transfer_masuk, 0, ',', '.'), 1, 0, 'C');
-    $pdf->Cell($colWidth, 6, 'Rp ' . number_format($total_transfer_keluar, 0, ',', '.'), 1, 1, 'C');
+    $pdf->Cell($summary_col_width, 6, 'Rp ' . number_format($total_setor, 0, ',', '.'), 1, 0, 'R');
+    $pdf->Cell($summary_col_width, 6, 'Rp ' . number_format($total_tarik, 0, ',', '.'), 1, 0, 'R');
+    $pdf->Cell($summary_col_width, 6, 'Rp ' . number_format($total_transfer_masuk, 0, ',', '.'), 1, 0, 'R');
+    $pdf->Cell($summary_col_width, 6, 'Rp ' . number_format($total_transfer_keluar, 0, ',', '.'), 1, 1, 'R');
 
     // Transaction Details Section
-    $pdf->Ln(3);
+    $pdf->Ln(5);
     $pdf->SetFont('helvetica', 'B', 10);
     $pdf->SetFillColor(0, 0, 0);
     $pdf->SetTextColor(255, 255, 255);
     $pdf->Cell(180, 7, 'DETAIL TRANSAKSI', 1, 1, 'C', true);
     $pdf->SetTextColor(0, 0, 0);
 
-    $col_width = [10, 30, 40, 30, 35, 35]; // No, Tanggal, No Transaksi, Jenis, Nominal, Saldo
+    $col_width = [10, 35, 45, 35, 55]; // No, Tanggal, No Transaksi, Jenis, Nominal
+    $row_height = 6;
 
     $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->SetFillColor(240, 240, 240);
-    $pdf->Cell($col_width[0], 6, 'No', 1, 0, 'C', true);
-    $pdf->Cell($col_width[1], 6, 'Tanggal', 1, 0, 'C', true);
-    $pdf->Cell($col_width[2], 6, 'No Transaksi', 1, 0, 'C', true);
-    $pdf->Cell($col_width[3], 6, 'Jenis', 1, 0, 'C', true);
-    $pdf->Cell($col_width[4], 6, 'Nominal', 1, 0, 'C', true);
-    $pdf->Cell($col_width[5], 6, 'Saldo', 1, 1, 'C', true);
+    $pdf->SetFillColor(220, 220, 220);
+    $pdf->Cell($col_width[0], $row_height, 'No', 1, 0, 'C', true);
+    $pdf->Cell($col_width[1], $row_height, 'Tanggal', 1, 0, 'C', true);
+    $pdf->Cell($col_width[2], $row_height, 'No Transaksi', 1, 0, 'C', true);
+    $pdf->Cell($col_width[3], $row_height, 'Jenis', 1, 0, 'C', true);
+    $pdf->Cell($col_width[4], $row_height, 'Nominal', 1, 1, 'C', true);
 
     $pdf->SetFont('helvetica', '', 8);
-    $row_height = 5;
 
     if (empty($transactions)) {
         $pdf->Cell(180, $row_height, 'Tidak ada transaksi dalam periode ini.', 1, 1, 'C');
     } else {
         $no = 1;
-        foreach ($transactions as $row) {
+        foreach ($transactions as $index => $row) {
             $typeColor = [255, 255, 255];
             $displayType = '';
 
@@ -320,45 +333,41 @@ try {
                     break;
             }
 
-            $pdf->Cell($col_width[0], $row_height, $no++, 1, 0, 'C');
-            $pdf->Cell($col_width[1], $row_height, date('d/m/Y H:i', strtotime($row['created_at'])), 1, 0, 'C');
-            $pdf->Cell($col_width[2], $row_height, $row['no_transaksi'], 1, 0, 'L');
+            // Alternating row background
+            $rowBgColor = $index % 2 == 0 ? [245, 245, 245] : [255, 255, 255];
+            $pdf->SetFillColor($rowBgColor[0], $rowBgColor[1], $rowBgColor[2]);
+
+            $pdf->Cell($col_width[0], $row_height, $no++, 1, 0, 'C', true);
+            $pdf->Cell($col_width[1], $row_height, date('d/m/Y H:i', strtotime($row['created_at'])), 1, 0, 'C', true);
+            $pdf->Cell($col_width[2], $row_height, $row['no_transaksi'], 1, 0, 'L', true);
             
             $pdf->SetFillColor($typeColor[0], $typeColor[1], $typeColor[2]);
             $pdf->Cell($col_width[3], $row_height, $displayType, 1, 0, 'C', true);
             
-            // Nominal Column: Rp left, amount right
-            $pdf->SetFillColor(255, 255, 255);
+            // Nominal Column
+            $pdf->SetFillColor($rowBgColor[0], $rowBgColor[1], $rowBgColor[2]);
             $x_start = $pdf->GetX();
-            $pdf->Cell($col_width[4], $row_height, '', 1, 0, 'C', true); // Draw the cell border
-            $pdf->SetXY($x_start, $pdf->GetY());
-            $pdf->Cell(10, $row_height, 'Rp', 0, 0, 'L'); // Rp on the left
-            $pdf->SetXY($x_start + $col_width[4] - 20, $pdf->GetY()); // Adjust position for amount
-            $pdf->Cell(20, $row_height, number_format($row['jumlah'], 0, ',', '.'), 0, 0, 'R');
-            
-            // Saldo Column: Rp left, amount right
-            $x_start = $pdf->GetX();
-            $pdf->Cell($col_width[5], $row_height, '', 1, 0, 'C', true); // Draw the cell border
-            $pdf->SetXY($x_start, $pdf->GetY());
-            $pdf->Cell(10, $row_height, 'Rp', 0, 0, 'L'); // Rp on the left
-            $pdf->SetXY($x_start + $col_width[5] - 20, $pdf->GetY()); // Adjust position for amount
-            $pdf->Cell(20, $row_height, number_format($row['running_balance'], 0, ',', '.'), 0, 1, 'R');
+            $pdf->Cell($col_width[4], $row_height, '', 1, 0, 'C', true);
+            $pdf->SetXY($x_start + 3, $pdf->GetY());
+            $pdf->Cell(10, $row_height, 'Rp', 0, 0, 'L');
+            $pdf->SetXY($x_start + $col_width[4] - 20, $pdf->GetY());
+            $pdf->Cell(20, $row_height, number_format($row['jumlah'], 0, ',', '.'), 0, 1, 'R');
         }
-    }
 
-    // Final Balance
-    $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->SetFillColor(240, 240, 240);
-    $combined_width = array_sum(array_slice($col_width, 0, 5));
-    $pdf->Cell($combined_width, 6, 'Saldo Akhir', 1, 0, 'C', true);
-    
-    // Saldo Akhir Value: Rp left, amount right
-    $x_start = $pdf->GetX();
-    $pdf->Cell($col_width[5], 6, '', 1, 0, 'C', true); // Draw the cell border
-    $pdf->SetXY($x_start, $pdf->GetY());
-    $pdf->Cell(10, 6, 'Rp', 0, 0, 'L'); // Rp on the left
-    $pdf->SetXY($x_start + $col_width[5] - 20, $pdf->GetY()); // Adjust position for amount
-    $pdf->Cell(20, 6, number_format($running_balance, 0, ',', '.'), 0, 1, 'R');
+        // Total Nominal Row
+        $pdf->SetFont('helvetica', 'B', 8);
+        $pdf->SetFillColor(220, 220, 220);
+        $combined_width = array_sum(array_slice($col_width, 0, 4));
+        $pdf->Cell($combined_width, $row_height, 'Total Nominal', 1, 0, 'C', true);
+        
+        $pdf->SetFillColor(220, 220, 220);
+        $x_start = $pdf->GetX();
+        $pdf->Cell($col_width[4], $row_height, '', 1, 0, 'C', true);
+        $pdf->SetXY($x_start + 3, $pdf->GetY());
+        $pdf->Cell(10, $row_height, 'Rp', 0, 0, 'L');
+        $pdf->SetXY($x_start + $col_width[4] - 20, $pdf->GetY());
+        $pdf->Cell(20, $row_height, number_format($total_nominal, 0, ',', '.'), 0, 1, 'R');
+    }
 
     // Clear output buffer and send PDF
     ob_end_clean();

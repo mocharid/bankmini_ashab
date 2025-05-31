@@ -544,6 +544,7 @@ if ($role == 'admin' || $role == 'petugas') {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Transfer - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -1144,7 +1145,7 @@ if ($role == 'admin' || $role == 'petugas') {
         <button class="back-btn" onclick="window.location.href='dashboard.php'">
             <i class="fas fa-xmark"></i>
         </button>
-        <h1>SCHOBANK</h1>
+        <h1>SchoBank</h1>
         <div style="width: 40px;"></div>
     </nav>
 

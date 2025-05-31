@@ -49,6 +49,9 @@ $stmt_total->bind_param("ss", $start_date, $end_date);
 $stmt_total->execute();
 $totals = $stmt_total->get_result()->fetch_assoc();
 $stmt_total->close();
+$totals['total_transactions'] = $totals['total_transactions'] ?? 0;
+$totals['total_debit'] = $totals['total_debit'] ?? 0;
+$totals['total_kredit'] = $totals['total_kredit'] ?? 0;
 
 // Calculate net balance
 $saldo_bersih = ($totals['total_debit'] ?? 0) - ($totals['total_kredit'] ?? 0);
@@ -73,7 +76,7 @@ $total_records = $stmt_total_records->get_result()->fetch_assoc()['total'];
 $stmt_total_records->close();
 $total_pages = ceil($total_records / $items_per_page);
 
-// Fetch transactions with class information
+// Fetch transactions with class information, including tingkatan_kelas
 try {
     $query = "SELECT 
         t.no_transaksi,
@@ -81,11 +84,13 @@ try {
         t.jumlah,
         t.created_at,
         u.nama AS nama_siswa,
-        k.nama_kelas
+        k.nama_kelas,
+        tk.nama_tingkatan
         FROM transaksi t 
         JOIN rekening r ON t.rekening_id = r.id 
         JOIN users u ON r.user_id = u.id 
         LEFT JOIN kelas k ON u.kelas_id = k.id 
+        LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
         WHERE DATE(t.created_at) BETWEEN ? AND ?
         AND t.jenis_transaksi IN ('setor', 'tarik') 
         AND t.petugas_id IS NOT NULL 
@@ -119,6 +124,7 @@ function formatRupiah($amount) {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Laporan Transaksi Petugas - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -147,8 +153,6 @@ function formatRupiah($amount) {
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
             -webkit-text-size-adjust: none;
-            -webkit-user-select: none;
-            user-select: none;
         }
 
         body {
@@ -184,6 +188,7 @@ function formatRupiah($amount) {
             width: 40px;
             height: 40px;
             transition: var(--transition);
+            z-index: 10;
         }
 
         .back-btn:hover {
@@ -473,6 +478,7 @@ function formatRupiah($amount) {
             gap: 8px;
             transition: var(--transition);
             position: relative;
+            z-index: 10;
         }
 
         .btn:hover {
@@ -579,6 +585,7 @@ function formatRupiah($amount) {
             transition: var(--transition);
             width: 120px;
             text-align: center;
+            z-index: 10;
         }
 
         .pagination-btn:hover {
@@ -591,6 +598,7 @@ function formatRupiah($amount) {
             background: #ccc;
             cursor: not-allowed;
             transform: none;
+            pointer-events: none;
         }
 
         .empty-state {
@@ -696,7 +704,7 @@ function formatRupiah($amount) {
             margin: 0 0 20px;
             font-size: clamp(1.4rem, 3vw, 1.6rem);
             font-weight: 600;
-            animation: slideUpText 0.5s ease-out 0.2s both;
+            animation: slideUpText 0.5s ease-out 0.2s;
         }
 
         .success-modal p, .error-modal p {
@@ -704,7 +712,7 @@ function formatRupiah($amount) {
             font-size: clamp(0.95rem, 2.3vw, 1.05rem);
             margin: 0 0 25px;
             line-height: 1.6;
-            animation: slideUpText 0.5s ease-out 0.3s both;
+            animation: slideUpText 0.5s ease-out 0.3s;
         }
 
         @keyframes slideUpText {
@@ -941,12 +949,12 @@ function formatRupiah($amount) {
                     <thead>
                         <tr>
                             <th>No</th>
+                            <th>Tanggal</th>
                             <th>No Transaksi</th>
                             <th>Nama Siswa</th>
                             <th>Kelas</th>
                             <th>Jenis</th>
                             <th>Jumlah</th>
-                            <th>Waktu</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -955,16 +963,19 @@ function formatRupiah($amount) {
                             $typeClass = $transaction['jenis_transaksi'] === 'setor' ? 'type-debit' : 'type-kredit';
                             $displayType = $transaction['jenis_transaksi'] === 'setor' ? 'Debit' : 'Kredit';
                             $noUrut = (($current_page - 1) * $items_per_page) + $index + 1;
-                            $nama_kelas = trim($transaction['nama_kelas'] ?? '') ?: 'N/A';
+                            // Combine nama_tingkatan and nama_kelas
+                            $nama_kelas = trim($transaction['nama_tingkatan'] ?? '') && trim($transaction['nama_kelas'] ?? '') 
+                                ? htmlspecialchars($transaction['nama_tingkatan'] . ' ' . $transaction['nama_kelas'])
+                                : 'N/A';
                             ?>
                             <tr>
                                 <td><?= $noUrut ?></td>
+                                <td><?= date('d/m/Y', strtotime($transaction['created_at'])) ?></td>
                                 <td><?= htmlspecialchars($transaction['no_transaksi'] ?? 'N/A') ?></td>
                                 <td><?= htmlspecialchars($transaction['nama_siswa'] ?? 'N/A') ?></td>
-                                <td><?= htmlspecialchars($nama_kelas) ?></td>
+                                <td><?= $nama_kelas ?></td>
                                 <td><span class="transaction-type <?= $typeClass ?>"><?= $displayType ?></span></td>
                                 <td><?= formatRupiah($transaction['jumlah']) ?></td>
-                                <td><?= date('H:i', strtotime($transaction['created_at'])) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -1003,20 +1014,10 @@ function formatRupiah($amount) {
                 lastTouchEnd = now;
             }, { passive: false });
 
-            document.addEventListener('wheel', function(event) {
-                if (event.ctrlKey) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
-
-            document.addEventListener('dblclick', function(event) {
-                event.preventDefault();
-            }, { passive: false });
-
             // Count-up animation function
             function countUp(element, target, duration, isCurrency) {
                 let start = 0;
-                const stepTime = 50; // Update every 50ms
+                const stepTime = 50;
                 const steps = Math.ceil(duration / stepTime);
                 const increment = target / steps;
                 let current = start;
@@ -1043,26 +1044,24 @@ function formatRupiah($amount) {
                 updateCount();
             }
 
-            // Apply count-up animation to summary amounts
+            // Apply count-up animation
             const amounts = document.querySelectorAll('.summary-box .amount, .stat-box .stat-value');
             amounts.forEach(amount => {
                 const target = parseFloat(amount.getAttribute('data-target'));
-                const isCurrency = amount.classList.contains('amount') && amount.parentElement.querySelector('h3').textContent.includes('Debit') || 
-                                   amount.classList.contains('amount') && amount.parentElement.querySelector('h3').textContent.includes('Kredit') || 
-                                   amount.classList.contains('stat-value');
-                countUp(amount, target, 1500, isCurrency); // 1.5s duration
+                const isCurrency = amount.classList.contains('amount') || amount.classList.contains('stat-value');
+                countUp(amount, target, 1500, isCurrency);
             });
 
             // Alert function
             function showAlert(message, type) {
                 const alertContainer = document.getElementById('alertContainer');
-                const existingAlerts = alertContainer.querySelectorAll('.alert');
+                const existingAlerts = alertContainer.querySelectorAll('.success-overlay');
                 existingAlerts.forEach(alert => {
                     alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => alert.remove(), 500);
                 });
                 const alertDiv = document.createElement('div');
-                alertDiv.className = `success-overlay`;
+                alertDiv.className = 'success-overlay';
                 alertDiv.innerHTML = `
                     <div class="${type}-modal">
                         <div class="${type}-icon">
@@ -1086,43 +1085,38 @@ function formatRupiah($amount) {
             // Filter form handling
             const filterForm = document.getElementById('filterForm');
             const filterButton = document.getElementById('filterButton');
-            const pdfButton = document.getElementById('pdfButton');
-            const totalTransactions = parseInt(document.getElementById('totalTransactions').value);
-
             if (filterForm && filterButton) {
                 filterForm.addEventListener('submit', function(e) {
                     e.preventDefault();
-                    if (filterForm.classList.contains('submitting')) return;
-                    filterForm.classList.add('submitting');
-
                     const startDate = document.getElementById('start_date').value;
                     const endDate = document.getElementById('end_date').value;
 
                     if (!startDate || !endDate) {
                         showAlert('Silakan pilih tanggal yang valid', 'error');
-                        filterForm.classList.remove('submitting');
                         return;
                     }
                     if (new Date(startDate) > new Date(endDate)) {
                         showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
-                        filterForm.classList.remove('submitting');
                         return;
                     }
 
                     filterButton.classList.add('loading');
-                    filterButton.innerHTML = '<span class="btn-content"><i class="fas fa-spinner"></i> Memproses...</span>';
+                    filterButton.disabled = true;
 
                     const url = new URL(window.location);
                     url.searchParams.set('start_date', startDate);
                     url.searchParams.set('end_date', endDate);
-                    url.searchParams.delete('page'); // Reset to first page
+                    url.searchParams.delete('page');
                     window.location.href = url.toString();
                 });
             }
 
             // PDF download handling
+            const pdfButton = document.getElementById('pdfButton');
+            const totalRecords = parseInt(document.getElementById('totalTransactions').value);
             if (pdfButton) {
-                pdfButton.addEventListener('click', function() {
+                pdfButton.addEventListener('click', function(e) {
+                    e.preventDefault();
                     if (pdfButton.classList.contains('loading')) return;
 
                     const startDate = document.getElementById('start_date').value;
@@ -1136,18 +1130,21 @@ function formatRupiah($amount) {
                         showAlert('Tanggal awal tidak boleh lebih dari tanggal akhir', 'error');
                         return;
                     }
-                    if (totalTransactions === 0) {
+                    if (totalRecords === 0) {
                         showAlert('Tidak ada transaksi untuk diunduh dalam periode ini', 'error');
                         return;
                     }
 
                     pdfButton.classList.add('loading');
+                    pdfButton.disabled = true;
                     pdfButton.innerHTML = '<span class="btn-content"><i class="fas fa-spinner"></i> Memproses...</span>';
 
-                    window.open(`download_laporan.php?start_date=${startDate}&end_date=${endDate}&format=pdf`, '_blank');
+                    const url = `download_laporan.php?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}&format=pdf`;
+                    window.open(url, '_blank');
 
                     setTimeout(() => {
                         pdfButton.classList.remove('loading');
+                        pdfButton.disabled = false;
                         pdfButton.innerHTML = '<span class="btn-content"><i class="fas fa-file-pdf"></i> Unduh PDF</span>';
                     }, 1000);
                 });
@@ -1160,8 +1157,9 @@ function formatRupiah($amount) {
             const totalPages = <?= $total_pages ?>;
 
             if (prevPageButton) {
-                prevPageButton.addEventListener('click', function() {
-                    if (currentPage > 1) {
+                prevPageButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (currentPage > 1 && !prevPageButton.disabled) {
                         const url = new URL(window.location);
                         url.searchParams.set('page', currentPage - 1);
                         window.location.href = url.toString();
@@ -1170,8 +1168,9 @@ function formatRupiah($amount) {
             }
 
             if (nextPageButton) {
-                nextPageButton.addEventListener('click', function() {
-                    if (currentPage < totalPages) {
+                nextPageButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    if (currentPage < totalPages && !nextPageButton.disabled) {
                         const url = new URL(window.location);
                         url.searchParams.set('page', currentPage + 1);
                         window.location.href = url.toString();
@@ -1179,30 +1178,11 @@ function formatRupiah($amount) {
                 });
             }
 
-            // Prevent text selection on double-click
-            document.addEventListener('mousedown', function(e) {
-                if (e.detail > 1) {
-                    e.preventDefault();
-                }
-            });
-
-            // Keyboard accessibility
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter' && document.activeElement.tagName !== 'BUTTON') {
-                    filterForm.dispatchEvent(new Event('submit'));
-                }
-            });
-
-            // Ensure responsive table scroll on mobile
+            // Ensure responsive table scroll
             const table = document.querySelector('.transaction-table');
             if (table) {
                 table.parentElement.style.overflowX = 'auto';
             }
-
-            // Fix touch issues in Safari
-            document.addEventListener('touchstart', function(e) {
-                e.stopPropagation();
-            }, { passive: true });
         });
     </script>
 </body>

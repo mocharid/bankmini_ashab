@@ -1,4 +1,8 @@
 <?php
+// tutup_rek.php
+// Digunakan untuk menutup rekening, menghapus semua data terkait, dan mengurangi saldo admin
+// Tanggal saat ini: Rabu, 28 Mei 2025
+
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
@@ -8,8 +12,6 @@ $phpmailer_available = false;
 if (file_exists($autoload_path)) {
     require_once $autoload_path;
     $phpmailer_available = true;
-} else {
-    error_log("Composer autoloader not found at $autoload_path. Email sending will be disabled.");
 }
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -29,6 +31,18 @@ $email_status = '';
 $showConfirmation = false;
 $formData = [];
 
+// Function to format date in Indonesian
+function formatIndonesianDate($date) {
+    $days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    $months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    $timestamp = strtotime($date);
+    $day_name = $days[date('w', $timestamp)];
+    $day = date('d', $timestamp);
+    $month = $months[date('n', $timestamp) - 1];
+    $year = date('Y', $timestamp);
+    return "$day_name, $day $month $year";
+}
+
 // Function to obscure email
 function obscureEmail($email) {
     if (empty($email)) {
@@ -36,7 +50,7 @@ function obscureEmail($email) {
     }
     $parts = explode('@', $email);
     if (count($parts) !== 2) {
-        return $email; // Invalid email format
+        return $email;
     }
     $username = $parts[0];
     $domain = $parts[1];
@@ -95,16 +109,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         
         $stmt = $conn->prepare($query);
         if (!$stmt) {
-            $_SESSION['error_message'] = 'Kesalahan server: Gagal mempersiapkan query.';
-            error_log("Prepare failed for account lookup: " . $conn->error);
+            $_SESSION['error_message'] = 'Kesalahan server: Gagal mempersiapkan query rekening.';
             header('Location: tutup_rek.php');
             exit();
         }
 
         $stmt->bind_param("s", $no_rekening);
         if (!$stmt->execute()) {
-            $_SESSION['error_message'] = 'Kesalahan server: Gagal menjalankan query.';
-            error_log("Execute failed for account lookup: " . $stmt->error);
+            $_SESSION['error_message'] = 'Kesalahan server: Gagal menjalankan query rekening.';
             header('Location: tutup_rek.php');
             exit();
         }
@@ -132,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'no_rekening' => $no_rekening,
                 'nama' => $nasabah['nama'],
                 'username' => $nasabah['username'],
-                'tanggal_lahir' => $nasabah['tanggal_lahir'],
+                'tanggal_lahir' => $nasabah['tanggal_lahir'] ? formatIndonesianDate($nasabah['tanggal_lahir']) : '-',
                 'email' => $nasabah['email'],
                 'nama_jurusan' => $nasabah['nama_jurusan'],
                 'nama_kelas' => $nasabah['nama_kelas'],
@@ -157,29 +169,107 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
                 if (!is_numeric($rekening_id) || !is_numeric($user_id) || !is_numeric($admin_id)) {
                     $_SESSION['error_message'] = 'Kesalahan data: ID rekening, pengguna, atau admin tidak valid.';
-                    error_log("Invalid input data: rekening_id=$rekening_id, user_id=$user_id, admin_id=$admin_id");
-                    header('Location: tutup_rek.php');
-                    exit();
-                }
-                if ($saldo > 0) {
-                    $_SESSION['error_message'] = 'Penghapusan gagal: Saldo Rp ' . number_format($saldo, 0, ',', '.') . ' masih ada. Kosongkan saldo terlebih dahulu.';
                     header('Location: tutup_rek.php');
                     exit();
                 }
 
                 $conn->begin_transaction();
                 try {
+                    // Fetch admin's rekening
+                    $query = "SELECT r.id AS admin_rekening_id, r.saldo AS admin_saldo, r.no_rekening AS admin_no_rekening
+                              FROM rekening r
+                              JOIN users u ON r.user_id = u.id
+                              WHERE u.role = 'admin' LIMIT 1";
+                    $stmt = $conn->prepare($query);
+                    if (!$stmt) {
+                        throw new Exception("Gagal mempersiapkan query rekening admin: " . $conn->error);
+                    }
+                    if (!$stmt->execute()) {
+                        throw new Exception("Gagal menjalankan query rekening admin: " . $stmt->error);
+                    }
+                    $result = $stmt->get_result();
+                    if ($result->num_rows === 0) {
+                        throw new Exception("Rekening admin tidak ditemukan.");
+                    }
+                    $admin = $result->fetch_assoc();
+                    $admin_rekening_id = $admin['admin_rekening_id'];
+                    $admin_saldo = $admin['admin_saldo'];
+                    $admin_no_rekening = $admin['admin_no_rekening'];
+                    $stmt->close();
+
+                    // Check if admin has sufficient balance
+                    if ($saldo > 0 && $admin_saldo < $saldo) {
+                        throw new Exception("Saldo admin tidak mencukupi untuk menutup rekening dengan saldo Rp " . number_format($saldo, 0, ',', '.'));
+                    }
+
+                    // Record transaction if saldo > 0
+                    if ($saldo > 0) {
+                        // Insert into transaksi
+                        $query = "INSERT INTO transaksi (rekening_id, tipe_transaksi, jumlah, rekening_tujuan_id, keterangan, created_at, updated_at)
+                                  VALUES (?, 'TRANSFER', ?, ?, 'Penutupan rekening', NOW(), NOW())";
+                        $stmt = $conn->prepare($query);
+                        if (!$stmt) {
+                            throw new Exception("Gagal mempersiapkan transaksi: " . $conn->error);
+                        }
+                        $stmt->bind_param("idii", $rekening_id, $saldo, $admin_rekening_id);
+                        if (!$stmt->execute()) {
+                            throw new Exception("Gagal menjalankan transaksi: " . $stmt->error);
+                        }
+                        $transaksi_id = $conn->insert_id;
+                        $stmt->close();
+
+                        // Insert into mutasi (debit for user)
+                        $query = "INSERT INTO mutasi (rekening_id, transaksi_id, tipe_mutasi, jumlah, saldo_akhir, created_at, updated_at)
+                                  VALUES (?, ?, 'DEBIT', ?, ?, NOW(), NOW())";
+                        $saldo_akhir = 0; // After closure, user's saldo is 0
+                        $stmt = $conn->prepare($query);
+                        if (!$stmt) {
+                            throw new Exception("Gagal mempersiapkan mutasi debit: " . $conn->error);
+                        }
+                        $stmt->bind_param("iidd", $rekening_id, $transaksi_id, $saldo, $saldo_akhir);
+                        if (!$stmt->execute()) {
+                            throw new Exception("Gagal menjalankan mutasi debit: " . $stmt->error);
+                        }
+                        $stmt->close();
+
+                        // Insert into mutasi (credit for admin)
+                        $query = "INSERT INTO mutasi (rekening_id, transaksi_id, tipe_mutasi, jumlah, saldo_akhir, created_at, updated_at)
+                                  VALUES (?, ?, 'KREDIT', ?, ?, NOW(), NOW())";
+                        $admin_saldo_akhir = $admin_saldo - $saldo;
+                        $stmt = $conn->prepare($query);
+                        if (!$stmt) {
+                            throw new Exception("Gagal mempersiapkan mutasi kredit: " . $conn->error);
+                        }
+                        $stmt->bind_param("iidd", $admin_rekening_id, $transaksi_id, $saldo, $admin_saldo_akhir);
+                        if (!$stmt->execute()) {
+                            throw new Exception("Gagal menjalankan mutasi kredit: " . $stmt->error);
+                        }
+                        $stmt->close();
+
+                        // Update admin's saldo
+                        $query = "UPDATE rekening SET saldo = ? WHERE id = ?";
+                        $stmt = $conn->prepare($query);
+                        if (!$stmt) {
+                            throw new Exception("Gagal mempersiapkan update saldo admin: " . $conn->error);
+                        }
+                        $stmt->bind_param("di", $admin_saldo_akhir, $admin_rekening_id);
+                        if (!$stmt->execute()) {
+                            throw new Exception("Gagal menjalankan update saldo admin: " . $stmt->error);
+                        }
+                        $stmt->close();
+                    }
+
                     // Delete related mutasi
                     $query = "DELETE m FROM mutasi m 
                              JOIN transaksi t ON m.transaksi_id = t.id 
                              WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?";
                     $stmt = $conn->prepare($query);
                     if (!$stmt) {
-                        throw new Exception("Prepare failed for mutasi deletion: " . $conn->error);
+                        throw new Exception("Gagal mempersiapkan penghapusan mutasi: " . $conn->error);
                     }
                     $stmt->bind_param("ii", $rekening_id, $rekening_id);
                     if (!$stmt->execute()) {
-                        throw new Exception("Execute failed for mutasi deletion: " . $stmt->error);
+                        throw new Exception("Gagal menjalankan penghapusan mutasi: " . $stmt->error);
                     }
                     $stmt->close();
 
@@ -187,11 +277,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $query = "DELETE FROM transaksi WHERE rekening_id = ? OR rekening_tujuan_id = ?";
                     $stmt = $conn->prepare($query);
                     if (!$stmt) {
-                        throw new Exception("Prepare failed for transaksi deletion: " . $conn->error);
+                        throw new Exception("Gagal mempersiapkan penghapusan transaksi: " . $conn->error);
                     }
                     $stmt->bind_param("ii", $rekening_id, $rekening_id);
                     if (!$stmt->execute()) {
-                        throw new Exception("Execute failed for transaksi deletion: " . $stmt->error);
+                        throw new Exception("Gagal menjalankan penghapusan transaksi: " . $stmt->error);
                     }
                     $stmt->close();
 
@@ -199,11 +289,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $query = "DELETE FROM rekening WHERE id = ?";
                     $stmt = $conn->prepare($query);
                     if (!$stmt) {
-                        throw new Exception("Prepare failed for rekening deletion: " . $conn->error);
+                        throw new Exception("Gagal mempersiapkan penghapusan rekening: " . $conn->error);
                     }
                     $stmt->bind_param("i", $rekening_id);
                     if (!$stmt->execute()) {
-                        throw new Exception("Execute failed for rekening deletion: " . $stmt->error);
+                        throw new Exception("Gagal menjalankan penghapusan rekening: " . $stmt->error);
                     }
                     $stmt->close();
 
@@ -221,18 +311,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     foreach ($tables as $table => $info) {
                         $result = $conn->query("SHOW TABLES LIKE '$table'");
                         if ($result->num_rows === 0) {
-                            error_log("Table $table does not exist. Skipping deletion.");
                             continue;
                         }
 
                         $query = "DELETE FROM $table WHERE {$info['column']} = ?";
                         $stmt = $conn->prepare($query);
                         if (!$stmt) {
-                            throw new Exception("Prepare failed for $table deletion: " . $conn->error);
+                            throw new Exception("Gagal mempersiapkan penghapusan data dari $table: " . $conn->error);
                         }
                         $stmt->bind_param("i", $info['id']);
                         if (!$stmt->execute()) {
-                            throw new Exception("Execute failed for $table deletion: " . $stmt->error);
+                            throw new Exception("Gagal menjalankan penghapusan data dari $table: " . $stmt->error);
                         }
                         $stmt->close();
                     }
@@ -241,11 +330,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $query = "DELETE FROM users WHERE id = ?";
                     $stmt = $conn->prepare($query);
                     if (!$stmt) {
-                        throw new Exception("Prepare failed for users deletion: " . $conn->error);
+                        throw new Exception("Gagal mempersiapkan penghapusan pengguna: " . $conn->error);
                     }
                     $stmt->bind_param("i", $user_id);
                     if (!$stmt->execute()) {
-                        throw new Exception("Execute failed for users deletion: " . $stmt->error);
+                        throw new Exception("Gagal menjalankan penghapusan pengguna: " . $stmt->error);
                     }
                     $stmt->close();
 
@@ -255,13 +344,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             $email_status = 'success';
                         } else {
                             $email_status = 'failed';
-                            error_log("Email sending failed for $email");
                         }
                     } else {
                         $email_status = $phpmailer_available ? 'no_email' : 'phpmailer_unavailable';
-                        if (!$phpmailer_available) {
-                            error_log("PHPMailer not available for sending email.");
-                        }
                     }
 
                     $conn->commit();
@@ -271,7 +356,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 } catch (Exception $e) {
                     $conn->rollback();
                     $_SESSION['error_message'] = 'Gagal menutup rekening: ' . $e->getMessage();
-                    error_log("Account and user deletion error: " . $e->getMessage());
                 }
                 header('Location: tutup_rek.php');
                 exit();
@@ -292,7 +376,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
     global $phpmailer_available;
     if (!$phpmailer_available) {
-        error_log("PHPMailer not available. Skipping email sending.");
         return false;
     }
 
@@ -314,7 +397,8 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
         $mail->isHTML(true);
         $mail->Subject = 'Penutupan Rekening - SCHOBANK SYSTEM';
         
-        $saldo_text = $saldo > 0 ? "Sisa saldo Rp " . number_format($saldo, 0, ',', '.') . " akan dibayarkan sesuai prosedur." : "Tidak ada sisa saldo.";
+        $saldo_text = $saldo > 0 ? "Sisa saldo Rp " . number_format($saldo, 0, ',', '.') . " telah ditransfer sesuai prosedur penutupan." : "Tidak ada sisa saldo.";
+        $current_date = formatIndonesianDate(date('Y-m-d'));
         
         $emailBody = "
         <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e0e0e0;'>
@@ -325,7 +409,7 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
                 <h3 style='color: #1e3a8a; font-size: 20px; margin-bottom: 20px; font-weight: 600;'>Penutupan Rekening</h3>
                 <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Yth. {$nama},</p>
                 <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>
-                    Kami menginformasikan bahwa rekening Anda dengan nomor <strong>{$no_rekening}</strong> telah ditutup dan akun Anda telah dihapus dari sistem SCHOBANK SYSTEM. Tindakan ini bersifat permanen dan tidak dapat dikembalikan.
+                    Kami menginformasikan bahwa pada {$current_date}, rekening Anda dengan nomor <strong>{$no_rekening}</strong> telah ditutup dan akun Anda telah dihapus dari sistem SCHOBANK SYSTEM. Tindakan ini bersifat permanen dan tidak dapat dikembalikan.
                 </p>
                 <table style='width: 100%; border-collapse: collapse; font-size: 14px; color: #333333; margin-bottom: 20px;'>
                     <tbody>
@@ -354,12 +438,11 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
         </div>";
         
         $mail->Body = $emailBody;
-        $mail->AltBody = strip_tags("SCHOBANK SYSTEM\n\nYth. {$nama},\n\nKami menginformasikan bahwa rekening Anda dengan nomor {$no_rekening} telah ditutup dan akun Anda telah dihapus dari sistem SCHOBANK SYSTEM. Tindakan ini bersifat permanen dan tidak dapat dikembalikan.\n\nNomor Rekening: {$no_rekening}\nStatus Saldo: {$saldo_text}\n\nJika Anda memiliki pertanyaan atau memerlukan informasi lebih lanjut, silakan hubungi tim kami melalui kanal resmi SCHOBANK SYSTEM.\n\nHormat kami,\nTim SCHOBANK SYSTEM\n\n© " . date('Y') . " SCHOBANK SYSTEM. Hak cipta dilindungi.");
+        $mail->AltBody = strip_tags("SCHOBANK SYSTEM\n\nYth. {$nama},\n\nKami menginformasikan bahwa pada {$current_date}, rekening Anda dengan nomor {$no_rekening} telah ditutup dan akun Anda telah dihapus dari sistem SCHOBANK SYSTEM. Tindakan ini bersifat permanen dan tidak dapat dikembalikan.\n\nNomor Rekening: {$no_rekening}\nStatus Saldo: {$saldo_text}\n\nJika Anda memiliki pertanyaan atau memerlukan informasi lebih lanjut, silakan hubungi tim kami melalui kanal resmi SCHOBANK SYSTEM.\n\nHormat kami,\nTim SCHOBANK SYSTEM\n\n© " . date('Y') . " SCHOBANK SYSTEM. Hak cipta dilindungi.");
         
         $mail->send();
         return true;
     } catch (Exception $e) {
-        error_log("Email sending failed for $email: " . $mail->ErrorInfo);
         return false;
     }
 }
@@ -369,6 +452,7 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Tutup Rekening - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -1255,7 +1339,6 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
                     if ((e.key === 'Backspace' || e.key === 'Delete') && cursorPos <= prefix.length) {
                         e.preventDefault();
                     }
-                    // Allow only numeric keys, backspace, delete, and navigation keys
                     if (!/^[0-9]$/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && 
                         !['ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
                         e.preventDefault();
@@ -1285,7 +1368,6 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
                     }
                 });
 
-                // Trigger initial fetch if formData has no_rekening
                 if (noRekeningInput.value.match(/^REK[0-9]{6}$/)) {
                     fetchAccountDetails(noRekeningInput.value);
                 }
@@ -1368,12 +1450,14 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
             }
 
             function showAlert(message, type) {
-                const alertContainer = document.getElementById('alertContainer');
+                // Remove existing alerts to prevent stacking
                 const existingAlerts = alertContainer.querySelectorAll('.modal-overlay');
                 existingAlerts.forEach(alert => {
                     alert.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
                     setTimeout(() => alert.remove(), 500);
                 });
+
+                // Create new alert modal
                 const alertDiv = document.createElement('div');
                 alertDiv.className = 'modal-overlay';
                 alertDiv.innerHTML = `
@@ -1382,12 +1466,14 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
                             <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
                         </div>
                         <h3>${type === 'success' ? 'Penutupan Berhasil!' : 'Gagal'}</h3>
-                        ${type === 'error' ? `<p>${message}</p>` : ''}
+                        <p>${message}</p>
                     </div>
                 `;
                 alertContainer.appendChild(alertDiv);
-                alertDiv.id = 'alert-' + Date.now();
+                alertDiv.id = `alert-${Date.now()}`;
                 addModalCloseListener(alertDiv);
+
+                // Auto-close after AUTO_CLOSE_DELAY
                 setTimeout(() => {
                     closeModal(alertDiv.id);
                     if (type === 'success') {
@@ -1423,7 +1509,7 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
                         if (response.status === 'success') {
                             $('#nama').val(response.nama);
                             $('#email').val(obscureEmail(response.email));
-                            $('#tanggal_lahir').val(response.tanggal_lahir);
+                            $('#tanggal_lahir').val(response.tanggal_lahir ? response.tanggal_lahir : '-');
                             $('#jurusan').val(response.nama_jurusan || '-');
                             $('#kelas').val(response.nama_kelas || '-');
                             $('#no_rekening-error').removeClass('show');
@@ -1453,7 +1539,7 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
                 });
             }
 
-            // Add close listener and auto-close to existing modals
+            // Attach listeners to existing modals
             ['successModal', 'errorModal', 'confirmModal', 'phpmailer-error'].forEach(modalId => {
                 const modal = document.getElementById(modalId);
                 if (modal) {
@@ -1526,7 +1612,6 @@ function sendEmailNotification($email, $nama, $no_rekening, $saldo) {
                             confirmBtn.innerHTML = '<span class="btn-content"><i class="fas fa-spinner"></i> Menghapus...</span>';
                         }
                     } else if (e.submitter.name === 'cancel') {
-                        // Allow cancel without validation
                         document.getElementById('reason-error').classList.remove('show');
                     }
                 });

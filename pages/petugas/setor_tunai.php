@@ -14,6 +14,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 <html lang="id">
 <head>
     <title>Setor Tunai - SCHOBANK SYSTEM</title>
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -83,25 +84,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .back-btn:hover {
             background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
-        }
-
-        .back-btn.loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .back-btn.loading .btn-content {
-            visibility: hidden;
-        }
-
-        .back-btn.loading::after {
-            content: '\f110';
-            font-family: 'Font Awesome 6 Free';
-            font-weight: 900;
-            color: white;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            position: absolute;
-            animation: spin 1s linear infinite;
         }
 
         .main-content {
@@ -175,7 +157,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             display: flex;
             flex-direction: column;
             gap: 30px;
-            max-width: 600px;
+            max-width: 1200px;
             margin-left: auto;
             margin-right: auto;
         }
@@ -183,7 +165,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .steps-section {
             display: flex;
             justify-content: space-between;
-            gap: 20px;
+            gap: 30px;
             position: relative;
         }
 
@@ -282,9 +264,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .deposit-card, .account-details {
             background: #f9fafb;
             border-radius: 10px;
-            padding: 20px;
+            padding: 25px;
             box-shadow: var(--shadow-sm);
             width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
             transition: var(--transition);
         }
 
@@ -305,7 +289,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .deposit-form {
             display: flex;
             flex-direction: column;
-            gap: 20px;
+            gap: 25px;
             align-items: center;
             justify-content: center;
         }
@@ -348,7 +332,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             border-radius: 10px;
             font-size: clamp(0.9rem, 2vw, 1rem);
             line-height: 1.5;
-            min      min-height: 44px;
+            min-height: 44px;
             transition: var(--transition);
             -webkit-user-select: text;
             user-select: text;
@@ -447,8 +431,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
             transition: var(--transition);
             width: var(--button-width);
             height: var(--button-height);
-            margin: 0 auto;
-            position: relative;
+            margin: 0;
         }
 
         .btn:hover {
@@ -533,8 +516,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 10px;
-            margin: 20px auto 0;
+            gap: 15px;
+            margin: 25px auto 0;
             width: 100%;
             max-width: 310px;
             box-sizing: border-box;
@@ -576,8 +559,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
             opacity: 0;
             animation: popInModal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
             overflow: hidden;
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             cursor: default;
+        }
+
+        .modal-content.success {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+        }
+
+        .modal-content.error {
+            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
         }
 
         .modal-content::before {
@@ -671,9 +661,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 max-width: 100%;
             }
 
+            .deposit-card, .account-details {
+                padding: 15px;
+                max-width: 100%;
+            }
+
             .steps-section {
                 flex-direction: column;
                 align-items: flex-start;
+                gap: 15px;
             }
 
             .step-item {
@@ -719,14 +715,14 @@ $username = $_SESSION['username'] ?? 'Petugas';
         <button class="back-btn" id="backBtn">
             <span class="btn-content"><i class="fas fa-xmark"></i></span>
         </button>
-        <h1>SCHOBANK</h1>
+        <h1>SchoBank</h1>
         <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
             <h2>Setor Tunai</h2>
-            <p>Layanan untuk nasabah menabung </p>
+            <p>Layanan untuk nasabah menabung</p>
         </div>
 
         <div class="combined-container">
@@ -919,6 +915,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 modalTitle.textContent = title;
                 modalMessage.textContent = message;
                 modalIcon.className = `fas modal-icon ${isSuccess ? 'fa-check-circle success-icon' : 'fa-exclamation-circle error-icon'}`;
+                modalContent.className = `modal-content ${isSuccess ? 'success' : 'error'}`;
                 modalOverlay.classList.add('show');
                 modalOverlay.focus();
                 // Auto-close modal after 2 seconds
@@ -934,7 +931,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 modalOverlay.classList.remove('show');
             }
 
-            // Close modal when clicking outside the modal content
+            // Close modal when clicking anywhere
             modalOverlay.addEventListener('click', function() {
                 closeModal();
             });
@@ -946,7 +943,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
             // Back Button Handler
             backBtn.addEventListener('click', function() {
-                backBtn.classList.add('loading');
                 window.location.href = 'dashboard.php';
             });
 
@@ -974,19 +970,19 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.addEventListener('input', function(e) {
                     let value = this.value.replace(/[^0-9]/g, '');
                     if (value.length === 1) {
+                        this.value = value;
                         this.classList.add('filled');
                         this.dataset.originalValue = value;
-                        this.value = value;
                         updateHiddenNoRek();
-                        if (index < 5) {
+                        if (index < rekInputs.length - 1) {
                             rekInputs[index + 1].focus();
                         } else if (hiddenNoRek.value.length === 9) {
                             cekButton.click();
                         }
                     } else {
+                        this.value = '';
                         this.classList.remove('filled');
                         this.dataset.originalValue = '';
-                        this.value = '';
                         updateHiddenNoRek();
                     }
                 });
@@ -994,9 +990,9 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.addEventListener('keydown', function(e) {
                     if (e.key === 'Backspace' && !this.dataset.originalValue && index > 0) {
                         rekInputs[index - 1].focus();
+                        rekInputs[index - 1].value = '';
                         rekInputs[index - 1].classList.remove('filled');
                         rekInputs[index - 1].dataset.originalValue = '';
-                        rekInputs[index - 1].value = '';
                         updateHiddenNoRek();
                     }
                 });
@@ -1004,19 +1000,16 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 input.addEventListener('paste', function(e) {
                     e.preventDefault();
                     let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-                    rekInputs.forEach((inp, i) => {
-                        inp.value = '';
-                        inp.classList.remove('filled');
-                        inp.dataset.originalValue = '';
-                    });
-                    for (let i = 0; i < 6 && i < pastedData.length; i++) {
+                    clearRekForm();
+                    for (let i = 0; i < pastedData.length && i < rekInputs.length; i++) {
                         rekInputs[i].value = pastedData[i];
-                        rekInputs[i].dataset.originalValue = pastedData[i];
                         rekInputs[i].classList.add('filled');
+                        rekInputs[i].dataset.originalValue = pastedData[i];
                     }
                     updateHiddenNoRek();
                     if (pastedData.length > 0) {
-                        rekInputs[Math.min(pastedData.length - 1, 5)].focus();
+                        const focusIndex = Math.min(pastedData.length - 1, rekInputs.length - 1);
+                        rekInputs[focusIndex].focus();
                     }
                     if (hiddenNoRek.value.length === 9) {
                         cekButton.click();
@@ -1027,6 +1020,9 @@ $username = $_SESSION['username'] ?? 'Petugas';
             // Amount Input Handling
             inputJumlah.addEventListener('input', function(e) {
                 let value = this.value.replace(/[^0-9]/g, '');
+                if (value.length > 8) {
+                    value = value.slice(0, 8);
+                }
                 if (value === '') {
                     this.value = '';
                     return;
@@ -1126,6 +1122,13 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 if (isNaN(jumlah) || jumlah < 1000) {
                     confirmAmount.classList.remove('loading');
                     showModal('Error', 'Jumlah setoran minimal Rp 1.000', false);
+                    inputJumlah.focus();
+                    return;
+                }
+                if (jumlah.toString().length > 8) {
+                    confirmAmount.classList.remove('loading');
+                    showModal('Error', 'Jumlah setoran maksimal 8 digit (Rp 99.999.999)', false);
+                    inputJumlah.focus();
                     return;
                 }
                 accountData.jumlah = jumlah;
@@ -1163,6 +1166,10 @@ $username = $_SESSION['username'] ?? 'Petugas';
                     processDeposit.classList.remove('loading');
                     if (data.status === 'error') {
                         showModal('Error', data.message, false);
+                        return;
+                    }
+                    if (data.email_status === 'failed') {
+                        showModal('Error', 'Transaksi berhasil, tetapi gagal mengirim bukti transaksi ke email', false);
                         return;
                     }
                     showModal('Sukses', data.message, true);

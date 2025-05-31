@@ -112,7 +112,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $kelas = $row['kelas'] ?? '-';
             $stmt->close();
 
-            $no_transaksi = 'TRXP' . date('Ymd') . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+            // Generate unique transaction number with more entropy
+            $no_transaksi = 'TRXP' . date('Ymd') . sprintf('%06d', mt_rand(100000, 999999));
 
             $query_transaksi = "
                 INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, petugas_id, status, created_at)
@@ -157,7 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             $email_status = 'success';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $subject = "Bukti Transaksi Setor Tunai - SCHOBANK SYSTEM";
+                // Create unique subject with transaction ID to prevent email threading
+                $subject = "[{$no_transaksi}] Bukti Setor Tunai - SCHOBANK " . date('Y-m-d H:i:s');
                 
                 // Konversi bulan ke bahasa Indonesia
                 $bulan = [
@@ -170,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $tanggal_transaksi = str_replace($en, $id, $tanggal_transaksi);
                 }
 
-                $message = "
+                $message_email = "
                 <div style='font-family: Poppins, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f0f5ff; border-radius: 12px; overflow: hidden;'>
                     <div style='background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px 20px; text-align: center; color: #ffffff;'>
                         <h2 style='font-size: 24px; font-weight: 600; margin: 0;'>SCHOBANK SYSTEM</h2>
@@ -183,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <table style='width: 100%; font-size: 15px; color: #333333;'>
                                 <tr>
                                     <td style='padding: 8px 0; font-weight: 500;'>Nomor Transaksi</td>
-                                    <td style='padding: 8px 0; text-align: right;'>{$no_transaksi}</td>
+                                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #1e3a8a;'>{$no_transaksi}</td>
                                 </tr>
                                 <tr>
                                     <td style='padding: 8px 0; font-weight: 500;'>Nomor Rekening</td>
@@ -203,7 +205,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 </tr>
                                 <tr>
                                     <td style='padding: 8px 0; font-weight: 500;'>Jumlah Setoran</td>
-                                    <td style='padding: 8px 0; text-align: right;'>Rp " . number_format($jumlah, 0, ',', '.') . "</td>
+                                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #059669;'>Rp " . number_format($jumlah, 0, ',', '.') . "</td>
                                 </tr>
                                 <tr>
                                     <td style='padding: 8px 0; font-weight: 500;'>Tanggal Transaksi</td>
@@ -211,44 +213,84 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 </tr>
                             </table>
                         </div>
+                        
+                        <!-- Email Banner Image -->
+                        <div style='text-align: center; margin: 20px 0;'>
+                            <img src='cid:emailbanner' alt='SCHOBANK Banner' style='max-width: 100%; height: auto; border-radius: 8px; border: 2px solid #e2e8f0;' />
+                        </div>
+                        
                         <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Terima kasih telah menggunakan layanan SCHOBANK SYSTEM. Untuk informasi lebih lanjut, silakan kunjungi halaman akun Anda atau hubungi petugas kami.</p>
                         <p style='color: #e74c3c; font-size: 14px; font-weight: 500; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;'>
                             <span style='font-size: 18px;'>🔒</span> Jangan bagikan informasi rekening, kata sandi, atau detail transaksi kepada pihak lain.
                         </p>
                         <div style='text-align: center; margin: 30px 0;'>
-                            <a href='mailto:support@schobank.xai' style='display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%); color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 500;'>Hubungi Kami</a>
+                            <a href='mailto:schobanksystem@gmail.com' style='display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%); color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 500;'>Hubungi Kami</a>
                         </div>
                     </div>
                     <div style='background: #f0f5ff; padding: 15px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0;'>
                         <p style='margin: 0;'>© " . date('Y') . " SCHOBANK SYSTEM. All rights reserved.</p>
                         <p style='margin: 5px 0 0;'>Email ini otomatis. Mohon tidak membalas.</p>
+                        <p style='margin: 5px 0 0; color: #999999;'>Transaksi ID: {$no_transaksi} | " . date('Y-m-d H:i:s T') . "</p>
                     </div>
                 </div>";
 
                 try {
+                    // Create new PHPMailer instance for each email
                     $mail = new PHPMailer(true);
+                    
+                    // Clear any previous recipients and attachments
+                    $mail->clearAllRecipients();
+                    $mail->clearAttachments();
+                    $mail->clearReplyTos();
+                    
+                    // SMTP Configuration
                     $mail->isSMTP();
                     $mail->Host = 'smtp.gmail.com';
                     $mail->SMTPAuth = true;
-                    $mail->Username = 'mocharid.ip@gmail.com';
-                    $mail->Password = 'spjs plkg ktuu lcxh';
+                    $mail->Username = 'schobanksystem@gmail.com';
+                    $mail->Password = 'dgry fzmc mfrd hzzq';
                     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                     $mail->Port = 587;
                     $mail->CharSet = 'UTF-8';
-
-                    $mail->setFrom('mocharid.ip@gmail.com', 'SCHOBANK SYSTEM');
+                    
+                    // Email settings to prevent threading
+                    $mail->setFrom('schobanksystem@gmail.com', 'SCHOBANK SYSTEM');
                     $mail->addAddress($email, $nama_nasabah);
                     $mail->addReplyTo('no-reply@schobank.com', 'No Reply');
+                    
+                    // Add unique Message-ID to prevent email threading
+                    $unique_id = uniqid('schobank_', true) . '@schobank.com';
+                    $mail->MessageID = '<' . $unique_id . '>';
+                    
+                    // Add custom headers to prevent threading
+                    $mail->addCustomHeader('X-Transaction-ID', $no_transaksi);
+                    $mail->addCustomHeader('X-Mailer', 'SCHOBANK-System-v1.0');
+                    $mail->addCustomHeader('X-Priority', '1');
+                    $mail->addCustomHeader('Importance', 'High');
+                    
+                    // Attach the banner image
+                    $banner_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/emailbanner.jpeg';
+                    if (file_exists($banner_path)) {
+                        $mail->addEmbeddedImage($banner_path, 'emailbanner', 'emailbanner.jpeg');
+                    }
 
                     $mail->isHTML(true);
                     $mail->Subject = $subject;
-                    $mail->Body = $message;
-                    $mail->AltBody = strip_tags(str_replace('<br>', "\n", $message));
+                    $mail->Body = $message_email;
+                    $mail->AltBody = strip_tags(str_replace(['<br>', '</tr>', '</td>'], ["\n", "\n", " "], $message_email));
 
-                    $mail->send();
-                    $email_status = 'success';
+                    // Send email
+                    if ($mail->send()) {
+                        $email_status = 'success';
+                    } else {
+                        throw new Exception('Email gagal dikirim: ' . $mail->ErrorInfo);
+                    }
+                    
+                    // Clear the mailer for good measure
+                    $mail->smtpClose();
+                    
                 } catch (Exception $e) {
-                    error_log("Mail error: " . $mail->ErrorInfo);
+                    error_log("Mail error for transaction {$no_transaksi}: " . $e->getMessage());
                     $email_status = 'failed';
                 }
             }
@@ -258,13 +300,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $response_message = "Setoran tunai berhasil diproses.";
             if ($email_status === 'failed') {
                 $response_message = "Transaksi berhasil, tetapi gagal mengirim bukti transaksi ke email.";
+            } elseif ($email_status === 'success') {
+                $response_message = "Setoran tunai berhasil diproses dan bukti transaksi telah dikirim ke email.";
             }
 
             echo json_encode([
                 'status' => 'success',
                 'message' => $response_message,
-                'email_status' => $email_status
+                'email_status' => $email_status,
+                'transaction_id' => $no_transaksi,
+                'saldo_baru' => number_format($saldo_baru, 0, ',', '.')
             ]);
+            
         } catch (Exception $e) {
             $conn->rollback();
             echo json_encode(['status' => 'error', 'message' => $e->getMessage(), 'email_status' => 'none']);
@@ -275,5 +322,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 } else {
     echo json_encode(['status' => 'error', 'message' => 'Metode request tidak valid.', 'email_status' => 'none']);
 }
+
 $conn->close();
 ?>

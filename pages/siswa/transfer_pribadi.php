@@ -29,8 +29,10 @@ if ($user_data['is_frozen']) {
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Transfer - SCHOBANK SYSTEM</title>
+    <title>Transfer - SchoBank</title>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -326,7 +328,7 @@ if ($user_data['is_frozen']) {
         <button class="back-btn" onclick="window.location.href='dashboard.php'">
             <i class="fas fa-times"></i>
         </button>
-        <h1>SCHOBANK</h1>
+        <h1>SchoBank</h1>
         <div style="width: 40px;"></div>
     </nav>
     <div class="error-container">
@@ -354,8 +356,9 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Transfer - SCHOBANK SYSTEM</title>
+    <title>Transfer - SchoBank</title>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -597,7 +600,7 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
         <button class="back-btn" onclick="window.location.href='dashboard.php'">
             <i class="fas fa-times"></i>
         </button>
-        <h1>SCHOBANK</h1>
+        <h1>SchoBank</h1>
         <div style="width: 40px;"></div>
     </nav>
     <div class="error-container">
@@ -1157,8 +1160,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Transfer - SCHOBANK SYSTEM</title>
+    <title>Transfer - SchoBank</title>
     <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -1969,13 +1973,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
         <button class="back-btn" id="xmarkButton" aria-label="Kembali">
             <i class="fas fa-times"></i>
         </button>
-        <h1>SCHOBANK</h1>
+        <h1>SchoBank</h1>
         <div style="width: 40px;"></div>
     </nav>
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-exchange-alt"></i> Transfer Lokal</h2>
+            <h2>Transfer Lokal</h2>
             <p>Kirim dana ke rekening lain dengan cepat dan aman</p>
         </div>
 
@@ -2172,7 +2176,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                         <span class="modal-value">BERHASIL</span>
                     </div>
                 </div>
-                <p>Bukti Transaksi ini Sah dikeluarkan oleh SCHOBANK SYSTEM.</p>
+                <p>Bukti Transaksi ini Sah dikeluarkan oleh SchoBank.</p>
             </div>
         </div>
         <?php endif; ?>

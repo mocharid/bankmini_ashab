@@ -234,6 +234,7 @@ function tanggal_indonesia($tanggal) {
 <html>
 <head>
     <title>Dashboard - SCHOBANK SYSTEM</title>
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1445,7 +1446,7 @@ function tanggal_indonesia($tanggal) {
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <h1 class="bank-name">SCHOBANK</h1>
+            <h1 class="bank-name">SchoBank</h1>
         </div>
         
         <div class="sidebar-content">

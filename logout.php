@@ -1,20 +1,19 @@
 <?php
 session_start();
-require_once 'includes/db_connection.php'; // Adjusted path
-
-// Hapus sesi aktif dari database (jika menggunakan tabel active_sessions)
-if (isset($_SESSION['user_id'])) {
-    $query = "DELETE FROM active_sessions WHERE user_id = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $_SESSION['user_id']);
-    $stmt->execute();
-}
 
 // Hapus semua data sesi
-session_unset();
+$_SESSION = [];
+if (ini_get("session.use_cookies")) {
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', time() - 42000,
+        $params["path"], $params["domain"],
+        $params["secure"], $params["httponly"]
+    );
+}
+
 session_destroy();
 
-// Redirect ke halaman login dengan path yang benar
-header("Location: pages/login.php"); // Adjusted path
+// Redirect ke halaman login
+header("Location: pages/login.php");
 exit();
 ?>

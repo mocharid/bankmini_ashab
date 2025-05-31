@@ -186,7 +186,7 @@ while ($row = $result_students->fetch_assoc()) {
 <html>
 <head>
     <title>Dashboard - SCHOBANK SYSTEM</title>
-    <!-- Prevent zooming with viewport settings -->
+    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css" rel="stylesheet">
@@ -1265,137 +1265,150 @@ while ($row = $result_students->fetch_assoc()) {
 <body>
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            <h1 class="bank-name">SCHOBANK</h1>
+            <h1 class="bank-name">SchoBank</h1>
         </div>
         
-        <div class="sidebar-content">
-            <div class="sidebar-menu">
-                <div class="menu-label">Menu Utama</div>
-                <div class="menu-item">
-                    <button class="dropdown-btn" id="dataDropdown">
-                        <div class="menu-icon">
-                            <i class="fas fa-database"></i> Kelola Data
-                        </div>
-                        <i class="fas fa-chevron-down arrow"></i>
-                    </button>
-                    <div class="dropdown-container" id="dataDropdownContainer">
-                        <a href="tambah_jurusan.php">
-                            <i class="fas fa-graduation-cap"></i> Kelola Jurusan
-                        </a>
-                        <a href="tambah_kelas.php">
-                            <i class="fas fa-chalkboard"></i> Kelola Kelas
-                        </a>
-                        <a href="tambah_petugas.php">
-                            <i class="fas fa-user-shield"></i> Kelola Akun Petugas
-                        </a>
-                        <a href="buat_jadwal.php">
-                            <i class="fas fa-user-cog"></i> Kelola Jadwal Petugas
-                        </a>
-                    </div>
-                </div>
+    <div class="sidebar-content">
+        <div class="sidebar-menu">
+            <!-- MENU UTAMA -->
+            <div class="menu-label">Menu Utama</div>
 
-                <div class="menu-item">
-                    <button class="dropdown-btn" id="rekapDropdown">
-                        <div class="menu-icon">
-                            <i class="fas fa-file-alt"></i> Rekap Data
-                        </div>
-                        <i class="fas fa-chevron-down arrow"></i>
-                    </button>
-                    <div class="dropdown-container" id="rekapDropdownContainer">
-                        <a href="laporan_admin.php">
-                            <i class="fas fa-file-alt"></i> Rekap Transaksi Admin
-                        </a>
-                        <a href="laporan.php">
-                            <i class="fas fa-file-alt"></i> Rekap Transaksi Petugas
-                        </a>
-                        <a href="rekap_transaksi.php">
-                            <i class="fas fa-file-alt"></i> Rekap Seluruh Transaksi
-                        </a>
-                        <a href="rekap_absen.php">
-                            <i class="fas fa-user-check"></i> Rekap Absen Petugas
-                        </a>
-                        <a href="data_siswa.php">
-                            <i class="fas fa-id-card"></i> Rekap Data Rekening
-                        </a>
+            <div class="menu-item">
+                <button class="dropdown-btn" id="dataMasterDropdown">
+                    <div class="menu-icon">
+                        <i class="fas fa-database"></i> Data Master
                     </div>
-                </div>
-
-                <div class="menu-item">
-                    <button class="dropdown-btn" id="rekeningDropdown">
-                        <div class="menu-icon">
-                            <i class="fas fa-users"></i> Manajemen Rekening
-                        </div>
-                        <i class="fas fa-chevron-down arrow"></i>
-                    </button>
-                    <div class="dropdown-container" id="rekeningDropdownContainer">
-                        <a href="tambah_nasabah.php">
-                            <i class="fas fa-user-plus"></i> Buka Rekening
-                        </a>
-                        <a href="tutup_rek.php">
-                            <i class="fas fa-user-slash"></i> Tutup Rekening
-                        </a>
-                    </div>
-                </div>
-
-                <div class="menu-item">
-                    <button class="dropdown-btn" id="saldoDropdown">
-                        <div class="menu-icon">
-                            <i class="fas fa-wallet"></i> Transaksi
-                        </div>
-                        <i class="fas fa-chevron-down arrow"></i>
-                    </button>
-                    <div class="dropdown-container" id="saldoDropdownContainer">
-                        <a href="setor_saldo_admin.php">
-                            <i class="fas fa-arrow-down"></i> Setor Saldo
-                        </a>
-                        <a href="tarik_saldo_admin.php">
-                            <i class="fas fa-arrow-up"></i> Tarik Saldo
-                        </a>
-                    </div>
-                </div>
-
-                <div class="menu-label">Lainnya</div>
-                <div class="menu-item">
-                    <button class="dropdown-btn" id="siswaDropdown">
-                        <div class="menu-icon">
-                            <i class="fas fa-users-cog"></i> Akun Siswa
-                        </div>
-                        <i class="fas fa-chevron-down arrow"></i>
-                    </button>
-                    <div class="dropdown-container" id="siswaDropdownContainer">
-                        <a href="recover_account.php">
-                            <i class="fas fa-user-lock"></i> Pemulihan Akun 
-                        </a>
-                        <a href="freeze_account.php">
-                            <i class="fas fa-ban"></i> Nonaktifkan Akun
-                        </a>
-                    </div>
-                </div>
-                <div class="menu-item">
-                    <button class="dropdown-btn" id="petugasDropdown">
-                        <div class="menu-icon">
-                            <i class="fas fa-user-shield"></i> Kontrol Petugas
-                        </div>
-                        <i class="fas fa-chevron-down arrow"></i>
-                    </button>
-                    <div class="dropdown-container" id="petugasDropdownContainer">
-                        <a href="manage_petugas_status.php">
-                            <i class="fa-solid fa-screwdriver-wrench"></i> Pembatasan Akses Petugas
-                        </a>
-                        <a href="kode_akses_petugas.php">
-                            <i class="fas fa-key"></i> Kode Akses Petugas
-                        </a>
-                    </div>
-                </div>
-
-                <div class="menu-label">Pengaturan</div>
-                <div class="menu-item">
-                    <a href="pengaturan.php">
-                        <i class="fas fa-cog"></i> Pengaturan
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="dataMasterDropdownContainer">
+                    <a href="tambah_jurusan.php">
+                        <i class="fas fa-layer-group"></i> Kelola Jurusan
+                    </a>
+                    <a href="tambah_tingkatan.php">
+                        <i class="fas fa-sort-amount-up-alt"></i> Kelola Tingkatan Kelas
+                    </a>
+                    <a href="tambah_kelas.php">
+                        <i class="fas fa-door-open"></i> Kelola Kelas
+                    </a>
+                    <a href="tambah_petugas.php">
+                        <i class="fas fa-user-cog"></i> Kelola Akun Petugas
+                    </a>
+                    <a href="buat_jadwal.php">
+                        <i class="fas fa-calendar-check"></i> Kelola Jadwal Petugas
                     </a>
                 </div>
             </div>
+
+            <!-- REKENING -->
+            <div class="menu-item">
+                <button class="dropdown-btn" id="rekeningDropdown">
+                    <div class="menu-icon">
+                        <i class="fas fa-id-card-alt"></i> Rekening Siswa
+                    </div>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="rekeningDropdownContainer">
+                    <a href="tambah_nasabah.php">
+                        <i class="fas fa-university"></i> Buka Rekening
+                    </a>
+                    <a href="tutup_rek.php">
+                        <i class="fas fa-user-times"></i> Tutup Rekening
+                    </a>
+                </div>
+            </div>
+
+            <!-- TRANSAKSI -->
+            <div class="menu-item">
+                <button class="dropdown-btn" id="transaksiDropdown">
+                    <div class="menu-icon">
+                        <i class="fas fa-wallet"></i> Transaksi Tunai
+                    </div>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="transaksiDropdownContainer">
+                    <a href="setor_saldo_admin.php">
+                        <i class="fas fa-arrow-down"></i> Setor Tunai
+                    </a>
+                    <a href="tarik_saldo_admin.php">
+                        <i class="fas fa-arrow-up"></i> Tarik Tunai
+                    </a>
+                </div>
+            </div>
+
+            <!-- LAPORAN & REKAP -->
+            <div class="menu-item">
+                <button class="dropdown-btn" id="laporanDropdown">
+                    <div class="menu-icon">
+                        <i class="fas fa-file-alt"></i> Laporan & Rekap
+                    </div>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="laporanDropdownContainer">
+                    <a href="laporan_admin.php">
+                        <i class="fas fa-user-tie"></i> Transaksi Admin
+                    </a>
+                    <a href="laporan.php">
+                        <i class="fas fa-user-cog"></i> Transaksi Petugas
+                    </a>
+                    <a href="rekap_transaksi.php">
+                        <i class="fas fa-file-invoice-dollar"></i> Semua Transaksi
+                    </a>
+                    <a href="rekap_absen.php">
+                        <i class="fas fa-user-check"></i> Rekap Absen Petugas
+                    </a>
+                    <a href="data_siswa.php">
+                        <i class="fas fa-users"></i> Data Rekening Siswa
+                    </a>
+                </div>
+            </div>
+
+            <!-- MANAJEMEN AKUN -->
+            <div class="menu-label">Manajemen Akun</div>
+
+            <div class="menu-item">
+                <button class="dropdown-btn" id="akunSiswaDropdown">
+                    <div class="menu-icon">
+                        <i class="fas fa-user-graduate"></i> Akun Siswa
+                    </div>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="akunSiswaDropdownContainer">
+                    <a href="recover_account.php">
+                        <i class="fas fa-user-lock"></i> Pemulihan Akun
+                    </a>
+                    <a href="freeze_account.php">
+                        <i class="fas fa-ban"></i> Nonaktifkan Akun
+                    </a>
+                </div>
+            </div>
+
+            <div class="menu-item">
+                <button class="dropdown-btn" id="kontrolPetugasDropdown">
+                    <div class="menu-icon">
+                        <i class="fas fa-user-shield"></i> Akses Petugas
+                    </div>
+                    <i class="fas fa-chevron-down arrow"></i>
+                </button>
+                <div class="dropdown-container" id="kontrolPetugasDropdownContainer">
+                    <a href="manage_petugas_status.php">
+                        <i class="fas fa-lock"></i> Pembatasan Akses
+                    </a>
+                    <a href="kode_akses_petugas.php">
+                        <i class="fas fa-key"></i> Kode Akses Login
+                    </a>
+                </div>
+            </div>
+
+            <!-- PENGATURAN -->
+            <div class="menu-label">Pengaturan</div>
+            <div class="menu-item">
+                <a href="pengaturan.php">
+                    <i class="fas fa-cog"></i> Pengaturan Profil
+                </a>
+            </div>
         </div>
+    </div>
+
         
         <div class="sidebar-footer">
             <div class="menu-item">
