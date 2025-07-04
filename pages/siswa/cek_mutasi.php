@@ -35,74 +35,91 @@ if (!$rekening_data) {
     // Date filter handling
     $is_filtered = isset($_GET['start_date']) && isset($_GET['end_date']);
     $filter_type = $_GET['filter_type'] ?? 'custom';
+    $today = date('Y-m-d');
 
     if ($filter_type === 'yesterday') {
         $start_date = date('Y-m-d', strtotime('-1 day'));
         $end_date = $start_date;
     } elseif ($filter_type === 'last7days') {
         $start_date = date('Y-m-d', strtotime('-7 days'));
-        $end_date = date('Y-m-d');
+        $end_date = $today;
     } elseif ($filter_type === 'last30days') {
         $start_date = date('Y-m-d', strtotime('-30 days'));
-        $end_date = date('Y-m-d');
+        $end_date = $today;
     } else {
         $start_date = $is_filtered ? $_GET['start_date'] : date('Y-m-01');
-        $end_date = $is_filtered ? $_GET['end_date'] : date('Y-m-d');
+        $end_date = $is_filtered ? $_GET['end_date'] : $today;
     }
 
-    // Pagination handling
-    $items_per_page = 5; // 5 dates per page
-    $current_page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-    $offset = ($current_page - 1) * $items_per_page;
+    // Validate dates
+    if (strtotime($start_date) > strtotime($end_date)) {
+        $error = "Tanggal awal tidak boleh lebih besar dari tanggal akhir!";
+    } elseif (strtotime($start_date) > strtotime($today) || strtotime($end_date) > strtotime($today)) {
+        $error = "Tanggal tidak boleh di masa depan!";
+    } else {
+        // Pagination handling
+        $items_per_page = 5; // 5 dates per page
+        $current_page = isset($_GET['page']) && is_numeric($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+        $offset = ($current_page - 1) * $items_per_page;
 
-    // Fetch transactions grouped by date
-    $query = "SELECT 
-                t.no_transaksi, 
-                t.jenis_transaksi, 
-                t.jumlah, 
-                t.created_at, 
-                t.rekening_id, 
-                t.rekening_tujuan_id,
-                r1.no_rekening as rekening_asal,
-                r2.no_rekening as rekening_tujuan,
-                u1.nama as nama_pengirim,
-                u2.nama as nama_penerima,
-                p.nama as petugas_nama,
-                pt.petugas1_nama,
-                pt.petugas2_nama,
-                DATE(t.created_at) as transaction_date
-              FROM transaksi t
-              LEFT JOIN rekening r1 ON t.rekening_id = r1.id
-              LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
-              LEFT JOIN users u1 ON r1.user_id = u1.id
-              LEFT JOIN users u2 ON r2.user_id = u2.id
-              LEFT JOIN users p ON t.petugas_id = p.id
-              LEFT JOIN petugas_tugas pt ON DATE(t.created_at) = pt.tanggal
-              WHERE (r1.user_id = ? OR r2.user_id = ?)";
-    
-    $params = ["ii", $user_id, $user_id];
-    if ($is_filtered || in_array($filter_type, ['yesterday', 'last7days', 'last30days'])) {
-        $query .= " AND t.created_at BETWEEN ? AND ?";
-        $params[0] .= "ss";
-        $params[] = $start_date;
-        $params[] = $end_date . ' 23:59:59';
-    }
-    
-    $query .= " ORDER BY t.created_at DESC";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param(...$params);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    $transactions = [];
-    
-    while ($row = $result->fetch_assoc()) {
-        $transactions[$row['transaction_date']][] = $row;
-    }
+        // Fetch transactions grouped by date
+        $query = "SELECT 
+                    t.no_transaksi, 
+                    t.jenis_transaksi, 
+                    t.jumlah, 
+                    t.created_at, 
+                    t.rekening_id, 
+                    t.rekening_tujuan_id,
+                    r1.no_rekening as rekening_asal,
+                    r2.no_rekening as rekening_tujuan,
+                    u1.nama as nama_pengirim,
+                    u2.nama as nama_penerima,
+                    p.nama as petugas_nama,
+                    pt.petugas1_nama,
+                    pt.petugas2_nama,
+                    DATE(t.created_at) as transaction_date
+                  FROM transaksi t
+                  LEFT JOIN rekening r1 ON t.rekening_id = r1.id
+                  LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
+                  LEFT JOIN users u1 ON r1.user_id = u1.id
+                  LEFT JOIN users u2 ON r2.user_id = u2.id
+                  LEFT JOIN users p ON t.petugas_id = p.id
+                  LEFT JOIN petugas_tugas pt ON DATE(t.created_at) = pt.tanggal
+                  WHERE (r1.user_id = ? OR r2.user_id = ?)";
+        
+        $params = ["ii", $user_id, $user_id];
+        if ($is_filtered || in_array($filter_type, ['yesterday', 'last7days', 'last30days'])) {
+            $query .= " AND t.created_at BETWEEN ? AND ?";
+            $params[0] .= "ss";
+            $params[] = $start_date . ' 00:00:00';
+            $params[] = $end_date . ' 23:59:59';
+        }
+        
+        $query .= " ORDER BY t.created_at DESC";
+        $stmt = $conn->prepare($query);
+        if (!$stmt) {
+            $error = "Error preparing query: " . $conn->error;
+        } else {
+            $stmt->bind_param(...$params);
+            if (!$stmt->execute()) {
+                $error = "Error executing query: " . $stmt->error;
+            } else {
+                $result = $stmt->get_result();
+                $transactions = [];
+                
+                while ($row = $result->fetch_assoc()) {
+                    $transactions[$row['transaction_date']][] = $row;
+                }
 
-    // Pagination logic
-    $total_dates = count($transactions);
-    $total_pages = ceil($total_dates / $items_per_page);
-    $transactions_paginated = array_slice($transactions, $offset, $items_per_page, true);
+                // Pagination logic
+                $total_dates = count($transactions);
+                $total_pages = max(1, ceil($total_dates / $items_per_page));
+                $current_page = min($current_page, $total_pages); // Ensure current_page doesn't exceed total_pages
+                $offset = ($current_page - 1) * $items_per_page;
+                $transactions_paginated = array_slice($transactions, $offset, $items_per_page, true);
+            }
+        }
+    }
 }
 ?>
 
@@ -530,6 +547,10 @@ if (!$rekening_data) {
             font-weight: 400;
         }
 
+        tr {
+            cursor: pointer;
+        }
+
         tr:nth-child(even) {
             background-color: #fafafa;
         }
@@ -916,14 +937,14 @@ if (!$rekening_data) {
                         <div class="filter-group">
                             <label for="start_date">Dari Tanggal</label>
                             <input type="date" id="start_date" name="start_date" 
-                                   value="<?= htmlspecialchars($start_date ?? date('Y-m-01')) ?>" 
-                                   required>
+                                   value="<?= htmlspecialchars($start_date) ?>" 
+                                   max="<?= date('Y-m-d') ?>" required>
                         </div>
                         <div class="filter-group">
                             <label for="end_date">Sampai Tanggal</label>
                             <input type="date" id="end_date" name="end_date" 
-                                   value="<?= htmlspecialchars($end_date ?? date('Y-m-d')) ?>" 
-                                   required>
+                                   value="<?= htmlspecialchars($end_date) ?>" 
+                                   max="<?= date('Y-m-d') ?>" required>
                         </div>
                     </div>
                     <div class="filter-presets">
@@ -983,7 +1004,8 @@ if (!$rekening_data) {
                                             $amount = $transaksi['jumlah'];
                                             $is_hidden = $index >= $visible_count ? 'hidden-transaction' : '';
                                         ?>
-                                            <tr class="<?= $is_hidden ?>" data-date="<?= htmlspecialchars($date) ?>">
+                                            <tr class="<?= $is_hidden ?>" data-date="<?= htmlspecialchars($date) ?>" 
+                                                onclick="window.location.href='struk_transaksi.php?no_transaksi=<?= htmlspecialchars($transaksi['no_transaksi']) ?>'">
                                                 <td>
                                                     <?php if ($transaksi['jenis_transaksi'] === 'setor'): ?>
                                                         Debit
@@ -1057,7 +1079,7 @@ if (!$rekening_data) {
                             <button onclick="changePage(<?= $current_page - 1 ?>)" <?= $current_page <= 1 ? 'disabled' : '' ?>>
                                 <i class="fas fa-chevron-left"></i> Sebelumnya
                             </button>
-                            <span class="page-info"><?= $current_page ?></span>
+                            <span class="page-info">Halaman <?= $current_page ?> dari <?= $total_pages ?></span>
                             <button onclick="changePage(<?= $current_page + 1 ?>)" <?= $current_page >= $total_pages ? 'disabled' : '' ?>>
                                 Berikutnya <i class="fas fa-chevron-right"></i>
                             </button>
@@ -1152,8 +1174,13 @@ if (!$rekening_data) {
         }
 
         function changePage(page) {
-            if (page < 1 || page > <?= $total_pages ?>) return;
-            document.getElementById('page').value = page;
+            if (page < 1 || page > <?= $total_pages ?>) {
+                console.log('Invalid page number: ' + page);
+                return;
+            }
+            console.log('Navigating to page: ' + page);
+            const pageInput = document.getElementById('page');
+            pageInput.value = page;
             document.getElementById('filterForm').submit();
         }
 
@@ -1196,9 +1223,15 @@ if (!$rekening_data) {
                         showAlert('Tanggal awal tidak boleh lebih besar dari tanggal akhir', 'error');
                         return;
                     }
+                    if (new Date(startDate) > new Date() || new Date(endDate) > new Date()) {
+                        e.preventDefault();
+                        showAlert('Tanggal tidak boleh di masa depan', 'error');
+                        return;
+                    }
                     
                     filterBtn.classList.add('loading');
                     filterBtn.disabled = true;
+                    console.log('Form submitted with start_date: ' + startDate + ', end_date: ' + endDate + ', page: ' + document.getElementById('page').value);
                 });
             }
 
@@ -1228,6 +1261,9 @@ if (!$rekening_data) {
             tables.forEach(table => {
                 table.addEventListener('dragstart', (e) => e.preventDefault());
             });
+
+            // Debug: Log pagination details
+            console.log('Total dates: <?= $total_dates ?>, Total pages: <?= $total_pages ?>, Current page: <?= $current_page ?>');
         });
 
         document.addEventListener('touchstart', function(event) {
@@ -1236,7 +1272,6 @@ if (!$rekening_data) {
             }
         }, { passive: false });
 
-        let lastTouchEnd = 0;
         document.addEventListener('touchend', function(event) {
             const now = (new Date()).getTime();
             if (now - lastTouchEnd <= 300) {
@@ -1250,6 +1285,8 @@ if (!$rekening_data) {
                 event.preventDefault();
             }
         }, { passive: false });
+
+        let lastTouchEnd = 0;
     </script>
 </body>
 </html>

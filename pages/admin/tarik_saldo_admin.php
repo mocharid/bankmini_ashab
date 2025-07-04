@@ -15,11 +15,11 @@ $username = $_SESSION['username'] ?? 'Admin';
 <head>
     <title>Tarik Saldo Siswa - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
+        <style>
         :root {
             --primary-color: #1e3a8a;
             --primary-dark: #1e1b4b;
@@ -751,18 +751,18 @@ $username = $_SESSION['username'] ?? 'Admin';
 
             <!-- Step 1: Check Account -->
             <div class="deposit-card" id="checkAccountStep">
-                <h3 class="section-title">Masukkan Nomor Rekening</h3>
+                <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Rekening</h3>
                 <form id="cekRekening" class="deposit-form" novalidate>
                     <div class="form-group">
                         <label for="no_rekening">No Rekening:</label>
                         <div class="rek-container">
                             <span class="rek-prefix">REK</span>
-                            <input type="text" class="rek-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="rek-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="rek-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="rek-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="rek-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" class="rek-input" maxlength="1" data-index="6" inputmode="numeric" pattern="[0-9]*">
+                            <input type="text" class="rek-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 1 of account number">
+                            <input type="text" class="rek-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 2 of account number">
+                            <input type="text" class="rek-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 3 of account number">
+                            <input type="text" class="rek-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 4 of account number">
+                            <input type="text" class="rek-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 5 of account number">
+                            <input type="text" class="rek-input" maxlength="1" data-index="6" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 6 of account number">
                         </div>
                         <input type="hidden" id="no_rekening" name="no_rekening">
                     </div>
@@ -774,7 +774,7 @@ $username = $_SESSION['username'] ?? 'Admin';
 
             <!-- Step 2: Input Amount -->
             <div class="account-details" id="amountDetails">
-                <h3 class="section-title">Detail Rekening</h3>
+                <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
                 <div class="detail-row">
                     <div class="detail-label">Nomor Rekening:</div>
                     <div class="detail-value" id="displayNoRek">-</div>
@@ -814,7 +814,7 @@ $username = $_SESSION['username'] ?? 'Admin';
 
             <!-- Step 3: PIN Verification -->
             <div class="account-details" id="pinDetails">
-                <h3 class="section-title">Verifikasi PIN</h3>
+                <h3 class="section-title"><i class="fas fa-lock"></i> Verifikasi PIN</h3>
                 <div class="detail-row">
                     <div class="detail-label">Nomor Rekening:</div>
                     <div class="detail-value" id="pinNoRek">-</div>
@@ -839,12 +839,12 @@ $username = $_SESSION['username'] ?? 'Admin';
                     <div class="form-group">
                         <label for="pin">Masukkan PIN (6 Digit):</label>
                         <div class="pin-container">
-                            <input type="password" class="pin-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="6" inputmode="numeric" pattern="[0-9]*">
+                            <input type="password" class="pin-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 1 of PIN">
+                            <input type="password" class="pin-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 2 of PIN">
+                            <input type="password" class="pin-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 3 of PIN">
+                            <input type="password" class="pin-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 4 of PIN">
+                            <input type="password" class="pin-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 5 of PIN">
+                            <input type="password" class="pin-input" maxlength="1" data-index="6" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 6 of PIN">
                         </div>
                         <input type="hidden" id="pin" name="pin">
                     </div>
@@ -861,7 +861,7 @@ $username = $_SESSION['username'] ?? 'Admin';
 
             <!-- Step 4: Confirmation -->
             <div class="account-details" id="confirmationDetails">
-                <h3 class="section-title">Konfirmasi Penarikan</h3>
+                <h3 class="section-title"><i class="fas fa-receipt"></i> Konfirmasi Penarikan</h3>
                 <div class="detail-row">
                     <div class="detail-label">Nomor Rekening:</div>
                     <div class="detail-value" id="confirmNoRek">-</div>
@@ -976,12 +976,20 @@ $username = $_SESSION['username'] ?? 'Admin';
             rekInputs.forEach(input => {
                 input.style.display = 'inline-block';
                 input.style.visibility = 'visible';
+                input.addEventListener('input', function() {
+                    this.style.color = 'var(--text-primary)';
+                    this.style.fontSize = window.innerWidth <= 480 ? '0.9rem' : window.innerWidth <= 768 ? '0.95rem' : '1rem';
+                });
             });
             pinContainer.style.display = 'flex';
             pinContainer.style.visibility = 'visible';
             pinInputs.forEach(input => {
                 input.style.display = 'inline-block';
                 input.style.visibility = 'visible';
+                input.addEventListener('input', function() {
+                    this.style.color = 'var(--text-primary)';
+                    this.style.fontSize = window.innerWidth <= 480 ? '0.9rem' : window.innerWidth <= 768 ? '0.95rem' : '1rem';
+                });
             });
 
             // Modal Handling
@@ -1049,7 +1057,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                 input.addEventListener('input', function(e) {
                     let value = this.value.replace(/[^0-9]/g, '');
                     if (value.length > 0) {
-                        this.value = value[0]; // Take only the first digit
+                        this.value = value[0];
                         this.classList.add('filled');
                         this.dataset.originalValue = value[0];
                         updateHiddenNoRek();

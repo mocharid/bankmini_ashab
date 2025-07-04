@@ -33,11 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($action === 'cek_rekening') {
         $query = "
             SELECT r.no_rekening, u.nama, u.email, u.id as user_id, r.id as rekening_id, 
-                   j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
+                   j.nama_jurusan AS jurusan, 
+                   CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
             FROM rekening r 
             JOIN users u ON r.user_id = u.id 
             LEFT JOIN jurusan j ON u.jurusan_id = j.id
             LEFT JOIN kelas k ON u.kelas_id = k.id
+            LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
             WHERE r.no_rekening = ?
         ";
         $stmt = $conn->prepare($query);
@@ -67,8 +69,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak valid.', 'email_status' => 'none']);
             exit();
         }
-        if ($jumlah < 1000) {
-            echo json_encode(['status' => 'error', 'message' => 'Jumlah setoran minimal Rp 1.000.', 'email_status' => 'none']);
+        if ($jumlah < 1) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah setoran minimal Rp 1.', 'email_status' => 'none']);
+            exit();
+        }
+        if ($jumlah > 99999999) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah setoran maksimal Rp 99.999.999.', 'email_status' => 'none']);
             exit();
         }
         if ($petugas_id <= 0) {
@@ -82,11 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Periksa status is_frozen
             $query = "
                 SELECT r.id, r.user_id, r.saldo, u.nama, u.email, u.is_frozen, 
-                       j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
+                       j.nama_jurusan AS jurusan, 
+                       CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
                 FROM rekening r 
                 JOIN users u ON r.user_id = u.id 
                 LEFT JOIN jurusan j ON u.jurusan_id = j.id
                 LEFT JOIN kelas k ON u.kelas_id = k.id
+                LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE r.no_rekening = ?
             ";
             $stmt = $conn->prepare($query);

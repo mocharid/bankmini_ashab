@@ -12,7 +12,7 @@ $message = isset($_GET['message']) ? htmlspecialchars($_GET['message']) : '';
 $error = isset($_GET['error']) ? htmlspecialchars($_GET['error']) : '';
 
 // Fetch user data
-$query = "SELECT u.username, u.nama, u.role, u.email, u.no_wa, u.tanggal_lahir, k.nama_kelas, tk.nama_tingkatan, j.nama_jurusan, 
+$query = "SELECT u.username, u.nama, u.role, u.email, u.no_wa, u.tanggal_lahir, k.nama_kelas, nama_tingkatan, j.nama_jurusan, 
           r.no_rekening, r.saldo, u.created_at AS tanggal_bergabung, u.pin, u.jurusan_id, u.kelas_id, u.is_frozen, u.pin_block_until, k.tingkatan_kelas_id
           FROM users u 
           LEFT JOIN rekening r ON u.id = r.user_id 
@@ -366,7 +366,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $update = $conn->prepare("UPDATE users SET kelas_id = ? WHERE id = ?");
         $update->bind_param("ii", $new_kelas_id, $_SESSION['user_id']);
         if ($update->execute()) {
-            $kelas_query = $conn->prepare("SELECT k.nama_kelas, tk.nama AS nama_tingkatan FROM kelas k JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id WHERE k.id = ?");
+            $kelas_query = $conn->prepare("SELECT k.nama_kelas, nama_tingkatan AS nama_tingkatan FROM kelas k JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id WHERE k.id = ?");
             $kelas_query->bind_param("i", $new_kelas_id);
             $kelas_query->execute();
             $kelas_data = $kelas_query->get_result()->fetch_assoc();
@@ -474,7 +474,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 
-<!-- HTML remains unchanged as per your request -->
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -485,778 +484,840 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-                :root {
-    --primary-color: #0c4da2;
-    --primary-dark: #0a2e5c;
-    --primary-light: #e0e9f5;
-    --secondary-color: #4caf50;
-    --accent-color: #ff9800;
-    --danger-color: #f44336;
-    --text-primary: #1a1a1a;
-    --text-secondary: #666;
-    --bg-light: #f8faff;
-    --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.08);
-    --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.12);
-    --transition: all 0.3s ease;
-}
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    font-family: 'Poppins', sans-serif;
-}
-
-html, body {
-    touch-action: manipulation;
-    -webkit-text-size-adjust: 100%;
-    -webkit-user-select: none;
-    user-select: none;
-}
-
-body {
-    background: linear-gradient(135deg, var(--bg-light), #e8effd);
-    color: var(--text-primary);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow-x: hidden;
-    font-size: calc(0.95rem + 0.3vw);
-}
-
-.main-content {
-    flex: 1;
-    padding: 40px 20px;
-    width: 100%;
-    max-width: 1100px;
-    margin: 0 auto;
-    position: relative;
-    z-index: 1;
-}
-
-.welcome-banner {
-    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-    color: white;
-    padding: 40px;
-    border-radius: 20px;
-    margin-bottom: 40px;
-    text-align: center;
-    position: relative;
-    box-shadow: var(--shadow-md);
-    overflow: hidden;
-    animation: fadeInDown 0.8s ease-out;
-    z-index: 2;
-}
-
-.welcome-banner h2 {
-    font-size: calc(1.8rem + 0.4vw);
-    font-weight: 700;
-    margin-bottom: 12px;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.welcome-banner p {
-    font-size: calc(1rem + 0.2vw);
-    opacity: 0.9;
-}
-
-.cancel-btn {
-    position: absolute;
-    top: 20px;
-    left: 20px;
-    background: rgba(255, 255, 255, 0.15);
-    color: white;
-    border: none;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: calc(1.1rem + 0.3vw);
-    transition: var(--transition);
-    text-decoration: none;
-}
-
-.cancel-btn:hover {
-    background: rgba(255, 255, 255, 0.25);
-    transform: scale(1.1);
-}
-
-.profile-container {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 30px;
-}
-
-.profile-card {
-    background: white;
-    border-radius: 20px;
-    box-shadow: var(--shadow-sm);
-    transition: var(--transition);
-    overflow: hidden;
-    animation: fadeInUp 0.6s ease-out;
-    position: relative;
-}
-
-.profile-card:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-8px);
-}
-
-.profile-header {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-    color: white;
-    padding: 20px 25px;
-    font-size: calc(1.2rem + 0.3vw);
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-}
-
-.profile-header i {
-    margin-right: 12px;
-    font-size: calc(1.4rem + 0.3vw);
-    line-height: 1;
-}
-
-.profile-info {
-    padding: 25px;
-}
-
-.info-item {
-    padding: 15px 0;
-    display: flex;
-    align-items: center;
-    border-bottom: 1px solid #f0f2f5;
-    position: relative;
-    transition: var(--transition);
-}
-
-.info-item:last-child {
-    border-bottom: none;
-}
-
-.info-item:hover {
-    background: var(--primary-light);
-    border-radius: 10px;
-}
-
-.info-item i {
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--primary-light);
-    color: var(--primary-color);
-    border-radius: 12px;
-    margin-right: 20px;
-    font-size: calc(1.1rem + 0.2vw);
-    flex-shrink: 0;
-    line-height: 1;
-}
-
-.info-item .text-container {
-    flex: 1;
-    min-width: 0;
-}
-
-.info-item .label {
-    font-size: calc(0.85rem + 0.1vw);
-    color: var(--text-secondary);
-    margin-bottom: 4px;
-}
-
-.info-item .value {
-    font-size: calc(0.95rem + 0.2vw);
-    font-weight: 500;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.info-item .value.status-aktif {
-    color: var(--secondary-color);
-}
-
-.info-item .value.status-dibekukan, .info-item .value.status-terblokir_sementara {
-    color: var(--danger-color);
-}
-
-.info-item .edit-btn {
-    position: absolute;
-    right: 15px;
-    background: var(--primary-light);
-    color: var(--primary-color);
-    border: 1px solid var(--primary-color);
-    padding: 8px 12px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: calc(0.85rem + 0.1vw);
-    transition: var(--transition);
-    flex-shrink: 0;
-}
-
-.info-item .edit-btn i {
-    margin: 0;
-    background: none;
-    width: auto;
-    height: auto;
-    font-size: calc(0.95rem + 0.1vw);
-    line-height: 1;
-}
-
-.info-item .edit-btn:hover {
-    background: var(--primary-color);
-    color: white;
-}
-
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
-}
-
-.modal.active {
-    display: block;
-}
-
-.modal-content {
-    background: white;
-    margin: 8% auto;
-    padding: 30px;
-    border-radius: 20px;
-    box-shadow: var(--shadow-md);
-    width: 90%;
-    max-width: 550px;
-    position: relative;
-    animation: zoomIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-@keyframes zoomIn {
-    from {
-        opacity: 0;
-        transform: scale(0.7);
-    }
-    to {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 25px;
-}
-
-.modal-header h3 {
-    margin: 0;
-    font-size: calc(1.3rem + 0.3vw);
-    font-weight: 600;
-    color: var(--primary-color);
-    display: flex;
-    align-items: center;
-}
-
-.modal-header h3 i {
-    margin-right: 10px;
-    font-size: calc(1.2rem + 0.3vw);
-    line-height: 1;
-}
-
-.modal-header .close-modal {
-    background: none;
-    border: none;
-    font-size: calc(1.5rem + 0.3vw);
-    cursor: pointer;
-    color: var(--text-secondary);
-    transition: var(--transition);
-    line-height: 1;
-}
-
-.modal-header .close-modal:hover {
-    color: var(--primary-color);
-}
-
-.modal-body {
-    margin-bottom: 25px;
-}
-
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-}
-
-.form-group {
-    margin-bottom: 25px;
-    position: relative;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 10px;
-    font-size: calc(0.9rem + 0.2vw);
-    font-weight: 500;
-    color: var(--text-primary);
-}
-
-.form-group input, .form-group select {
-    width: 100%;
-    padding: 14px 20px;
-    border: none;
-    border-radius: 12px;
-    font-size: calc(0.95rem + 0.2vw);
-    background: #f5f7fa;
-    transition: var(--transition);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.form-group select {
-    appearance: none;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-    background-repeat: no-repeat;
-    background-position: right 20px center;
-    background-size: 18px;
-    padding-right: 50px;
-}
-
-.form-group input:focus, .form-group select:focus {
-    outline: none;
-    background: white;
-    box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.2);
-}
-
-.form-group small {
-    display: block;
-    margin-top: 8px;
-    font-size: calc(0.75rem + 0.1vw);
-    color: var(--text-secondary);
-}
-
-.form-group .password-toggle {
-    position: absolute;
-    top: 50%;
-    right: 20px;
-    transform: translateY(-50%);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: calc(1rem + 0.2vw);
-    transition: var(--transition);
-    line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-}
-
-.form-group .password-toggle:hover {
-    color: var(--primary-color);
-}
-
-.btn {
-    display: inline-block;
-    padding: 14px 30px;
-    border-radius: 12px;
-    font-weight: 500;
-    font-size: calc(0.95rem + 0.2vw);
-    cursor: pointer;
-    transition: var(--transition);
-    border: none;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-}
-
-.btn-primary {
-    background: var(--primary-color);
-    color: white;
-}
-
-.btn-primary:hover {
-    background: var(--primary-dark);
-    transform: translateY(-3px);
-    box-shadow: 0 4px 12px rgba(12, 77, 162, 0.3);
-}
-
-.btn-outline {
-    background: transparent;
-    color: var(--primary-color);
-    border: 2px solid var(--primary-color);
-}
-
-.btn-outline:hover {
-    background: var(--primary-light);
-    transform: translateY(-3px);
-}
-
-.btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    transition: 0.5s;
-}
-
-.btn:hover::before {
-    left: 100%;
-}
-
-.btn-loading {
-    position: relative;
-    pointer-events: none;
-}
-
-.btn-loading span {
-    visibility: hidden;
-}
-
-.btn-loading::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 24px;
-    height: 24px;
-    margin: -12px 0 0 -12px;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: rotate 0.8s linear infinite;
-}
-
-.success-popup, .error-popup {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: #d1fae5;
-    color: #065f46;
-    padding: 15px 25px;
-    border-radius: 12px;
-    box-shadow: var(--shadow-md);
-    display: none;
-    align-items: center;
-    z-index: 600;
-    max-width: 400px;
-    width: 90%;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.error-popup {
-    background: #fee2e2;
-    color: #991b1b;
-    border-left: 6px solid #f87171;
-}
-
-.success-popup i, .error-popup i {
-    margin-right: 10px;
-    font-size: calc(1.2rem + 0.2vw);
-    line-height: 1;
-    flex-shrink: 0;
-}
-
-.success-popup span, .error-popup span {
-    font-size: calc(0.9rem + 0.2vw);
-    line-height: 1.5;
-}
-
-@keyframes fadeInDown {
-    from { opacity: 0; transform: translateY(-30px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes rotate {
-    to { transform: rotate(360deg); }
-}
-
-@media (max-width: 768px) {
-    .main-content {
-        padding: 20px 10px;
-    }
-
-    .welcome-banner {
-        padding: 30px 20px;
-    }
-
-    .welcome-banner h2 {
-        font-size: calc(1.4rem + 0.4vw);
-    }
-
-    .welcome-banner p {
-        font-size: calc(0.9rem + 0.2vw);
-    }
-
-    .cancel-btn {
-        width: 40px;
-        height: 40px;
-        font-size: calc(1rem + 0.2vw);
-    }
-
-    .profile-header {
-        font-size: calc(1rem + 0.3vw);
-        padding: 15px 20px;
-    }
-
-    .profile-header i {
-        font-size: calc(1.2rem + 0.3vw);
-    }
-
-    .profile-info {
-        padding: 15px;
-    }
-
-    .info-item {
-        padding: 10px 0;
-    }
-
-    .info-item i {
-        width: 40px;
-        height: 40px;
-        margin-right: 15px;
-        font-size: calc(1rem + 0.2vw);
-    }
-
-    .info-item .label {
-        font-size: calc(0.75rem + 0.1vw);
-    }
-
-    .info-item .value {
-        font-size: calc(0.85rem + 0.2vw);
-    }
-
-    .info-item .edit-btn {
-        padding: 6px 10px;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-    }
-
-    .info-item .edit-btn i {
-        font-size: calc(0.85rem + 0.1vw);
-    }
-
-    .modal-content {
-        margin: 20% auto;
-        padding: 20px;
-    }
-
-    .modal-header h3 {
-        font-size: calc(1.1rem + 0.3vw);
-    }
-
-    .modal-header h3 i {
-        font-size: calc(1rem + 0.3vw);
-    }
-
-    .modal-header .close-modal {
-        font-size: calc(1.3rem + 0.3vw);
-    }
-
-    .modal-footer {
-        flex-direction: column;
-    }
-
-    .btn {
-        width: 100%;
-        padding: 12px 20px;
-    }
-
-    .form-group input, .form-group select {
-        padding: 12px 15px;
-        font-size: calc(0.85rem + 0.2vw);
-    }
-
-    .form-group .password-toggle {
-        right: 15px;
-        font-size: calc(0.9rem + 0.2vw);
-        width: 20px;
-        height: 20px;
-    }
-
-    .form-group select {
-        background-position: right 15px center;
-        background-size: 16px;
-        padding-right: 40px;
-    }
-
-    .success-popup, .error-popup {
-        max-width: 90%;
-        padding: 12px 20px;
-    }
-
-    .success-popup i, .error-popup i {
-        font-size: calc(1rem + 0.2vw);
-    }
-
-    .success-popup span, .error-popup span {
-        font-size: calc(0.8rem + 0.2vw);
-    }
-}
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background: #f8fafc;
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 420px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(30, 60, 114, 0.12);
+            overflow: hidden;
+            border: 1px solid #e5e7eb;
+        }
+
+        .profile-header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 32px 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .profile-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 70% 30%, rgba(255,255,255,0.15) 0%, transparent 60%);
+        }
+
+        .profile-avatar {
+            width: 75px;
+            height: 75px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            margin: 0 auto 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            z-index: 2;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            font-size: 24px;
+            font-weight: 700;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        .profile-name {
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 4px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .profile-status {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 14px;
+            font-weight: 500;
+            position: relative;
+            z-index: 2;
+        }
+
+        .section {
+            padding: 0;
+        }
+
+        .section-title {
+            background: #1e3c72;
+            color: white;
+            padding: 16px 30px;
+            margin: 0;
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+            letter-spacing: 0.3px;
+        }
+
+        .section-title i {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            padding: 18px 30px;
+            border-bottom: 1px solid #f1f5f9;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            background: #ffffff;
+        }
+
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+
+        .menu-item:hover {
+            background: #f8fafc;
+        }
+
+        .menu-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 18px;
+            box-shadow: 0 4px 16px rgba(30, 60, 114, 0.25);
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+        }
+
+        .menu-item:hover .menu-icon {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(30, 60, 114, 0.35);
+        }
+
+        .menu-icon i {
+            color: white;
+            font-size: 18px;
+        }
+
+        .menu-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .menu-label {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 2px;
+            font-weight: 500;
+        }
+
+        .menu-value {
+            font-size: 15px;
+            color: #1e293b;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .menu-value.status-aktif {
+            color: #059669;
+        }
+
+        .menu-value.status-dibekukan, .menu-value.status-terblokir_sementara {
+            color: #ef4444;
+        }
+
+        .menu-arrow {
+            color: #94a3b8;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            margin-left: 8px;
+        }
+
+        .menu-item:hover .menu-arrow {
+            color: #1e3c72;
+            transform: translateX(2px);
+        }
+
+        .status-badge {
+            background: #059669;
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .section-divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 0;
+        }
+
+        .floating-action {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            width: 56px;
+            height: 56px;
+            background: #1e3c72;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(30, 60, 114, 0.25);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .floating-action:hover {
+            transform: scale(1.1);
+            background: #2a5298;
+            box-shadow: 0 6px 25px rgba(30, 60, 114, 0.35);
+        }
+
+        .floating-action i {
+            color: white;
+            font-size: 20px;
+        }
+
+        /* Enhanced Popup Styling */
+        .success-overlay, .error-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            opacity: 0;
+            animation: fadeInOverlay 0.5s ease-out forwards;
+            backdrop-filter: blur(8px);
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .success-popup, .error-popup {
+            position: relative;
+            text-align: center;
+            width: clamp(300px, 80vw, 400px);
+            border-radius: 24px;
+            padding: clamp(30px, 6vw, 40px);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            transform: translateY(20px);
+            opacity: 0;
+            animation: slideInPopup 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55) 0.2s forwards;
+            overflow: hidden;
+            background: white;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .success-popup {
+            background: linear-gradient(145deg, #22c55e 0%, #15803d 100%);
+        }
+
+        .error-popup {
+            background: linear-gradient(145deg, #ef4444 0%, #b91c1c 100%);
+        }
+
+        .success-popup::before, .error-popup::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top right, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0) 70%);
+            pointer-events: none;
+        }
+
+        @keyframes slideInPopup {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .success-popup i, .error-popup i {
+            font-size: clamp(3rem, 7vw, 4rem);
+            margin-bottom: 20px;
+            color: white;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+            animation: iconPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes iconPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .success-popup span, .error-popup span {
+            color: white;
+            font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+            font-weight: 600;
+            line-height: 1.5;
+            display: block;
+            animation: fadeInText 0.6s ease-out 0.3s both;
+        }
+
+        @keyframes fadeInText {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Modal Styling */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(8px);
+        }
+
+        .modal.active {
+            display: block;
+        }
+
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            width: 90%;
+            max-width: 500px;
+            position: relative;
+            animation: zoomIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes zoomIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: calc(1.2rem + 0.3vw);
+            font-weight: 600;
+            color: #1e40af;
+            display: flex;
+            align-items: center;
+        }
+
+        .modal-header h3 i {
+            margin-right: 8px;
+            font-size: calc(1.1rem + 0.3vw);
+        }
+
+        .modal-header .close-modal {
+            background: none;
+            border: none;
+            font-size: calc(1.4rem + 0.3vw);
+            cursor: pointer;
+            color: #6b7280;
+            transition: all 0.3s ease;
+        }
+
+        .modal-header .close-modal:hover {
+            color: #1e40af;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: calc(0.85rem + 0.2vw);
+            font-weight: 500;
+            color: #111827;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            font-size: calc(0.85rem + 0.2vw);
+            background: #f3f4f6;
+            transition: all 0.3s ease;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+            line-height: 1.5;
+        }
+
+        .form-group select {
+            appearance: none;
+            background: #f3f4f6 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="%231e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>') no-repeat right 16px center;
+            padding-right: 40px;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.2);
+        }
+
+        .form-group input[type="date"] {
+            background: #f3f4f6 url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%231e40af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>') no-repeat right 16px center;
+            padding-right: 40px;
+        }
+
+        .form-group input[type="date"]::-webkit-calendar-picker-indicator {
+            opacity: 0;
+            width: 40px;
+            height: 100%;
+            position: absolute;
+            right: 0;
+            cursor: pointer;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 6px;
+            font-size: calc(0.7rem + 0.1vw);
+            color: #6b7280;
+        }
+
+        .form-group .checkbox-container {
+            display: flex;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .form-group .checkbox-container input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            margin-right: 8px;
+            cursor: pointer;
+            accent-color: #1e40af;
+        }
+
+        .form-group .checkbox-container label {
+            font-size: calc(0.8rem + 0.2vw);
+            color: #6b7280;
+            cursor: pointer;
+        }
+
+        .password-criteria {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .password-criteria .criterion {
+            display: flex;
+            align-items: center;
+            font-size: calc(0.65rem + 0.2vw);
+            color: #6b7280;
+        }
+
+        .password-criteria .criterion input[type="checkbox"] {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #6b7280;
+            border-radius: 4px;
+            margin-right: 10px;
+            position: relative;
+            cursor: default;
+            flex-shrink: 0;
+            background: white;
+            transition: border-color 0.2s ease, background 0.2s ease;
+        }
+
+        .password-criteria .criterion input[type="checkbox"]:checked {
+            border-color: #22c55e;
+            background: #22c55e;
+        }
+
+        .password-criteria .criterion input[type="checkbox"]:checked::after {
+            content: '\f00c';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            color: white;
+            font-size: 12px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 28px;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: calc(0.9rem + 0.2vw);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            min-width: 100px; /* Added to maintain button size */
+            min-height: 44px; /* Added to maintain button size */
+        }
+
+        .btn-primary {
+            background: #1e40af;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #172554;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(29, 78, 216, 0.3);
+        }
+
+        .btn-primary.btn-loading {
+            pointer-events: none;
+        }
+
+        .btn-primary.btn-loading span {
+            display: none;
+        }
+
+        .btn-primary.btn-loading::after {
+            content: '';
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.8s linear infinite;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: #1e40af;
+            border: 2px solid #1e40af;
+            min-width: 100px; /* Added to maintain button size */
+            min-height: 44px; /* Added to maintain button size */
+        }
+
+        .btn-outline:hover {
+            background: #dbeafe;
+            transform: translateY(-2px);
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: 0.5s;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            body {
+                padding: 10px;
+            }
+
+            .modal-content {
+                margin: 15% auto;
+                padding: 20px;
+                border-radius: 12px;
+            }
+
+            .modal-header h3 {
+                font-size: calc(1rem + 0.3vw);
+            }
+
+            .modal-header h3 i {
+                font-size: calc(0.95rem + 0.3vw);
+            }
+
+            .modal-header .close-modal {
+                font-size: calc(1.2rem + 0.3vw);
+            }
+
+            .modal-footer {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .btn {
+                width: 100%;
+                padding: 10px 16px;
+                font-size: calc(0.85rem + 0.2vw);
+                min-width: 100%; /* Adjusted for mobile */
+                min-height: 40px; /* Adjusted for mobile */
+            }
+
+            .form-group input, .form-group select {
+                padding: 10px 14px;
+                font-size: calc(0.8rem + 0.2vw);
+            }
+
+            .success-popup, .error-popup {
+                width: clamp(280px, 92vw, 350px);
+                padding: clamp(20px, 5vw, 30px);
+                border-radius: 20px;
+            }
+
+            .success-popup i, .error-popup i {
+                font-size: clamp(2.5rem, 6vw, 3.2rem);
+                margin-bottom: 15px;
+            }
+
+            .success-popup span, .error-popup span {
+                font-size: clamp(0.85rem, 2.2vw, 0.95rem);
+                margin-bottom: 15px;
+            }
+
+            .password-criteria .criterion {
+                font-size: calc(0.6rem + 0.2vw);
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="main-content">
-        <div class="welcome-banner">
-            <h2>Profil Pengguna</h2>
-            <p>Kelola informasi dan pengaturan akun Anda</p>
-            <a href="dashboard.php" title="Kembali ke Dashboard">
-                <span class="cancel-btn"><i class="fas fa-xmark"></i></span>
-            </a>
+    <div class="container">
+        <!-- Profile Header -->
+        <div class="profile-header">
+            <div class="profile-avatar">
+                <?php
+                // Generate initials from the user's name
+                $name = htmlspecialchars($user['nama']);
+                $name_parts = explode(' ', $name);
+                $initials = '';
+                foreach ($name_parts as $part) {
+                    if (!empty($part)) {
+                        $initials .= strtoupper($part[0]);
+                    }
+                    if (strlen($initials) >= 2) break;
+                }
+                echo $initials;
+                ?>
+            </div>
+            <div class="profile-name"><?= htmlspecialchars($user['nama']) ?></div>
+            <div class="profile-status"><?= htmlspecialchars($user['nama_jurusan']) ?></div>
         </div>
 
-        <?php if ($message): ?>
-            <div id="successPopup" class="success-popup">
-                <i class="fas fa-check-circle"></i>
-                <span><?= htmlspecialchars($message) ?></span>
+        <!-- Personal Information Section -->
+        <div class="section">
+            <div class="section-title">
+                <i class="fas fa-info-circle"></i>
+                Informasi Pribadi
             </div>
-        <?php endif; ?>
-        <?php if ($error): ?>
-            <div id="errorPopup" class="error-popup">
-                <i class="fas fa-exclamation-circle"></i>
-                <span><?= htmlspecialchars($error) ?></span>
+            
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-id-card"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Nama Lengkap</div>
+                    <div class="menu-value"><?= htmlspecialchars($user['nama']) ?></div>
+                </div>
+                <i class="fas fa-chevron-right menu-arrow"></i>
             </div>
-        <?php endif; ?>
 
-        <div class="profile-container">
-            <div class="profile-card">
-                <div class="profile-header">
-                    <i class="fas fa-user-circle"></i> Informasi Pribadi
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-calendar-alt"></i>
                 </div>
-                <div class="profile-info">
-                    <div class="info-item">
-                        <i class="fas fa-user"></i>
-                        <div class="text-container">
-                            <div class="label">Nama Lengkap</div>
-                            <div class="value"><?= htmlspecialchars($user['nama']) ?></div>
-                        </div>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-calendar-alt"></i>
-                        <div class="text-container">
-                            <div class="label">Tanggal Lahir</div>
-                            <div class="value"><?= $user['tanggal_lahir'] ? date('d/m/Y', strtotime($user['tanggal_lahir'])) : 'Belum diatur' ?></div>
-                        </div>
-                        <button type="button" class="edit-btn" data-target="tanggal_lahir">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-graduation-cap"></i>
-                        <div class="text-container">
-                            <div class="label">Jurusan</div>
-                            <div class="value"><?= htmlspecialchars($user['nama_jurusan']) ?></div>
-                        </div>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-users"></i>
-                        <div class="text-container">
-                            <div class="label">Tingkatan & Kelas</div>
-                            <div class="value"><?= ($user['nama_tingkatan'] && $user['nama_kelas']) ? htmlspecialchars($user['nama_tingkatan'] . ' ' . $user['nama_kelas']) : 'Belum diatur' ?></div>
-                        </div>
-                        <button type="button" class="edit-btn" data-target="tingkatan_kelas">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
+                <div class="menu-content">
+                    <div class="menu-label">Tanggal Lahir</div>
+                    <div class="menu-value"><?= $user['tanggal_lahir'] ? date('d/m/Y', strtotime($user['tanggal_lahir'])) : 'Belum diatur' ?></div>
                 </div>
+                <i class="fas fa-edit menu-arrow" data-target="tanggal_lahir"></i>
+            </div>
 
-                <div class="profile-header">
-                    <i class="fas fa-cog"></i> Pengaturan Akun
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-palette"></i>
                 </div>
-                <div class="profile-info">
-                    <div class="info-item">
-                        <i class="fas fa-user-tag"></i>
-                        <div class="text-container">
-                            <div class="label">Username</div>
-                            <div class="value"><?= htmlspecialchars($user['username']) ?></div>
-                        </div>
-                        <button type="button" class="edit-btn" data-target="username">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-lock"></i>
-                        <div class="text-container">
-                            <div class="label">Password</div>
-                            <div class="value">••••••</div>
-                        </div>
-                        <button type="button" class="edit-btn" data-target="password">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-key"></i>
-                        <div class="text-container">
-                            <div class="label">PIN</div>
-                            <div class="value"><?= $user['pin'] ? '••••••' : 'Belum diatur' ?></div>
-                        </div>
-                        <button type="button" class="edit-btn" data-target="pin">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-envelope"></i>
-                        <div class="text-container">
-                            <div class="label">Email</div>
-                            <div class="value"><?= $user['email'] ? htmlspecialchars($user['email']) : 'Belum diatur' ?></div>
-                        </div>
-                        <button type="button" class="edit-btn" data-target="email">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    <div class="info-item">
-                        <i class="fab fa-whatsapp"></i>
-                        <div class="text-container">
-                            <div class="label">Nomor WhatsApp</div>
-                            <div class="value"><?= $user['no_wa'] ? htmlspecialchars($user['no_wa']) : 'Belum diatur' ?></div>
-                        </div>
-                        <button type="button" class="edit-btn" data-target="no_wa">
-                            <i class="fas fa-pen-to-square"></i>
-                        </button>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-user-shield"></i>
-                        <div class="text-container">
-                            <div class="label">Status Akun</div>
-                            <div class="value status-<?= strtolower($account_status) ?>"><?= ucfirst(str_replace('_', ' ', $account_status)) ?></div>
-                        </div>
-                    </div>
-                    <div class="info-item">
-                        <i class="fas fa-calendar-alt"></i>
-                        <div class="text-container">
-                            <div class="label">Bergabung Sejak</div>
-                            <div class="value"><?= getIndonesianMonth($user['tanggal_bergabung']) ?></div>
-                        </div>
+                <div class="menu-content">
+                    <div class="menu-label">Jurusan</div>
+                    <div class="menu-value"><?= htmlspecialchars($user['nama_jurusan']) ?></div>
+                </div>
+                <i class="fas fa-chevron-right menu-arrow"></i>
+            </div>
+
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-school"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Tingkatan & Kelas</div>
+                    <div class="menu-value"><?= ($user['nama_tingkatan'] && $user['nama_kelas']) ? htmlspecialchars($user['nama_tingkatan'] . ' ' . $user['nama_kelas']) : 'Belum diatur' ?></div>
+                </div>
+                <i class="fas fa-edit menu-arrow" data-target="tingkatan_kelas"></i>
+            </div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <!-- Account Settings Section -->
+        <div class="section">
+            <div class="section-title">
+                <i class="fas fa-cog"></i>
+                Pengaturan Akun
+            </div>
+            
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-at"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Username</div>
+                    <div class="menu-value"><?= htmlspecialchars($user['username']) ?></div>
+                </div>
+                <i class="fas fa-edit menu-arrow" data-target="username"></i>
+            </div>
+
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Password</div>
+                    <div class="menu-value">••••••</div>
+                </div>
+                <i class="fas fa-edit menu-arrow" data-target="password"></i>
+            </div>
+
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-fingerprint"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">PIN</div>
+                    <div class="menu-value"><?= $user['pin'] ? '••••••' : 'Belum diatur' ?></div>
+                </div>
+                <i class="fas fa-edit menu-arrow" data-target="pin"></i>
+            </div>
+
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-envelope"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Email</div>
+                    <div class="menu-value"><?= $user['email'] ? htmlspecialchars($user['email']) : 'Belum diatur' ?></div>
+                </div>
+                <i class="fas fa-edit menu-arrow" data-target="email"></i>
+            </div>
+
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fab fa-whatsapp"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Nomor WhatsApp</div>
+                    <div class="menu-value"><?= $user['no_wa'] ? htmlspecialchars($user['no_wa']) : 'Belum diatur' ?></div>
+                </div>
+                <i class="fas fa-edit menu-arrow" data-target="no_wa"></i>
+            </div>
+
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Status Akun</div>
+                    <div class="menu-value">
+                        <span class="status-badge"><?= ucfirst(str_replace('_', ' ', $account_status)) ?></span>
                     </div>
                 </div>
+                <i class="fas fa-chevron-right menu-arrow"></i>
+            </div>
+
+            <div class="menu-item">
+                <div class="menu-icon">
+                    <i class="fas fa-calendar-plus"></i>
+                </div>
+                <div class="menu-content">
+                    <div class="menu-label">Bergabung Sejak</div>
+                    <div class="menu-value"><?= getIndonesianMonth($user['tanggal_bergabung']) ?></div>
+                </div>
+                <i class="fas fa-chevron-right menu-arrow"></i>
             </div>
         </div>
     </div>
+
+    <!-- Floating Action Button -->
+    <a href="dashboard.php" title="Kembali ke Dashboard">
+        <div class="floating-action">
+            <i class="fas fa-xmark"></i>
+        </div>
+    </a>
 
     <!-- Modal: Username -->
     <div id="usernameModal" class="modal">
@@ -1359,25 +1420,50 @@ body {
                 <button type="button" class="close-modal">×</button>
             </div>
             <div class="modal-body">
-                <div id="passwordErrorPopup" class="error-popup" style="display:none">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span id="passwordErrorMessage"></span>
+                <div id="passwordErrorPopup" class="error-overlay" style="display:none">
+                    <div class="error-popup">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id=".NODEBUG_MESSAGE"></span>
+                    </div>
                 </div>
                 <form method="POST" id="passwordForm">
                     <div class="form-group">
                         <label for="current_password">Password Saat Ini</label>
                         <input type="password" id="current_password" name="current_password" required placeholder="Password saat ini">
-                        <i class="fas fa-eye password-toggle" data-target="current_password"></i>
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="show_current_password" data-target="current_password">
+                            <label for="show_current_password">Tampilkan</label>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="new_password">Password Baru</label>
                         <input type="password" id="new_password" name="new_password" required placeholder="Password baru">
-                        <i class="fas fa-eye password-toggle" data-target="new_password"></i>
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="show_new_password" data-target="new_password">
+                            <label for="show_new_password">Tampilkan</label>
+                        </div>
+                        <div class="password-criteria">
+                            <div class="criterion">
+                                <input type="checkbox" id="lengthCriteria" disabled>
+                                <label for="lengthCriteria">Minimal 8 karakter</label>
+                            </div>
+                            <div class="criterion">
+                                <input type="checkbox" id="letterCriteria" disabled>
+                                <label for="letterCriteria">Mengandung huruf</label>
+                            </div>
+                            <div class="criterion">
+                                <input type="checkbox" id="numberCriteria" disabled>
+                                <label for="numberCriteria">Mengandung angka</label>
+                            </div>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="confirm_password">Konfirmasi Password</label>
                         <input type="password" id="confirm_password" name="confirm_password" required placeholder="Konfirmasi password">
-                        <i class="fas fa-eye password-toggle" data-target="confirm_password"></i>
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="show_confirm_password" data-target="confirm_password">
+                            <label for="show_confirm_password">Tampilkan</label>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_password" class="btn btn-primary" id="passwordBtn"><span>Simpan</span></button>
@@ -1396,27 +1482,38 @@ body {
                 <button type="button" class="close-modal">×</button>
             </div>
             <div class="modal-body">
-                <div id="pinErrorPopup" class="error-popup" style="display:none">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span id="pinErrorMessage"></span>
+                <div id="pinErrorPopup" class="error-overlay" style="display:none">
+                    <div class="error-popup">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id="pinErrorMessage"></span>
+                    </div>
                 </div>
                 <form method="POST" id="pinForm">
                     <?php if ($user['pin']): ?>
                     <div class="form-group">
                         <label for="current_pin">PIN Saat Ini</label>
-                        <input type="number" id="current_pin" name="current_pin" required placeholder="PIN saat ini" maxlength="6" inputmode="numeric">
-                        <i class="fas fa-eye password-toggle" data-target="current_pin"></i>
+                        <input type="password" id="current_pin" name="current_pin" required placeholder="PIN saat ini" maxlength="6" inputmode="numeric">
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="show_current_pin" data-target="current_pin">
+                            <label for="show_current_pin">Tampilkan</label>
+                        </div>
                     </div>
                     <?php endif; ?>
                     <div class="form-group">
                         <label for="new_pin">PIN Baru (6 digit)</label>
-                        <input type="number" id="new_pin" name="new_pin" required placeholder="PIN baru" maxlength="6" inputmode="numeric">
-                        <i class="fas fa-eye password-toggle" data-target="new_pin"></i>
+                        <input type="password" id="new_pin" name="new_pin" required placeholder="PIN baru" maxlength="6" inputmode="numeric">
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="show_new_pin" data-target="new_pin">
+                            <label for="show_new_pin">Tampilkan</label>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="confirm_pin">Konfirmasi PIN</label>
-                        <input type="number" id="confirm_pin" name="confirm_pin" required placeholder="Konfirmasi PIN" maxlength="6" inputmode="numeric">
-                        <i class="fas fa-eye password-toggle" data-target="confirm_pin"></i>
+                        <input type="password" id="confirm_pin" name="confirm_pin" required placeholder="Konfirmasi PIN" maxlength="6" inputmode="numeric">
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="show_confirm_pin" data-target="confirm_pin">
+                            <label for="show_confirm_pin">Tampilkan</label>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="submit" name="update_pin" class="btn btn-primary" id="pinBtn"><span>Simpan</span></button>
@@ -1435,9 +1532,11 @@ body {
                 <button type="button" class="close-modal">×</button>
             </div>
             <div class="modal-body">
-                <div id="tingkatanKelasErrorPopup" class="error-popup" style="display:none">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span id="tingkatanKelasErrorMessage"></span>
+                <div id="tingkatanKelasErrorPopup" class="error-overlay" style="display:none">
+                    <div class="error-popup">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <span id="tingkatanKelasErrorMessage"></span>
+                    </div>
                 </div>
                 <form method="POST" id="tingkatanKelasForm">
                     <div class="form-group">
@@ -1471,289 +1570,384 @@ body {
 
     <!-- Success Popup -->
     <?php if (isset($_SESSION['success_message'])): ?>
-    <div id="successPopup" class="success-popup">
-        <i class="fas fa-check-circle"></i>
-        <span><?= htmlspecialchars($_SESSION['success_message']) ?></span>
+    <div class="success-overlay" id="successPopup">
+        <div class="success-popup">
+            <i class="fas fa-check-circle"></i>
+            <span><?= htmlspecialchars($_SESSION['success_message']) ?></span>
+        </div>
     </div>
     <?php unset($_SESSION['success_message']); ?>
     <?php endif; ?>
 
+    <!-- Success/Error Popups from PHP variables -->
+    <?php if ($message): ?>
+        <div class="success-overlay" id="successPopup">
+            <div class="success-popup">
+                <i class="fas fa-check-circle"></i>
+                <span><?= htmlspecialchars($message) ?></span>
+            </div>
+        </div>
+    <?php endif; ?>
+    <?php if ($error): ?>
+        <div class="error-overlay" id="errorPopup">
+            <div class="error-popup">
+                <i class="fas fa-exclamation-circle"></i>
+                <span><?= htmlspecialchars($error) ?></span>
+            </div>
+        </div>
+    <?php endif; ?>
+
     <script>
-        // Prevent zooming on mobile and desktop
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
+document.addEventListener('touchstart', function(event) {
+    if (event.touches.length > 1) {
+        event.preventDefault();
+    }
+}, { passive: false });
 
-        document.addEventListener('gesturestart', function(event) {
-            event.preventDefault();
-        });
+document.addEventListener('gesturestart', function(event) {
+    event.preventDefault();
+});
 
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
+document.addEventListener('wheel', function(event) {
+    if (event.ctrlKey) {
+        event.preventDefault();
+    }
+}, { passive: false });
 
-        document.addEventListener('keydown', function(event) {
-            if (event.ctrlKey && (event.key === '+' || event.key === '-' || event.key === '0')) {
-                event.preventDefault();
-            }
-        });
+document.addEventListener('keydown', function(event) {
+    if (event.ctrlKey && (event.key === '+' || event.key === '-' || event.key === '0')) {
+        event.preventDefault();
+    }
+});
 
-        document.addEventListener('DOMContentLoaded', () => {
-            // Show error popup in modal
-            function showErrorPopup(modalId, message, focusInputId) {
-                const popup = document.getElementById(modalId + 'ErrorPopup');
-                popup.querySelector('span').textContent = message;
-                popup.style.display = 'flex';
-                setTimeout(() => popup.style.opacity = '1', 10);
+document.addEventListener('DOMContentLoaded', () => {
+    // Show error popup in modal
+    function showErrorPopup(modalId, message, focusInputId) {
+        const popup = document.getElementById(modalId + 'ErrorPopup');
+        if (popup) {
+            popup.querySelector('span').textContent = message;
+            popup.style.display = 'flex';
+            popup.style.animation = 'fadeInOverlay 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards';
+            setTimeout(() => {
+                popup.style.animation = 'fadeOutOverlay 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards';
                 setTimeout(() => {
-                    popup.style.opacity = '0';
-                    setTimeout(() => {
-                        popup.style.display = 'none';
-                        if (focusInputId) document.getElementById(focusInputId).focus();
-                    }, 300);
-                }, 3000);
-            }
+                    popup.style.display = 'none';
+                    popup.style.animation = '';
+                    if (focusInputId) document.getElementById(focusInputId).focus();
+                }, 400);
+            }, 3000);
+        }
+    }
 
-            // Reset form
-            function resetForm(modalId) {
-                const modal = document.getElementById(modalId);
-                const form = modal.querySelector('form');
-                form.reset();
-                if (modalId === 'tingkatan_kelasModal') {
-                    const tingkatanSelect = document.getElementById('new_tingkatan_kelas_id');
-                    const kelasSelect = document.getElementById('new_kelas_id');
-                    tingkatanSelect.value = '<?php echo $user['tingkatan_kelas_id']; ?>';
-                    kelasSelect.innerHTML = '<option value="">Pilih Kelas</option>';
-                    fetchKelas(tingkatanSelect.value);
-                }
-            }
+    // Show success/error popup
+    function showPopup(popupId) {
+        const popup = document.getElementById(popupId);
+        if (popup) {
+            popup.style.display = 'flex';
+            popup.style.animation = 'fadeInOverlay 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards';
+            setTimeout(() => {
+                popup.style.animation = 'fadeOutOverlay 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards';
+                setTimeout(() => {
+                    popup.style.display = 'none';
+                    popup.style.animation = '';
+                }, 400);
+            }, 3000);
+        }
+    }
 
-            // Fetch kelas based on tingkatan_kelas_id
-            function fetchKelas(tingkatanId) {
+    // Reset form
+    function resetForm(modalId) {
+        const modal = document.getElementById(modalId);
+        const form = modal.querySelector('form');
+        if (form) {
+            form.reset();
+            if (modalId === 'tingkatan_kelasModal') {
+                const tingkatanSelect = document.getElementById('new_tingkatan_kelas_id');
                 const kelasSelect = document.getElementById('new_kelas_id');
+                tingkatanSelect.value = '<?php echo $user['tingkatan_kelas_id'] ?? ''; ?>';
                 kelasSelect.innerHTML = '<option value="">Pilih Kelas</option>';
-                if (!tingkatanId) {
+                if (tingkatanSelect.value) {
+                    fetchKelas(tingkatanSelect.value);
+                } else {
                     kelasSelect.disabled = true;
-                    return;
                 }
-                fetch(`get_kelas.php?tingkatan_kelas_id=${tingkatanId}&jurusan_id=<?php echo $user['jurusan_id']; ?>`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.length === 0) {
-                            kelasSelect.innerHTML = '<option value="">Tidak ada kelas ada</option>';
-                            kelasSelect.disabled = true;
-                        } else {
-                            data.forEach(kelas => {
-                                const option = new Option(kelas.nama_tingkatan + ' ' + kelas.nama_kelas, kelas.id);
-                                kelasSelect.appendChild(option);
-                            });
-                            kelasSelect.disabled = false;
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        kelasSelect.innerHTML = '<option value="">Tidak ada kelas ada</option>';
-                        kelasSelect.disabled = true;
-                        showErrorPopup('tingkatanKelas', 'Gagal memuat kelas!', 'new_kelas_id');
-                    });
             }
-
-            // Handle pop-ups
-            document.querySelectorAll('.success-popup, .error-popup').forEach(popup => {
-                popup.style.display = 'flex';
-                setTimeout(() => popup.style.opacity = '1', 10);
-                setTimeout(() => {
-                    popup.style.opacity = '0';
-                    setTimeout(() => popup.style.display = 'none', 300);
-                }, 3000);
+            // Reset checkbox states and input types
+            modal.querySelectorAll('.checkbox-container input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = false;
+                const input = document.getElementById(checkbox.dataset.target);
+                if (input) input.type = 'password';
             });
-
-            // Password/PIN toggle
-            document.querySelectorAll('.password-toggle').forEach(toggle => {
-                toggle.addEventListener('click', () => {
-                    const input = document.getElementById(toggle.dataset.target);
-                    input.type = input.type === 'number' || input.type === 'password' ? 'text' : input.type === 'text' ? 'number' : 'password';
-                    toggle.classList.toggle('fa-eye');
-                    toggle.classList.toggle('fa-eye-slash');
-                    input.focus();
-                });
-            });
-
-            // Modal handling
-            document.querySelectorAll('.edit-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const modal = document.getElementById(btn.dataset.target + 'Modal');
-                    modal.style.display = 'block';
-                    setTimeout(() => modal.classList.add('active'), 10);
-                    resetForm(btn.dataset.target + 'Modal');
-                    // FIX: Prevent auto-focus on inputs, focus modal container
-                    modal.querySelector('.modal-content').focus();
-                });
-            });
-
-            document.querySelectorAll('.close-modal').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const modal = btn.closest('.modal');
-                    modal.classList.remove('active');
-                    setTimeout(() => modal.style.display = 'none', 400);
-                });
-            });
-
-            window.addEventListener('click', e => {
-                document.querySelectorAll('.modal').forEach(modal => {
-                    if (e.target === modal) {
-                        modal.classList.remove('active');
-                        setTimeout(() => modal.style.display = 'none', 400);
-                    }
-                });
-            });
-
-            // Password form validation
-            document.getElementById('passwordForm').addEventListener('submit', e => {
-                const current = document.getElementById('current_password').value;
-                const newPass = document.getElementById('new_password').value;
-                const confirm = document.getElementById('confirm_password').value;
-                const btn = document.getElementById('passwordBtn');
-                if (!current || !newPass || !confirm) {
-                    e.preventDefault();
-                    showErrorPopup('password', 'Semua field harus diisi!', 'current_password');
-                    btn.classList.remove('btn-loading');
-                } else if (newPass.length < 6) {
-                    e.preventDefault();
-                    showErrorPopup('password', 'Password minimal 6 karakter!', 'new_password');
-                    btn.classList.remove('btn-loading');
-                } else if (newPass !== confirm) {
-                    e.preventDefault();
-                    showErrorPopup('password', 'Password tidak cocok!', 'confirm_password');
-                    btn.classList.remove('btn-loading');
-                } else {
-                    btn.classList.add('btn-loading');
-                }
-            });
-
-            // PIN form validation
-            document.getElementById('pinForm').addEventListener('submit', e => {
-                const current = document.getElementById('current_pin')?.value;
-                const newPin = document.getElementById('new_pin').value;
-                const confirm = document.getElementById('confirm_pin').value;
-                const btn = document.getElementById('pinBtn');
-                if (document.getElementById('current_pin') && !current) {
-                    e.preventDefault();
-                    showErrorPopup('pin', 'PIN saat ini harus diisi!', 'current_pin');
-                    btn.classList.remove('btn-loading');
-                } else if (!newPin || !confirm) {
-                    e.preventDefault();
-                    showErrorPopup('pin', 'Semua field harus diisi!', 'new_pin');
-                    btn.classList.remove('btn-loading');
-                } else if (!/^\d{6}$/.test(newPin)) {
-                    e.preventDefault();
-                    showErrorPopup('pin', 'PIN harus 6 digit angka!', 'new_pin');
-                    btn.classList.remove('btn-loading');
-                } else if (newPin !== confirm) {
-                    e.preventDefault();
-                    showErrorPopup('pin', 'PIN tidak cocok!', 'confirm_pin');
-                    btn.classList.remove('btn-loading');
-                } else {
-                    btn.classList.add('btn-loading');
-                }
-            });
-
-            // Tingkatan & Kelas form validation
-            document.getElementById('tingkatanKelasForm').addEventListener('submit', e => {
-                const tingkatan = document.getElementById('new_tingkatan_kelas_id').value;
-                const kelas = document.getElementById('new_kelas_id').value;
-                const btn = document.getElementById('tingkatanKelasBtn');
-                if (!tingkatan) {
-                    e.preventDefault();
-                    showErrorPopup('tingkatanKelas', 'Pilih tingkatan!', 'new_tingkatan_kelas_id');
-                    btn.classList.remove('btn-loading');
-                } else if (!kelas) {
-                    e.preventDefault();
-                    showErrorPopup('tingkatanKelas', 'Pilih kelas!', 'new_kelas_id');
-                    btn.classList.remove('btn-loading');
-                } else {
-                    btn.classList.add('btn-loading');
-                }
-            });
-
-            // Form loading state
-            ['usernameForm', 'emailForm', 'no_waForm', 'tanggalLahirForm', 'tingkatanKelasForm'].forEach(id => {
-                const form = document.getElementById(id);
-                if (form) {
-                    form.addEventListener('submit', () => {
-                        document.getElementById(id.replace('Form', 'Btn')).classList.add('btn-loading');
-                    });
-                }
-            });
-
-            // PIN input validation
-            ['current_pin', 'new_pin', 'confirm_pin'].forEach(id => {
-                const input = document.getElementById(id);
-                if (input) {
-                    input.addEventListener('input', () => {
-                        input.value = input.value.replace(/[^0-9]/g, '').slice(0, 6);
-                    });
-                }
-            });
-
-            // WhatsApp input validation
-            const noWaInput = document.getElementById('no_wa');
-            if (noWaInput) {
-                noWaInput.addEventListener('input', () => {
-                    noWaInput.value = noWaInput.value.replace(/[^0-9]/g, '').slice(0, 13);
-                    if (noWaInput.value && !noWaInput.value.startsWith('08')) {
-                        noWaInput.value = '08' + noWaInput.value;
-                    }
-                });
-                noWaInput.addEventListener('keypress', (e) => {
-                    if (!/[0-9]/.test(e.key)) {
-                        e.preventDefault();
-                    }
+            // Reset password criteria checkboxes
+            if (modalId === 'passwordModal') {
+                ['lengthCriteria', 'letterCriteria', 'numberCriteria'].forEach(id => {
+                    const checkbox = document.getElementById(id);
+                    if (checkbox) checkbox.checked = false;
                 });
             }
+        }
+    }
 
-            // FIX: Date input validation to match mutasi.php
-            const tanggalLahirInput = document.getElementById('tanggal_lahir');
-            if (tanggalLahirInput) {
-                tanggalLahirInput.addEventListener('change', () => {
-                    const today = new Date().toISOString().split('T')[0];
-                    if (tanggalLahirInput.value > today) {
-                        showErrorPopup('tanggalLahir', 'Tanggal lahir tidak boleh di masa depan!', 'tanggal_lahir');
-                        tanggalLahirInput.value = '';
-                    } else if (tanggalLahirInput.value < '2000-01-01') {
-                        showErrorPopup('tanggalLahir', 'Tanggal lahir harus minimal 1 Jan 2000!', 'tanggal_lahir');
-                        tanggalLahirInput.value = '';
-                    }
-                });
-            }
-
-            // FIX: Prevent select auto-open on iOS
-            ['new_tingkatan_kelas_id', 'new_kelas_id'].forEach(id => {
-                const select = document.getElementById(id);
-                if (select) {
-                    select.addEventListener('touchstart', (e) => {
-                        if (!select.hasFocus) {
-                            e.preventDefault();
-                            select.focus();
-                        }
+    // Fetch kelas based on tingkatan_kelas_id
+    function fetchKelas(tingkatanId) {
+        const kelasSelect = document.getElementById('new_kelas_id');
+        kelasSelect.innerHTML = '<option value="">Pilih Kelas</option>';
+        if (!tingkatanId) {
+            kelasSelect.disabled = true;
+            return;
+        }
+        fetch(`get_kelas.php?tingkatan_kelas_id=${tingkatanId}&jurusan_id=${<?php echo $user['jurusan_id'] ?? ''; ?>}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(data => {
+                if (data.length === 0) {
+                    kelasSelect.innerHTML = '<option value="">Tidak ada kelas tersedia</option>';
+                    kelasSelect.disabled = true;
+                } else {
+                    data.forEach(kelas => {
+                        const option = new Option(kelas.nama_tingkatan + ' ' + kelas.nama_kelas, kelas.id);
+                        kelasSelect.appendChild(option);
                     });
+                    kelasSelect.disabled = false;
+                    // Set selected kelas if available
+                    kelasSelect.value = '<?php echo $user['kelas_id'] ?? ''; ?>';
                 }
+            })
+            .catch(error => {
+                console.error('Error fetching kelas:', error);
+                kelasSelect.innerHTML = '<option value="">Gagal memuat kelas</option>';
+                kelasSelect.disabled = true;
+                showErrorPopup('tingkatanKelas', 'Gagal memuat kelas!', 'new_kelas_id');
             });
+    }
 
-            // Fetch kelas on tingkatan change
-            document.getElementById('new_tingkatan_kelas_id').addEventListener('change', e => {
-                fetchKelas(e.target.value);
-            });
+    // Handle pop-ups
+    document.querySelectorAll('.success-overlay, .error-overlay').forEach(popup => {
+        if (popup.id === 'successPopup' || popup.id === 'errorPopup') {
+            showPopup(popup.id);
+        }
+    });
 
-            // Initialize kelas dropdown on page load
-            if (document.getElementById('new_tingkatan_kelas_id').value) {
-                fetchKelas(document.getElementById('new_tingEQId').value);
+    // Checkbox show/hide functionality
+    document.querySelectorAll('.checkbox-container input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            const input = document.getElementById(checkbox.dataset.target);
+            if (input) {
+                input.type = checkbox.checked ? 'text' : 'password';
+                input.focus();
             }
         });
+    });
+
+    // Modal handling for edit buttons
+    document.querySelectorAll('.menu-arrow[data-target]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modalId = btn.dataset.target + 'Modal';
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'block';
+                setTimeout(() => modal.classList.add('active'), 10);
+                resetForm(modalId);
+                modal.querySelector('.modal-content').focus();
+            }
+        });
+    });
+
+    document.querySelectorAll('.close-modal').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modal = btn.closest('.modal');
+            if (modal) {
+                modal.classList.remove('active');
+                setTimeout(() => modal.style.display = 'none', 400);
+            }
+        });
+    });
+
+    window.addEventListener('click', e => {
+        document.querySelectorAll('.modal').forEach(modal => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+                setTimeout(() => modal.style.display = 'none', 400);
+            }
+        });
+    });
+
+    // Password strength validation
+    const newPasswordInput = document.getElementById('new_password');
+    if (newPasswordInput) {
+        newPasswordInput.addEventListener('input', () => {
+            const password = newPasswordInput.value;
+            document.getElementById('lengthCriteria').checked = password.length >= 8;
+            document.getElementById('letterCriteria').checked = /[A-Za-z]/.test(password);
+            document.getElementById('numberCriteria').checked = /\d/.test(password);
+        });
+    }
+
+    // Password form validation
+    const passwordForm = document.getElementById('passwordForm');
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', e => {
+            const current = document.getElementById('current_password').value;
+            const newPass = document.getElementById('new_password').value;
+            const confirm = document.getElementById('confirm_password').value;
+            const btn = document.getElementById('passwordBtn');
+            const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$/;
+
+            if (!current || !newPass || !confirm) {
+                e.preventDefault();
+                showErrorPopup('password', 'Semua field harus diisi!', 'current_password');
+                btn.classList.remove('btn-loading');
+            } else if (!passwordRegex.test(newPass)) {
+                e.preventDefault();
+                showErrorPopup('password', 'Password minimal 8 karakter, harus mengandung huruf dan angka!', 'new_password');
+                btn.classList.remove('btn-loading');
+            } else if (newPass !== confirm) {
+                e.preventDefault();
+                showErrorPopup('password', 'Password baru dan konfirmasi tidak cocok!', 'confirm_password');
+                btn.classList.remove('btn-loading');
+            } else {
+                btn.classList.add('btn-loading');
+            }
+        });
+    }
+
+    // PIN form validation
+    const pinForm = document.getElementById('pinForm');
+    if (pinForm) {
+        pinForm.addEventListener('submit', e => {
+            const current = document.getElementById('current_pin')?.value;
+            const newPin = document.getElementById('new_pin').value;
+            const confirm = document.getElementById('confirm_pin').value;
+            const btn = document.getElementById('pinBtn');
+            if (document.getElementById('current_pin') && !current) {
+                e.preventDefault();
+                showErrorPopup('pin', 'PIN saat ini harus diisi!', 'current_pin');
+                btn.classList.remove('btn-loading');
+            } else if (!newPin || !confirm) {
+                e.preventDefault();
+                showErrorPopup('pin', 'Semua field harus diisi!', 'new_pin');
+                btn.classList.remove('btn-loading');
+            } else if (!/^\d{6}$/.test(newPin)) {
+                e.preventDefault();
+                showErrorPopup('pin', 'PIN harus 6 digit angka!', 'new_pin');
+                btn.classList.remove('btn-loading');
+            } else if (newPin !== confirm) {
+                e.preventDefault();
+                showErrorPopup('pin', 'PIN baru dan konfirmasi tidak cocok!', 'confirm_pin');
+                btn.classList.remove('btn-loading');
+            } else {
+                btn.classList.add('btn-loading');
+            }
+        });
+    }
+
+    // Tingkatan & Kelas form validation
+    const tingkatanKelasForm = document.getElementById('tingkatanKelasForm');
+    if (tingkatanKelasForm) {
+        tingkatanKelasForm.addEventListener('submit', e => {
+            const tingkatan = document.getElementById('new_tingkatan_kelas_id').value;
+            const kelas = document.getElementById('new_kelas_id').value;
+            const btn = document.getElementById('tingkatanKelasBtn');
+            if (!tingkatan) {
+                e.preventDefault();
+                showErrorPopup('tingkatanKelas', 'Pilih tingkatan!', 'new_tingkatan_kelas_id');
+                btn.classList.remove('btn-loading');
+            } else if (!kelas) {
+                e.preventDefault();
+                showErrorPopup('tingkatanKelas', 'Pilih kelas!', 'new_kelas_id');
+                btn.classList.remove('btn-loading');
+            } else {
+                btn.classList.add('btn-loading');
+            }
+        });
+    }
+
+    // Form loading state
+    ['usernameForm', 'emailForm', 'no_waForm', 'tanggalLahirForm', 'tingkatanKelasForm'].forEach(id => {
+        const form = document.getElementById(id);
+        if (form) {
+            form.addEventListener('submit', () => {
+                const btn = document.getElementById(id.replace('Form', 'Btn'));
+                if (btn) btn.classList.add('btn-loading');
+            });
+        }
+    });
+
+    // PIN input validation
+    ['current_pin', 'new_pin', 'confirm_pin'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+            input.addEventListener('input', () => {
+                input.value = input.value.replace(/[^0-9]/g, '').slice(0, 6);
+            });
+        }
+    });
+
+    // WhatsApp input validation
+    const noWaInput = document.getElementById('no_wa');
+    if (noWaInput) {
+        noWaInput.addEventListener('input', () => {
+            noWaInput.value = noWaInput.value.replace(/[^0-9]/g, '').slice(0, 13);
+            if (noWaInput.value && !noWaInput.value.startsWith('08')) {
+                noWaInput.value = '08' + noWaInput.value.slice(0, 11);
+            }
+        });
+        noWaInput.addEventListener('keypress', (e) => {
+            if (!/[0-9]/.test(e.key)) {
+                e.preventDefault();
+            }
+        });
+    }
+
+    // Date input validation
+    const tanggalLahirInput = document.getElementById('tanggal_lahir');
+    if (tanggalLahirInput) {
+        tanggalLahirInput.addEventListener('change', () => {
+            const today = new Date().toISOString().split('T')[0];
+            if (tanggalLahirInput.value > today) {
+                showErrorPopup('tanggalLahir', 'Tanggal lahir tidak boleh di masa depan!', 'tanggal_lahir');
+                tanggalLahirInput.value = '';
+            } else if (tanggalLahirInput.value < '2000-01-01') {
+                showErrorPopup('tanggalLahir', 'Tanggal lahir harus minimal 1 Jan 2000!', 'tanggal_lahir');
+                tanggalLahirInput.value = '';
+            }
+        });
+    }
+
+    // Prevent select auto-open on iOS
+    ['new_tingkatan_kelas_id', 'new_kelas_id'].forEach(id => {
+        const select = document.getElementById(id);
+        if (select) {
+            select.addEventListener('touchstart', (e) => {
+                if (!document.activeElement === select) {
+                    e.preventDefault();
+                    select.focus();
+                }
+            });
+        }
+    });
+
+    // Fetch kelas on tingkatan change
+    const tingkatanSelect = document.getElementById('new_tingkatan_kelas_id');
+    const kelasSelect = document.getElementById('new_kelas_id');
+    if (tingkatanSelect && kelasSelect) {
+        tingkatanSelect.addEventListener('change', e => {
+            kelasSelect.innerHTML = '<option value="">Pilih Kelas</option>';
+            if (e.target.value) {
+                fetchKelas(e.target.value);
+            } else {
+                kelasSelect.disabled = true;
+            }
+        });
+    }
+
+    // Initialize kelas dropdown on page load
+    if (tingkatanSelect && tingkatanSelect.value) {
+        fetchKelas(tingkatanSelect.value);
+    }
+});
     </script>
 </body>
 </html>

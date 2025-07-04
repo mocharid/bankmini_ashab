@@ -13,7 +13,7 @@ $result = $stmt->get_result();
 $user = $result->fetch_assoc();
 
 if (!$user) {
-    die("Data pengguna tidak ditemukan.");
+    $error = "Data pengguna tidak ditemukan.";
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
@@ -22,55 +22,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $current_password = $_POST['current_password'];
     $new_password = $_POST['new_password'];
     $confirm_password = $_POST['confirm_password'];
-    
-    // Validate username
-    if (empty($new_username)) {
-        $_SESSION['no_username_popup'] = true;
-        header("Location: profile.php");
-        exit();
-    } else {
-        $check_query = "SELECT id FROM users WHERE username = ? AND id != ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
-        $check_stmt->execute();
-        $check_result = $check_stmt->get_result();
-        
-        if ($check_result->num_rows > 0) {
-            $error = "Username sudah digunakan!";
+
+    // Handle password update first if applicable
+    $password_verified = true; // Default to true if no password update
+    if (!empty($new_password) || !empty($confirm_password) || !empty($current_password)) {
+        if (empty($current_password)) {
+            $error = "Password saat ini harus diisi!";
+        } else {
+            $verify_query = "SELECT password FROM users WHERE id = ?";
+            $verify_stmt = $conn->prepare($verify_query);
+            $verify_stmt->bind_param("i", $_SESSION['user_id']);
+            $verify_stmt->execute();
+            $verify_result = $verify_stmt->get_result();
+            $user_data = $verify_result->fetch_assoc();
+
+            if (!$user_data || !isset($user_data['password'])) {
+                $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
+            } else {
+                $stored_hash = $user_data['password'];
+                $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
+                $password_verified = false;
+
+                if ($is_sha256) {
+                    $password_verified = (hash('sha256', $current_password) === $stored_hash);
+                } else {
+                    $password_verified = password_verify($current_password, $stored_hash);
+                }
+
+                if (!$password_verified) {
+                    $_SESSION['error_popup'] = "Password saat ini salah!";
+                }
+            }
         }
     }
 
-    // Validate email
-    if (!empty($new_email) && !filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
-        $error = "Format email tidak valid!";
-    } else {
-        $email_check_query = "SELECT id FROM users WHERE email = ? AND id != ? AND email != ''";
-        $email_check_stmt = $conn->prepare($email_check_query);
-        $email_check_stmt->bind_param("si", $new_email, $_SESSION['user_id']);
-        $email_check_stmt->execute();
-        $email_check_result = $email_check_stmt->get_result();
-        
-        if ($email_check_result->num_rows > 0) {
-            $error = "Email sudah digunakan!";
+    // Proceed with other validations only if password is verified or no password update
+    if ($password_verified && empty($error) && empty($_SESSION['error_popup'])) {
+        // Validate username
+        if (empty($new_username)) {
+            $error = "Username tidak boleh kosong!";
+        } else {
+            $check_query = "SELECT id FROM users WHERE username = ? AND id != ?";
+            $check_stmt = $conn->prepare($check_query);
+            $check_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
+            $check_stmt->execute();
+            $check_result = $check_stmt->get_result();
+
+            if ($check_result->num_rows > 0) {
+                $error = "Username sudah digunakan!";
+            }
         }
-    }
 
-    // Proceed if no errors
-    if (empty($error)) {
-        $updates = ["username = ?"];
-        $types = "s";
-        $params = [$new_username];
+        // Validate email
+        if (!empty($new_email) && !filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
+            $error = "Format email tidak valid!";
+        } else {
+            $email_check_query = "SELECT id FROM users WHERE email = ? AND id != ? AND email != ''";
+            $email_check_stmt = $conn->prepare($email_check_query);
+            $email_check_stmt->bind_param("si", $new_email, $_SESSION['user_id']);
+            $email_check_stmt->execute();
+            $email_check_result = $email_check_stmt->get_result();
 
-        // Add email to update
-        $updates[] = "email = ?";
-        $types .= "s";
-        $params[] = $new_email ?: ''; // Use empty string if email is not provided
+            if ($email_check_result->num_rows > 0) {
+                $error = "Email sudah digunakan!";
+            }
+        }
 
-        // Handle password update
+        // Validate new password fields
         if (!empty($new_password) || !empty($confirm_password)) {
-            if (empty($current_password)) {
-                $error = "Password saat ini harus diisi!";
-            } elseif (empty($new_password)) {
+            if (empty($new_password)) {
                 $error = "Password baru harus diisi!";
             } elseif (empty($confirm_password)) {
                 $error = "Konfirmasi password harus diisi!";
@@ -78,61 +98,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 $error = "Password baru tidak cocok dengan konfirmasi!";
             } elseif (strlen($new_password) < 6) {
                 $error = "Password baru minimal 6 karakter!";
-            } else {
-                $verify_query = "SELECT password FROM users WHERE id = ?";
-                $verify_stmt = $conn->prepare($verify_query);
-                $verify_stmt->bind_param("i", $_SESSION['user_id']);
-                $verify_stmt->execute();
-                $verify_result = $verify_stmt->get_result();
-                $user_data = $verify_result->fetch_assoc();
-                
-                if (!$user_data || !isset($user_data['password'])) {
-                    $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
-                } else {
-                    $stored_hash = $user_data['password'];
-                    $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
-                    $password_verified = false;
-                    
-                    if ($is_sha256) {
-                        $password_verified = (hash('sha256', $current_password) === $stored_hash);
-                    } else {
-                        $password_verified = password_verify($current_password, $stored_hash);
-                    }
-                    
-                    if ($password_verified) {
-                        if ($is_sha256) {
-                            $updates[] = "password = ?";
-                            $types .= "s";
-                            $params[] = hash('sha256', $new_password);
-                        } else {
-                            $updates[] = "password = ?";
-                            $types .= "s";
-                            $params[] = password_hash($new_password, PASSWORD_DEFAULT);
-                        }
-                    } else {
-                        $error = "Password saat ini tidak valid!";
-                    }
-                }
             }
         }
-        
+
         // Execute update if no errors
         if (empty($error)) {
+            $updates = ["username = ?"];
+            $types = "s";
+            $params = [$new_username];
+
+            // Add email to update
+            $updates[] = "email = ?";
+            $types .= "s";
+            $params[] = $new_email ?: '';
+
+            // Add password to update if applicable
+            if (!empty($new_password) && !empty($confirm_password) && $password_verified) {
+                if ($is_sha256) {
+                    $updates[] = "password = ?";
+                    $types .= "s";
+                    $params[] = hash('sha256', $new_password);
+                } else {
+                    $updates[] = "password = ?";
+                    $types .= "s";
+                    $params[] = password_hash($new_password, PASSWORD_DEFAULT);
+                }
+            }
+
             $params[] = $_SESSION['user_id'];
             $types .= "i";
-            
+
             $query = "UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?";
             $stmt = $conn->prepare($query);
             $stmt->bind_param($types, ...$params);
-            
+
             if ($stmt->execute()) {
                 $_SESSION['username'] = $new_username;
                 $_SESSION['email'] = $new_email;
-                $_SESSION['update_success'] = !empty($new_password) ? 'password' : (!empty($new_email) ? 'email' : 'username');
+                $_SESSION['update_success'] = !empty($new_password) ? 'password' : (!empty($new_email) && $new_email !== $user['email'] ? 'email' : 'username');
             } else {
                 $error = "Gagal memperbarui pengaturan: " . $conn->error;
             }
         }
+    }
+
+    // Set no username popup if applicable
+    if ($error === "Username tidak boleh kosong!") {
+        $_SESSION['no_username_popup'] = true;
     }
 }
 ?>
@@ -142,25 +154,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 <head>
     <title>Profil - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --secondary-dark: #2563eb;
+            --accent-color: #f59e0b;
+            --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f8faff;
+            --bg-light: #f0f5ff;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
+            --scrollbar-track: #1e1b4b;
+            --scrollbar-thumb: #3b82f6;
+            --scrollbar-thumb-hover: #60a5fa;
         }
 
         * {
@@ -184,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         .top-nav {
-            background: var(--primary-dark);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary-color) 100%);
             padding: 15px 30px;
             display: flex;
             justify-content: space-between;
@@ -224,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 25px;
             border-radius: 15px;
@@ -233,6 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
             position: relative;
             overflow: hidden;
             animation: fadeInBanner 0.8s ease-out;
+            text-align: center;
         }
 
         .welcome-banner::before {
@@ -260,9 +275,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         .welcome-banner h2 {
             margin-bottom: 10px;
             font-size: clamp(1.5rem, 3vw, 1.8rem);
-            display: flex;
-            align-items: center;
-            gap: 10px;
             position: relative;
             z-index: 1;
         }
@@ -303,7 +315,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 
         .form-separator {
             margin: 30px 0;
-            border-top: 1px solid #e0e0e0;
+            border-top: 1px solid #e2e8f0;
             position: relative;
         }
 
@@ -336,7 +348,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         input[type="password"] {
             width: 100%;
             padding: 12px 15px;
-            border: 1px solid #ddd;
+            border: 1px solid #e2e8f0;
             border-radius: 10px;
             font-size: clamp(0.9rem, 2vw, 1rem);
             transition: var(--transition);
@@ -355,8 +367,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         input[type="email"]:focus,
         input[type="password"]:focus {
             outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
             transform: scale(1.02);
         }
 
@@ -387,7 +399,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         button[type="submit"] {
-            background-color: var(--primary-color);
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
             color: white;
             border: none;
             padding: 12px 25px;
@@ -404,7 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         button[type="submit"]:hover {
-            background-color: var(--primary-dark);
+            background: linear-gradient(90deg, var(--secondary-dark), var(--primary-dark));
             transform: translateY(-2px);
         }
 
@@ -424,9 +436,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 5px solid #ef4444;
+            background-color: #fef2f2;
+            color: var(--danger-color);
+            border-left: 5px solid var(--danger-color);
         }
 
         .alert i {
@@ -439,7 +451,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
+            background: rgba(0, 0, 0, 0.65);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -459,13 +471,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         }
 
         .success-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
+            background: linear-gradient(145deg, #ffffff, var(--bg-light));
             border-radius: 20px;
             padding: 40px;
             text-align: center;
             max-width: 90%;
             width: 450px;
-            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            box-shadow: var(--shadow-md);
             position: relative;
             overflow: hidden;
             transform: scale(0.5);
@@ -572,6 +584,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
             color: var(--danger-color);
         }
 
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: clamp(1rem, 2vw, 1.2rem);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .close-btn:hover {
+            color: var(--primary-color);
+            transform: scale(1.1);
+        }
+
         @media (max-width: 768px) {
             .top-nav {
                 padding: 15px;
@@ -647,22 +676,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2><i class="fas fa-user-edit"></i> Profil Petugas</h2>
+            <h2>Profil Administrator</h2>
             <p>Kelola informasi akun Anda</p>
         </div>
 
         <div class="profile-card">
-            <?php if (!empty($error)): ?>
+            <?php if (!empty($error) && $error !== "Password salah!" && $error !== "Password baru tidak cocok dengan konfirmasi!" && $error !== "Konfirmasi password harus diisi!" && $error !== "Password baru harus diisi!"): ?>
                 <div class="alert alert-error">
                     <i class="fas fa-exclamation-circle"></i>
                     <span><?= htmlspecialchars($error) ?></span>
-                </div>
-            <?php endif; ?>
-
-            <?php if (!empty($message)): ?>
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i>
-                    <span><?= htmlspecialchars($message) ?></span>
                 </div>
             <?php endif; ?>
 
@@ -671,7 +693,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 <div class="form-group">
                     <label for="username">Username:</label>
                     <div class="input-wrapper">
-                        <input type="text" id="username" name="username" value="<?= htmlspecialchars($user['username']) ?>" required>
+                        <input type="text" id="username" name="username" value="<?= htmlspecialchars($user['username'] ?? '') ?>" required>
                     </div>
                     <div class="help-text">Username digunakan untuk login ke aplikasi.</div>
                 </div>
@@ -679,7 +701,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 <div class="form-group">
                     <label for="email">Email:</label>
                     <div class="input-wrapper">
-                        <input type="email" id="email" name="email" value="<?= htmlspecialchars($user['email']) ?>">
+                        <input type="email" id="email" name="email" value="<?= htmlspecialchars($user['email'] ?? '') ?>">
                     </div>
                     <div class="help-text">Masukkan email aktif Anda. Biarkan kosong jika tidak ingin mengubah.</div>
                 </div>
@@ -702,7 +724,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 <div class="form-group">
                     <label for="new_password">Password Baru:</label>
                     <div class="password-field">
-                        <input type="password" id="new_password" name="new_password">
+                        <input type="password" id="new_password" name="new_password" oninput="checkPasswordStrength()">
                         <button type="button" class="password-toggle" onclick="togglePassword('new_password')">
                             <i class="fas fa-eye" id="new_password_icon"></i>
                         </button>
@@ -716,7 +738,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
                 <div class="form-group">
                     <label for="confirm_password">Konfirmasi Password Baru:</label>
                     <div class="password-field">
-                        <input type="password" id="confirm_password" name="confirm_password">
+                        <input type="password" id="confirm_password" name="confirm_password" oninput="checkPasswordMatch()">
                         <button type="button" class="password-toggle" onclick="togglePassword('confirm_password')">
                             <i class="fas fa-eye" id="confirm_password_icon"></i>
                         </button>
@@ -740,49 +762,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     <?php if (isset($_SESSION['no_username_popup']) && $_SESSION['no_username_popup']): ?>
         <div class="success-overlay" id="noUsernameModal">
             <div class="success-modal">
+                <button class="close-btn" onclick="closeModal('noUsernameModal')"><i class="fas fa-times"></i></button>
                 <div class="warning-icon">
                     <i class="fas fa-exclamation-circle"></i>
                 </div>
                 <h3>Peringatan</h3>
-                <p id="countdownTextNoUsername">Username tidak boleh kosong!<br>Akan keluar dalam 3 detik</p>
+                <p id="countdownTextNoUsername">Username tidak boleh kosong!<br>Akan keluar dalam <span id="countdownNoUsername">3</span> detik</p>
             </div>
         </div>
         <?php unset($_SESSION['no_username_popup']); ?>
     <?php endif; ?>
 
+    <?php if (isset($_SESSION['error_popup'])): ?>
+        <div class="success-overlay" id="errorModal">
+            <div class="success-modal">
+                <button class="close-btn" onclick="closeModal('errorModal')"><i class="fas fa-times"></i></button>
+                <div class="warning-icon">
+                    <i class="fas fa-exclamation-circle"></i>
+                </div>
+                <h3>Peringatan</h3>
+                <p><?= htmlspecialchars($_SESSION['error_popup']) ?></p>
+            </div>
+        </div>
+        <?php unset($_SESSION['error_popup']); ?>
+    <?php endif; ?>
+
     <?php if (isset($_SESSION['update_success'])): ?>
         <div class="success-overlay" id="successModal">
             <div class="success-modal">
+                <button class="close-btn" onclick="closeModal('successModal')"><i class="fas fa-times"></i></button>
                 <div class="success-icon">
                     <i class="fas fa-check-circle"></i>
                 </div>
                 <h3>Ubah <?php echo $_SESSION['update_success'] == 'password' ? 'Password' : ($_SESSION['update_success'] == 'email' ? 'Email' : 'Username'); ?> Berhasil!</h3>
-                <p id="countdownText">Akan keluar dalam 3 detik</p>
+                <p id="countdownText">Akan keluar dalam <span id="countdown">3</span> detik</p>
+                <?php for ($i = 0; $i < 20; $i++): ?>
+                    <div class="confetti" style="left: <?= rand(0, 100) ?>%; top: <?= rand(-50, -10) ?>%; animation-delay: <?= rand(0, 2000) / 1000 ?>s;"></div>
+                <?php endfor; ?>
             </div>
         </div>
+        <?php unset($_SESSION['update_success']); ?>
     <?php endif; ?>
 
     <script>
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        document.addEventListener('gesturestart', function(event) {
-            event.preventDefault();
-        });
-
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        function togglePassword(inputId) {
-            const input = document.getElementById(inputId);
-            const icon = document.getElementById(inputId + '_icon');
-            
+        function togglePassword(fieldId) {
+            const input = document.getElementById(fieldId);
+            const icon = document.getElementById(fieldId + '_icon');
             if (input.type === 'password') {
                 input.type = 'text';
                 icon.classList.remove('fa-eye');
@@ -794,190 +819,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
             }
         }
 
-        const newPassword = document.getElementById('new_password');
-        const confirmPassword = document.getElementById('confirm_password');
-        const emailInput = document.getElementById('email');
-        const passwordMeter = document.getElementById('password-meter');
-        const passwordMatch = document.getElementById('password-match');
-        const passwordMismatch = document.getElementById('password-mismatch');
-        
-        newPassword.addEventListener('input', function() {
-            updatePasswordStrength(this.value);
-            validatePasswordMatch();
-        });
-        
-        confirmPassword.addEventListener('input', function() {
-            validatePasswordMatch();
-        });
-
-        emailInput.addEventListener('input', function() {
-            validateEmail(this.value);
-        });
-        
-        function updatePasswordStrength(password) {
+        function checkPasswordStrength() {
+            const password = document.getElementById('new_password').value;
+            const meter = document.getElementById('password-meter');
             let strength = 0;
-            let width = "0%";
-            let color = "#eee";
-            
-            if (!password) {
-                passwordMeter.style.width = width;
-                passwordMeter.style.backgroundColor = color;
-                return;
-            }
-            
-            if (password.length >= 6) strength += 1;
-            if (password.length >= 10) strength += 1;
-            if (/[A-Z]/.test(password)) strength += 1;
-            if (/[0-9]/.test(password)) strength += 1;
-            if (/[^A-Za-z0-9]/.test(password)) strength += 1;
-            
-            switch(strength) {
-                case 0:
-                    width = "0%";
-                    color = "#eee";
-                    break;
-                case 1:
-                    width = "20%";
-                    color = "#ef4444";
-                    break;
-                case 2:
-                    width = "40%";
-                    color = "#f97316";
-                    break;
-                case 3:
-                    width = "60%";
-                    color = "#eab308";
-                    break;
-                case 4:
-                    width = "80%";
-                    color = "#84cc16";
-                    break;
-                case 5:
-                    width = "100%";
-                    color = "#10b981";
-                    break;
-            }
-            
-            passwordMeter.style.width = width;
-            passwordMeter.style.backgroundColor = color;
+
+            if (password.length >= 6) strength += 20;
+            if (password.match(/[A-Z]/)) strength += 20;
+            if (password.match(/[a-z]/)) strength += 20;
+            if (password.match(/[0-9]/)) strength += 20;
+            if (password.match(/[^A-Za-z0-9]/)) strength += 20;
+
+            meter.style.width = strength + '%';
+            meter.style.backgroundColor = strength < 40 ? '#ef4444' : strength < 80 ? '#f59e0b' : '#10b981';
         }
-        
-        function validatePasswordMatch() {
-            if (confirmPassword.value && newPassword.value) {
-                if (newPassword.value === confirmPassword.value) {
-                    passwordMatch.style.display = "block";
-                    passwordMismatch.style.display = "none";
-                    confirmPassword.style.borderColor = "#10b981";
+
+        function checkPasswordMatch() {
+            const newPassword = document.getElementById('new_password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+            const match = document.getElementById('password-match');
+            const mismatch = document.getElementById('password-mismatch');
+
+            if (newPassword && confirmPassword) {
+                if (newPassword === confirmPassword) {
+                    match.style.display = 'block';
+                    mismatch.style.display = 'none';
                 } else {
-                    passwordMatch.style.display = "none";
-                    passwordMismatch.style.display = "block";
-                    confirmPassword.style.borderColor = "#ef4444";
+                    match.style.display = 'none';
+                    mismatch.style.display = 'block';
                 }
             } else {
-                passwordMatch.style.display = "none";
-                passwordMismatch.style.display = "none";
-                confirmPassword.style.borderColor = "#ddd";
+                match.style.display = 'none';
+                mismatch.style.display = 'none';
             }
         }
 
-        function validateEmail(email) {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (email && !emailRegex.test(email)) {
-                emailInput.style.borderColor = "#ef4444";
-            } else {
-                emailInput.style.borderColor = "#ddd";
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                }, 500);
             }
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            updatePasswordStrength(newPassword.value);
-            validatePasswordMatch();
-            validateEmail(emailInput.value);
-
-            <?php if (isset($_SESSION['update_success'])): ?>
-                const successOverlay = document.getElementById('successModal');
-                const successCountdownText = document.getElementById('countdownText');
-                const successModal = successOverlay.querySelector('.success-modal');
-
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    successModal.appendChild(confetti);
-                }
-
-                let successCountdown = 3;
-                successCountdownText.textContent = `Akan keluar dalam ${successCountdown} detik`;
-                
-                const successCountdownInterval = setInterval(() => {
-                    successCountdown--;
-                    if (successCountdown > 0) {
-                        successCountdownText.textContent = `Akan keluar dalam ${successCountdown} detik`;
-                    } else {
-                        successCountdownText.textContent = 'Mengalihkan...';
-                        clearInterval(successCountdownInterval);
+        function startCountdown(elementId, redirectUrl) {
+            let seconds = 3;
+            const countdownElement = document.getElementById(elementId);
+            if (countdownElement) {
+                const interval = setInterval(() => {
+                    countdownElement.textContent = seconds;
+                    seconds--;
+                    if (seconds < 0) {
+                        clearInterval(interval);
+                        window.location.href = redirectUrl;
                     }
                 }, 1000);
-
-                setTimeout(() => {
-                    successOverlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    successModal.style.animation = 'popInModal 0.7s ease-out reverse';
-                    setTimeout(() => {
-                        <?php
-                        $delete_session_query = "DELETE FROM active_sessions WHERE user_id = ?";
-                        $delete_session_stmt = $conn->prepare($delete_session_query);
-                        $delete_session_stmt->bind_param("i", $_SESSION['user_id']);
-                        $delete_session_stmt->execute();
-                        $delete_session_stmt->close();
-
-                        session_unset();
-                        session_destroy();
-                        ?>
-                        window.location.href = '../../pages/login.php';
-                    }, 500);
-                }, 3000);
-
-                <?php unset($_SESSION['update_success']); ?>
-            <?php endif; ?>
-
-            const noUsernameModal = document.getElementById('noUsernameModal');
-            if (noUsernameModal) {
-                const noUsernameCountdownText = document.getElementById('countdownTextNoUsername');
-                const noUsernameModalContent = noUsernameModal.querySelector('.success-modal');
-
-                for (let i = 0; i < 30; i++) {
-                    const confetti = document.createElement('div');
-                    confetti.className = 'confetti';
-                    confetti.style.left = Math.random() * 100 + '%';
-                    confetti.style.animationDelay = Math.random() * 1 + 's';
-                    confetti.style.animationDuration = (Math.random() * 2 + 3) + 's';
-                    noUsernameModalContent.appendChild(confetti);
-                }
-
-                let noUsernameCountdown = 3;
-                noUsernameCountdownText.innerHTML = `Username tidak boleh kosong!<br>Akan keluar dalam ${noUsernameCountdown} detik`;
-                
-                const noUsernameCountdownInterval = setInterval(() => {
-                    noUsernameCountdown--;
-                    if (noUsernameCountdown > 0) {
-                        noUsernameCountdownText.innerHTML = `Username tidak boleh kosong!<br>Akan keluar dalam ${noUsernameCountdown} detik`;
-                    } else {
-                        noUsernameCountdownText.innerHTML = `Username tidak boleh kosong!<br>Mengalihkan...`;
-                        clearInterval(noUsernameCountdownInterval);
-                    }
-                }, 1000);
-
-                setTimeout(() => {
-                    noUsernameModal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    noUsernameModalContent.style.animation = 'popInModal 0.7s ease-out reverse';
-                    setTimeout(() => {
-                        noUsernameModal.remove();
-                    }, 500);
-                }, 3000);
             }
-        });
+        }
+
+        // Start countdown for no username modal
+        if (document.getElementById('noUsernameModal')) {
+            startCountdown('countdownNoUsername', 'profile.php');
+        }
+
+        // Start countdown for success modal
+        if (document.getElementById('successModal')) {
+            const updateType = '<?php echo isset($_SESSION['update_success']) ? $_SESSION['update_success'] : ''; ?>';
+            const redirectUrl = updateType === 'email' ? '../admin/pengaturan.php' : '../login.php';
+            startCountdown('countdown', redirectUrl);
+        }
+
+        // Auto-close error modal after 2 seconds
+        if (document.getElementById('errorModal')) {
+            setTimeout(() => {
+                closeModal('errorModal');
+            }, 2000);
+        }
     </script>
 </body>
 </html>

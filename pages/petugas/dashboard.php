@@ -12,13 +12,78 @@ $query_block = "SELECT is_blocked FROM petugas_block_status WHERE id = 1";
 $result_block = $conn->query($query_block);
 $is_blocked = $result_block->fetch_assoc()['is_blocked'] ?? 0;
 
-// Query untuk mengambil total transaksi, uang masuk, dan uang keluar (only if not blocked)
+// Get today's officer schedule
+$query_schedule = "SELECT * FROM petugas_tugas WHERE tanggal = CURDATE()";
+$stmt_schedule = $conn->prepare($query_schedule);
+$stmt_schedule->execute();
+$result_schedule = $stmt_schedule->get_result();
+$schedule = $result_schedule->fetch_assoc();
+
+// Get the names of scheduled officers for today
+$petugas1_nama = $schedule ? $schedule['petugas1_nama'] : '';
+$petugas2_nama = $schedule ? $schedule['petugas2_nama'] : '';
+
+// Check if both officers have checked in today (for transaction data display)
+$both_checked_in = false;
+if ($schedule) {
+    $query_attendance = "SELECT * FROM absensi 
+                        WHERE tanggal = CURDATE() 
+                        AND ((petugas_type = 'petugas1' AND petugas1_status = 'hadir')
+                             OR (petugas_type = 'petugas2' AND petugas2_status = 'hadir'))";
+    $stmt_attendance = $conn->prepare($query_attendance);
+    $stmt_attendance->execute();
+    $result_attendance = $stmt_attendance->get_result();
+    $attendance_records = $result_attendance->fetch_all(MYSQLI_ASSOC);
+    
+    $petugas1_checked_in = false;
+    $petugas2_checked_in = false;
+    
+    foreach ($attendance_records as $record) {
+        if ($record['petugas_type'] === 'petugas1' && $record['petugas1_status'] === 'hadir') {
+            $petugas1_checked_in = true;
+        }
+        if ($record['petugas_type'] === 'petugas2' && $record['petugas2_status'] === 'hadir') {
+            $petugas2_checked_in = true;
+        }
+    }
+    
+    $both_checked_in = ($petugas1_nama ? $petugas1_checked_in : true) && ($petugas2_nama ? $petugas2_checked_in : true);
+}
+
+// Check if both officers are still active (not checked out) for alert message
+$both_active = false;
+if ($schedule) {
+    $query_active = "SELECT * FROM absensi 
+                    WHERE tanggal = CURDATE() 
+                    AND ((petugas_type = 'petugas1' AND petugas1_status = 'hadir' AND waktu_keluar IS NULL)
+                         OR (petugas_type = 'petugas2' AND petugas2_status = 'hadir' AND waktu_keluar IS NULL))";
+    $stmt_active = $conn->prepare($query_active);
+    $stmt_active->execute();
+    $result_active = $stmt_active->get_result();
+    $active_records = $result_active->fetch_all(MYSQLI_ASSOC);
+    
+    $petugas1_active = false;
+    $petugas2_active = false;
+    
+    foreach ($active_records as $record) {
+        if ($record['petugas_type'] === 'petugas1' && $record['petugas1_status'] === 'hadir' && is_null($record['waktu_keluar'])) {
+            $petugas1_active = true;
+        }
+        if ($record['petugas_type'] === 'petugas2' && $record['petugas2_status'] === 'hadir' && is_null($record['waktu_keluar'])) {
+            $petugas2_active = true;
+        }
+    }
+    
+    $both_active = ($petugas1_nama ? $petugas1_active : true) && ($petugas2_nama ? $petugas2_active : true);
+}
+
+// Query for transaction data (only if not blocked and both officers checked in)
 $total_transaksi = 0;
 $uang_masuk = 0;
 $uang_keluar = 0;
 $saldo_bersih = 0;
 
-if (!$is_blocked) {
+if (!$is_blocked && $both_checked_in) {
     $query = "SELECT COUNT(id) as total_transaksi 
               FROM transaksi 
               WHERE DATE(created_at) = CURDATE() 
@@ -29,7 +94,7 @@ if (!$is_blocked) {
     $stmt->bind_param("i", $petugas_id);
     $stmt->execute();
     $result = $stmt->get_result();
-    $total_transaksi = $result->fetch_assoc()['total_transaksi'];
+    $total_transaksi = $result->fetch_assoc()['total_transaksi'] ?? 0;
 
     $query = "SELECT SUM(jumlah) as uang_masuk 
               FROM transaksi 
@@ -58,160 +123,7 @@ if (!$is_blocked) {
     $saldo_bersih = $uang_masuk - $uang_keluar;
 }
 
-// Check if user is logged in
-$petugas_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
-$user_name = isset($_SESSION['name']) ? $_SESSION['name'] : null;
-
-// Get current date for comparison
-$current_date = date('Y-m-d');
-
-// Get today's officer schedule
-$query_schedule = "SELECT * FROM petugas_tugas WHERE tanggal = CURDATE()";
-$stmt_schedule = $conn->prepare($query_schedule);
-$stmt_schedule->execute();
-$result_schedule = $stmt_schedule->get_result();
-$schedule = $result_schedule->fetch_assoc();
-
-// Get the names of scheduled officers for today
-$petugas1_nama = $schedule ? $schedule['petugas1_nama'] : '';
-$petugas2_nama = $schedule ? $schedule['petugas2_nama'] : '';
-
-// Check for old attendance records
-$query_check_old = "SELECT * FROM absensi WHERE tanggal < CURDATE() AND waktu_keluar IS NULL";
-$stmt_check_old = $conn->prepare($query_check_old);
-$stmt_check_old->execute();
-$result_check_old = $stmt_check_old->get_result();
-
-// Get attendance records for both officers for today
-$attendance_petugas1 = null;
-$attendance_petugas2 = null;
-
-$query_attendance1 = "SELECT * FROM absensi 
-                     WHERE petugas_type = 'petugas1' AND tanggal = CURDATE()";
-$stmt_attendance1 = $conn->prepare($query_attendance1);
-$stmt_attendance1->execute();
-$attendance_petugas1 = $stmt_attendance1->get_result()->fetch_assoc();
-
-$query_attendance2 = "SELECT * FROM absensi 
-                     WHERE petugas_type = 'petugas2' AND tanggal = CURDATE()";
-$stmt_attendance2 = $conn->prepare($query_attendance2);
-$stmt_attendance2->execute();
-$attendance_petugas2 = $stmt_attendance2->get_result()->fetch_assoc();
-
-// Handle attendance form submissions (only if not blocked)
-if (!$is_blocked && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $success_message = '';
-    if (isset($_POST['check_in_petugas1'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, waktu_masuk, petugas1_status) 
-                 VALUES (?, 'petugas1', CURDATE(), NOW(), 'hadir')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Absen masuk Petugas 1 berhasil!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['check_out_petugas1'])) {
-        $query = "UPDATE absensi SET waktu_keluar = NOW() 
-                 WHERE petugas_type = 'petugas1' AND tanggal = CURDATE()";
-        $stmt = $conn->prepare($query);
-        if ($stmt->execute()) {
-            $success_message = 'Absen pulang Petugas 1 berhasil!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['check_in_petugas2'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, waktu_masuk, petugas2_status) 
-                 VALUES (?, 'petugas2', CURDATE(), NOW(), 'hadir')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Absen masuk Petugas 2 berhasil!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['check_out_petugas2'])) {
-        $query = "UPDATE absensi SET waktu_keluar = NOW() 
-                 WHERE petugas_type = 'petugas2' AND tanggal = CURDATE()";
-        $stmt = $conn->prepare($query);
-        if ($stmt->execute()) {
-            $success_message = 'Absen pulang Petugas 2 berhasil!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['absent_petugas1'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas1_status) 
-                 VALUES (?, 'petugas1', CURDATE(), 'tidak_hadir')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Petugas 1 ditandai tidak hadir!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['absent_petugas2'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas2_status) 
-                 VALUES (?, 'petugas2', CURDATE(), 'tidak_hadir')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Petugas 2 ditandai tidak hadir!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['sakit_petugas1'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas1_status) 
-                 VALUES (?, 'petugas1', CURDATE(), 'sakit')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Petugas 1 ditandai sakit!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['sakit_petugas2'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas2_status) 
-                 VALUES (?, 'petugas2', CURDATE(), 'sakit')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Petugas 2 ditandai sakit!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['izin_petugas1'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas1_status) 
-                 VALUES (?, 'petugas1', CURDATE(), 'izin')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Petugas 1 ditandai izin!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    } elseif (isset($_POST['izin_petugas2'])) {
-        $query = "INSERT INTO absensi (user_id, petugas_type, tanggal, petugas2_status) 
-                 VALUES (?, 'petugas2', CURDATE(), 'izin')";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("i", $petugas_id);
-        if ($stmt->execute()) {
-            $success_message = 'Petugas 2 ditandai izin!';
-        }
-        header("Location: dashboard.php?attendance_success=" . urlencode($success_message));
-        exit();
-    }
-}
-
-// Store the last visited date in the session
-$session_last_date = isset($_SESSION['last_attendance_date']) ? $_SESSION['last_attendance_date'] : '';
-if ($session_last_date != $current_date) {
-    $_SESSION['last_attendance_date'] = $current_date;
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        echo "<script>window.location.reload();</script>";
-    }
-}
-
-// Fungsi untuk mengonversi tanggal ke bahasa Indonesia
+// Function to convert date to Indonesian format
 function tanggal_indonesia($tanggal) {
     $bulan = [
         1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
@@ -234,7 +146,7 @@ function tanggal_indonesia($tanggal) {
 <html>
 <head>
     <title>Dashboard - SCHOBANK SYSTEM</title>
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -255,6 +167,8 @@ function tanggal_indonesia($tanggal) {
             --scrollbar-track: #1e1b4b;
             --scrollbar-thumb: #3b82f6;
             --scrollbar-thumb-hover: #60a5fa;
+            --alert-bg-start: rgba(59, 130, 246, 0.1);
+            --alert-bg-end: rgba(30, 58, 138, 0.1);
         }
 
         * {
@@ -266,15 +180,13 @@ function tanggal_indonesia($tanggal) {
             -ms-user-select: none;
             user-select: none;
             -webkit-touch-callout: none;
-            
         }
 
-        html, body {
+        html {
             width: 100%;
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
-            -webkit-text-size-adjust: none; /* Mencegah penyesuaian ukuran teks otomatis */
         }
 
         body {
@@ -284,6 +196,8 @@ function tanggal_indonesia($tanggal) {
             transition: background-color 0.3s ease;
             font-size: 0.95rem;
             line-height: 1.6;
+            min-height: 100vh;
+            touch-action: pan-y;
         }
 
         /* Sidebar Utama */
@@ -302,21 +216,25 @@ function tanggal_indonesia($tanggal) {
 
         /* Sidebar Header (Fixed) */
         .sidebar-header {
-            padding: 25px 20px;
+            padding: 20px;
             background: var(--primary-dark);
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             position: sticky;
             top: 0;
             z-index: 101;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .sidebar-header .bank-name {
             font-size: 1.6rem;
-            font-weight: 600;
-            letter-spacing: 1.2px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
             margin: 0;
             color: white;
+            text-transform: uppercase;
+            text-align: center;
         }
 
         /* Sidebar Content (Scrollable) */
@@ -395,6 +313,27 @@ function tanggal_indonesia($tanggal) {
             color: white;
         }
 
+        .menu-item a.disabled {
+            pointer-events: none;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .menu-item a.disabled:hover::after {
+            content: 'Silakan absen terlebih dahulu';
+            position: absolute;
+            top: 50%;
+            left: 100%;
+            transform: translateY(-50%);
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            z-index: 100;
+        }
+
         .menu-item i {
             margin-right: 12px;
             width: 20px;
@@ -424,6 +363,27 @@ function tanggal_indonesia($tanggal) {
             background-color: rgba(255, 255, 255, 0.1);
             border-left-color: var(--secondary-color);
             color: white;
+        }
+
+        .dropdown-btn.disabled {
+            pointer-events: none;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .dropdown-btn.disabled:hover::after {
+            content: 'Silakan absen terlebih dahulu';
+            position: absolute;
+            top: 50%;
+            left: 100%;
+            transform: translateY(-50%);
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            z-index: 100;
         }
 
         .dropdown-btn .menu-icon {
@@ -475,6 +435,12 @@ function tanggal_indonesia($tanggal) {
             color: white;
         }
 
+        .dropdown-container a.disabled {
+            pointer-events: none;
+            color: #ccc;
+            cursor: not-allowed;
+        }
+
         /* Tombol Logout (Warna Merah) */
         .logout-btn {
             color: var(--danger-color);
@@ -488,6 +454,8 @@ function tanggal_indonesia($tanggal) {
             padding: 30px;
             transition: var(--transition);
             max-width: calc(100% - 280px);
+            overflow-y: auto;
+            min-height: 100vh;
         }
 
         /* Welcome Banner */
@@ -523,6 +491,19 @@ function tanggal_indonesia($tanggal) {
 
         .welcome-banner .date i {
             margin-right: 8px;
+        }
+
+        /* Hamburger Menu Toggle */
+        .menu-toggle {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            transform: translateY(-50%);
+            z-index: 1000;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
         }
 
         /* Summary Section */
@@ -645,174 +626,31 @@ function tanggal_indonesia($tanggal) {
             transition: var(--transition);
         }
 
-        /* Attendance Container */
-        .attendance-container {
-            background: white;
-            border-radius: 16px;
-            padding: 25px;
+        /* Alert Styling */
+        .alert-message {
+            background: linear-gradient(145deg, var(--alert-bg-start) 0%, var(--alert-bg-end) 100%);
+            border-radius: 8px;
+            padding: 15px 20px;
             margin-bottom: 25px;
             box-shadow: var(--shadow-sm);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            font-weight: 500;
             animation: fadeIn 1s ease-in-out;
         }
 
-        .attendance-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--primary-dark);
-            margin-bottom: 20px;
-        }
-
-        .attendance-table {
-            width: 100%;
-            border-collapse: separate;
-            border-spacing: 0;
-            margin-top: 20px;
-            box-shadow: var(--shadow-sm);
-            border-radius: 8px;
-            overflow: hidden;
-        }
-
-        .attendance-table th,
-        .attendance-table td {
-            padding: 15px;
-            text-align: center;
-            border-bottom: 1px solid #e9ecef;
-            font-size: 0.9rem;
-            font-weight: 400;
-        }
-
-        .attendance-table th {
-            background-color: var(--primary-dark);
-            color: white;
-            text-transform: uppercase;
-            font-size: 0.85rem;
-            letter-spacing: 0.5px;
-            font-weight: 500;
-        }
-
-        .attendance-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        .attendance-table tr:nth-child(even) {
-            background-color: #f8fafc;
-        }
-
-        .attendance-table tr:hover {
-            background-color: #ebf5ff;
-            transition: background-color 0.2s ease;
-        }
-
-        /* Status Indicators */
-        .present-status {
-            background-color: #e6f7ed;
-            color: #2ecc71;
-            font-weight: 500;
-            padding: 5px 10px;
-            border-radius: 15px;
-            display: inline-block;
-            font-size: 0.85rem;
-        }
-
-        .absent-status {
-            background-color: #fdeaea;
-            color: var(--danger-color);
-            font-weight: 500;
-            padding: 5px 10px;
-            border-radius: 15px;
-            display: inline-block;
-            font-size: 0.85rem;
-        }
-
-        /* Buttons */
-        .btn {
-            padding: 8px 15px;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            margin: 3px;
-            transition: var(--transition);
-            font-weight: 500;
-            font-size: 0.9rem;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background-color: var(--secondary-color);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .btn i {
-            margin-right: 5px;
-        }
-
-        .btn:hover {
-            background-color: var(--secondary-dark);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-
-        .btn-danger {
-            background-color: var(--danger-color);
-        }
-
-        .btn-danger:hover {
-            background-color: #c0392b;
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-
-        .btn-confirm {
-            background-color: var(--secondary-color);
-        }
-
-        .btn-confirm:hover {
-            background-color: var(--secondary-dark);
-            transform: translateY(-2px);
-        }
-
-        .btn-cancel {
-            background-color: #f0f0f0;
-            color: var(--text-secondary);
-            border: none;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .btn-cancel:hover {
-            background-color: #e0e0e0;
-            transform: translateY(-2px);
-        }
-
-        /* Empty Message */
-        .empty-state {
-            text-align: center;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            padding: 20px;
-            background: #f8fafc;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            font-weight: 400;
-        }
-
-        .empty-state i {
-            font-size: 2rem;
-            color: #95a5a6;
-            margin-bottom: 15px;
-            display: block;
-        }
-
-        /* Hamburger Menu Toggle */
-        .menu-toggle {
-            display: none;
-            color: white;
+        .alert-message i {
+            color: var(--secondary-color);
             font-size: 1.5rem;
-            cursor: pointer;
-            transition: transform 0.3s ease;
         }
 
-        .menu-toggle:hover {
-            transform: scale(1.1);
+        .alert-message:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+            transition: var(--transition);
         }
 
         /* Animations */
@@ -826,184 +664,10 @@ function tanggal_indonesia($tanggal) {
             to { transform: translateY(0); opacity: 1; }
         }
 
-        @keyframes cardFadeIn {
-            0% { opacity: 0; transform: translateY(20px); }
-            100% { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Success Modal Animations */
-        @keyframes fadeInOverlay {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes fadeOutOverlay {
-            from { opacity: 1; }
-            to { opacity: 0; }
-        }
-
-        @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        @keyframes bounceIn {
-            0% { transform: scale(0); opacity: 0; }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        @keyframes slideUpText {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        /* Success Modal Styling */
-        .success-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
-        }
-
-        .success-modal {
-            background: linear-gradient(145deg, #ffffff, #f0f4ff);
-            border-radius: 16px;
-            padding: 30px 25px;
-            text-align: center;
-            max-width: 90%;
-            width: 400px;
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: hidden;
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .success-icon {
-            font-size: 3.5rem;
-            color: var(--secondary-color);
-            margin-bottom: 15px;
-            animation: bounceIn 0.6s ease-out;
-            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-        }
-
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin: 0;
-            font-size: 1.4rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            animation: slideUpText 0.5s ease-out 0.2s both;
-        }
-
-        .success-modal p {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-            font-weight: 400;
-            margin: 0;
-            line-height: 1.5;
-            animation: slideUpText 0.5s ease-out 0.3s both;
-            max-width: 80%;
-        }
-
-        .modal-content-confirm {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-
-        .modal-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 15px;
-            border-bottom: 1px solid #eee;
-            font-size: 0.9rem;
-        }
-
-        .modal-row:last-child {
-            border-bottom: none;
-        }
-
-        .modal-label {
-            font-weight: 500;
-            color: var(--text-secondary);
-        }
-
-        .modal-value {
-            font-weight: 600;
-            color: var(--text-primary);
-        }
-
-        .modal-buttons {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            width: 100%;
-        }
-        .sakit-status {
-            color: #e67e22; /* Orange for Sakit */
-            font-weight: 500;
-        }
-        .izin-status {
-            color: #3498db; /* Blue for Izin */
-            font-weight: 500;
-        }
-        .btn-warning {
-            background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
-            color: white;
-        }
-        .btn-warning:hover {
-            background: linear-gradient(135deg, #d35400 0%, #e67e22 100%);
-        }
-        .btn-info {
-            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-            color: white;
-        }
-        .btn-info:hover {
-            background: linear-gradient(135deg, #2980b9 0%, #3498db 100%);
-        }
-
-        .loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .loading i {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
         /* Responsive Design for Tablets (max-width: 768px) */
         @media (max-width: 768px) {
             .menu-toggle {
                 display: flex;
-                position: absolute;
-                top: 50%;
-                left: 20px;
-                transform: translateY(-50%);
-                z-index: 1000;
             }
 
             .sidebar {
@@ -1046,12 +710,17 @@ function tanggal_indonesia($tanggal) {
                 pointer-events: none;
             }
 
-            /* Welcome Banner */
+            .sidebar-header {
+                padding: 15px;
+            }
+
+            .sidebar-header .bank-name {
+                font-size: 1.4rem;
+            }
+
             .welcome-banner {
                 padding: 20px;
                 border-radius: 12px;
-                box-shadow: var(--shadow-md);
-                position: relative;
                 display: flex;
                 flex-direction: row;
                 align-items: center;
@@ -1066,15 +735,12 @@ function tanggal_indonesia($tanggal) {
 
             .welcome-banner h2 {
                 font-size: 1.4rem;
-                font-weight: 600;
             }
 
             .welcome-banner .date {
                 font-size: 0.85rem;
-                font-weight: 400;
             }
 
-            /* Summary Section */
             .summary-header h2 {
                 font-size: 1.2rem;
             }
@@ -1092,7 +758,6 @@ function tanggal_indonesia($tanggal) {
             .stat-box {
                 padding: 18px;
                 border-radius: 12px;
-                box-shadow: var(--shadow-sm);
             }
 
             .stat-icon {
@@ -1104,178 +769,14 @@ function tanggal_indonesia($tanggal) {
 
             .stat-title {
                 font-size: 0.85rem;
-                font-weight: 500;
             }
 
             .stat-value {
                 font-size: 1.4rem;
-                font-weight: 600;
             }
 
             .stat-trend {
                 font-size: 0.8rem;
-            }
-
-            /* Attendance Container */
-            .attendance-container {
-                padding: 15px;
-                border-radius: 12px;
-                background: #ffffff;
-                box-shadow: var(--shadow-sm);
-            }
-
-            .attendance-title {
-                font-size: 1.1rem;
-                margin-bottom: 20px;
-                color: var(--primary-dark);
-                font-weight: 600;
-                text-align: center;
-            }
-
-            .attendance-table {
-                display: block;
-                margin-top: 0;
-                box-shadow: none;
-            }
-
-            .attendance-table thead {
-                display: none;
-            }
-
-            .attendance-table tbody {
-                display: flex;
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .attendance-table tr {
-                display: flex;
-                flex-direction: column;
-                background: #ffffff;
-                border: 1px solid #e0e0e0;
-                border-radius: 8px;
-                padding: 15px;
-                box-shadow: var(--shadow-sm);
-                transition: var(--transition);
-                animation: cardFadeIn 0.6s ease-out forwards;
-                opacity: 0;
-            }
-
-            .attendance-table tr:nth-child(1) {
-                animation-delay: 0.1s;
-            }
-
-            .attendance-table tr:nth-child(2) {
-                animation-delay: 0.2s;
-            }
-
-            .attendance-table tr:hover {
-                box-shadow: var(--shadow-md);
-                transform: translateY(-2px);
-            }
-
-            .attendance-table td {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 8px 0;
-                border-bottom: none;
-                font-size: 0.9rem;
-                color: var(--text-primary);
-                font-weight: 400;
-            }
-
-            .attendance-table td::before {
-                content: attr(data-label);
-                font-weight: 500;
-                color: var(--primary-dark);
-                text-transform: uppercase;
-                font-size: 0.8rem;
-                letter-spacing: 0.5px;
-            }
-
-            .attendance-table td[data-label="Absensi"] {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 10px;
-                padding: 10px 0;
-            }
-
-            .attendance-table .present-status, 
-            .attendance-table .absent-status {
-                padding: 6px 12px;
-                font-size: 0.85rem;
-                border-radius: 4px;
-                font-weight: 500;
-                border: 1px solid #ccc;
-            }
-
-            .attendance-table .present-status {
-                background: #e6f7ed;
-                color: #2ecc71;
-                border-color: #2ecc71;
-            }
-
-            .attendance-table .absent-status {
-                background: #fdeaea;
-                color: var(--danger-color);
-                border-color: var(--danger-color);
-            }
-
-            .attendance-table .btn {
-                width: 100%;
-                padding: 10px;
-                font-size: 0.9rem;
-                border-radius: 8px;
-                background: var(--primary-dark);
-                color: #ffffff;
-                border: 1px solid var(--primary-dark);
-                box-shadow: var(--shadow-sm);
-                transition: var(--transition);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                font-weight: 500;
-            }
-
-            .attendance-table .btn:hover {
-                background: #0f1e3d;
-                border-color: #0f1e3d;
-                transform: scale(1.02);
-                box-shadow: var(--shadow-md);
-            }
-
-            .attendance-table .btn-danger {
-                background: var(--danger-color);
-                border-color: var(--danger-color);
-            }
-
-            .attendance-table .btn-danger:hover {
-                background: #c0392b;
-                border-color: #c0392b;
-                transform: scale(1.02);
-                box-shadow: var(--shadow-md);
-            }
-
-            form[style="display: inline;"] {
-                display: block !important;
-                width: 100%;
-            }
-
-            .success-modal {
-                width: 90%;
-                padding: 25px;
-            }
-
-            .success-icon {
-                font-size: 3rem;
-            }
-
-            .success-modal h3 {
-                font-size: 1.25rem;
-            }
-
-            .success-modal p {
-                font-size: 0.9rem;
             }
         }
 
@@ -1284,19 +785,22 @@ function tanggal_indonesia($tanggal) {
             .menu-toggle {
                 font-size: 1.3rem;
                 left: 15px;
-                top: 50%;
-                transform: translateY(-50%);
             }
 
             .sidebar {
                 width: 240px;
             }
 
-            .sidebar-header .bank-name {
-                font-size: 1.4rem;
+            .sidebar-header {
+                padding: 12px;
             }
 
-            .menu-item a, .dropdown-btn {
+            .sidebar-header .bank-name {
+                font-size: 1.3rem;
+            }
+
+            .menu-item a,
+            .dropdown-btn {
                 padding: 12px 20px;
                 font-size: 0.85rem;
             }
@@ -1310,7 +814,6 @@ function tanggal_indonesia($tanggal) {
                 padding: 10px;
             }
 
-            /* Welcome Banner */
             .welcome-banner {
                 padding: 15px;
                 border-radius: 10px;
@@ -1328,7 +831,6 @@ function tanggal_indonesia($tanggal) {
                 font-size: 0.8rem;
             }
 
-            /* Summary Section */
             .summary-header h2 {
                 font-size: 1.1rem;
             }
@@ -1359,86 +861,6 @@ function tanggal_indonesia($tanggal) {
             .stat-trend {
                 font-size: 0.75rem;
             }
-
-            /* Attendance Container */
-            .attendance-container {
-                padding: 12px;
-            }
-
-            .attendance-title {
-                font-size: 1rem;
-            }
-
-            .success-modal {
-                padding: 20px;
-            }
-
-            .success-icon {
-                font-size: 2.5rem;
-            }
-
-            .success-modal h3 {
-                font-size: 1.15rem;
-            }
-
-            .success-modal p {
-                font-size: 0.85rem;
-            }
-        }
-
-        /* Alert for Blocked Petugas Activities */
-        .alert-blocked {
-            background: linear-gradient(145deg, #fff5f5, #ffe6e6);
-            border-left: 4px solid var(--danger-color);
-            border-radius: 8px;
-            padding: 15px 20px;
-            margin-bottom: 25px;
-            box-shadow: var(--shadow-sm);
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            color: var(--text-primary);
-            font-size: 0.95rem;
-            font-weight: 500;
-            animation: fadeIn 1s ease-in-out;
-        }
-
-        .alert-blocked i {
-            color: var(--danger-color);
-            font-size: 1.5rem;
-        }
-
-        .alert-blocked:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-            transition: var(--transition);
-        }
-
-        /* Responsive adjustments for alert */
-        @media (max-width: 768px) {
-            .alert-blocked {
-                padding: 12px 15px;
-                font-size: 0.9rem;
-                gap: 10px;
-                margin-bottom: 20px;
-            }
-
-            .alert-blocked i {
-                font-size: 1.3rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .alert-blocked {
-                padding: 10px 12px;
-                font-size: 0.85rem;
-                gap: 8px;
-                margin-bottom: 15px;
-            }
-
-            .alert-blocked i {
-                font-size: 1.2rem;
-            }
         }
     </style>
 </head>
@@ -1453,21 +875,21 @@ function tanggal_indonesia($tanggal) {
             <div class="sidebar-menu">
                 <div class="menu-label">Menu Utama</div>
                 <div class="menu-item">
-                    <a href="dashboard.php" class="active">
-                        <i class="fas fa-home"></i> Dashboard
+                    <a href="dashboard.php" class="<?php echo $both_checked_in && !$is_blocked ? 'active' : 'disabled'; ?>" title="<?php echo $both_checked_in && !$is_blocked ? '' : 'Silakan absen terlebih dahulu'; ?>">
+                        <i class="fas fa-home"></i> Beranda
                     </a>
                 </div>
 
                 <div class="menu-item">
-                    <button class="dropdown-btn" id="transaksiDropdown" <?php echo $is_blocked ? 'disabled' : ''; ?>>
+                    <button class="dropdown-btn <?php echo $both_checked_in && !$is_blocked ? '' : 'disabled'; ?>" id="transaksiDropdown">
                         <div class="menu-icon">
                             <i class="fas fa-exchange-alt"></i> Transaksi
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
                     <div class="dropdown-container" id="transaksiDropdownContainer">
-                        <?php if ($is_blocked): ?>
-                            <span style="padding: 10px 20px; color: #ccc;">Transaksi dinonaktifkan oleh admin</span>
+                        <?php if ($is_blocked || !$both_checked_in): ?>
+                            <span style="padding: 10px 20px; color: #ccc;">Transaksi dinonaktifkan</span>
                         <?php else: ?>
                             <a href="setor_tunai.php">
                                 <i class="fas fa-arrow-circle-down"></i> Setor Tunai
@@ -1483,15 +905,15 @@ function tanggal_indonesia($tanggal) {
                 </div>
 
                 <div class="menu-item">
-                    <button class="dropdown-btn" id="rekeningDropdown" <?php echo $is_blocked ? 'disabled' : ''; ?>>
+                    <button class="dropdown-btn <?php echo $both_checked_in && !$is_blocked ? '' : 'disabled'; ?>" id="rekeningDropdown">
                         <div class="menu-icon">
                             <i class="fas fa-users-cog"></i> Rekening
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
                     <div class="dropdown-container" id="rekeningDropdownContainer">
-                        <?php if ($is_blocked): ?>
-                            <span style="padding: 10px 20px; color: #ccc;">Rekening dinonaktifkan oleh admin</span>
+                        <?php if ($is_blocked || !$both_checked_in): ?>
+                            <span style="padding: 10px 20px; color: #ccc;">Rekening dinonaktifkan</span>
                         <?php else: ?>
                             <a href="tambah_nasabah.php">
                                 <i class="fas fa-user-plus"></i> Buka Rekening
@@ -1503,22 +925,16 @@ function tanggal_indonesia($tanggal) {
                     </div>
                 </div>
 
-                <div class="menu-label">Menu Lainnya</div>
                 <div class="menu-item">
-                    <a href="laporan.php" <?php echo $is_blocked ? 'style="pointer-events: none; color: #ccc;"' : ''; ?>>
-                        <i class="fas fa-calendar-day"></i> Cetak Laporan
-                    </a>
-                </div>
-                <div class="menu-item">
-                    <button class="dropdown-btn" id="searchDropdown" <?php echo $is_blocked ? 'disabled' : ''; ?>>
+                    <button class="dropdown-btn <?php echo $both_checked_in && !$is_blocked ? '' : 'disabled'; ?>" id="searchDropdown">
                         <div class="menu-icon">
                             <i class="fas fa-search"></i> Cek Informasi
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
                     <div class="dropdown-container" id="searchDropdownContainer">
-                        <?php if ($is_blocked): ?>
-                            <span style="padding: 10px 20px; color: #ccc;">Cek Informasi dinonaktifkan oleh admin</span>
+                        <?php if ($is_blocked || !$both_checked_in): ?>
+                            <span style="padding: 10px 20px; color: #ccc;">Cek Informasi dinonaktifkan</span>
                         <?php else: ?>
                             <a href="cari_mutasi.php">
                                 <i class="fas fa-list-alt"></i> Cek Mutasi Rekening
@@ -1531,6 +947,18 @@ function tanggal_indonesia($tanggal) {
                             </a>
                         <?php endif; ?>
                     </div>
+                </div>
+
+                <div class="menu-label">Menu Lainnya</div>
+                <div class="menu-item">
+                    <a href="absensi_petugas.php">
+                        <i class="fas fa-user-check"></i> Absen
+                    </a>
+                </div>
+                <div class="menu-item">
+                    <a href="laporan.php" class="<?php echo $both_checked_in && !$is_blocked ? '' : 'disabled'; ?>">
+                        <i class="fas fa-calendar-day"></i> Cetak Laporan
+                    </a>
                 </div>
             </div>
         </div>
@@ -1553,15 +981,30 @@ function tanggal_indonesia($tanggal) {
             <div class="content">
                 <h2>Hai, <?= htmlspecialchars($petugas1_nama) ?> & <?= htmlspecialchars($petugas2_nama) ?>!</h2>
                 <div class="date">
-                    <i class="far fa-calendar-alt"></i> <?= tanggal_indonesia(date('Y-m-d')) ?>
+                    <?= tanggal_indonesia(date('Y-m-d')) ?>
                 </div>
             </div>
         </div>
 
         <?php if ($is_blocked): ?>
-            <div class="alert-blocked">
+            <div class="alert-message">
                 <i class="fas fa-exclamation-triangle"></i> 
                 Semua aktivitas petugas telah diblokir oleh admin. Silakan hubungi admin untuk informasi lebih lanjut.
+            </div>
+        <?php elseif (!$schedule): ?>
+            <div class="alert-message">
+                <i class="fas fa-info-circle"></i> 
+                Belum ada petugas yang bertugas.
+            </div>
+        <?php elseif (!$both_checked_in): ?>
+            <div class="alert-message">
+                <i class="fas fa-exclamation-circle"></i> 
+                Silakan absen terlebih dahulu.
+            </div>
+        <?php elseif (!$both_active): ?>
+            <div class="alert-message">
+                <i class="fas fa-check-circle"></i> 
+                Terimakasih atas kerja keras kamu hari ini, Good Job!
             </div>
         <?php endif; ?>
 
@@ -1628,225 +1071,11 @@ function tanggal_indonesia($tanggal) {
                 </div>
             </div>
         </div>
-
-        <div class="attendance-container">
-            <h3 class="attendance-title">Jadwal & Absensi Petugas Hari Ini</h3>
-            
-            <?php if ($schedule): ?>
-                <table class="attendance-table">
-                    <thead>
-                        <tr>
-                            <th>Petugas</th>
-                            <th>Nama Petugas</th>
-                            <th>Status</th>
-                            <th>Jam Masuk</th>
-                            <th>Jam Keluar</th>
-                            <th>Absensi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Petugas 1 Row -->
-                        <tr>
-                            <td data-label="Petugas">Petugas 1</td>
-                            <td data-label="Nama Petugas"><?= htmlspecialchars($petugas1_nama) ?></td>
-                            <td data-label="Status">
-                                <?php if ($attendance_petugas1): ?>
-                                    <?php if ($attendance_petugas1['petugas1_status'] == 'hadir'): ?>
-                                        <?php if ($attendance_petugas1['waktu_masuk'] && !$attendance_petugas1['waktu_keluar']): ?>
-                                            <span>-</span>
-                                        <?php else: ?>
-                                            <span class="present-status">Hadir</span>
-                                        <?php endif; ?>
-                                    <?php elseif ($attendance_petugas1['petugas1_status'] == 'tidak_hadir'): ?>
-                                        <span class="absent-status">Tidak Hadir</span>
-                                    <?php elseif ($attendance_petugas1['petugas1_status'] == 'sakit'): ?>
-                                        <span class="sakit-status">Sakit</span>
-                                    <?php elseif ($attendance_petugas1['petugas1_status'] == 'izin'): ?>
-                                        <span class="izin-status">Izin</span>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <span>-</span>
-                                <?php endif; ?>
-                            </td>
-                            <td data-label="Jam Masuk">
-                                <?php if ($attendance_petugas1 && $attendance_petugas1['waktu_masuk'] && $attendance_petugas1['petugas1_status'] == 'hadir'): ?>
-                                    <?= date('H:i', strtotime($attendance_petugas1['waktu_masuk'])) ?>
-                                <?php else: ?>
-                                    -
-                                <?php endif; ?>
-                            </td>
-                            <td data-label="Jam Keluar">
-                                <?php if ($attendance_petugas1 && $attendance_petugas1['waktu_keluar'] && $attendance_petugas1['petugas1_status'] == 'hadir'): ?>
-                                    <?= date('H:i', strtotime($attendance_petugas1['waktu_keluar'])) ?>
-                                <?php else: ?>
-                                    -
-                                <?php endif; ?>
-                            </td>
-                            <td data-label="Absensi">
-                                <?php if (!$is_blocked): ?>
-                                    <?php if (!$attendance_petugas1): ?>
-                                        <button type="button" class="btn" onclick="showAttendanceModal('check_in_petugas1', 'Absen Masuk Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
-                                            Hadir
-                                        </button>
-                                        <button type="button" class="btn btn-danger" onclick="showAttendanceModal('absent_petugas1', 'Tandai Tidak Hadir Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
-                                            Tidak Hadir
-                                        </button>
-                                        <button type="button" class="btn btn-warning" onclick="showAttendanceModal('sakit_petugas1', 'Tandai Sakit Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
-                                            Sakit
-                                        </button>
-                                        <button type="button" class="btn btn-info" onclick="showAttendanceModal('izin_petugas1', 'Tandai Izin Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
-                                            Izin
-                                        </button>
-                                    <?php elseif ($attendance_petugas1 && !$attendance_petugas1['waktu_keluar'] && $attendance_petugas1['petugas1_status'] == 'hadir'): ?>
-                                        <button type="button" class="btn" onclick="showAttendanceModal('check_out_petugas1', 'Absen Pulang Petugas 1', '<?= htmlspecialchars($petugas1_nama) ?>')">
-                                            <i class="fas fa-sign-out-alt"></i> Absen Pulang
-                                        </button>
-                                    <?php else: ?>
-                                        <span>Selesai</span>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <span style="color: #dc3545;">Absensi dinonaktifkan</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        
-                        <!-- Petugas 2 Row -->
-                        <tr>
-                            <td data-label="Petugas">Petugas 2</td>
-                            <td data-label="Nama Petugas"><?= htmlspecialchars($petugas2_nama) ?></td>
-                            <td data-label="Status">
-                                <?php if ($attendance_petugas2): ?>
-                                    <?php if ($attendance_petugas2['petugas2_status'] == 'hadir'): ?>
-                                        <?php if ($attendance_petugas2['waktu_masuk'] && !$attendance_petugas2['waktu_keluar']): ?>
-                                            <span>-</span>
-                                        <?php else: ?>
-                                            <span class="present-status">Hadir</span>
-                                        <?php endif; ?>
-                                    <?php elseif ($attendance_petugas2['petugas2_status'] == 'tidak_hadir'): ?>
-                                        <span class="absent-status">Tidak Hadir</span>
-                                    <?php elseif ($attendance_petugas2['petugas2_status'] == 'sakit'): ?>
-                                        <span class="sakit-status">Sakit</span>
-                                    <?php elseif ($attendance_petugas2['petugas2_status'] == 'izin'): ?>
-                                        <span class="izin-status">Izin</span>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <span>-</span>
-                                <?php endif; ?>
-                            </td>
-                            <td data-label="Jam Masuk">
-                                <?php if ($attendance_petugas2 && $attendance_petugas2['waktu_masuk'] && $attendance_petugas2['petugas2_status'] == 'hadir'): ?>
-                                    <?= date('H:i', strtotime($attendance_petugas2['waktu_masuk'])) ?>
-                                <?php else: ?>
-                                    -
-                                <?php endif; ?>
-                            </td>
-                            <td data-label="Jam Keluar">
-                                <?php if ($attendance_petugas2 && $attendance_petugas2['waktu_keluar'] && $attendance_petugas2['petugas2_status'] == 'hadir'): ?>
-                                    <?= date('H:i', strtotime($attendance_petugas2['waktu_keluar'])) ?>
-                                <?php else: ?>
-                                    -
-                                <?php endif; ?>
-                            </td>
-                            <td data-label="Absensi">
-                                <?php if (!$is_blocked): ?>
-                                    <?php if (!$attendance_petugas2): ?>
-                                        <button type="button" class="btn" onclick="showAttendanceModal('check_in_petugas2', 'Absen Masuk Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
-                                            Hadir
-                                        </button>
-                                        <button type="button" class="btn btn-danger" onclick="showAttendanceModal('absent_petugas2', 'Tandai Tidak Hadir Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
-                                            Tidak Hadir
-                                        </button>
-                                        <button type="button" class="btn btn-warning" onclick="showAttendanceModal('sakit_petugas2', 'Tandai Sakit Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
-                                            Sakit
-                                        </button>
-                                        <button type="button" class="btn btn-info" onclick="showAttendanceModal('izin_petugas2', 'Tandai Izin Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
-                                            Izin
-                                        </button>
-                                    <?php elseif ($attendance_petugas2 && !$attendance_petugas2['waktu_keluar'] && $attendance_petugas2['petugas2_status'] == 'hadir'): ?>
-                                        <button type="button" class="btn" onclick="showAttendanceModal('check_out_petugas2', 'Absen Pulang Petugas 2', '<?= htmlspecialchars($petugas2_nama) ?>')">
-                                            <i class="fas fa-sign-out-alt"></i> Absen Pulang
-                                        </button>
-                                    <?php else: ?>
-                                        <span>Selesai</span>
-                                    <?php endif; ?>
-                                <?php else: ?>
-                                    <span style="color: #dc3545;">Absensi dinonaktifkan</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            <?php else: ?>
-                <div class="empty-state">
-                    <i class="fas fa-info-circle"></i> Belum ada jadwal petugas untuk hari ini.
-                </div>
-            <?php endif; ?>
-        </div>
-
-        <!-- Success Modal for Attendance -->
-        <?php if (isset($_GET['attendance_success'])): ?>
-            <div class="success-overlay" id="attendanceSuccessModal">
-                <div class="success-modal">
-                    <div class="success-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <h3>BERHASIL</h3>
-                    <p><?= htmlspecialchars(urldecode($_GET['attendance_success'])) ?></p>
-                </div>
-            </div>
-        <?php endif; ?>
-
-        <!-- Confirmation Modal for Attendance -->
-        <div class="success-overlay" id="attendanceConfirmModal" style="display: none;">
-            <div class="success-modal">
-                <div class="success-icon">
-                </div>
-                <h3 id="modalTitle">Konfirmasi Absensi</h3>
-                <div class="modal-content-confirm">
-                    <div class="modal-row">
-                        <span class="modal-label">Nama Petugas</span>
-                        <span class="modal-value" id="modalPetugasName"></span>
-                    </div>
-                    <div class="modal-row">
-                        <span class="modal-label">Aksi</span>
-                        <span class="modal-value" id="modalAction"></span>
-                    </div>
-                </div>
-                <form action="" method="POST" id="attendanceConfirmForm">
-                    <input type="hidden" name="action" id="modalActionInput">
-                    <div class="modal-buttons">
-                        <button type="submit" class="btn btn-confirm" id="confirm-btn">
-                            <i class="fas fa-check"></i> Konfirmasi
-                        </button>
-                        <button type="button" class="btn btn-cancel" onclick="hideAttendanceModal()">
-                            <i class="fas fa-times"></i> Batal
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Mencegah Pinch-to-Zoom
-            document.addEventListener('touchmove', function(e) {
-                if (e.scale !== 1) {
-                    e.preventDefault();
-                }
-            }, { passive: false });
-
-            // Mencegah Double-Tap Zoom
-            let lastTouchEnd = 0;
-            document.addEventListener('touchend', function(e) {
-                const now = Date.now();
-                if (now - lastTouchEnd <= 300) {
-                    e.preventDefault();
-                }
-                lastTouchEnd = now;
-            }, { passive: false });
-
-            // Mencegah Zoom melalui Keyboard (Ctrl + +/-, Ctrl + Scroll)
+            // Prevent Pinch-to-Zoom
             document.addEventListener('wheel', function(e) {
                 if (e.ctrlKey) {
                     e.preventDefault();
@@ -1857,19 +1086,6 @@ function tanggal_indonesia($tanggal) {
                 if (e.ctrlKey && (e.key === '+' || e.key === '-' || e.key === '=')) {
                     e.preventDefault();
                 }
-            });
-
-            // Mencegah Zoom melalui Gesture Lain
-            document.addEventListener('gesturestart', function(e) {
-                e.preventDefault();
-            });
-
-            document.addEventListener('gesturechange', function(e) {
-                e.preventDefault();
-            });
-
-            document.addEventListener('gestureend', function(e) {
-                e.preventDefault();
             });
 
             // Sidebar toggle for mobile
@@ -1894,7 +1110,7 @@ function tanggal_indonesia($tanggal) {
             const dropdownButtons = document.querySelectorAll('.dropdown-btn');
             dropdownButtons.forEach(button => {
                 button.addEventListener('click', function(e) {
-                    if (this.disabled) return; // Prevent action if disabled
+                    if (this.classList.contains('disabled')) return;
                     e.stopPropagation();
                     const dropdownContainer = this.nextElementSibling;
                     const isActive = this.classList.contains('active');
@@ -1922,29 +1138,6 @@ function tanggal_indonesia($tanggal) {
                 });
             });
 
-            // Success modal handling (no confetti)
-            const successModal = document.querySelector('#attendanceSuccessModal .success-modal');
-            if (successModal) {
-                setTimeout(() => {
-                    const overlay = successModal.closest('.success-overlay');
-                    overlay.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                    setTimeout(() => {
-                        overlay.remove();
-                        window.location.href = 'dashboard.php';
-                    }, 500);
-                }, 2000);
-            }
-
-            // Confirm form handling
-            const confirmForm = document.getElementById('attendanceConfirmForm');
-            const confirmBtn = document.getElementById('confirm-btn');
-            if (confirmForm && confirmBtn) {
-                confirmForm.addEventListener('submit', function() {
-                    confirmBtn.classList.add('loading');
-                    confirmBtn.innerHTML = '<i class="fas fa-spinner"></i> Menyimpan...';
-                });
-            }
-
             // Animated Counter for Numbers
             const counters = document.querySelectorAll('.counter');
             counters.forEach(counter => {
@@ -1952,13 +1145,13 @@ function tanggal_indonesia($tanggal) {
                     const target = +counter.getAttribute('data-target');
                     const prefix = counter.getAttribute('data-prefix') || '';
                     const count = +counter.innerText.replace(/[^0-9]/g, '') || 0;
-                    const increment = target / 100; // Adjust speed by dividing target
+                    const increment = target / 100;
 
                     if (count < target) {
                         let newCount = Math.ceil(count + increment);
                         if (newCount > target) newCount = target;
                         counter.innerText = prefix + newCount.toLocaleString('id-ID');
-                        setTimeout(updateCount, 20); // Adjust speed of animation
+                        setTimeout(updateCount, 20);
                     } else {
                         counter.innerText = prefix + target.toLocaleString('id-ID');
                     }
@@ -1966,19 +1159,6 @@ function tanggal_indonesia($tanggal) {
                 updateCount();
             });
         });
-
-        // Attendance Modal Functions
-        function showAttendanceModal(action, title, petugasName) {
-            document.getElementById('modalTitle').textContent = title;
-            document.getElementById('modalPetugasName').textContent = petugasName;
-            document.getElementById('modalAction').textContent = title;
-            document.getElementById('modalActionInput').name = action;
-            document.getElementById('attendanceConfirmModal').style.display = 'flex';
-        }
-
-        function hideAttendanceModal() {
-            document.getElementById('attendanceConfirmModal').style.display = 'none';
-        }
     </script>
 </body>
 </html>

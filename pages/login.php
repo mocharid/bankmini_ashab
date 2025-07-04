@@ -103,7 +103,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
 <html lang="id">
 <head>
     <title>Login - SCHOBANK SYSTEM</title>
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -470,7 +470,7 @@ unset($_SESSION['error_message'], $_SESSION['username'], $_SESSION['password'], 
             <i class="fas fa-times"></i>
         </a>
         <div class="logo-container">
-            <img src="/bankmini/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
+            <img src="/schobank/assets/images/lbank.png" alt="SCHOBANK Logo" class="logo">
             <div class="bank-name">SCHOBANK</div>
         </div>
 

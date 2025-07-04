@@ -20,11 +20,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if ($action === 'cek_rekening') {
         $query = "
             SELECT r.no_rekening, u.nama, u.email, u.id as user_id, r.id as rekening_id, r.saldo, 
-                   j.nama_jurusan AS jurusan, k.nama_kelas AS kelas, u.is_frozen
+                   j.nama_jurusan AS jurusan, 
+                   CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas, 
+                   u.is_frozen
             FROM rekening r 
             JOIN users u ON r.user_id = u.id 
             LEFT JOIN jurusan j ON u.jurusan_id = j.id
             LEFT JOIN kelas k ON u.kelas_id = k.id
+            LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
             WHERE r.no_rekening = ? AND u.role = 'siswa'
         ";
         $stmt = $conn->prepare($query);
@@ -75,11 +78,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             // 2. Validasi rekening siswa dan status frozen
             $query = "
-                SELECT r.id, r.user_id, r.saldo, u.nama, u.email, j.nama_jurusan AS jurusan, k.nama_kelas AS kelas, u.is_frozen
+                SELECT r.id, r.user_id, r.saldo, u.nama, u.email, 
+                       j.nama_jurusan AS jurusan, 
+                       CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas, 
+                       u.is_frozen
                 FROM rekening r 
                 JOIN users u ON r.user_id = u.id 
                 LEFT JOIN jurusan j ON u.jurusan_id = j.id
                 LEFT JOIN kelas k ON u.kelas_id = k.id
+                LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE r.no_rekening = ? AND u.role = 'siswa'
             ";
             $stmt = $conn->prepare($query);
@@ -169,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             // 6. Catat notifikasi
-            $message = "Transaksi penyetoran saldo sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh admin.";
+            $message = "Asikkk! Transaksi penyetoran saldo sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh admin. Cek saldo Mu jangan lupa ya!";
             $query_notifikasi = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
             $stmt_notifikasi = $conn->prepare($query_notifikasi);
             if (!$stmt_notifikasi) {

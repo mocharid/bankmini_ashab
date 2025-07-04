@@ -9,25 +9,25 @@ use PHPMailer\PHPMailer\Exception;
 // Set timezone to WIB
 date_default_timezone_set('Asia/Jakarta');
 
-// Start session if not active
+// Start session jika belum aktif
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Restrict access to petugas only
+// Batasi akses hanya untuk petugas
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'petugas') {
     header('Location: ../../pages/login.php?error=' . urlencode('Silakan login sebagai petugas terlebih dahulu!'));
     exit();
 }
 
-// Enable debugging
+// Aktifkan debugging
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 ini_set('log_errors', 1);
 ini_set('error_log', 'C:/laragon/www/schobank/logs/error.log');
 
-// Fetch jurusan data
+// Ambil data jurusan
 $query_jurusan = "SELECT * FROM jurusan";
 $result_jurusan = $conn->query($query_jurusan);
 if (!$result_jurusan) {
@@ -35,7 +35,7 @@ if (!$result_jurusan) {
     die("Terjadi kesalahan saat mengambil data jurusan.");
 }
 
-// Fetch tingkatan kelas data
+// Ambil data tingkatan kelas
 $query_tingkatan = "SELECT * FROM tingkatan_kelas";
 $result_tingkatan = $conn->query($query_tingkatan);
 if (!$result_tingkatan) {
@@ -43,13 +43,13 @@ if (!$result_tingkatan) {
     die("Terjadi kesalahan saat mengambil data tingkatan kelas.");
 }
 
-// Initialize variables
+// Inisialisasi variabel
 $showConfirmation = false;
 $formData = [];
 $show_success_popup = false;
 $errors = [];
 
-// Function to generate unique username
+// Fungsi untuk menghasilkan username unik
 function generateUsername($nama, $conn) {
     $base_username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nama));
     $username = $base_username;
@@ -74,12 +74,12 @@ function generateUsername($nama, $conn) {
     return $username;
 }
 
-// Function to check unique field
+// Fungsi untuk memeriksa keunikan field
 function checkUniqueField($field, $value, $conn, $table = 'users') {
     $query = "SELECT id FROM $table WHERE $field = ?";
     $stmt = $conn->prepare($query);
     if (!$stmt) {
-        error_log("Error preparing unique check for $field: " . $conn->error);
+        error_log("Error preparing unique check untuk $field: " . $conn->error);
         return "Terjadi kesalahan server.";
     }
     $stmt->bind_param("s", $value);
@@ -90,7 +90,7 @@ function checkUniqueField($field, $value, $conn, $table = 'users') {
     return $exists ? ucfirst($field) . " sudah digunakan!" : null;
 }
 
-// Function to send WhatsApp message using Fonnte API
+// Fungsi untuk mengirim pesan WhatsApp menggunakan Fonnte API
 function sendWhatsAppMessage($phone_number, $message) {
     $curl = curl_init();
     
@@ -114,7 +114,7 @@ function sendWhatsAppMessage($phone_number, $message) {
         CURLOPT_CUSTOMREQUEST => 'POST',
         CURLOPT_POSTFIELDS => $post_fields,
         CURLOPT_HTTPHEADER => [
-            'Authorization: dCjq3fJVf9p2DAfVDVED'
+            'Authorization: dCwg3f6Vfgp2rAfVDved'
         ],
     ]);
     
@@ -124,16 +124,16 @@ function sendWhatsAppMessage($phone_number, $message) {
     curl_close($curl);
     
     if ($http_code == 200) {
-        error_log("WhatsApp message sent successfully to: $phone_number");
+        error_log("Pesan WhatsApp berhasil dikirim ke: $phone_number");
         return true;
     } else {
-        error_log("Failed to send WhatsApp message to $phone_number: HTTP $http_code, Response: $response, Error: $curl_error");
+        error_log("Gagal mengirim pesan WhatsApp ke: $phone_number: HTTP $http_code, Response: $response, Error: $curl_error");
         return false;
     }
 }
 
-// Function to send email confirmation
-function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $tingkatan_name, $kelas_name, $no_wa = '') {
+// Fungsi untuk mengirim email konfirmasi
+function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_full_name, $no_wa = '') {
     try {
         $mail = new PHPMailer(true);
         $mail->isSMTP();
@@ -149,11 +149,11 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
         $mail->addAddress($email, $nama);
         $mail->addReplyTo('no-reply@schobank.com', 'No Reply');
         
-        // Add unique Message-ID
+        // Tambahkan Message-ID unik
         $unique_id = uniqid('schobank_', true) . '@schobank.com';
         $mail->MessageID = '<' . $unique_id . '>';
         
-        // Add custom headers
+        // Tambahkan header kustom
         $mail->addCustomHeader('X-Mailer', 'SCHOBANK-System-v1.0');
         $mail->addCustomHeader('X-Priority', '1');
         $mail->addCustomHeader('Importance', 'High');
@@ -161,7 +161,7 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
         $mail->isHTML(true);
         $mail->Subject = '[SCHOBANK] Pembukaan Rekening Berhasil - ' . date('Y-m-d H:i:s') . ' WIB';
 
-        // Generate dynamic login link
+        // Generate link login dinamis
         $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
         $host = $_SERVER['HTTP_HOST'];
         $path = dirname($_SERVER['PHP_SELF'], 2);
@@ -180,9 +180,9 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
 
         $banner_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/buka.png';
         if (file_exists($banner_path)) {
-            $mail->addEmbeddedImage($banner_path, 'emailbanner', 'buka_Rekening.png');
+            $mail->addEmbeddedImage($banner_path, 'emailbanner', 'buka_rekening.png');
         } else {
-            error_log("Banner image not found at: $banner_path");
+            error_log("Banner image tidak ditemukan di: $banner_path");
         }
 
         $emailBody = "
@@ -217,12 +217,8 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
                             <td style='padding: 8px 0; text-align: right;'>{$jurusan_name}</td>
                         </tr>
                         <tr>
-                            <td style='padding: 8px 0; font-weight: 500;'>Tingkatan Kelas</td>
-                            <td style='padding: 8px 0; text-align: right;'>{$tingkatan_name}</td>
-                        </tr>
-                        <tr>
                             <td style='padding: 8px 0; font-weight: 500;'>Kelas</td>
-                            <td style='padding: 8px 0; text-align: right;'>{$kelas_name}</td>
+                            <td style='padding: 8px 0; text-align: right;'>{$kelas_full_name}</td>
                         </tr>
                         <tr>
                             <td style='padding: 8px 0; font-weight: 500;'>No. WhatsApp</td>
@@ -271,8 +267,7 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
             'Username' => $username,
             'Password' => $password,
             'Jurusan' => $jurusan_name,
-            'Tingkatan Kelas' => $tingkatan_name,
-            'Kelas' => $kelas_name,
+            'Kelas' => $kelas_full_name,
             'No. WhatsApp' => ($no_wa ? $no_wa : '-'),
             'Tanggal Pembukaan' => $tanggal_pembukaan . ' WIB',
             'Saldo Awal' => 'Rp 0'
@@ -314,8 +309,8 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
     }
 }
 
-// Function to send notifications
-function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $password, $jurusan_name, $tingkatan_name, $kelas_name) {
+// Fungsi untuk mengirim notifikasi
+function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_full_name) {
     $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
     $host = $_SERVER['HTTP_HOST'];
     $path = dirname($_SERVER['PHP_SELF'], 2);
@@ -325,7 +320,7 @@ function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $pass
     $max_duration = 0;
 
     if (!empty($email)) {
-        $email_result = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $tingkatan_name, $kelas_name, $no_wa);
+        $email_result = sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_full_name, $no_wa);
         if (!$email_result['success']) {
             error_log("Peringatan: Gagal mengirim email ke: $email, tetapi data disimpan.");
             $success = false;
@@ -342,8 +337,7 @@ function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $pass
                       "Username: {$username}\n" .
                       "Password: {$password}\n" .
                       "Jurusan: {$jurusan_name}\n" .
-                      "Tingkatan Kelas: {$tingkatan_name}\n" .
-                      "Kelas: {$kelas_name}\n\n" .
+                      "Kelas: {$kelas_full_name}\n\n" .
                       "Silakan login di {$login_link} untuk mengakses akun Anda. Segera ubah kata sandi dan atur PIN transaksi.\n\n" .
                       "Hubungi kami di 081234567890 atau schobanksystem@gmail.com jika perlu bantuan.\n\n" .
                       "Hormat kami,\nTim SCHOBANK";
@@ -364,13 +358,13 @@ function sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $pass
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     error_log("Data POST diterima: " . print_r($_POST, true));
 
-    // Handle cancel button
+    // Handle tombol batal
     if (isset($_POST['cancel'])) {
         header('Location: tambah_nasabah.php');
         exit();
     }
 
-    // Handle confirmation
+    // Handle konfirmasi
     if (isset($_POST['confirmed'])) {
         $nama = trim($_POST['nama'] ?? '');
         $username = trim($_POST['username'] ?? '');
@@ -382,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $email = trim($_POST['email'] ?? '');
         $no_wa = trim($_POST['no_wa'] ?? '');
 
-        // Validate input
+        // Validasi input
         if (empty($nama) || strlen($nama) < 3) {
             $errors['nama'] = "Nama harus minimal 3 karakter!";
         }
@@ -392,8 +386,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors['email'] = "Format email tidak valid!";
         }
-        if (!empty($no_wa) && !preg_match('/^\+?\d{10,15}$/', $no_wa)) {
-            $errors['no_wa'] = "Nomor WhatsApp tidak valid!";
+        if (!empty($no_wa) && !preg_match('/^08\d{8,13}$/', $no_wa)) {
+            $errors['no_wa'] = "Nomor WhatsApp harus dimulai dengan 08 dan terdiri dari 10-15 digit!";
         }
         if ($jurusan_id <= 0) {
             $errors['jurusan_id'] = "Jurusan wajib dipilih!";
@@ -411,7 +405,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $errors['no_rekening'] = "Nomor rekening tidak valid!";
         }
 
-        // Validate unique fields
+        // Validasi field unik
         if (!$errors) {
             if (!empty($email) && ($error = checkUniqueField('email', $email, $conn))) {
                 $errors['email'] = $error;
@@ -419,7 +413,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             if (!empty($no_wa) && ($error = checkUniqueField('no_wa', $no_wa, $conn))) {
                 $errors['no_wa'] = $error;
             }
-            if ($error = checkUniqueField('no_rekening', $no_rekening, $conn, 'rekening')) {
+            $max_attempts = 5;
+            $attempt = 0;
+            while ($error = checkUniqueField('no_rekening', $no_rekening, $conn, 'rekening')) {
+                if (++$attempt >= $max_attempts) {
+                    throw new Exception("Gagal menghasilkan nomor rekening unik setelah $max_attempts percobaan.");
+                }
                 $no_rekening = 'REK' . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
                 error_log("No rekening duplikat, generate ulang: $no_rekening");
             }
@@ -429,8 +428,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $conn->begin_transaction();
             try {
                 // Insert user
-                $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id, email, no_wa) 
-                          VALUES (?, SHA2(?, 256), 'siswa', ?, ?, ?, ?, ?)";
+                $query = "INSERT INTO users (username, password, role, nama, jurusan_id, kelas_id, email, no_wa) VALUES (?, SHA2(?, 256), 'siswa', ?, ?, ?, ?, ?)";
                 $stmt = $conn->prepare($query);
                 if (!$stmt) {
                     error_log("Error preparing user insert: " . $conn->error);
@@ -458,7 +456,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
                 $stmt_rekening->close();
 
-                // Fetch jurusan, tingkatan kelas, and kelas names
+                // Ambil nama jurusan dan kelas lengkap
                 $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
                 $stmt_jurusan = $conn->prepare($query_jurusan_name);
                 if (!$stmt_jurusan) {
@@ -504,8 +502,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $kelas_name = $result_kelas_name->fetch_assoc()['nama_kelas'];
                 $stmt_kelas->close();
 
-                // Send notifications
-                $notification_result = sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $password, $jurusan_name, $tingkatan_name, $kelas_name);
+                $kelas_full_name = $tingkatan_name . ' ' . $kelas_name;
+
+                // Kirim notifikasi
+                $notification_result = sendNotifications($email, $no_wa, $nama, $username, $no_rekening, $password, $jurusan_name, $kelas_full_name);
                 if (!$notification_result['success']) {
                     error_log("Peringatan: Gagal mengirim notifikasi, tetapi data disimpan.");
                 }
@@ -513,7 +513,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $conn->commit();
                 $show_success_popup = true;
                 $notification_duration = $notification_result['duration'];
-                // Redirect after 5 seconds (3s popup + 2s buffer)
+                // Redirect setelah 5 detik (3s popup + 2s buffer)
                 header("refresh:5;url=tambah_nasabah.php");
             } catch (Exception $e) {
                 $conn->rollback();
@@ -522,7 +522,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
         }
     } else {
-        // Handle initial form submission
+        // Handle pengiriman form awal
         $nama = trim($_POST['nama'] ?? '');
         $email = trim($_POST['email'] ?? '');
         $no_wa = trim($_POST['no_wa'] ?? '');
@@ -530,7 +530,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $tingkatan_kelas_id = (int)($_POST['tingkatan_kelas_id'] ?? 0);
         $kelas_id = (int)($_POST['kelas_id'] ?? 0);
 
-        // Validate input
+        // Validasi input
         if (empty($nama) || strlen($nama) < 3) {
             $errors['nama'] = "Nama harus minimal 3 karakter!";
         }
@@ -540,8 +540,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors['email'] = "Format email tidak valid!";
         }
-        if (!empty($no_wa) && !preg_match('/^\+?\d{10,15}$/', $no_wa)) {
-            $errors['no_wa'] = "Nomor WhatsApp tidak valid!";
+        if (!empty($no_wa) && !preg_match('/^08\d{8,13}$/', $no_wa)) {
+            $errors['no_wa'] = "Nomor WhatsApp harus dimulai dengan 08 dan terdiri dari 10-15 digit!";
         }
         if ($jurusan_id <= 0) {
             $errors['jurusan_id'] = "Jurusan wajib dipilih!";
@@ -553,7 +553,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $errors['kelas_id'] = "Kelas wajib dipilih!";
         }
 
-        // Validate unique fields
+        // Validasi field unik
         if (!$errors) {
             if (!empty($email) && ($error = checkUniqueField('email', $email, $conn))) {
                 $errors['email'] = $error;
@@ -567,12 +567,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $username = generateUsername($nama, $conn);
             $no_rekening = 'REK' . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
 
-            if ($error = checkUniqueField('no_rekening', $no_rekening, $conn, 'rekening')) {
+            $max_attempts = 5;
+            $attempt = 0;
+            while ($error = checkUniqueField('no_rekening', $no_rekening, $conn, 'rekening')) {
+                if (++$attempt >= $max_attempts) {
+                    throw new Exception("Gagal menghasilkan nomor rekening unik setelah $max_attempts percobaan.");
+                }
                 $no_rekening = 'REK' . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
                 error_log("No rekening duplikat (initial), generate ulang: $no_rekening");
             }
 
-            // Fetch jurusan, tingkatan kelas, and kelas names
+            // Ambil nama jurusan dan kelas lengkap
             $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
             $stmt_jurusan = $conn->prepare($query_jurusan_name);
             if (!$stmt_jurusan) {
@@ -615,6 +620,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 $kelas_name = $result_kelas_name->num_rows > 0 ? $result_kelas_name->fetch_assoc()['nama_kelas'] : '';
                                 $stmt_kelas->close();
 
+                                $kelas_full_name = $tingkatan_name . ' ' . $kelas_name;
+
                                 $formData = [
                                     'nama' => $nama,
                                     'username' => $username,
@@ -626,8 +633,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                     'email' => $email,
                                     'no_wa' => $no_wa,
                                     'jurusan_name' => $jurusan_name,
-                                    'tingkatan_name' => $tingkatan_name,
-                                    'kelas_name' => $kelas_name
+                                    'kelas_full_name' => $kelas_full_name
                                 ];
                                 $showConfirmation = true;
                             }
@@ -638,7 +644,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
     }
 }
-// Function to mask account number
+
+// Fungsi untuk menyembunyikan nomor rekening
 function maskNoRekening($no_rekening) {
     if (strlen($no_rekening) >= 9) {
         return substr($no_rekening, 0, 4) . '****' . substr($no_rekening, -2);
@@ -656,7 +663,7 @@ function maskNoRekening($no_rekening) {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <style>
+        <style>
         :root {
             --primary-color: #1e3a8a;
             --primary-dark: #1e1b4b;
@@ -1234,7 +1241,7 @@ function maskNoRekening($no_rekening) {
                 padding: 20px;
             }
 
-            input, select pasaj {
+            input, select {
                 min-height: 40px;
             }
 
@@ -1311,7 +1318,7 @@ function maskNoRekening($no_rekening) {
                         <input type="email" id="email" name="email" 
                                value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>" 
                                aria-invalid="<?php echo isset($errors['email']) ? 'true' : 'false'; ?>">
-                        <span class="error-message <?php echo isset($errors['email']) ? 'show' : ''; ?>">
+                        <span class="error-message <?php echo isset($errors['email']) ? 'show' : ''; ?>" id="email-error">
                             <?php echo htmlspecialchars($errors['email'] ?? ''); ?>
                         </span>
                         <span class="tooltip">Masukkan email yang valid</span>
@@ -1319,16 +1326,16 @@ function maskNoRekening($no_rekening) {
 
                     <div class="form-group">
                         <label for="no_wa">Nomor WhatsApp (Bisa Isi Email/Whatsapp)</label>
-                        <input type="tel" id="no_wa" name="no_wa" 
+                        <input type="tel" id="no_wa" name="no_wa" inputmode="numeric" pattern="08[0-9]{8,13}" 
                                value="<?php echo htmlspecialchars($_POST['no_wa'] ?? ''); ?>" 
                                aria-invalid="<?php echo isset($errors['no_wa']) ? 'true' : 'false'; ?>">
-                        <span class="error-message <?php echo isset($errors['no_wa']) ? 'show' : ''; ?>">
+                        <span class="error-message <?php echo isset($errors['no_wa']) ? 'show' : ''; ?>" id="no_wa-error">
                             <?php echo htmlspecialchars($errors['no_wa'] ?? ''); ?>
                         </span>
-                        <span class="tooltip">Masukkan nomor WhatsApp (contoh: +6281234567890)</span>
+                        <span class="tooltip">Masukkan nomor WhatsApp (contoh: 081234567890)</span>
                     </div>
 
-                    <span class="error-message <?php echo isset($errors['contact']) ? 'show' : ''; ?>">
+                    <span class="error-message <?php echo isset($errors['contact']) ? 'show' : ''; ?>" id="contact-error">
                         <?php echo htmlspecialchars($errors['contact'] ?? ''); ?>
                     </span>
                 </div>
@@ -1363,7 +1370,7 @@ function maskNoRekening($no_rekening) {
                         <label for="tingkatan_kelas_id">Tingkatan Kelas</label>
                         <select id="tingkatan_kelas_id" name="tingkatan_kelas_id" required onchange="updateKelas()" 
                                 aria-invalid="<?php echo isset($errors['tingkatan_kelas_id']) ? 'true' : 'false'; ?>">
-                            <option value="">Pilih Tingkatan Kelas</option>
+                            <option value="">Pilih Tingkatan</option>
                             <?php 
                             if ($result_tingkatan && $result_tingkatan->num_rows > 0) {
                                 $result_tingkatan->data_seek(0);
@@ -1375,7 +1382,7 @@ function maskNoRekening($no_rekening) {
                                 </option>
                             <?php endwhile; ?>
                             <?php } else { ?>
-                                <option value="">Tidak ada tingkatan kelas tersedia</option>
+                                <option value="">Tidak ada tingkatan tersedia</option>
                             <?php } ?>
                         </select>
                         <span class="error-message <?php echo isset($errors['tingkatan_kelas_id']) ? 'show' : ''; ?>">
@@ -1390,7 +1397,7 @@ function maskNoRekening($no_rekening) {
                                 aria-invalid="<?php echo isset($errors['kelas_id']) ? 'true' : 'false'; ?>">
                             <option value="">Pilih Kelas</option>
                         </select>
-                        <span class="error-message" id="kelas_id-error">
+                        <span class="kelas_id-error error-message" id="kelas_id-error">
                             <?php echo htmlspecialchars($errors['kelas_id'] ?? ''); ?>
                         </span>
                         <span class="tooltip">Pilih kelas nasabah</span>
@@ -1407,61 +1414,59 @@ function maskNoRekening($no_rekening) {
     </div>
 <?php endif; ?>
 
-
-        <?php if ($showConfirmation && empty($errors['general'])): ?>
-            <div class="modal-overlay active" id="confirmation-popup">
-                <div class="confirm-modal">
-                    <div class="confirm-icon"><i class="fas fa-user-check"></i></div>
-                    <h3>Konfirmasi Data Nasabah</h3>
-                    <div class="modal-content">
-                        <div class="modal-row"><span class="modal-label">Nama:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['nama']); ?></span></div>
-                        <div class="modal-row"><span class="modal-label">Email:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['email'] ?: '-'); ?></span></div>
-                        <div class="modal-row"><span class="modal-label">WhatsApp:</span> <span class="modal-value"><?php echo $formData['no_wa'] ? htmlspecialchars($formData['no_wa']) : '-'; ?></span></div>
-                        <div class="modal-row"><span class="modal-label">Jurusan:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['jurusan_name']); ?></span></div>
-                        <div class="modal-row"><span class="modal-label">Tingkatan:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['tingkatan_name']); ?></span></div>
-                        <div class="modal-row"><span class="modal-label">Kelas:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['kelas_name']); ?></span></div>
-                    </div>
-                    <p>Username, kata sandi, dan nomor rekening akan dikirim melalui email/WhatsApp terdaftar setelah konfirmasi.</p>
-                    <form action="" method="POST" id="confirm-form">
-                        <input type="hidden" name="nama" value="<?php echo htmlspecialchars($formData['nama']); ?>">
-                        <input type="hidden" name="username" value="<?php echo htmlspecialchars($formData['username']); ?>">
-                        <input type="hidden" name="jurusan_id" value="<?php echo htmlspecialchars($formData['jurusan_id']); ?>">
-                        <input type="hidden" name="tingkatan_kelas_id" value="<?php echo htmlspecialchars($formData['tingkatan_kelas_id']); ?>">
-                        <input type="hidden" name="kelas_id" value="<?php echo htmlspecialchars($formData['kelas_id']); ?>">
-                        <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($formData['no_rekening']); ?>">
-                        <input type="hidden" name="email" value="<?php echo htmlspecialchars($formData['email']); ?>">
-                        <input type="hidden" name="no_wa" value="<?php echo htmlspecialchars($formData['no_wa']); ?>">
-                        <input type="hidden" name="confirmed" value="1">
-                        <div class="modal-buttons">
-                            <button type="submit" name="confirm" id="confirm-btn" class="btn btn-confirm"> <span class="btn-content">Konfirmasi</span></button>
-                            <button type="submit" name="cancel" id="cancel-btn" class="btn btn-cancel"> <span class="btn-content">Batal</span></button>
-                        </div>
-                    </form>
-                </div>
+<?php if ($showConfirmation && empty($errors['general'])): ?>
+    <div class="modal-overlay active" id="confirmation-popup">
+        <div class="confirm-modal">
+            <div class="confirm-icon"><i class="fas fa-user-check"></i></div>
+            <h3>Konfirmasi Data Nasabah</h3>
+            <div class="modal-content">
+                <div class="modal-row"><span class="modal-label">Nama:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['nama']); ?></span></div>
+                <div class="modal-row"><span class="modal-label">Email:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['email'] ?: '-'); ?></span></div>
+                <div class="modal-row"><span class="modal-label">WhatsApp:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['no_wa'] ?: '-'); ?></span></div>
+                <div class="modal-row"><span class="modal-label">Jurusan:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['jurusan_name']); ?></span></div>
+                <div class="modal-row"><span class="modal-label">Kelas:</span> <span class="modal-value"><?php echo htmlspecialchars($formData['kelas_full_name']); ?></span></div>
             </div>
-        <?php endif; ?>
-
-        <?php if ($show_success_popup): ?>
-            <div class="modal-overlay active" id="success-popup">
-                <div class="success-modal">
-                    <div class="success-icon"><i class="fas fa-check-circle"></i></div>
-                    <h3>Pembukaan Rekening Digital Berhasil</h3>
+            <p>Username, kata sandi, dan nomor rekening akan dikirim melalui email/WhatsApp terdaftar setelah konfirmasi.</p>
+            <form action="" method="POST" id="confirm-form">
+                <input type="hidden" name="nama" value="<?php echo htmlspecialchars($formData['nama']); ?>">
+                <input type="hidden" name="username" value="<?php echo htmlspecialchars($formData['username']); ?>">
+                <input type="hidden" name="jurusan_id" value="<?php echo htmlspecialchars($formData['jurusan_id']); ?>">
+                <input type="hidden" name="tingkatan_kelas_id" value="<?php echo htmlspecialchars($formData['tingkatan_kelas_id']); ?>">
+                <input type="hidden" name="kelas_id" value="<?php echo htmlspecialchars($formData['kelas_id']); ?>">
+                <input type="hidden" name="no_rekening" value="<?php echo htmlspecialchars($formData['no_rekening']); ?>">
+                <input type="hidden" name="email" value="<?php echo htmlspecialchars($formData['email']); ?>">
+                <input type="hidden" name="no_wa" value="<?php echo htmlspecialchars($formData['no_wa']); ?>">
+                <input type="hidden" name="confirmed" value="1">
+                <div class="modal-buttons">
+                    <button type="submit" name="confirm" id="confirm-btn" class="btn btn-confirm"> <span class="btn-content">Konfirmasi</span></button>
+                    <button type="submit" name="cancel" id="cancel-btn" class="btn btn-cancel"> <span class="btn-content">Batal</span></button>
                 </div>
-            </div>
-        <?php endif; ?>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
 
-        <?php if (!empty($errors['general'])): ?>
-            <div class="modal-overlay active" id="error-popup">
-                <div class="error-modal">
-                    <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
-                    <h3>Gagal</h3>
-                    <p><?php echo htmlspecialchars($errors['general']); ?></p>
-                    <div class="modal-buttons">
-                        <button type="button" class="btn" onclick="window.location.reload()"><i class="fas fa-redo"></i> <span class="btn-content">Coba Lagi</span></button>
-                    </div>
-                </div>
+<?php if ($show_success_popup): ?>
+    <div class="modal-overlay active" id="success-popup">
+        <div class="success-modal">
+            <div class="success-icon"><i class="fas fa-check-circle"></i></div>
+            <h3>Pembukaan Rekening Berhasil</h3>
+        </div>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($errors['general'])): ?>
+    <div class="modal-overlay active" id="error-popup">
+        <div class="error-modal">
+            <div class="error-icon"><i class="fas fa-exclamation-circle"></i></div>
+            <h3>Gagal</h3>
+            <p><?php echo htmlspecialchars($errors['general']); ?></p>
+            <div class="modal-buttons">
+                <button type="button" class="btn" onclick="window.location.reload()"><i class="fas fa-redo"></i> <span class="btn-content">Coba Lagi</span></button>
             </div>
-        <?php endif; ?>
+        </div>
+    </div>
+<?php endif; ?>
     </div>
 
     <script>
@@ -1470,14 +1475,18 @@ function maskNoRekening($no_rekening) {
             const tingkatanId = document.getElementById('tingkatan_kelas_id').value;
             const kelasSelect = document.getElementById('kelas_id');
             const kelasError = document.getElementById('kelas_id-error');
+            const submitBtn = document.getElementById('submit-btn');
 
             if (!jurusanId || !tingkatanId) {
                 kelasSelect.innerHTML = '<option value="">Pilih Kelas</option>';
+                kelasSelect.disabled = true;
+                submitBtn.disabled = true;
                 return;
             }
 
             kelasSelect.disabled = true;
             kelasSelect.innerHTML = '<option value="">Memuat kelas...</option>';
+            submitBtn.disabled = true;
 
             fetch('get_kelas_by_jurusan_dan_tingkatan.php', {
                 method: 'POST',
@@ -1490,6 +1499,8 @@ function maskNoRekening($no_rekening) {
                 if (data.error) {
                     kelasError.textContent = data.error;
                     kelasError.classList.add('show');
+                    kelasSelect.disabled = true;
+                    submitBtn.disabled = true;
                 } else if (data.kelas && data.kelas.length > 0) {
                     data.kelas.forEach(k => {
                         const option = document.createElement('option');
@@ -1499,18 +1510,22 @@ function maskNoRekening($no_rekening) {
                     });
                     kelasError.textContent = '';
                     kelasError.classList.remove('show');
+                    kelasSelect.disabled = false;
+                    submitBtn.disabled = false;
                 } else {
                     kelasError.textContent = 'Tidak ada kelas tersedia untuk jurusan dan tingkatan ini.';
                     kelasError.classList.add('show');
+                    kelasSelect.disabled = true;
+                    submitBtn.disabled = true;
                 }
-                kelasSelect.disabled = false;
             })
             .catch(error => {
                 console.error('Error fetching kelas:', error);
                 kelasSelect.innerHTML = '<option value="">Error memuat kelas</option>';
                 kelasError.textContent = 'Gagal memuat kelas.';
                 kelasError.classList.add('show');
-                kelasSelect.disabled = false;
+                kelasSelect.disabled = true;
+                submitBtn.disabled = true;
             });
         }
 
@@ -1518,7 +1533,8 @@ function maskNoRekening($no_rekening) {
             const form = document.getElementById('nasabahForm');
             const submitBtn = document.getElementById('submit-btn');
             if (form && submitBtn) {
-                form.addEventListener('submit', (e) => {
+                submitBtn.addEventListener('click', (e) => {
+                    // Mencegah perubahan visual default saat tombol diklik
                     e.preventDefault();
                     const nama = document.getElementById('nama').value.trim();
                     const jurusan = document.getElementById('jurusan_id').value;
@@ -1552,27 +1568,43 @@ function maskNoRekening($no_rekening) {
                         confirmBtn.classList.add('loading');
                         setTimeout(() => confirmForm.submit(), 1000);
                     } else if (submitter.id === 'cancel-btn') {
-                        // No loading spinner for cancel
                         confirmForm.submit();
                     }
                 });
             }
 
-            // Auto-close success popup after 3 seconds
-            const successPopup = document.getElementById('success-popup');
-            if (successPopup) {
-                setTimeout(() => {
-                    successPopup.classList.remove('active');
-                    setTimeout(() => {
-                        successPopup.remove();
-                    }, 500); // Match transition duration
-                }, 3000); // Display for 3 seconds
+            // Validasi input WhatsApp hanya numerik dan dimulai dengan 08
+            const noWaInput = document.getElementById('no_wa');
+            const noWaError = document.getElementById('no_wa-error');
+            if (noWaInput && noWaError) {
+                noWaInput.addEventListener('input', () => {
+                    let value = noWaInput.value.replace(/[^0-9]/g, '');
+                    if (value.length > 0 && !value.startsWith('08')) {
+                        value = '08' + value.slice(value.length);
+                    }
+                    if (value.length > 15) {
+                        value = value.slice(0, 15);
+                    }
+                    noWaInput.value = value;
+                    noWaInput.setAttribute('aria-invalid', 'false');
+                    noWaError.textContent = '';
+                    noWaError.classList.remove('show');
+                });
             }
 
-            // Ensure kelas is updated if jurusan or tingkatan is pre-selected
-            const jurusanId = document.getElementById('jurusan_id')?.value;
-            const tingkatanId = document.getElementById('tingkatan_kelas_id')?.value;
-            if (jurusanId && tingkatanId) {
+            // Hapus border merah saat mengetik di email
+            const emailInput = document.getElementById('email');
+            const emailError = document.getElementById('email-error');
+            if (emailInput && emailError) {
+                emailInput.addEventListener('input', () => {
+                    emailInput.setAttribute('aria-invalid', 'false');
+                    emailError.textContent = '';
+                    emailError.classList.remove('show');
+                });
+            }
+
+            // Inisialisasi dropdown kelas jika jurusan dan tingkatan sudah dipilih
+            if (document.getElementById('jurusan_id').value && document.getElementById('tingkatan_kelas_id').value) {
                 updateKelas();
             }
         });

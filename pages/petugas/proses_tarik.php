@@ -30,15 +30,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $jumlah = floatval($_POST['jumlah'] ?? 0);
     $user_id = intval($_POST['user_id'] ?? 0);
     $pin = $_POST['pin'] ?? '';
+    $petugas_id = $_SESSION['user_id'];
 
     if ($action === 'cek_rekening') {
         $query = "
             SELECT r.no_rekening, u.nama, u.email, u.has_pin, u.pin, u.id as user_id, r.id as rekening_id, r.saldo, 
-                   j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
+                   j.nama_jurusan AS jurusan, 
+                   CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
             FROM rekening r 
             JOIN users u ON r.user_id = u.id 
             LEFT JOIN jurusan j ON u.jurusan_id = j.id
             LEFT JOIN kelas k ON u.kelas_id = k.id
+            LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
             WHERE r.no_rekening = ?
         ";
         $stmt = $conn->prepare($query);
@@ -78,8 +81,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak valid.', 'email_status' => 'none']);
             exit();
         }
-        if ($jumlah < 10000) {
-            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan minimal Rp 10.000.', 'email_status' => 'none']);
+        if ($jumlah < 1000) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan minimal Rp 1.000.', 'email_status' => 'none']);
+            exit();
+        }
+        if ($jumlah > 99999999) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan maksimal Rp 99.999.999.', 'email_status' => 'none']);
             exit();
         }
 
@@ -115,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
 
-        $query = "SELECT pin, has_pin FROM users WHERE id = ?";
+        $query = "SELECT pin, has_pin, pin_block_until, failed_pin_attempts FROM users WHERE id = ?";
         $stmt = $conn->prepare($query);
         $stmt->bind_param('i', $user_id);
         $stmt->execute();
@@ -127,6 +134,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
 
         $user = $result->fetch_assoc();
+
+        // Check if PIN is blocked
+        if ($user['pin_block_until'] && strtotime($user['pin_block_until']) > time()) {
+            $block_time = date('d M Y H:i:s', strtotime($user['pin_block_until']));
+            echo json_encode(['status' => 'error', 'message' => "PIN diblokir hingga $block_time. Hubungi admin untuk bantuan.", 'email_status' => 'none']);
+            exit();
+        }
 
         if (!empty($user['pin']) && !$user['has_pin']) {
             $update_query = "UPDATE users SET has_pin = 1 WHERE id = ?";
@@ -144,9 +158,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         // Assuming plain text PIN for demo; use password_verify() if hashed
         if ($user['pin'] !== $pin) {
+            $failed_attempts = $user['failed_pin_attempts'] + 1;
+            $max_attempts = 3;
+            $block_duration = 24 * 3600; // 24 hours in seconds
+
+            $update_attempts_query = "UPDATE users SET failed_pin_attempts = ? WHERE id = ?";
+            $update_attempts_stmt = $conn->prepare($update_attempts_query);
+            $update_attempts_stmt->bind_param('ii', $failed_attempts, $user_id);
+            $update_attempts_stmt->execute();
+            $update_attempts_stmt->close();
+
+            if ($failed_attempts >= $max_attempts) {
+                $block_until = date('Y-m-d H:i:s', time() + $block_duration);
+                $update_block_query = "UPDATE users SET pin_block_until = ?, failed_pin_attempts = 0 WHERE id = ?";
+                $update_block_stmt = $conn->prepare($update_block_query);
+                $update_block_stmt->bind_param('si', $block_until, $user_id);
+                $update_block_stmt->execute();
+                $update_block_stmt->close();
+                echo json_encode(['status' => 'error', 'message' => 'Terlalu banyak percobaan PIN salah. PIN diblokir selama 24 jam.', 'email_status' => 'none']);
+                exit();
+            }
+
             echo json_encode(['status' => 'error', 'message' => 'PIN yang Anda masukkan salah', 'email_status' => 'none']);
             exit();
         }
+
+        // Reset failed attempts on successful PIN
+        $reset_attempts_query = "UPDATE users SET failed_pin_attempts = 0, pin_block_until = NULL WHERE id = ?";
+        $reset_attempts_stmt = $conn->prepare($reset_attempts_query);
+        $reset_attempts_stmt->bind_param('i', $user_id);
+        $reset_attempts_stmt->execute();
+        $reset_attempts_stmt->close();
 
         echo json_encode(['status' => 'success', 'message' => 'PIN valid', 'email_status' => 'none']);
         $stmt->close();
@@ -154,14 +196,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         try {
             $conn->begin_transaction();
 
-            // Periksa status is_frozen
+            // Periksa status is_frozen dan data rekening
             $query = "
                 SELECT r.id, r.user_id, r.saldo, u.nama, u.email, u.is_frozen, 
-                       j.nama_jurusan AS jurusan, k.nama_kelas AS kelas
+                       j.nama_jurusan AS jurusan, 
+                       CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
                 FROM rekening r 
                 JOIN users u ON r.user_id = u.id 
                 LEFT JOIN jurusan j ON u.jurusan_id = j.id
                 LEFT JOIN kelas k ON u.kelas_id = k.id
+                LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE r.no_rekening = ?
             ";
             $stmt = $conn->prepare($query);
@@ -192,7 +236,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             $today = date('Y-m-d');
-            $petugas_id = $_SESSION['user_id'];
 
             // Hitung total setoran dan penarikan petugas hari ini
             $query_setoran = "SELECT COALESCE(SUM(jumlah), 0) as total_setoran 
@@ -226,9 +269,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 throw new Exception('Saldo kas petugas hari ini tidak mencukupi untuk penarikan sebesar Rp ' . number_format($jumlah, 0, ',', '.') . '.');
             }
 
-            // Generate unique transaction number with more entropy
+            // Generate unique transaction number
             $no_transaksi = 'TRXP' . date('Ymd') . sprintf('%06d', mt_rand(100000, 999999));
 
+            // Insert transaksi
             $query_transaksi = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, petugas_id, status, created_at) 
                                VALUES (?, ?, 'tarik', ?, ?, 'approved', NOW())";
             $stmt_transaksi = $conn->prepare($query_transaksi);
@@ -239,6 +283,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $transaksi_id = $conn->insert_id;
             $stmt_transaksi->close();
 
+            // Update saldo
             $saldo_baru = $saldo_sekarang - $jumlah;
             $query_update_saldo = "UPDATE rekening SET saldo = ?, updated_at = NOW() WHERE id = ?";
             $stmt_update_saldo = $conn->prepare($query_update_saldo);
@@ -248,6 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             $stmt_update_saldo->close();
 
+            // Catat mutasi
             $query_mutasi = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir, created_at) 
                             VALUES (?, ?, ?, ?, NOW())";
             $stmt_mutasi = $conn->prepare($query_mutasi);
@@ -257,6 +303,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             $stmt_mutasi->close();
 
+            // Simpan notifikasi
             $message = "Transaksi penarikan tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh petugas.";
             $query_notifikasi = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
             $stmt_notifikasi = $conn->prepare($query_notifikasi);
@@ -266,12 +313,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             $stmt_notifikasi->close();
 
+            // Kirim email notifikasi
             $email_status = 'success';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                // Create unique subject with transaction ID to prevent email threading
                 $subject = "[{$no_transaksi}] Bukti Penarikan Tunai - SCHOBANK " . date('Y-m-d H:i:s');
-                
-                // Konversi bulan ke bahasa Indonesia
                 $bulan = [
                     'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
                     'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
@@ -345,40 +390,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>";
 
                 try {
-                    // Create new PHPMailer instance for each email
                     $mail = new PHPMailer(true);
-                    
-                    // Clear any previous recipients and attachments
                     $mail->clearAllRecipients();
                     $mail->clearAttachments();
                     $mail->clearReplyTos();
-                    
-                    // SMTP Configuration
+
                     $mail->isSMTP();
                     $mail->Host = 'smtp.gmail.com';
                     $mail->SMTPAuth = true;
-                    $mail->Username = 'schobanksystem@gmail.com';
-                    $mail->Password = 'dgry fzmc mfrd hzzq';
+                    $mail->Username = 'schobanksystem@gmail.com'; // Ganti dengan email SMTP Anda
+                    $mail->Password = 'dgry fzmc mfrd hzzq'; // Ganti dengan kata sandi SMTP Anda
                     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                     $mail->Port = 587;
                     $mail->CharSet = 'UTF-8';
-                    
-                    // Email settings to prevent threading
+
                     $mail->setFrom('schobanksystem@gmail.com', 'SCHOBANK SYSTEM');
                     $mail->addAddress($email, $nama_nasabah);
                     $mail->addReplyTo('no-reply@schobank.com', 'No Reply');
-                    
-                    // Add unique Message-ID to prevent email threading
+
                     $unique_id = uniqid('schobank_', true) . '@schobank.com';
                     $mail->MessageID = '<' . $unique_id . '>';
-                    
-                    // Add custom headers to prevent threading
                     $mail->addCustomHeader('X-Transaction-ID', $no_transaksi);
                     $mail->addCustomHeader('X-Mailer', 'SCHOBANK-System-v1.0');
                     $mail->addCustomHeader('X-Priority', '1');
                     $mail->addCustomHeader('Importance', 'High');
-                    
-                    // Attach the banner image
+
                     $banner_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/emailbanner.jpeg';
                     if (file_exists($banner_path)) {
                         $mail->addEmbeddedImage($banner_path, 'emailbanner', 'emailbanner.jpeg');
@@ -389,16 +425,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $mail->Body = $message_email;
                     $mail->AltBody = strip_tags(str_replace(['<br>', '</tr>', '</td>'], ["\n", "\n", " "], $message_email));
 
-                    // Send email
                     if ($mail->send()) {
                         $email_status = 'success';
                     } else {
                         throw new Exception('Email gagal dikirim: ' . $mail->ErrorInfo);
                     }
-                    
-                    // Clear the mailer for good measure
+
                     $mail->smtpClose();
-                    
                 } catch (Exception $e) {
                     error_log("Mail error for transaction {$no_transaksi}: " . $e->getMessage());
                     $email_status = 'failed';
@@ -421,7 +454,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'transaction_id' => $no_transaksi,
                 'saldo_baru' => number_format($saldo_baru, 0, ',', '.')
             ]);
-            
         } catch (Exception $e) {
             $conn->rollback();
             echo json_encode([
@@ -434,7 +466,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         echo json_encode(['status' => 'error', 'message' => 'Aksi tidak valid.', 'email_status' => 'none']);
     }
 } else {
-    echo json_encode(['status' => 'error', 'message' => 'Metode request tidak valid.', 'email_status' => 'none']);
+    echo json_encode(['status' => 'error', 'message' => 'Metode tidak diizinkan.', 'email_status' => 'none']);
 }
-$conn->close();
 ?>

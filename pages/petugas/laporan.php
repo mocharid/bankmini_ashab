@@ -77,11 +77,12 @@ try {
         t.jumlah,
         t.created_at,
         u.nama AS nama_siswa,
-        k.nama_kelas
+        CONCAT_WS(' ', tk.nama_tingkatan, k.nama_kelas) AS nama_kelas
         FROM transaksi t 
         JOIN rekening r ON t.rekening_id = r.id 
         JOIN users u ON r.user_id = u.id 
         LEFT JOIN kelas k ON u.kelas_id = k.id 
+        LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
         WHERE DATE(t.created_at) = ? 
         AND t.jenis_transaksi != 'transfer' 
         AND t.petugas_id IS NOT NULL 
@@ -115,7 +116,6 @@ function formatRupiah($amount) {
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Laporan Harian - SCHOBANK SYSTEM</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">

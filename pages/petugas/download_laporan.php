@@ -1,5 +1,4 @@
 <?php
-
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
 
@@ -38,6 +37,11 @@ function formatIndonesianDate($date) {
     return "$day_name, $day $month $year";
 }
 
+// Function to format Rupiah
+function formatRupiah($amount) {
+    return 'Rp ' . number_format($amount, 0, ',', '.');
+}
+
 try {
     // Get officer information
     $officer_query = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = ?";
@@ -65,11 +69,12 @@ try {
         t.jumlah,
         t.created_at,
         u.nama AS nama_siswa,
-        k.nama_kelas
+        CONCAT_WS(' ', tk.nama_tingkatan, k.nama_kelas) AS nama_kelas
         FROM transaksi t 
         JOIN rekening r ON t.rekening_id = r.id 
         JOIN users u ON r.user_id = u.id 
         LEFT JOIN kelas k ON u.kelas_id = k.id 
+        LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
         WHERE DATE(t.created_at) = ? 
         AND t.jenis_transaksi != 'transfer'
         AND t.petugas_id IS NOT NULL
@@ -118,11 +123,6 @@ try {
         $transactions[] = $row;
     }
     $stmt->close();
-
-    // Format Rupiah
-    function formatRupiah($amount) {
-        return 'Rp ' . number_format($amount, 0, ',', '.');
-    }
 
     // Generate PDF
     if ($format === 'pdf') {
@@ -198,8 +198,8 @@ try {
         if ($has_transactions) {
             $pdf->SetFont('helvetica', 'B', 8);
             $pdf->Cell(10, 6, 'No', 1, 0, 'C', true);
-            $pdf->Cell(70, 6, 'Nama', 1, 0, 'C', true);
-            $pdf->Cell(30, 6, 'Kelas', 1, 0, 'C', true);
+            $pdf->Cell(65, 6, 'Nama', 1, 0, 'C', true);
+            $pdf->Cell(35, 6, 'Kelas', 1, 0, 'C', true);
             $pdf->Cell(30, 6, 'Jenis', 1, 0, 'C', true);
             $pdf->Cell(50, 6, 'Jumlah', 1, 1, 'C', true);
 
@@ -212,8 +212,8 @@ try {
                 $displayKelas = mb_strlen($row['display_kelas']) > 15 ? mb_substr($row['display_kelas'], 0, 12) . '...' : $row['display_kelas'];
 
                 $pdf->Cell(10, 6, $row['no'], 1, 0, 'C', true);
-                $pdf->Cell(70, 6, $displayName, 1, 0, 'L', true);
-                $pdf->Cell(30, 6, $displayKelas, 1, 0, 'C', true);
+                $pdf->Cell(65, 6, $displayName, 1, 0, 'L', true);
+                $pdf->Cell(35, 6, $displayKelas, 1, 0, 'C', true);
                 $pdf->Cell(30, 6, $row['display_jenis'], 1, 0, 'C', true);
                 $pdf->Cell(50, 6, formatRupiah($row['jumlah']), 1, 1, 'R', true);
                 $row_count++;

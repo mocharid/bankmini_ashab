@@ -8,21 +8,22 @@ if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin
 }
 
 $username = $_SESSION['username'] ?? 'Petugas';
-
-// Flag for error popup
 $show_error_popup = false;
 $error_message = '';
+$form_token = isset($_SESSION['search_form_token']) ? $_SESSION['search_form_token'] : bin2hex(random_bytes(32));
+$_SESSION['search_form_token'] = $form_token;
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cari Transaksi - SCHOBANK SYSTEM</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         :root {
             --primary-color: #1e3a8a;
@@ -213,6 +214,29 @@ $error_message = '';
         .input-container {
             position: relative;
             width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .qr-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .qr-btn:hover {
+            background: var(--secondary-color);
+            transform: translateY(-2px);
         }
 
         .error-message {
@@ -280,6 +304,7 @@ $error_message = '';
         .form-buttons {
             display: flex;
             justify-content: center;
+            gap: 20px;
             margin-top: 20px;
             width: 100%;
         }
@@ -395,7 +420,7 @@ $error_message = '';
             to { opacity: 0; }
         }
 
-        .success-modal, .error-modal {
+        .success-modal, .error-modal, .qr-modal {
             position: relative;
             text-align: center;
             width: clamp(280px, 70vw, 360px);
@@ -406,7 +431,7 @@ $error_message = '';
             transform: scale(0.8);
             opacity: 0;
             animation: popInModal 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-            cursor: pointer;
+            cursor: default;
             overflow: hidden;
         }
 
@@ -414,7 +439,7 @@ $error_message = '';
             background: linear-gradient(135deg, var(--error-color) 0%, #c0392b 100%);
         }
 
-        .success-modal::before, .error-modal::before {
+        .success-modal::before, .error-modal::before, .qr-modal::before {
             content: '';
             position: absolute;
             inset: 0;
@@ -428,7 +453,7 @@ $error_message = '';
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-icon, .error-icon {
+        .success-icon, .error-icon, .qr-icon {
             font-size: clamp(2rem, 4.5vw, 2.5rem);
             margin: 0 auto 10px;
             color: white;
@@ -441,7 +466,7 @@ $error_message = '';
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-modal h3, .error-modal h3 {
+        .success-modal h3, .error-modal h3, .qr-modal h3 {
             color: white;
             margin: 0 0 8px;
             font-size: clamp(1rem, 2vw, 1.1rem);
@@ -449,12 +474,23 @@ $error_message = '';
             letter-spacing: 0.02em;
         }
 
-        .success-modal p, .error-modal p {
+        .success-modal p, .error-modal p, .qr-modal p {
             color: white;
             font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             margin: 0;
             line-height: 1.5;
             padding: 0 10px;
+        }
+
+        .qr-modal video {
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .qr-modal .btn {
+            margin-top: 10px;
+            width: 100%;
         }
 
         .form-error {
@@ -498,26 +534,36 @@ $error_message = '';
                 justify-content: center;
             }
 
+            .input-container {
+                flex-direction: row;
+                align-items: center;
+            }
+
+            .qr-btn {
+                width: 40px;
+                height: 40px;
+            }
+
             .detail-row {
                 grid-template-columns: 1fr 1.5fr;
                 padding: 10px 12px;
                 font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             }
 
-            .success-modal, .error-modal {
+            .success-modal, .error-modal, .qr-modal {
                 width: clamp(260px, 80vw, 340px);
                 padding: clamp(12px, 3vw, 15px);
             }
 
-            .success-icon, .error-icon {
+            .success-icon, .error-icon, .qr-icon {
                 font-size: clamp(1.8rem, 4vw, 2rem);
             }
 
-            .success-modal h3, .error-modal h3 {
+            .success-modal h3, .error-modal h3, .qr-modal h3 {
                 font-size: clamp(0.9rem, 1.9vw, 1rem);
             }
 
-            .success-modal p, .error-modal p {
+            .success-modal p, .error-modal p, .qr-modal p {
                 font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             }
         }
@@ -539,26 +585,31 @@ $error_message = '';
                 min-height: 40px;
             }
 
+            .qr-btn {
+                width: 36px;
+                height: 36px;
+            }
+
             .detail-row {
                 grid-template-columns: 1fr 1.5fr;
                 padding: 8px 10px;
                 font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             }
 
-            .success-modal, .error-modal {
+            .success-modal, .error-modal, .qr-modal {
                 width: clamp(240px, 85vw, 320px);
                 padding: clamp(10px, 2.5vw, 12px);
             }
 
-            .success-icon, .error-icon {
+            .success-icon, .error-icon, .qr-icon {
                 font-size: clamp(1.6rem, 3.5vw, 1.8rem);
             }
 
-            .success-modal h3, .error-modal h3 {
+            .success-modal h3, .error-modal h3, .qr-modal h3 {
                 font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             }
 
-            .success-modal p, .error-modal p {
+            .success-modal p, .error-modal p, .qr-modal p {
                 font-size: clamp(0.7rem, 1.6vw, 0.8rem);
             }
         }
@@ -576,25 +627,29 @@ $error_message = '';
 
     <div class="main-content">
         <div class="welcome-banner">
-            <h2> Cari Transaksi</h2>
-            <p>Cari informasi transaksi berdasarkan nomor transaksi</p>
+            <h2><i class="fas fa-search"></i> Cari Transaksi</h2>
+            <p>Cari informasi transaksi berdasarkan nomor transaksi atau scan QR code</p>
         </div>
 
         <div id="alertContainer"></div>
 
         <div class="form-section">
             <form id="searchForm" action="" method="GET" class="form-container">
+                <input type="hidden" name="form_token" value="<?php echo htmlspecialchars($form_token); ?>">
+                <input type="hidden" name="form_submitted" value="1">
                 <div class="form-column">
                     <div class="form-group">
                         <label for="no_transaksi">No Transaksi</label>
                         <div class="input-container">
-                            <input type="text" id="no_transaksi" name="no_transaksi" placeholder="Masukan No Transaksi" required autofocus
-                                   value="<?php echo isset($_GET['no_transaksi']) && preg_match('/^[0-9A-Z]+$/', $_GET['no_transaksi']) ? htmlspecialchars($_GET['no_transaksi']) : ''; ?>">
+                            <input type="text" id="no_transaksi" name="no_transaksi" placeholder="Masukkan No Transaksi" required autofocus
+                                   value="<?php echo isset($_GET['no_transaksi']) ? htmlspecialchars($_GET['no_transaksi']) : ''; ?>">
+                            <button type="button" class="qr-btn" id="scanQrBtn" title="Scan QR Code">
+                                <i class="fas fa-qrcode"></i>
+                            </button>
                         </div>
                         <span class="error-message" id="no_transaksi-error"></span>
                     </div>
                 </div>
-                <input type="hidden" name="form_submitted" value="1">
                 <div class="form-buttons">
                     <button type="submit" class="btn" id="searchBtn">
                         <span class="btn-content"><i class="fas fa-search"></i> Cari</span>
@@ -605,13 +660,13 @@ $error_message = '';
 
         <div id="results">
             <?php
-            if (isset($_GET['form_submitted']) && isset($_GET['no_transaksi']) && !empty($_GET['no_transaksi'])) {
-                $no_transaksi = $conn->real_escape_string($_GET['no_transaksi']);
+            if (isset($_GET['form_submitted']) && isset($_GET['form_token']) && $_GET['form_token'] === $_SESSION['search_form_token'] && isset($_GET['no_transaksi']) && !empty(trim($_GET['no_transaksi']))) {
+                $no_transaksi = trim($conn->real_escape_string($_GET['no_transaksi']));
 
-                // Validate transaction number format
-                if (!preg_match('/^[0-9A-Z]+$/', $no_transaksi)) {
+                // Validate transaction number length (based on schema: varchar(20))
+                if (strlen($no_transaksi) > 20) {
                     $show_error_popup = true;
-                    $error_message = 'No Transaksi Tidak Valid. Format: Angka atau huruf kapital';
+                    $error_message = 'No Transaksi tidak valid. Maksimum 20 karakter.';
                 } else {
                     $query = "SELECT 
                                 t.*, 
@@ -619,10 +674,12 @@ $error_message = '';
                                 u1.nama AS nama_nasabah, 
                                 j1.nama_jurusan AS jurusan_asal, 
                                 k1.nama_kelas AS kelas_asal,
+                                tk1.nama_tingkatan AS tingkatan_asal,
                                 r2.no_rekening AS rekening_tujuan,
                                 u2.nama AS nama_penerima,
                                 j2.nama_jurusan AS jurusan_tujuan,
                                 k2.nama_kelas AS kelas_tujuan,
+                                tk2.nama_tingkatan AS tingkatan_tujuan,
                                 pt.petugas1_nama,
                                 pt.petugas2_nama,
                                 up.nama AS petugas_nama
@@ -637,6 +694,8 @@ $error_message = '';
                               LEFT JOIN 
                                 kelas k1 ON u1.kelas_id = k1.id
                               LEFT JOIN 
+                                tingkatan_kelas tk1 ON k1.tingkatan_kelas_id = tk1.id
+                              LEFT JOIN 
                                 rekening r2 ON t.rekening_tujuan_id = r2.id
                               LEFT JOIN 
                                 users u2 ON r2.user_id = u2.id
@@ -645,119 +704,138 @@ $error_message = '';
                               LEFT JOIN 
                                 kelas k2 ON u2.kelas_id = k2.id
                               LEFT JOIN 
+                                tingkatan_kelas tk2 ON k2.tingkatan_kelas_id = tk2.id
+                              LEFT JOIN 
                                 petugas_tugas pt ON DATE(t.created_at) = pt.tanggal
                               LEFT JOIN 
                                 users up ON t.petugas_id = up.id
                               WHERE 
-                                t.no_transaksi = '$no_transaksi'";
-                    
-                    $result = $conn->query($query);
-                    if (!$result) {
+                                t.no_transaksi = ?";
+                    $stmt = $conn->prepare($query);
+                    if (!$stmt) {
                         $show_error_popup = true;
-                        $error_message = 'Error saat memeriksa transaksi: ' . htmlspecialchars($conn->error);
-                    } elseif ($result->num_rows === 0) {
-                        $show_error_popup = true;
-                        $error_message = 'No Transaksi Tidak Ditemukan';
+                        $error_message = 'Database error: ' . htmlspecialchars($conn->error);
                     } else {
-                        $row = $result->fetch_assoc();
-                        $badgeClass = '';
-                        $transactionIcon = '';
-                        switch ($row['jenis_transaksi']) {
-                            case 'setor':
-                                $badgeClass = 'badge-deposit';
-                                $transactionIcon = '<i class="fas fa-arrow-circle-down"></i>';
-                                break;
-                            case 'tarik':
-                                $badgeClass = 'badge-withdraw';
-                                $transactionIcon = '<i class="fas fa-arrow-circle-up"></i>';
-                                break;
-                            case 'transfer':
-                                $badgeClass = 'badge-transfer';
-                                $transactionIcon = '<i class="fas fa-exchange-alt"></i>';
-                                break;
-                        }
-                        $status_display = $row['status'] === 'approved' ? 'Berhasil' : ($row['status'] === 'pending' ? 'Menunggu' : 'Ditolak');
-                        $petugas_display = '';
-                        if (!empty($row['petugas1_nama']) && !empty($row['petugas2_nama'])) {
-                            $petugas_display = htmlspecialchars($row['petugas1_nama']) . ' dan ' . htmlspecialchars($row['petugas2_nama']);
-                        } elseif (!empty($row['petugas1_nama'])) {
-                            $petugas_display = htmlspecialchars($row['petugas1_nama']);
-                        } elseif (!empty($row['petugas2_nama'])) {
-                            $petugas_display = htmlspecialchars($row['petugas2_nama']);
-                        } elseif (!empty($row['petugas_nama'])) {
-                            $petugas_display = htmlspecialchars($row['petugas_nama']);
+                        $stmt->bind_param("s", $no_transaksi);
+                        $stmt->execute();
+                        $result = $stmt->get_result();
+                        if ($result->num_rows === 0) {
+                            $show_error_popup = true;
+                            $error_message = 'No Transaksi Tidak Ditemukan';
                         } else {
-                            $petugas_display = 'Tidak ada data petugas';
+                            $row = $result->fetch_assoc();
+                            $badgeClass = '';
+                            $transactionIcon = '';
+                            switch ($row['jenis_transaksi']) {
+                                case 'setor':
+                                    $badgeClass = 'badge-deposit';
+                                    $transactionIcon = '<i class="fas fa-arrow-circle-down"></i>';
+                                    break;
+                                case 'tarik':
+                                    $badgeClass = 'badge-withdraw';
+                                    $transactionIcon = '<i class="fas fa-arrow-circle-up"></i>';
+                                    break;
+                                case 'transfer':
+                                    $badgeClass = 'badge-transfer';
+                                    $transactionIcon = '<i class="fas fa-exchange-alt"></i>';
+                                    break;
+                            }
+                            $status_display = $row['status'] === 'approved' ? 'Berhasil' : ($row['status'] === 'pending' ? 'Menunggu' : 'Ditolak');
+                            // Determine if Petugas field should be shown
+                            $show_petugas = strpos($row['no_transaksi'], 'TF') !== 0; // Hide for TF transactions
+                            $petugas_display = '';
+                            if ($show_petugas) {
+                                if (!empty($row['petugas1_nama']) && !empty($row['petugas2_nama'])) {
+                                    $petugas_display = htmlspecialchars($row['petugas1_nama']) . ' dan ' . htmlspecialchars($row['petugas2_nama']);
+                                } elseif (!empty($row['petugas1_nama'])) {
+                                    $petugas_display = htmlspecialchars($row['petugas1_nama']);
+                                } elseif (!empty($row['petugas2_nama'])) {
+                                    $petugas_display = htmlspecialchars($row['petugas2_nama']);
+                                } elseif (!empty($row['petugas_nama'])) {
+                                    $petugas_display = htmlspecialchars($row['petugas_nama']);
+                                } else {
+                                    $petugas_display = 'Tidak ada data petugas';
+                                }
+                            }
+                            // Combine tingkatan and kelas
+                            $kelas_asal_display = $row['tingkatan_asal'] && $row['kelas_asal'] ? htmlspecialchars($row['tingkatan_asal'] . ' ' . $row['kelas_asal']) : '-';
+                            $kelas_tujuan_display = $row['tingkatan_tujuan'] && $row['kelas_tujuan'] ? htmlspecialchars($row['tingkatan_tujuan'] . ' ' . $row['kelas_tujuan']) : '-';
+                            ?>
+                            <div class="results-card">
+                                <h3 class="section-title"><?php echo $transactionIcon; ?> Detail Transaksi</h3>
+                                <div class="detail-row">
+                                    <div class="detail-label">No Transaksi:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($row['no_transaksi']); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Jenis Transaksi:</div>
+                                    <div class="detail-value"><span class="badge <?php echo $badgeClass; ?>"><?php echo strtoupper($row['jenis_transaksi']); ?></span></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Jumlah:</div>
+                                    <div class="detail-value">Rp <?php echo number_format($row['jumlah'], 0, ',', '.'); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Tanggal:</div>
+                                    <div class="detail-value"><?php echo date('d/m/Y H:i', strtotime($row['created_at'])); ?></div>
+                                </div>
+                                <?php if ($show_petugas) { ?>
+                                <div class="detail-row">
+                                    <div class="detail-label">Petugas:</div>
+                                    <div class="detail-value"><?php echo $petugas_display; ?></div>
+                                </div>
+                                <?php } ?>
+                                <div class="detail-row">
+                                    <div class="detail-label">Status:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($status_display); ?></div>
+                                </div>
+                                <div class="detail-divider"></div>
+                                <div class="detail-subheading"><i class="fas fa-user-circle"></i> Rekening Sumber</div>
+                                <div class="detail-row">
+                                    <div class="detail-label">No Rekening:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($row['rekening_asal']); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Nama:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($row['nama_nasabah']); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Jurusan:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($row['jurusan_asal'] ?: '-'); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Kelas:</div>
+                                    <div class="detail-value"><?php echo $kelas_asal_display; ?></div>
+                                </div>
+                                <?php if ($row['jenis_transaksi'] === 'transfer' && !empty($row['rekening_tujuan_id'])) { ?>
+                                <div class="detail-divider"></div>
+                                <div class="detail-subheading"><i class="fas fa-user-circle"></i> Rekening Tujuan</div>
+                                <div class="detail-row">
+                                    <div class="detail-label">No Rekening:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($row['rekening_tujuan'] ?: '-'); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Nama:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($row['nama_penerima'] ?: '-'); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Jurusan:</div>
+                                    <div class="detail-value"><?php echo htmlspecialchars($row['jurusan_tujuan'] ?: '-'); ?></div>
+                                </div>
+                                <div class="detail-row">
+                                    <div class="detail-label">Kelas:</div>
+                                    <div class="detail-value"><?php echo $kelas_tujuan_display; ?></div>
+                                </div>
+                                <?php } ?>
+                            </div>
+                            <?php
                         }
-                        ?>
-                        <div class="results-card">
-                            <h3 class="section-title"><?php echo $transactionIcon; ?> Detail Transaksi</h3>
-                            <div class="detail-row">
-                                <div class="detail-label">No Transaksi:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['no_transaksi']); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Jenis Transaksi:</div>
-                                <div class="detail-value"><span class="badge <?php echo $badgeClass; ?>"><?php echo strtoupper($row['jenis_transaksi']); ?></span></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Jumlah:</div>
-                                <div class="detail-value">Rp <?php echo number_format($row['jumlah'], 0, ',', '.'); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Tanggal:</div>
-                                <div class="detail-value"><?php echo date('d/m/Y H:i', strtotime($row['created_at'])); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Petugas:</div>
-                                <div class="detail-value"><?php echo $petugas_display; ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Status:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($status_display); ?></div>
-                            </div>
-                            <div class="detail-divider"></div>
-                            <div class="detail-subheading"><i class="fas fa-user-circle"></i> Rekening Sumber</div>
-                            <div class="detail-row">
-                                <div class="detail-label">No Rekening:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['rekening_asal']); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Nama:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['nama_nasabah']); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Jurusan:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['jurusan_asal'] ?: '-'); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Kelas:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['kelas_asal'] ?: '-'); ?></div>
-                            </div>
-                            <?php if ($row['jenis_transaksi'] === 'transfer' && !empty($row['rekening_tujuan_id'])) { ?>
-                            <div class="detail-divider"></div>
-                            <div class="detail-subheading"><i class="fas fa-user-circle"></i> Rekening Tujuan</div>
-                            <div class="detail-row">
-                                <div class="detail-label">No Rekening:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['rekening_tujuan']); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Nama:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['nama_penerima']); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Jurusan:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['jurusan_tujuan'] ?: '-'); ?></div>
-                            </div>
-                            <div class="detail-row">
-                                <div class="detail-label">Kelas:</div>
-                                <div class="detail-value"><?php echo htmlspecialchars($row['kelas_tujuan'] ?: '-'); ?></div>
-                            </div>
-                            <?php } ?>
-                        </div>
-                        <?php
+                        $stmt->close();
                     }
                 }
+                // Regenerate form token after submission
+                $form_token = bin2hex(random_bytes(32));
+                $_SESSION['search_form_token'] = $form_token;
             }
             ?>
         </div>
@@ -794,48 +872,50 @@ $error_message = '';
             const searchForm = document.getElementById('searchForm');
             const searchBtn = document.getElementById('searchBtn');
             const inputNoTransaksi = document.getElementById('no_transaksi');
+            const scanQrBtn = document.getElementById('scanQrBtn');
             const alertContainer = document.getElementById('alertContainer');
             const results = document.getElementById('results');
+            let stream = null;
+            let scanning = false;
+            let isSubmitting = false;
 
             // Clear query string on page load/refresh to prevent resubmission
             if (window.location.search) {
-                history.replaceState(null, '', window.location.pathname);
+                window.history.replaceState(null, '', window.location.pathname);
             }
 
             // Initialize transaction input
-            if (!inputNoTransaksi.value) {
-                inputNoTransaksi.value = '';
-            }
+            inputNoTransaksi.value = '';
 
             // Handle transaction input
             inputNoTransaksi.addEventListener('input', function() {
-                let value = this.value.replace(/[^0-9A-Z]/g, '');
+                let value = this.value.substring(0, 20); // Limit to 20 characters per schema
                 this.value = value;
                 document.getElementById('no_transaksi-error').classList.remove('show');
             });
 
             inputNoTransaksi.addEventListener('paste', function(e) {
                 e.preventDefault();
-                let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9A-Z]/g, '');
+                let pastedData = (e.clipboardData || window.clipboardData).getData('text').substring(0, 20);
                 this.value = pastedData;
             });
 
             // Search form handling
             searchForm.addEventListener('submit', function(e) {
                 e.preventDefault();
-                if (searchForm.classList.contains('submitting')) return;
-                searchForm.classList.add('submitting');
+                if (isSubmitting) return;
+                isSubmitting = true;
 
                 const transaksi = inputNoTransaksi.value.trim();
-                if (!transaksi || !/^[0-9A-Z]+$/.test(transaksi)) {
-                    showAlert('No Transaksi Tidak Valid. Format: Angka atau huruf kapital', 'error');
+                if (!transaksi || transaksi.length > 20) {
+                    showAlert('No Transaksi tidak valid. Maksimum 20 karakter.', 'error');
                     inputNoTransaksi.classList.add('form-error');
                     setTimeout(() => inputNoTransaksi.classList.remove('form-error'), 400);
                     inputNoTransaksi.value = '';
                     inputNoTransaksi.focus();
                     document.getElementById('no_transaksi-error').classList.add('show');
-                    document.getElementById('no_transaksi-error').textContent = 'No Transaksi Tidak Valid. Format: Angka atau huruf kapital';
-                    searchForm.classList.remove('submitting');
+                    document.getElementById('no_transaksi-error').textContent = 'No Transaksi tidak valid. Maksimum 20 karakter.';
+                    isSubmitting = false;
                     return;
                 }
 
@@ -844,6 +924,97 @@ $error_message = '';
                 setTimeout(() => {
                     searchForm.submit();
                 }, 1000);
+            });
+
+            // QR Code Scanning
+            scanQrBtn.addEventListener('click', function() {
+                if (scanning) return;
+                scanning = true;
+
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.id = 'qr-modal-' + Date.now();
+                modal.innerHTML = `
+                    <div class="qr-modal">
+                        <div class="qr-icon">
+                            <i class="fas fa-qrcode"></i>
+                        </div>
+                        <h3>Scan QR Code</h3>
+                        <p>Arahkan kamera ke QR code transaksi</p>
+                        <video id="qr-video" autoplay playsinline></video>
+                        <canvas id="qr-canvas" style="display: none;"></canvas>
+                        <button class="btn" id="closeQrBtn">
+                            <span class="btn-content"><i class="fas fa-times"></i> Tutup</span>
+                        </button>
+                    </div>
+                `;
+                alertContainer.appendChild(modal);
+
+                const video = document.getElementById('qr-video');
+                const canvas = document.getElementById('qr-canvas');
+                const canvasContext = canvas.getContext('2d', { willReadFrequently: true });
+                const closeQrBtn = document.getElementById('closeQrBtn');
+
+                // Start camera
+                navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' }
+                }).then(function(s) {
+                    stream = s;
+                    video.srcObject = stream;
+                    video.play();
+                    scanQrCode();
+                }).catch(function(err) {
+                    showAlert('Gagal mengakses kamera: ' + err.message, 'error');
+                    closeModal(modal.id);
+                    scanning = false;
+                });
+
+                // QR code scanning function
+                function scanQrCode() {
+                    if (!scanning) return;
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth;
+                        canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: 'dontInvert'
+                        });
+
+                        if (code && code.data.length <= 20) {
+                            inputNoTransaksi.value = code.data;
+                            showAlert('QR Code berhasil discan: ' + code.data, 'success');
+                            closeModal(modal.id);
+                            stopCamera();
+                            searchBtn.click();
+                            return;
+                        } else if (code) {
+                            showAlert('QR Code tidak valid. Maksimum 20 karakter.', 'error');
+                        }
+                    }
+                    requestAnimationFrame(scanQrCode);
+                }
+
+                // Close QR modal
+                closeQrBtn.addEventListener('click', function() {
+                    closeModal(modal.id);
+                    stopCamera();
+                });
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeModal(modal.id);
+                        stopCamera();
+                    }
+                });
+
+                // Stop camera function
+                function stopCamera() {
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                        stream = null;
+                    }
+                    scanning = false;
+                }
             });
 
             // Show error popup if there's an error
@@ -858,7 +1029,7 @@ $error_message = '';
             function showAlert(message, type) {
                 const existingAlerts = alertContainer.querySelectorAll('.modal-overlay');
                 existingAlerts.forEach(alert => {
-                    alert.style.animation = 'fadeOutOverlay 0.4s ease-in-out forwards';
+                    alert.style.animation = 'fadeOutOverlayzogOutOverlay 0.4s ease-in-out forwards';
                     setTimeout(() => alert.remove(), 400);
                 });
                 const alertDiv = document.createElement('div');

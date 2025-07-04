@@ -14,7 +14,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
 <html lang="id">
 <head>
     <title>Setor Tunai - SCHOBANK SYSTEM</title>
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -1119,15 +1119,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 confirmAmount.classList.add('loading');
                 let jumlah = inputJumlah.value.replace(/[^0-9]/g, '');
                 jumlah = parseFloat(jumlah);
-                if (isNaN(jumlah) || jumlah < 1000) {
+                if (isNaN(jumlah) || jumlah < 1) {
                     confirmAmount.classList.remove('loading');
-                    showModal('Error', 'Jumlah setoran minimal Rp 1.000', false);
+                    showModal('Error', 'Jumlah setoran minimal Rp 1', false);
                     inputJumlah.focus();
                     return;
                 }
-                if (jumlah.toString().length > 8) {
+                if (jumlah > 99999999) {
                     confirmAmount.classList.remove('loading');
-                    showModal('Error', 'Jumlah setoran maksimal 8 digit (Rp 99.999.999)', false);
+                    showModal('Error', 'Jumlah setoran maksimal Rp 99.999.999', false);
                     inputJumlah.focus();
                     return;
                 }

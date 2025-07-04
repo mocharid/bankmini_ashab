@@ -81,6 +81,14 @@ if ($rekening_data) {
     $rekening_id = null;
 }
 
+// Format account number with spaces (e.g., "REK 123 123")
+if ($no_rekening === 'N/A') {
+    $formatted_no_rekening = 'N/A';
+} else {
+    $clean_no_rekening = preg_replace('/^REK\s*/i', '', trim($no_rekening));
+    $formatted_no_rekening = 'REK ' . chunk_split($clean_no_rekening, 3, ' ');
+}
+
 // Determine card level and style
 $card_info = getCardLevelAndStyle($saldo);
 
@@ -137,7 +145,6 @@ if ($rekening_id) {
     $stmt->execute();
     $recent_transactions_result = $stmt->get_result();
     while ($row = $recent_transactions_result->fetch_assoc()) {
-        // Map status to Indonesian terms
         if ($row['status'] == 'approved') {
             $row['status'] = 'berhasil';
         } elseif ($row['status'] == 'pending') {
@@ -162,7 +169,7 @@ $quotes = [
 $day_index = date('w');
 $daily_quote = $quotes[$day_index];
 
-// Fungsi untuk format bulan dalam bahasa Indonesia
+// Fungsi untuk format bulan dalam bahasa Indonesia dengan tahun
 function formatIndonesianDate($date) {
     $months = [
         1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -171,8 +178,9 @@ function formatIndonesianDate($date) {
     $dateObj = new DateTime($date);
     $day = $dateObj->format('d');
     $month = (int)$dateObj->format('m');
+    $year = $dateObj->format('Y');
     $hour = $dateObj->format('H:i');
-    return "$day {$months[$month]}, $hour";
+    return "$day {$months[$month]} $year, $hour";
 }
 ?>
 
@@ -181,7 +189,7 @@ function formatIndonesianDate($date) {
 <head>
     <title>Dashboard - SCHOBANK SYSTEM</title>
     <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
@@ -206,7 +214,8 @@ function formatIndonesianDate($date) {
             -webkit-user-select: none;
             -ms-user-select: none;
             user-select: none;
-            overscroll-behavior: none;
+            overscroll-behavior-y: auto;
+            touch-action: auto;
         }
 
         .wrapper {
@@ -306,19 +315,20 @@ function formatIndonesianDate($date) {
 
         .notification-dropdown-content {
             display: none;
-            position: absolute;
-            right: 0;
+            position: fixed;
+            right: clamp(1rem, 2vw, 1.5rem);
+            top: clamp(60px, 15vw, 80px);
             background-color: white;
             min-width: clamp(280px, 40vw, 320px);
+            max-width: 90vw;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            z-index: 100;
+            z-index: 1000;
             border-radius: 16px;
             overflow: hidden;
-            margin-top: 15px;
-            max-height: 300px;
+            max-height: 50vh;
             overflow-y: auto;
-            border: 1px solid rgba(0, 0, 0, 0.05);
             -webkit-overflow-scrolling: touch;
+            border: 1px solid rgba(0, 0, 0, 0.05);
         }
 
         .notification-item {
@@ -1011,8 +1021,8 @@ function formatIndonesianDate($date) {
                 transform: translateX(-50%);
                 top: clamp(120px, 20vw, 140px);
                 width: clamp(80%, 90vw, 90%);
-                max-height: 300px;
-                z-index: 999;
+                max-height: 50vh;
+                z-index: 9999;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
             }
@@ -1023,8 +1033,66 @@ function formatIndonesianDate($date) {
             }
 
             .card-menu {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                grid-template-rows: auto auto;
+                gap: clamp(0.8rem, 2vw, 1rem);
                 padding: clamp(0.8rem, 2vw, 1rem);
-                margin: clamp(1rem, 2vw, 1.5rem) auto;
+                max-width: clamp(340px, 90vw, 400px);
+            }
+
+            .card-menu .card:nth-child(1) {
+                grid-column: 1 / 2;
+                grid-row: 1 / 2;
+            }
+
+            .card-menu .card:nth-child(2) {
+                grid-column: 2 / 3;
+                grid-row: 1 / 2;
+            }
+
+            .card-menu .card:nth-child(3) {
+                grid-column: 1 / 2;
+                grid-row: 2 / 3;
+            }
+
+            .card-menu .card:nth-child(4) {
+                grid-column: 2 / 3;
+                grid-row: 2 / 3;
+            }
+
+            .card {
+                flex: none;
+                padding: clamp(1rem, 2.5vw, 1.5rem);
+                border-radius: 16px;
+                box-shadow: 0 6px 15px rgba(0, 0, 0, 0.08);
+            }
+
+            .card:nth-child(3), .card:nth-child(4) {
+                padding: clamp(1.2rem, 3vw, 1.8rem);
+            }
+
+            .card h3 {
+                font-size: var(--font-size-md);
+            }
+
+            .card p {
+                font-size: var(--font-size-xs);
+                margin-top: 0.6rem;
+            }
+
+            .card-icon i {
+                font-size: clamp(1.8rem, 4vw, 2.2rem);
+            }
+
+            .card-icon::after {
+                width: clamp(40px, 8vw, 50px);
+                height: clamp(40px, 8vw, 50px);
+            }
+
+            .card:hover .card-icon::after {
+                width: clamp(50px, 10vw, 60px);
+                height: clamp(50px, 10vw, 60px);
             }
 
             .recent-transactions {
@@ -1091,7 +1159,7 @@ function formatIndonesianDate($date) {
             .notification-dropdown-content {
                 width: clamp(85%, 95vw, 95%);
                 top: clamp(100px, 18vw, 120px);
-                max-height: 300px;
+                max-height: 50vh;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
             }
@@ -1108,6 +1176,42 @@ function formatIndonesianDate($date) {
                 width: clamp(50px, 12vw, 60px);
                 font-size: var(--font-size-xs);
             }
+
+            .card-menu {
+                grid-template-columns: repeat(2, 1fr);
+                gap: clamp(0.6rem, 1.5vw, 0.8rem);
+                max-width: clamp(300px, 95vw, 360px);
+            }
+
+            .card {
+                padding: clamp(0.8rem, 2vw, 1.2rem);
+            }
+
+            .card:nth-child(3), .card:nth-child(4) {
+                padding: clamp(1rem, 2.5vw, 1.5rem);
+            }
+
+            .card h3 {
+                font-size: var(--font-size-sm);
+            }
+
+            .card p {
+                font-size: calc(var(--font-size-xs) * 0.9);
+            }
+
+            .card-icon i {
+                font-size: clamp(1.6rem, 3.5vw, 2rem);
+            }
+
+            .card-icon::after {
+                width: clamp(35px, 7vw, 45px);
+                height: clamp(35px, 7vw, 45px);
+            }
+
+            .card:hover .card-icon::after {
+                width: clamp(45px, 9vw, 55px);
+                height: clamp(45px, 9vw, 55px);
+            }
         }
 
         @keyframes cardEntrance {
@@ -1123,6 +1227,7 @@ function formatIndonesianDate($date) {
         .card:nth-child(1) { --i: 1; }
         .card:nth-child(2) { --i: 2; }
         .card:nth-child(3) { --i: 3; }
+        .card:nth-child(4) { --i: 4; }
 
         .header, .card-wrapper, .recent-transactions {
             transition: all 0.3s ease;
@@ -1181,11 +1286,11 @@ function formatIndonesianDate($date) {
                     <span class="card-type-badge"><?php echo htmlspecialchars($card_info['level']); ?></span>
                 </div>
                 <div class="account-number">
-                    <?= htmlspecialchars($no_rekening) ?>
+                    <?= htmlspecialchars($formatted_no_rekening) ?>
                 </div>
                 <div class="card-footer">
                     <div class="holder-info">
-                        <div class="info-label">Pemilik</div>
+                        <div class="info-label">Pemilik Rekening</div>
                         <div class="holder-name"><?= htmlspecialchars(strtoupper($user_data['nama'])) ?></div>
                     </div>
                     <div class="balance-section" id="balanceContainer">
@@ -1259,6 +1364,14 @@ function formatIndonesianDate($date) {
                 </div>
                 <h3>Transfer Lokal</h3>
                 <p>Kirim uang dengan cepat ke teman kamu</p>
+            </div>
+            <div class="card <?php echo !$has_pin ? 'disabled' : ''; ?>" 
+                 <?php echo $has_pin ? 'onclick="window.location.href=\'qr_payment.php\'"' : 'onclick="showPinAlert()" title="Harap atur PIN terlebih dahulu"'; ?>>
+                <div class="card-icon">
+                    <i class="fas fa-qrcode"></i>
+                </div>
+                <h3>Pembayaran QR</h3>
+                <p>Bayar atau terima uang dengan kode QR</p>
             </div>
         </div>
 
@@ -1341,24 +1454,36 @@ function formatIndonesianDate($date) {
     </div>
 
     <script>
-        // Prevent pinch-to-zoom and double-tap zoom on mobile
+        // Prevent pinch-to-zoom while allowing scrolling
+        document.addEventListener('touchstart', function (event) {
+            if (event.touches.length > 1) {
+                event.preventDefault(); // Prevent pinch-to-zoom
+            }
+        }, { passive: false });
+
+        // Ensure scrolling is enabled
         document.addEventListener('touchmove', function (event) {
-            if (event.scale !== 1) {
+            // Only prevent pinch-to-zoom, allow single-touch scrolling
+            if (event.touches.length > 1) {
                 event.preventDefault();
             }
         }, { passive: false });
 
-        // Add CSS to prevent double-tap zoom
-        const style = document.createElement('style');
-        style.textContent = `
-            html, body {
-                touch-action: pan-x pan-y;
-            }
-        `;
-        document.head.appendChild(style);
-
-        // Animate balance counter
+        // Remove dynamic touch-action CSS to avoid conflicts
         document.addEventListener('DOMContentLoaded', function() {
+            const style = document.createElement('style');
+            style.textContent = `
+                html, body {
+                    touch-action: auto;
+                    overscroll-behavior-y: auto;
+                }
+                .notification-dropdown-content {
+                    touch-action: pan-y;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // Animate balance counter
             const balanceElement = document.getElementById('balanceCounter');
             const finalBalance = parseInt(balanceElement.textContent.replace(/[,.]/g, '')) || 0;
             let currentBalance = 0;
@@ -1390,7 +1515,7 @@ function formatIndonesianDate($date) {
             if (dropdownContent.style.display === 'block') {
                 dropdownContent.style.display = 'none';
             }
-        });
+        }, { passive: true });
 
         // Initialize swipe to delete and click to read
         function initializeSwipe() {
