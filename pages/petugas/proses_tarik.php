@@ -13,8 +13,18 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
 }
 
 // Validasi keberadaan petugas1_nama dan petugas2_nama di jadwal hari ini
-$query_schedule = "SELECT petugas1_nama, petugas2_nama FROM petugas_tugas WHERE tanggal = CURDATE()";
+$query_schedule = "
+    SELECT u1.nama AS petugas1_nama, u2.nama AS petugas2_nama 
+    FROM petugas_tugas pt
+    LEFT JOIN users u1 ON pt.petugas1_id = u1.id
+    LEFT JOIN users u2 ON pt.petugas2_id = u2.id
+    WHERE pt.tanggal = CURDATE()
+";
 $stmt_schedule = $conn->prepare($query_schedule);
+if (!$stmt_schedule) {
+    echo json_encode(['status' => 'error', 'message' => 'Error preparing schedule query.', 'email_status' => 'none']);
+    exit();
+}
 $stmt_schedule->execute();
 $result_schedule = $stmt_schedule->get_result();
 $schedule = $result_schedule->fetch_assoc();
@@ -33,10 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $petugas_id = $_SESSION['user_id'];
 
     if ($action === 'cek_rekening') {
+        // Validasi format no_rekening: 8 digit angka tanpa prefix
+        if (empty($no_rekening) || strlen($no_rekening) !== 8 || !preg_match('/^[0-9]{8}$/', $no_rekening)) {
+            echo json_encode(['status' => 'error', 'message' => 'Format nomor rekening tidak valid. Harus 8 digit angka.', 'email_status' => 'none']);
+            exit();
+        }
+
         $query = "
             SELECT r.no_rekening, u.nama, u.email, u.has_pin, u.pin, u.id as user_id, r.id as rekening_id, r.saldo, 
                    j.nama_jurusan AS jurusan, 
-                   CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
+                   CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas,
+                   u.is_frozen, u.pin_block_until
             FROM rekening r 
             JOIN users u ON r.user_id = u.id 
             LEFT JOIN jurusan j ON u.jurusan_id = j.id
@@ -45,6 +62,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             WHERE r.no_rekening = ?
         ";
         $stmt = $conn->prepare($query);
+        if (!$stmt) {
+            echo json_encode(['status' => 'error', 'message' => 'Error preparing statement.', 'email_status' => 'none']);
+            exit();
+        }
         $stmt->bind_param('s', $no_rekening);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -53,6 +74,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak ditemukan.', 'email_status' => 'none']);
         } else {
             $row = $result->fetch_assoc();
+            $is_blocked = $row['pin_block_until'] && strtotime($row['pin_block_until']) > time();
+            $is_frozen = (bool)$row['is_frozen'];
+
+            if ($is_frozen || $is_blocked) {
+                $error_message = $is_frozen ? 'Akun sedang dibekukan. Tidak dapat melakukan tarik tunai.' : 'Akun sedang diblokir sementara. Tidak dapat melakukan tarik tunai.';
+                echo json_encode(['status' => 'error', 'message' => $error_message, 'email_status' => 'none']);
+                exit();
+            }
+
             if (!empty($row['pin']) && !$row['has_pin']) {
                 $update_query = "UPDATE users SET has_pin = 1 WHERE id = ?";
                 $update_stmt = $conn->prepare($update_query);
@@ -77,12 +107,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         $stmt->close();
     } elseif ($action === 'check_balance') {
-        if (empty($no_rekening)) {
-            echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak valid.', 'email_status' => 'none']);
+        // Validasi format no_rekening: 8 digit angka tanpa prefix
+        if (empty($no_rekening) || strlen($no_rekening) !== 8 || !preg_match('/^[0-9]{8}$/', $no_rekening)) {
+            echo json_encode(['status' => 'error', 'message' => 'Format nomor rekening tidak valid. Harus 8 digit angka.', 'email_status' => 'none']);
             exit();
         }
-        if ($jumlah < 1000) {
-            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan minimal Rp 1.000.', 'email_status' => 'none']);
+
+        if ($jumlah < 1) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan minimal Rp 1.', 'email_status' => 'none']);
             exit();
         }
         if ($jumlah > 99999999) {
@@ -92,6 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         $query = "SELECT saldo FROM rekening WHERE no_rekening = ?";
         $stmt = $conn->prepare($query);
+        if (!$stmt) {
+            echo json_encode(['status' => 'error', 'message' => 'Error preparing statement.', 'email_status' => 'none']);
+            exit();
+        }
         $stmt->bind_param('s', $no_rekening);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -124,6 +160,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         $query = "SELECT pin, has_pin, pin_block_until, failed_pin_attempts FROM users WHERE id = ?";
         $stmt = $conn->prepare($query);
+        if (!$stmt) {
+            echo json_encode(['status' => 'error', 'message' => 'Error preparing statement.', 'email_status' => 'none']);
+            exit();
+        }
         $stmt->bind_param('i', $user_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -135,7 +175,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         $user = $result->fetch_assoc();
 
-        // Check if PIN is blocked
         if ($user['pin_block_until'] && strtotime($user['pin_block_until']) > time()) {
             $block_time = date('d M Y H:i:s', strtotime($user['pin_block_until']));
             echo json_encode(['status' => 'error', 'message' => "PIN diblokir hingga $block_time. Hubungi admin untuk bantuan.", 'email_status' => 'none']);
@@ -156,14 +195,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
 
-        // Assuming plain text PIN for demo; use password_verify() if hashed
-        if ($user['pin'] !== $pin) {
+        $hashed_pin = hash('sha256', $pin);
+        
+        if ($user['pin'] !== $hashed_pin) {
             $failed_attempts = $user['failed_pin_attempts'] + 1;
             $max_attempts = 3;
             $block_duration = 24 * 3600; // 24 hours in seconds
 
             $update_attempts_query = "UPDATE users SET failed_pin_attempts = ? WHERE id = ?";
             $update_attempts_stmt = $conn->prepare($update_attempts_query);
+            if (!$update_attempts_stmt) {
+                echo json_encode(['status' => 'error', 'message' => 'Error updating attempts.', 'email_status' => 'none']);
+                exit();
+            }
             $update_attempts_stmt->bind_param('ii', $failed_attempts, $user_id);
             $update_attempts_stmt->execute();
             $update_attempts_stmt->close();
@@ -172,6 +216,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $block_until = date('Y-m-d H:i:s', time() + $block_duration);
                 $update_block_query = "UPDATE users SET pin_block_until = ?, failed_pin_attempts = 0 WHERE id = ?";
                 $update_block_stmt = $conn->prepare($update_block_query);
+                if (!$update_block_stmt) {
+                    echo json_encode(['status' => 'error', 'message' => 'Error blocking PIN.', 'email_status' => 'none']);
+                    exit();
+                }
                 $update_block_stmt->bind_param('si', $block_until, $user_id);
                 $update_block_stmt->execute();
                 $update_block_stmt->close();
@@ -183,20 +231,56 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
 
-        // Reset failed attempts on successful PIN
         $reset_attempts_query = "UPDATE users SET failed_pin_attempts = 0, pin_block_until = NULL WHERE id = ?";
         $reset_attempts_stmt = $conn->prepare($reset_attempts_query);
-        $reset_attempts_stmt->bind_param('i', $user_id);
-        $reset_attempts_stmt->execute();
-        $reset_attempts_stmt->close();
+        if ($reset_attempts_stmt) {
+            $reset_attempts_stmt->bind_param('i', $user_id);
+            $reset_attempts_stmt->execute();
+            $reset_attempts_stmt->close();
+        }
 
         echo json_encode(['status' => 'success', 'message' => 'PIN valid', 'email_status' => 'none']);
         $stmt->close();
     } elseif ($action === 'tarik_tunai') {
+        if (empty($no_rekening) || strlen($no_rekening) !== 8 || !preg_match('/^[0-9]{8}$/', $no_rekening)) {
+            echo json_encode(['status' => 'error', 'message' => 'Format nomor rekening tidak valid. Harus 8 digit angka.', 'email_status' => 'none']);
+            exit();
+        }
+        if ($jumlah < 1) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan minimal Rp 1.', 'email_status' => 'none']);
+            exit();
+        }
+        if ($jumlah > 99999999) {
+            echo json_encode(['status' => 'error', 'message' => 'Jumlah penarikan maksimal Rp 99.999.999.', 'email_status' => 'none']);
+            exit();
+        }
+        if ($user_id <= 0) {
+            $query_user = "SELECT user_id FROM rekening WHERE no_rekening = ?";
+            $stmt_user = $conn->prepare($query_user);
+            if (!$stmt_user) {
+                echo json_encode(['status' => 'error', 'message' => 'Error fetching user ID.', 'email_status' => 'none']);
+                exit();
+            }
+            $stmt_user->bind_param('s', $no_rekening);
+            $stmt_user->execute();
+            $result_user = $stmt_user->get_result();
+            if ($result_user->num_rows == 0) {
+                echo json_encode(['status' => 'error', 'message' => 'Nomor rekening tidak ditemukan.', 'email_status' => 'none']);
+                exit();
+            }
+            $row_user = $result_user->fetch_assoc();
+            $user_id = intval($row_user['user_id']);
+            $stmt_user->close();
+
+            if ($user_id <= 0) {
+                echo json_encode(['status' => 'error', 'message' => 'ID user tidak valid.', 'email_status' => 'none']);
+                exit();
+            }
+        }
+
         try {
             $conn->begin_transaction();
 
-            // Periksa status is_frozen dan data rekening
             $query = "
                 SELECT r.id, r.user_id, r.saldo, u.nama, u.email, u.is_frozen, 
                        j.nama_jurusan AS jurusan, 
@@ -209,6 +293,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 WHERE r.no_rekening = ?
             ";
             $stmt = $conn->prepare($query);
+            if (!$stmt) {
+                throw new Exception('Error preparing statement untuk cek rekening.');
+            }
             $stmt->bind_param('s', $no_rekening);
             $stmt->execute();
             $result = $stmt->get_result();
@@ -218,18 +305,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             $row = $result->fetch_assoc();
-            if ($row['is_frozen']) {
-                throw new Exception('Akun ini sedang dibekukan dan tidak dapat melakukan penarikan, Hubungi Admin!');
-            }
 
             $rekening_id = $row['id'];
             $saldo_sekarang = $row['saldo'];
             $nama_nasabah = $row['nama'];
-            $user_id = $row['user_id'];
+            $user_id_check = $row['user_id'];
             $email = $row['email'] ?? '';
             $jurusan = $row['jurusan'] ?? '-';
             $kelas = $row['kelas'] ?? '-';
             $stmt->close();
+
+            if ($user_id != $user_id_check) {
+                throw new Exception('ID user tidak cocok dengan rekening.');
+            }
 
             if ($saldo_sekarang < $jumlah) {
                 throw new Exception('Saldo nasabah tidak mencukupi untuk melakukan penarikan.');
@@ -239,12 +327,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             // Hitung total setoran dan penarikan petugas hari ini
             $query_setoran = "SELECT COALESCE(SUM(jumlah), 0) as total_setoran 
-                             FROM transaksi 
-                             WHERE petugas_id = ? 
-                             AND jenis_transaksi = 'setor' 
-                             AND status = 'approved' 
-                             AND DATE(created_at) = ?";
+                              FROM transaksi 
+                              WHERE petugas_id = ? 
+                              AND jenis_transaksi = 'setor' 
+                              AND status = 'approved' 
+                              AND DATE(created_at) = ?";
             $stmt_setoran = $conn->prepare($query_setoran);
+            if (!$stmt_setoran) {
+                throw new Exception('Error preparing setoran query.');
+            }
             $stmt_setoran->bind_param('is', $petugas_id, $today);
             $stmt_setoran->execute();
             $total_setoran = floatval($stmt_setoran->get_result()->fetch_assoc()['total_setoran']);
@@ -257,26 +348,58 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                AND status = 'approved' 
                                AND DATE(created_at) = ?";
             $stmt_penarikan = $conn->prepare($query_penarikan);
+            if (!$stmt_penarikan) {
+                throw new Exception('Error preparing penarikan query.');
+            }
             $stmt_penarikan->bind_param('is', $petugas_id, $today);
             $stmt_penarikan->execute();
             $total_penarikan = floatval($stmt_penarikan->get_result()->fetch_assoc()['total_penarikan']);
             $stmt_penarikan->close();
 
-            // Hitung saldo bersih petugas (setoran - penarikan)
             $saldo_bersih = $total_setoran - $total_penarikan;
 
             if ($saldo_bersih < $jumlah) {
                 throw new Exception('Saldo kas petugas hari ini tidak mencukupi untuk penarikan sebesar Rp ' . number_format($jumlah, 0, ',', '.') . '.');
             }
 
-            // Generate unique transaction number
-            $no_transaksi = 'TRXP' . date('Ymd') . sprintf('%06d', mt_rand(100000, 999999));
+            // Generate unique ID Transaksi
+            do {
+                $date_prefix = date('ymd');
+                $random_8digit = sprintf('%08d', mt_rand(10000000, 99999999));
+                $id_transaksi = $date_prefix . $random_8digit;
+                
+                $check_id_query = "SELECT id FROM transaksi WHERE id_transaksi = ?";
+                $check_id_stmt = $conn->prepare($check_id_query);
+                $check_id_stmt->bind_param('s', $id_transaksi);
+                $check_id_stmt->execute();
+                $check_id_result = $check_id_stmt->get_result();
+                $id_exists = $check_id_result->num_rows > 0;
+                $check_id_stmt->close();
+            } while ($id_exists);
 
-            // Insert transaksi
-            $query_transaksi = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, petugas_id, status, created_at) 
-                               VALUES (?, ?, 'tarik', ?, ?, 'approved', NOW())";
+            // Generate unique Nomor Referensi
+            do {
+                $date_prefix = date('ymd');
+                $random_6digit = sprintf('%06d', mt_rand(100000, 999999));
+                $no_transaksi = 'TRXTP' . $date_prefix . $random_6digit;
+                
+                $check_query = "SELECT id FROM transaksi WHERE no_transaksi = ?";
+                $check_stmt = $conn->prepare($check_query);
+                $check_stmt->bind_param('s', $no_transaksi);
+                $check_stmt->execute();
+                $check_result = $check_stmt->get_result();
+                $exists = $check_result->num_rows > 0;
+                $check_stmt->close();
+            } while ($exists);
+
+            // Insert transaksi dengan keterangan default "Tarik Saldo Tabungan"
+            $query_transaksi = "INSERT INTO transaksi (id_transaksi, no_transaksi, rekening_id, jenis_transaksi, jumlah, petugas_id, status, keterangan, created_at) 
+                                VALUES (?, ?, ?, 'tarik', ?, ?, 'approved', 'Tarik Saldo Tabungan', NOW())";
             $stmt_transaksi = $conn->prepare($query_transaksi);
-            $stmt_transaksi->bind_param('sidi', $no_transaksi, $rekening_id, $jumlah, $petugas_id);
+            if (!$stmt_transaksi) {
+                throw new Exception('Error preparing transaksi statement.');
+            }
+            $stmt_transaksi->bind_param('ssidi', $id_transaksi, $no_transaksi, $rekening_id, $jumlah, $petugas_id);
             if (!$stmt_transaksi->execute()) {
                 throw new Exception('Gagal menyimpan transaksi.');
             }
@@ -287,6 +410,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $saldo_baru = $saldo_sekarang - $jumlah;
             $query_update_saldo = "UPDATE rekening SET saldo = ?, updated_at = NOW() WHERE id = ?";
             $stmt_update_saldo = $conn->prepare($query_update_saldo);
+            if (!$stmt_update_saldo) {
+                throw new Exception('Error preparing update saldo statement.');
+            }
             $stmt_update_saldo->bind_param('di', $saldo_baru, $rekening_id);
             if (!$stmt_update_saldo->execute()) {
                 throw new Exception('Gagal memperbarui saldo.');
@@ -297,6 +423,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $query_mutasi = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir, created_at) 
                             VALUES (?, ?, ?, ?, NOW())";
             $stmt_mutasi = $conn->prepare($query_mutasi);
+            if (!$stmt_mutasi) {
+                throw new Exception('Error preparing mutasi statement.');
+            }
             $stmt_mutasi->bind_param('iidd', $transaksi_id, $rekening_id, $jumlah, $saldo_baru);
             if (!$stmt_mutasi->execute()) {
                 throw new Exception('Gagal mencatat mutasi.');
@@ -307,6 +436,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $message = "Transaksi penarikan tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh petugas.";
             $query_notifikasi = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
             $stmt_notifikasi = $conn->prepare($query_notifikasi);
+            if (!$stmt_notifikasi) {
+                throw new Exception('Error preparing notifikasi statement.');
+            }
             $stmt_notifikasi->bind_param('is', $user_id, $message);
             if (!$stmt_notifikasi->execute()) {
                 throw new Exception('Gagal mengirim notifikasi.');
@@ -314,80 +446,107 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $stmt_notifikasi->close();
 
             // Kirim email notifikasi
-            $email_status = 'success';
+            $email_status = 'none';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $subject = "[{$no_transaksi}] Bukti Penarikan Tunai - SCHOBANK " . date('Y-m-d H:i:s');
+                $subject = "Bukti Penarikan Tunai {$no_transaksi}";
+
                 $bulan = [
                     'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
                     'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
                     'Sep' => 'September', 'Oct' => 'Oktober', 'Nov' => 'November', 'Dec' => 'Desember'
                 ];
-                $tanggal_transaksi = date('d M Y H:i:s');
-                foreach ($bulan as $en => $id) {
-                    $tanggal_transaksi = str_replace($en, $id, $tanggal_transaksi);
+                $tanggal_transaksi = date('d M Y, H:i');
+                foreach ($bulan as $en => $id_bulan) {
+                    $tanggal_transaksi = str_replace($en, $id_bulan, $tanggal_transaksi);
                 }
 
                 $message_email = "
-                <div style='font-family: Poppins, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f0f5ff; border-radius: 12px; overflow: hidden;'>
-                    <div style='background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 30px 20px; text-align: center; color: #ffffff;'>
-                        <h2 style='font-size: 24px; font-weight: 600; margin: 0;'>SCHOBANK SYSTEM</h2>
-                        <p style='font-size: 16px; opacity: 0.8; margin: 5px 0 0;'>Bukti Transaksi Penarikan Tunai</p>
-                    </div>
-                    <div style='background: #ffffff; padding: 30px;'>
-                        <h3 style='color: #1e3a8a; font-size: 20px; font-weight: 600; margin-bottom: 20px;'>Halo, {$nama_nasabah}</h3>
-                        <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Kami informasikan bahwa transaksi penarikan tunai dari rekening Anda telah berhasil diproses oleh petugas. Berikut rincian transaksi:</p>
-                        <div style='background: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 20px;'>
-                            <table style='width: 100%; font-size: 15px; color: #333333;'>
-                                <tr>
-                                    <td style='padding: 8px 0; font-weight: 500;'>Nomor Transaksi</td>
-                                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #1e3a8a;'>{$no_transaksi}</td>
-                                </tr>
-                                <tr>
-                                    <td style='padding: 8px 0; font-weight: 500;'>Nomor Rekening</td>
-                                    <td style='padding: 8px 0; text-align: right;'>{$no_rekening}</td>
-                                </tr>
-                                <tr>
-                                    <td style='padding: 8px 0; font-weight: 500;'>Nama Pemilik</td>
-                                    <td style='padding: 8px 0; text-align: right;'>{$nama_nasabah}</td>
-                                </tr>
-                                <tr>
-                                    <td style='padding: 8px 0; font-weight: 500;'>Jurusan</td>
-                                    <td style='padding: 8px 0; text-align: right;'>{$jurusan}</td>
-                                </tr>
-                                <tr>
-                                    <td style='padding: 8px 0; font-weight: 500;'>Kelas</td>
-                                    <td style='padding: 8px 0; text-align: right;'>{$kelas}</td>
-                                </tr>
-                                <tr>
-                                    <td style='padding: 8px 0; font-weight: 500;'>Jumlah Penarikan</td>
-                                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #dc2626;'>Rp " . number_format($jumlah, 0, ',', '.') . "</td>
-                                </tr>
-                                <tr>
-                                    <td style='padding: 8px 0; font-weight: 500;'>Tanggal Transaksi</td>
-                                    <td style='padding: 8px 0; text-align: right;'>{$tanggal_transaksi} WIB</td>
-                                </tr>
-                            </table>
-                        </div>
-                        
-                        <!-- Email Banner Image -->
-                        <div style='text-align: center; margin: 20px 0;'>
-                            <img src='cid:emailbanner' alt='SCHOBANK Banner' style='max-width: 100%; height: auto; border-radius: 8px; border: 2px solid #e2e8f0;' />
-                        </div>
-                        
-                        <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px;'>Terima kasih telah menggunakan layanan SCHOBANK SYSTEM. Untuk informasi lebih lanjut, silakan kunjungi halaman akun Anda atau hubungi petugas kami.</p>
-                        <p style='color: #e74c3c; font-size: 14px; font-weight: 500; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;'>
-                            <span style='font-size: 18px;'>🔒</span> Jangan bagikan informasi rekening, kata sandi, atau detail transaksi kepada pihak lain.
-                        </p>
-                        <div style='text-align: center; margin: 30px 0;'>
-                            <a href='mailto:schobanksystem@gmail.com' style='display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%); color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 500;'>Hubungi Kami</a>
-                        </div>
-                    </div>
-                    <div style='background: #f0f5ff; padding: 15px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0;'>
-                        <p style='margin: 0;'>© " . date('Y') . " SCHOBANK SYSTEM. All rights reserved.</p>
-                        <p style='margin: 5px 0 0;'>Email ini otomatis. Mohon tidak membalas.</p>
-                        <p style='margin: 5px 0 0; color: #999999;'>Transaksi ID: {$no_transaksi} | " . date('Y-m-d H:i:s T') . "</p>
-                    </div>
-                </div>";
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
+</head>
+<body style='margin:0; padding:0; font-family:Poppins,Arial,sans-serif; background:#f5f5f5;'>
+    <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%'>
+        <tr>
+            <td style='padding:40px 20px;'>
+                <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='margin:0 auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);'>
+                    <!-- Header -->
+                    <tr>
+                        <td style='padding:40px 40px 30px; text-align:center; background:#ffffff;'>
+                            <img src='cid:header_img' alt='Schobank' style='max-width:260px; width:100%; height:auto;' />
+                        </td>
+                    </tr>
+
+                    <!-- Content -->
+                    <tr>
+                        <td style='padding:0 40px 40px;'>
+                            <h2 style='margin:0 0 12px; font-size:20px; font-weight:600; color:#1a1a1a;'>Halo <strong>{$nama_nasabah}</strong>,</h2>
+                            <p style='margin:0 0 24px; font-size:15px; line-height:1.6; color:#4a4a4a;'>
+                                Kamu berhasil menarik tunai <strong style='color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</strong> dari rekening Tabungan Utama.
+                            </p>
+
+                            <hr style='border:none; border-top:1px solid #e5e5e5; margin:30px 0;' />
+
+                            <h3 style='margin:0 0 20px; font-size:17px; font-weight:700; color:#1a1a1a;'>Detail Transaksi</h3>
+
+                            <div style='margin-bottom:18px;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nominal Penarikan</p>
+                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
+                            </div>
+                            <div style='margin-bottom:18px;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Biaya Admin</p>
+                                <p style='margin:0; font-size:16px; font-weight:600; color:#22c55e;'>Gratis</p>
+                            </div>
+                            <div style='margin-bottom:18px;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Total</p>
+                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
+                            </div>
+                            <div style='margin-bottom:18px;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Sumber</p>
+                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening}</span></p>
+                            </div>
+                            <div style='margin-bottom:18px;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
+                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>Tarik Saldo Tabungan</p>
+                            </div>
+                            <div style='margin-bottom:18px;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal & Waktu</p>
+                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
+                            </div>
+                            <div style='margin-bottom:18px;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
+                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
+                            </div>
+                            <div style='margin-bottom:0;'>
+                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
+                                <p style='margin:0; font-size:16px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Footer (tanpa background warna, lebih bersih) -->
+                    <tr>
+                        <td style='padding:30px 40px; text-align:center; border-top:1px solid #e5e5e5; background:#ffffff;'>
+                            <p style='margin:0 0 8px; font-size:13px; color:#6b7280;'>
+                                © " . date('Y') . " Schobank Student Digital Banking. All rights reserved.
+                            </p>
+                            <p style='margin:0 0 8px; font-size:12px; color:#9ca3af;'>
+                                Email ini dikirim secara otomatis. Mohon tidak membalas email ini.
+                            </p>
+                            <p style='margin:0; font-size:11px; color:#d1d5db;'>
+                                Ref: {$no_transaksi} • ID: {$id_transaksi}
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>";
 
                 try {
                     $mail = new PHPMailer(true);
@@ -398,26 +557,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $mail->isSMTP();
                     $mail->Host = 'smtp.gmail.com';
                     $mail->SMTPAuth = true;
-                    $mail->Username = 'schobanksystem@gmail.com'; // Ganti dengan email SMTP Anda
-                    $mail->Password = 'dgry fzmc mfrd hzzq'; // Ganti dengan kata sandi SMTP Anda
+                    $mail->Username = 'myschobank@gmail.com';
+                    $mail->Password = 'xpni zzju utfu mkth';
                     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
                     $mail->Port = 587;
                     $mail->CharSet = 'UTF-8';
 
-                    $mail->setFrom('schobanksystem@gmail.com', 'SCHOBANK SYSTEM');
+                    $mail->setFrom('myschobank@gmail.com', 'Schobank Student Digital Banking');
                     $mail->addAddress($email, $nama_nasabah);
-                    $mail->addReplyTo('no-reply@schobank.com', 'No Reply');
+                    $mail->addReplyTo('no-reply@myschobank.com', 'No Reply');
 
-                    $unique_id = uniqid('schobank_', true) . '@schobank.com';
+                    $unique_id = uniqid('myschobank_', true) . '@myschobank.com';
                     $mail->MessageID = '<' . $unique_id . '>';
-                    $mail->addCustomHeader('X-Transaction-ID', $no_transaksi);
-                    $mail->addCustomHeader('X-Mailer', 'SCHOBANK-System-v1.0');
+                    $mail->addCustomHeader('X-Transaction-ID', $id_transaksi);
+                    $mail->addCustomHeader('X-Reference-Number', $no_transaksi);
+                    $mail->addCustomHeader('X-Mailer', 'Schobank-System-v1.0');
                     $mail->addCustomHeader('X-Priority', '1');
                     $mail->addCustomHeader('Importance', 'High');
 
-                    $banner_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/emailbanner.jpeg';
-                    if (file_exists($banner_path)) {
-                        $mail->addEmbeddedImage($banner_path, 'emailbanner', 'emailbanner.jpeg');
+                    $header_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/header.png';
+                    if (file_exists($header_path)) {
+                        $mail->addEmbeddedImage($header_path, 'header_img', 'header.png');
                     }
 
                     $mail->isHTML(true);
@@ -433,7 +593,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     $mail->smtpClose();
                 } catch (Exception $e) {
-                    error_log("Mail error for transaction {$no_transaksi}: " . $e->getMessage());
+                    error_log("Mail error for transaction {$id_transaksi}: " . $e->getMessage());
                     $email_status = 'failed';
                 }
             }
@@ -451,7 +611,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 'status' => 'success',
                 'message' => $response_message,
                 'email_status' => $email_status,
-                'transaction_id' => $no_transaksi,
+                'id_transaksi' => $id_transaksi,
+                'no_transaksi' => $no_transaksi,
                 'saldo_baru' => number_format($saldo_baru, 0, ',', '.')
             ]);
         } catch (Exception $e) {
@@ -468,4 +629,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 } else {
     echo json_encode(['status' => 'error', 'message' => 'Metode tidak diizinkan.', 'email_status' => 'none']);
 }
+
+$conn->close();
 ?>

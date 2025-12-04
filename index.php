@@ -19,11 +19,11 @@ if (isLoggedIn()) {
             redirect(BASE_URL . 'pages/siswa/dashboard.php');
             break;
         default:
-            redirect(BASE_URL . 'landing.php');
+            redirect(BASE_URL . 'pages/login.php');
             break;
     }
 } else {
-    // Jika belum login, arahkan ke landing.php
-    redirect(BASE_URL . 'landing.php');
+    // Jika belum login, arahkan ke login.php
+    redirect(BASE_URL . 'pages/login.php');
 }
 ?>

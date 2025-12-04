@@ -1,902 +1,756 @@
 <?php
+// pengaturan_akun.php (Admin)
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
+date_default_timezone_set('Asia/Jakarta');
 
-$message = '';
-$error = '';
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-$query = "SELECT username, email FROM users WHERE id = ?";
+// Validate admin access
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header('Location: ../login.php');
+    exit();
+}
+
+// Generate or validate CSRF token
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$token = $_SESSION['csrf_token'];
+
+// Fetch user data
+$query = "SELECT username, email, nama, created_at FROM users WHERE id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $_SESSION['user_id']);
 $stmt->execute();
 $result = $stmt->get_result();
-$user = $result->fetch_assoc();
+$current_user = $result->fetch_assoc();
 
-if (!$user) {
-    $error = "Data pengguna tidak ditemukan.";
+if (!$current_user) {
+    die("Data pengguna tidak ditemukan.");
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
-    $new_username = trim($_POST['username']);
-    $new_email = trim($_POST['email']);
-    $current_password = $_POST['current_password'];
-    $new_password = $_POST['new_password'];
-    $confirm_password = $_POST['confirm_password'];
+// Function Masking Username
+function maskUsername($username) {
+    if (strlen($username) <= 2) return $username;
+    $first = $username[0];
+    $last = substr($username, -1);
+    $len = strlen($username) - 2;
+    return $first . str_repeat('*', max(3, $len)) . $last;
+}
 
-    // Handle password update first if applicable
-    $password_verified = true; // Default to true if no password update
-    if (!empty($new_password) || !empty($confirm_password) || !empty($current_password)) {
-        if (empty($current_password)) {
-            $error = "Password saat ini harus diisi!";
-        } else {
-            $verify_query = "SELECT password FROM users WHERE id = ?";
-            $verify_stmt = $conn->prepare($verify_query);
-            $verify_stmt->bind_param("i", $_SESSION['user_id']);
-            $verify_stmt->execute();
-            $verify_result = $verify_stmt->get_result();
-            $user_data = $verify_result->fetch_assoc();
+$masked_username = maskUsername($current_user['username']);
 
-            if (!$user_data || !isset($user_data['password'])) {
-                $error = "Tidak dapat memverifikasi password, silakan coba lagi nanti.";
-            } else {
-                $stored_hash = $user_data['password'];
-                $is_sha256 = (strlen($stored_hash) == 64 && ctype_xdigit($stored_hash));
-                $password_verified = false;
+// Handle AJAX requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_account') {
+    header('Content-Type: application/json');
+    
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['status' => 'error', 'message' => 'Token CSRF tidak valid']);
+        exit();
+    }
+    
+    $new_username = trim($_POST['username'] ?? '');
+    $new_email = trim($_POST['email'] ?? '');
+    $password_lama = trim($_POST['password_lama'] ?? '');
+    $password_baru = trim($_POST['password_baru'] ?? '');
+    $konfirmasi_password = trim($_POST['konfirmasi_password'] ?? '');
 
-                if ($is_sha256) {
-                    $password_verified = (hash('sha256', $current_password) === $stored_hash);
-                } else {
-                    $password_verified = password_verify($current_password, $stored_hash);
-                }
+    // Gunakan data lama jika input kosong
+    if (empty($new_username)) $new_username = $current_user['username'];
+    if (empty($new_email)) $new_email = $current_user['email'];
 
-                if (!$password_verified) {
-                    $_SESSION['error_popup'] = "Password saat ini salah!";
-                }
-            }
-        }
+    // Validasi format email
+    if (!empty($new_email) && !filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['status' => 'error', 'message' => 'Format email tidak valid!']);
+        exit;
     }
 
-    // Proceed with other validations only if password is verified or no password update
-    if ($password_verified && empty($error) && empty($_SESSION['error_popup'])) {
-        // Validate username
-        if (empty($new_username)) {
-            $error = "Username tidak boleh kosong!";
-        } else {
-            $check_query = "SELECT id FROM users WHERE username = ? AND id != ?";
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
-            $check_stmt->execute();
-            $check_result = $check_stmt->get_result();
+    if (empty($password_lama)) {
+        echo json_encode(['status' => 'error', 'message' => 'Password Lama wajib diisi untuk konfirmasi!']);
+        exit;
+    }
 
-            if ($check_result->num_rows > 0) {
-                $error = "Username sudah digunakan!";
-            }
-        }
+    // Verifikasi Password Lama
+    $q_check = "SELECT password FROM users WHERE id = ?";
+    $stmt_check = $conn->prepare($q_check);
+    $stmt_check->bind_param("i", $_SESSION['user_id']);
+    $stmt_check->execute();
+    $user_data = $stmt_check->get_result()->fetch_assoc();
+    $stored_pass = $user_data['password'];
 
-        // Validate email
-        if (!empty($new_email) && !filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
-            $error = "Format email tidak valid!";
-        } else {
-            $email_check_query = "SELECT id FROM users WHERE email = ? AND id != ? AND email != ''";
-            $email_check_stmt = $conn->prepare($email_check_query);
-            $email_check_stmt->bind_param("si", $new_email, $_SESSION['user_id']);
-            $email_check_stmt->execute();
-            $email_check_result = $email_check_stmt->get_result();
+    $is_sha256 = (strlen($stored_pass) == 64 && ctype_xdigit($stored_pass));
+    $verified = $is_sha256 ? (hash('sha256', $password_lama) === $stored_pass) : password_verify($password_lama, $stored_pass);
 
-            if ($email_check_result->num_rows > 0) {
-                $error = "Email sudah digunakan!";
-            }
-        }
+    if (!$verified) {
+        echo json_encode(['status' => 'error', 'message' => 'Password saat ini salah!']);
+        exit;
+    }
 
-        // Validate new password fields
-        if (!empty($new_password) || !empty($confirm_password)) {
-            if (empty($new_password)) {
-                $error = "Password baru harus diisi!";
-            } elseif (empty($confirm_password)) {
-                $error = "Konfirmasi password harus diisi!";
-            } elseif ($new_password !== $confirm_password) {
-                $error = "Password baru tidak cocok dengan konfirmasi!";
-            } elseif (strlen($new_password) < 6) {
-                $error = "Password baru minimal 6 karakter!";
-            }
-        }
+    // Cek Unik Username & Email
+    $check_query = "SELECT id FROM users WHERE (username = ? OR (email = ? AND email != '')) AND id != ?";
+    $check_stmt = $conn->prepare($check_query);
+    $check_stmt->bind_param("ssi", $new_username, $new_email, $_SESSION['user_id']);
+    $check_stmt->execute();
+    if ($check_stmt->get_result()->num_rows > 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Username atau Email sudah digunakan!']);
+        exit;
+    }
 
-        // Execute update if no errors
-        if (empty($error)) {
-            $updates = ["username = ?"];
-            $types = "s";
-            $params = [$new_username];
+    $conn->begin_transaction();
+    try {
+        $update_sql = "UPDATE users SET username = ?, email = ?";
+        $types = "ss";
+        $params = [$new_username, $new_email];
 
-            // Add email to update
-            $updates[] = "email = ?";
+        // Update Password jika diisi
+        if (!empty($password_baru)) {
+            if (strlen($password_baru) < 8) throw new Exception("Password baru minimal 8 karakter.");
+            if (!preg_match('/[A-Z]/', $password_baru)) throw new Exception("Password harus ada huruf kapital.");
+            if (!preg_match('/[0-9]/', $password_baru)) throw new Exception("Password harus ada angka.");
+            if ($password_baru !== $konfirmasi_password) throw new Exception("Konfirmasi password tidak cocok.");
+            
+            $new_hash = hash('sha256', $password_baru); 
+            
+            $update_sql .= ", password = ?";
             $types .= "s";
-            $params[] = $new_email ?: '';
-
-            // Add password to update if applicable
-            if (!empty($new_password) && !empty($confirm_password) && $password_verified) {
-                if ($is_sha256) {
-                    $updates[] = "password = ?";
-                    $types .= "s";
-                    $params[] = hash('sha256', $new_password);
-                } else {
-                    $updates[] = "password = ?";
-                    $types .= "s";
-                    $params[] = password_hash($new_password, PASSWORD_DEFAULT);
-                }
-            }
-
-            $params[] = $_SESSION['user_id'];
-            $types .= "i";
-
-            $query = "UPDATE users SET " . implode(", ", $updates) . " WHERE id = ?";
-            $stmt = $conn->prepare($query);
-            $stmt->bind_param($types, ...$params);
-
-            if ($stmt->execute()) {
-                $_SESSION['username'] = $new_username;
-                $_SESSION['email'] = $new_email;
-                $_SESSION['update_success'] = !empty($new_password) ? 'password' : (!empty($new_email) && $new_email !== $user['email'] ? 'email' : 'username');
-            } else {
-                $error = "Gagal memperbarui pengaturan: " . $conn->error;
-            }
+            $params[] = $new_hash;
         }
-    }
 
-    // Set no username popup if applicable
-    if ($error === "Username tidak boleh kosong!") {
-        $_SESSION['no_username_popup'] = true;
+        $update_sql .= " WHERE id = ?";
+        $types .= "i";
+        $params[] = $_SESSION['user_id'];
+
+        $stmt_update = $conn->prepare($update_sql);
+        $stmt_update->bind_param($types, ...$params);
+        
+        if (!$stmt_update->execute()) {
+            throw new Exception("Gagal mengupdate data.");
+        }
+
+        $conn->commit();
+        session_destroy();
+        
+        echo json_encode(['status' => 'success', 'message' => 'Profil berhasil diperbarui! Silakan login kembali.']);
+    } catch (Exception $e) {
+        $conn->rollback();
+        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
     }
+    exit;
 }
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Profil - SCHOBANK SYSTEM</title>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pengaturan Akun | Dashboard Admin</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
             --primary-color: #1e3a8a;
             --primary-dark: #1e1b4b;
             --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
-            --accent-color: #f59e0b;
-            --danger-color: #e74c3c;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f0f5ff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-            --scrollbar-track: #1e1b4b;
-            --scrollbar-thumb: #3b82f6;
-            --scrollbar-thumb-hover: #60a5fa;
+            --text-primary: #1a202c;
+            --text-secondary: #4a5568;
+            --text-light: #718096;
+            --bg-light: #f7fafc;
+            --bg-table: #ffffff;
+            --border-color: #e2e8f0;
+            --success-color: #059669;
+            --danger-color: #dc2626;
+            --warning-color: #f59e0b;
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+            --radius: 8px;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-            -webkit-text-size-adjust: none;
-            -webkit-user-select: none;
-            user-select: none;
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+            font-family: 'Poppins', sans-serif; 
         }
 
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
+            display: flex;
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            -webkit-text-size-adjust: none;
-            zoom: 1;
-        }
-
-        .top-nav {
-            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-            padding: 15px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            color: white;
-            box-shadow: var(--shadow-sm);
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
-        }
-
-        .back-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            transition: var(--transition);
-            text-decoration: none;
-        }
-
-        .back-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
+            font-size: 14px;
+            overflow-x: hidden;
         }
 
         .main-content {
             flex: 1;
-            padding: 20px;
+            margin-left: 280px;
+            padding: 30px;
+            max-width: calc(100% - 280px);
+            transition: margin-left 0.3s ease;
             width: 100%;
-            max-width: 800px;
-            margin: 0 auto;
         }
 
+        /* Welcome Banner */
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
-            padding: 25px;
-            border-radius: 15px;
-            margin-bottom: 30px;
+            padding: 20px 25px;
+            border-radius: var(--radius);
+            margin-bottom: 25px;
             box-shadow: var(--shadow-md);
+            display: flex;
+            align-items: center;
+            gap: 15px;
             position: relative;
-            overflow: hidden;
-            animation: fadeInBanner 0.8s ease-out;
-            text-align: center;
+        }
+        .welcome-banner h2 { 
+            margin: 0; 
+            font-size: 1.4rem; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+        }
+        .welcome-banner p { 
+            margin: 4px 0 0 0; 
+            opacity: 0.9; 
+            font-size: 0.9rem; 
         }
 
-        .welcome-banner::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
-            transform: rotate(30deg);
-            animation: shimmer 8s infinite linear;
+        .menu-toggle {
+            display: none;
+            color: white;
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 5px;
         }
 
-        @keyframes shimmer {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @keyframes fadeInBanner {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.5rem, 3vw, 1.8rem);
-            position: relative;
-            z-index: 1;
-        }
-
-        .welcome-banner p {
-            position: relative;
-            z-index: 1;
-            opacity: 0.9;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-        }
-
-        .profile-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
-            transition: var(--transition);
-        }
-
-        .profile-card:hover {
+        /* Form Container */
+        .form-section {
+            background: var(--bg-table);
+            border-radius: var(--radius);
+            padding: 35px;
             box-shadow: var(--shadow-md);
-            transform: translateY(-5px);
+            max-width: 1100px;
+            margin: 0 auto;
+            width: 100%;
         }
 
-        .section-title {
-            margin-bottom: 20px;
-            color: var(--primary-dark);
-            font-size: clamp(1.1rem, 2.5vw, 1.2rem);
+        .section-header {
+            margin-bottom: 25px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 12px;
+        }
+        .section-header h3 {
+            color: var(--primary-color);
+            font-size: 1.15rem;
             display: flex;
             align-items: center;
             gap: 10px;
+            font-weight: 600;
         }
 
-        .form-group {
-            margin-bottom: 20px;
+        /* Form Grid - 3 Kolom per Baris */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
         }
 
-        .form-separator {
-            margin: 30px 0;
-            border-top: 1px solid #e2e8f0;
-            position: relative;
-        }
-
-        .form-separator span {
-            position: absolute;
-            top: -10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: white;
-            padding: 0 15px;
-            color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            font-weight: 500;
+        .form-group { 
+            display: flex;
+            flex-direction: column;
         }
 
         label {
             display: block;
+            font-weight: 500;
+            color: var(--text-secondary);
             margin-bottom: 8px;
-            color: var(--text-secondary);
-            font-weight: 500;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: 0.9rem;
+        }
+        label i { 
+            color: var(--primary-color); 
+            width: 18px; 
+            text-align: center; 
+            margin-right: 6px; 
         }
 
-        .input-wrapper {
-            position: relative;
+        .input-wrapper { 
+            position: relative; 
+            width: 100%; 
         }
 
-        input[type="text"],
-        input[type="email"],
-        input[type="password"] {
+        input[type="text"], 
+        input[type="password"], 
+        input[type="email"] {
             width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            transition: var(--transition);
-            font-family: 'Poppins', sans-serif;
-            background: white;
-            color: var(--text-primary);
+            padding: 12px 45px 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            height: 45px;
+            box-sizing: border-box;
         }
-
-        input[type="text"]:hover,
-        input[type="email"]:hover,
-        input[type="password"]:hover {
+        input:focus {
             border-color: var(--primary-color);
-        }
-
-        input[type="text"]:focus,
-        input[type="email"]:focus,
-        input[type="password"]:focus {
             outline: none;
-            border-color: var(--secondary-color);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-            transform: scale(1.02);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
         }
 
-        .password-field {
-            position: relative;
-        }
-
-        .password-toggle {
+        .toggle-pass {
             position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-            cursor: pointer;
-            background: none;
-            border: none;
-            font-size: clamp(1rem, 2vw, 1.1rem);
-        }
-
-        input[type="password"] {
-            padding-right: 45px;
-        }
-
-        .help-text {
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            color: var(--text-secondary);
-            margin-top: 5px;
-        }
-
-        button[type="submit"] {
-            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            font-weight: 500;
+            right: 0;
+            top: 0;
+            height: 100%;
+            width: 45px;
             display: flex;
             align-items: center;
-            gap: 8px;
-            transition: var(--transition);
-            width: 100%;
             justify-content: center;
+            cursor: pointer;
+            color: var(--text-light);
+            font-size: 1.05rem;
+            transition: color 0.3s;
+        }
+        .toggle-pass:hover { color: var(--primary-color); }
+
+        .username-edit-link {
+            margin-top: 6px;
+            text-align: right;
+        }
+        .username-edit-link a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.3s;
+        }
+        .username-edit-link a:hover {
+            color: var(--secondary-color);
+            text-decoration: underline;
         }
 
-        button[type="submit"]:hover {
-            background: linear-gradient(90deg, var(--secondary-dark), var(--primary-dark));
+        .divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 30px 0 25px 0;
+            position: relative;
+        }
+        .divider span {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-table);
+            padding: 0 15px;
+            color: var(--text-light);
+            font-size: 0.85rem;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        /* Password Indicator */
+        .password-indicator {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: var(--text-light);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .indicator-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.3s;
+        }
+        .indicator-item i { font-size: 0.7rem; }
+        .indicator-item.valid { color: var(--success-color); }
+        .indicator-item.invalid { color: var(--text-light); }
+
+        /* Button Section - Centered */
+        .btn-section {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 0 40px;
+            border: none;
+            border-radius: var(--radius);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            font-size: 1rem;
+            height: 48px;
+            min-width: 200px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-dark), var(--secondary-color));
+            color: white;
+        }
+        .btn-primary:hover {
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
             transform: translateY(-2px);
         }
-
-        button[type="submit"]:active {
-            transform: scale(0.95);
+        .btn-primary:active {
+            transform: translateY(0);
         }
 
-        .alert {
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-        }
-
-        .alert-error {
-            background-color: #fef2f2;
-            color: var(--danger-color);
-            border-left: 5px solid var(--danger-color);
-        }
-
-        .alert i {
-            font-size: clamp(1rem, 2vw, 1.1rem);
-        }
-
-        .success-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.65);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            opacity: 0;
-            animation: fadeInOverlay 0.5s ease-in-out forwards;
-        }
-
-        @keyframes fadeInOverlay {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes fadeOutOverlay {
-            from { opacity: 1; }
-            to { opacity: 0; }
-        }
-
-        .success-modal {
-            background: linear-gradient(145deg, #ffffff, var(--bg-light));
-            border-radius: 20px;
-            padding: 40px;
-            text-align: center;
-            max-width: 90%;
-            width: 450px;
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: hidden;
-            transform: scale(0.5);
-            opacity: 0;
-            animation: popInModal 0.7s ease-out forwards;
-        }
-
-        @keyframes popInModal {
-            0% { transform: scale(0.5); opacity: 0; }
-            70% { transform: scale(1.05); opacity: 1; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .success-icon, .warning-icon {
-            font-size: clamp(4rem, 8vw, 4.5rem);
-            margin-bottom: 25px;
-            animation: bounceIn 0.6s ease-out;
-            filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-        }
-
-        .success-icon {
-            color: var(--secondary-color);
-        }
-
-        .warning-icon {
-            color: var(--danger-color);
-        }
-
-        @keyframes bounceIn {
-            0% { transform: scale(0); opacity: 0; }
-            50% { transform: scale(1.2); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        .success-modal h3 {
-            color: var(--primary-dark);
-            margin-bottom: 15px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            animation: slideUpText 0.5s ease-out 0.2s both;
-            font-weight: 600;
-        }
-
-        .success-modal p {
-            color: var(--text-secondary);
-            font-size: clamp(0.95rem, 2.2vw, 1.1rem);
-            margin-bottom: 25px;
-            animation: slideUpText 0.5s ease-out 0.3s both;
-            line-height: 1.5;
-        }
-
-        @keyframes slideUpText {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .confetti {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            opacity: 0.8;
-            animation: confettiFall 4s ease-out forwards;
-            transform-origin: center;
-        }
-
-        .confetti:nth-child(odd) {
-            background: var(--accent-color);
-        }
-
-        .confetti:nth-child(even) {
-            background: var(--secondary-color);
-        }
-
-        @keyframes confettiFall {
-            0% { transform: translateY(-150%) rotate(0deg); opacity: 0.8; }
-            50% { opacity: 1; }
-            100% { transform: translateY(300%) rotate(1080deg); opacity: 0; }
-        }
-
-        .password-strength {
-            height: 4px;
-            margin-top: 8px;
-            border-radius: 2px;
-            overflow: hidden;
-            transition: var(--transition);
-        }
-
-        .password-strength-meter {
-            height: 100%;
-            width: 0;
-            transition: width 0.3s ease, background-color 0.3s ease;
-        }
-
-        .password-match-indicator {
-            margin-top: 5px;
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            display: none;
-        }
-
-        .match-success {
-            color: #10b981;
-        }
-
-        .match-error {
-            color: var(--danger-color);
-        }
-
-        .close-btn {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: clamp(1rem, 2vw, 1.2rem);
-            cursor: pointer;
-            transition: var(--transition);
-        }
-
-        .close-btn:hover {
-            color: var(--primary-color);
-            transform: scale(1.1);
+        /* RESPONSIVE */
+        @media (max-width: 992px) {
+            .main-content { 
+                margin-left: 0; 
+                padding: 20px; 
+                max-width: 100%;
+            }
+            .menu-toggle { display: block; }
+            .welcome-banner { 
+                padding: 20px 20px 20px 55px; 
+            }
+            
+            .menu-toggle {
+                position: absolute;
+                left: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                z-index: 10;
+            }
+            
+            .form-section {
+                padding: 25px;
+            }
         }
 
         @media (max-width: 768px) {
-            .top-nav {
-                padding: 15px;
-                font-size: clamp(1rem, 2.5vw, 1.2rem);
+            .main-content { 
+                padding: 15px; 
+                max-width: 100vw; 
+            }
+            
+            .welcome-banner {
+                padding: 18px 15px 18px 50px;
+                margin-bottom: 20px;
+            }
+            .welcome-banner h2 { 
+                font-size: 1.25rem; 
+            }
+            .welcome-banner p { 
+                font-size: 0.85rem; 
+            }
+            
+            .menu-toggle {
+                left: 15px;
             }
 
-            .main-content {
-                padding: 15px;
+            .form-section {
+                padding: 20px 15px;
             }
 
-            .profile-card {
-                padding: 20px;
+            /* Mobile: 1 Kolom */
+            .form-grid {
+                grid-template-columns: 1fr !important;
+                gap: 15px;
+            }
+            
+            input[type="text"], 
+            input[type="password"], 
+            input[type="email"] {
+                font-size: 16px; /* Prevent iOS zoom */
             }
 
-            .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.6rem);
-            }
-
-            .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.9rem);
-            }
-
-            .section-title {
-                font-size: clamp(1rem, 2.5vw, 1.1rem);
-            }
-
-            button[type="submit"] {
+            .btn {
                 width: 100%;
-                justify-content: center;
-            }
-
-            .success-modal {
-                width: 90%;
-                padding: 30px;
-            }
-
-            .success-icon, .warning-icon {
-                font-size: clamp(3.5rem, 7vw, 4rem);
-            }
-
-            .success-modal h3 {
-                font-size: clamp(1.3rem, 3vw, 1.5rem);
-            }
-
-            .success-modal p {
-                font-size: clamp(0.9rem, 2vw, 1rem);
-            }
-        }
-
-        @media (max-width: 480px) {
-            .welcome-banner h2 {
-                font-size: clamp(1.2rem, 3vw, 1.4rem);
-            }
-
-            .form-group {
-                margin-bottom: 15px;
-            }
-
-            .form-separator {
-                margin: 20px 0;
+                min-width: unset;
             }
         }
     </style>
 </head>
 <body>
-    <nav class="top-nav">
-        <a href="dashboard.php" class="back-btn">
-            <i class="fas fa-xmark"></i>
-        </a>
-        <h1>SCHOBANK</h1>
-        <div style="width: 40px;"></div>
-    </nav>
+    <?php include '../../includes/sidebar_admin.php'; ?>
 
-    <div class="main-content">
+    <div class="main-content" id="mainContent">
         <div class="welcome-banner">
-            <h2>Profil Administrator</h2>
-            <p>Kelola informasi akun Anda</p>
+            <span class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></span>
+            <div class="banner-content">
+                <h2><i class="fas fa-user-shield"></i> Pengaturan Akun Admin</h2>
+                <p>Kelola profil dan keamanan akun administrator Anda</p>
+            </div>
         </div>
 
-        <div class="profile-card">
-            <?php if (!empty($error) && $error !== "Password salah!" && $error !== "Password baru tidak cocok dengan konfirmasi!" && $error !== "Konfirmasi password harus diisi!" && $error !== "Password baru harus diisi!"): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <span><?= htmlspecialchars($error) ?></span>
-                </div>
-            <?php endif; ?>
+        <div class="form-section">
+            <form id="accountForm">
+                <input type="hidden" name="action" value="update_account">
+                <input type="hidden" name="csrf_token" value="<?= $token ?>">
 
-            <h3 class="section-title"><i class="fas fa-user"></i> Edit Informasi Profil</h3>
-            <form action="" method="POST" class="profile-form">
-                <div class="form-group">
-                    <label for="username">Username:</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="username" name="username" value="<?= htmlspecialchars($user['username'] ?? '') ?>" required>
-                    </div>
-                    <div class="help-text">Username digunakan untuk login ke aplikasi.</div>
+                <div class="section-header">
+                    <h3><i class="fas fa-id-card"></i> Informasi Profil</h3>
                 </div>
 
-                <div class="form-group">
-                    <label for="email">Email:</label>
-                    <div class="input-wrapper">
-                        <input type="email" id="email" name="email" value="<?= htmlspecialchars($user['email'] ?? '') ?>">
+                <!-- BARIS 1: Nama Lengkap | Email | Username -->
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> Nama Lengkap</label>
+                        <div class="input-wrapper">
+                            <input type="text" value="<?= htmlspecialchars($current_user['nama'] ?? 'Admin') ?>" disabled style="background-color: #f8fafc; color: #64748b; padding-right: 15px;">
+                        </div>
                     </div>
-                    <div class="help-text">Masukkan email aktif Anda. Biarkan kosong jika tidak ingin mengubah.</div>
+
+                    <div class="form-group">
+                        <label><i class="fas fa-envelope"></i> Email</label>
+                        <div class="input-wrapper">
+                            <input type="email" id="email" name="email" value="<?= htmlspecialchars($current_user['email']) ?>" placeholder="Email Admin">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="username"><i class="fas fa-user-tag"></i> Username</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="username_display" value="<?= $masked_username ?>" disabled style="background-color: #f8fafc; color: #64748b; padding-right: 15px;">
+                            <input type="hidden" name="username" id="username_real" value="<?= htmlspecialchars($current_user['username']) ?>">
+                        </div>
+                        <div class="username-edit-link">
+                            <a href="#" id="editUsernameBtn">Ubah Username?</a>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="form-separator">
-                    <span>Ubah Password</span>
+
+                <div class="divider"><span>Keamanan Password</span></div>
+
+                <!-- BARIS 2: Password Baru | Ulangi Password | Password Lama -->
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="password_baru"><i class="fas fa-key"></i> Password Baru</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="password_baru" name="password_baru" placeholder="Biarkan kosong jika tidak ubah" autocomplete="new-password">
+                            <div class="toggle-pass" onclick="togglePassword('password_baru')">
+                                <i class="fas fa-eye"></i>
+                            </div>
+                        </div>
+                        <div class="password-indicator" id="passwordRules">
+                            <div class="indicator-item invalid" id="rule-length"><i class="fas fa-circle"></i> Min. 8 Karakter</div>
+                            <div class="indicator-item invalid" id="rule-number"><i class="fas fa-circle"></i> Mengandung Angka</div>
+                            <div class="indicator-item invalid" id="rule-capital"><i class="fas fa-circle"></i> Huruf Kapital</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="konfirmasi_password"><i class="fas fa-check-double"></i> Ulangi Password</label>
+                        <div class="input-wrapper">
+                            <input type="password" id="konfirmasi_password" name="konfirmasi_password" placeholder="Konfirmasi password baru" autocomplete="new-password">
+                            <div class="toggle-pass" onclick="togglePassword('konfirmasi_password')">
+                                <i class="fas fa-eye"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password_lama" style="color: var(--danger-color);"><i class="fas fa-lock" style="color: var(--danger-color);"></i> Password Lama <span style="color: var(--danger-color);">(Wajib)</span></label>
+                        <div class="input-wrapper">
+                            <input type="password" id="password_lama" name="password_lama" placeholder="Masukkan password saat ini" required autocomplete="current-password" style="border-color: #fed7aa; background: #fff7ed;">
+                            <div class="toggle-pass" onclick="togglePassword('password_lama')">
+                                <i class="fas fa-eye"></i>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="form-group">
-                    <label for="current_password">Password Saat Ini:</label>
-                    <div class="password-field">
-                        <input type="password" id="current_password" name="current_password">
-                        <button type="button" class="password-toggle" onclick="togglePassword('current_password')">
-                            <i class="fas fa-eye" id="current_password_icon"></i>
-                        </button>
-                    </div>
-                    <div class="help-text">Masukkan password saat ini untuk verifikasi.</div>
+
+                <!-- TOMBOL SIMPAN - CENTER -->
+                <div class="btn-section">
+                    <button type="submit" class="btn btn-primary" id="saveBtn">
+                        <i class="fas fa-save"></i> Simpan Perubahan
+                    </button>
                 </div>
-                
-                <div class="form-group">
-                    <label for="new_password">Password Baru:</label>
-                    <div class="password-field">
-                        <input type="password" id="new_password" name="new_password" oninput="checkPasswordStrength()">
-                        <button type="button" class="password-toggle" onclick="togglePassword('new_password')">
-                            <i class="fas fa-eye" id="new_password_icon"></i>
-                        </button>
-                    </div>
-                    <div class="password-strength">
-                        <div class="password-strength-meter" id="password-meter"></div>
-                    </div>
-                    <div class="help-text">Minimal 6 karakter. Biarkan kosong jika tidak ingin mengubah password.</div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="confirm_password">Konfirmasi Password Baru:</label>
-                    <div class="password-field">
-                        <input type="password" id="confirm_password" name="confirm_password" oninput="checkPasswordMatch()">
-                        <button type="button" class="password-toggle" onclick="togglePassword('confirm_password')">
-                            <i class="fas fa-eye" id="confirm_password_icon"></i>
-                        </button>
-                    </div>
-                    <div class="password-match-indicator" id="password-match">
-                        <i class="fas fa-check-circle match-success"></i> Password cocok
-                    </div>
-                    <div class="password-match-indicator" id="password-mismatch">
-                        <i class="fas fa-exclamation-circle match-error"></i> Password tidak cocok
-                    </div>
-                    <div class="help-text">Masukkan ulang password baru untuk konfirmasi.</div>
-                </div>
-                
-                <button type="submit" name="update_profile">
-                    <i class="fas fa-save"></i> Simpan Perubahan
-                </button>
             </form>
         </div>
     </div>
 
-    <?php if (isset($_SESSION['no_username_popup']) && $_SESSION['no_username_popup']): ?>
-        <div class="success-overlay" id="noUsernameModal">
-            <div class="success-modal">
-                <button class="close-btn" onclick="closeModal('noUsernameModal')"><i class="fas fa-times"></i></button>
-                <div class="warning-icon">
-                    <i class="fas fa-exclamation-circle"></i>
-                </div>
-                <h3>Peringatan</h3>
-                <p id="countdownTextNoUsername">Username tidak boleh kosong!<br>Akan keluar dalam <span id="countdownNoUsername">3</span> detik</p>
-            </div>
-        </div>
-        <?php unset($_SESSION['no_username_popup']); ?>
-    <?php endif; ?>
-
-    <?php if (isset($_SESSION['error_popup'])): ?>
-        <div class="success-overlay" id="errorModal">
-            <div class="success-modal">
-                <button class="close-btn" onclick="closeModal('errorModal')"><i class="fas fa-times"></i></button>
-                <div class="warning-icon">
-                    <i class="fas fa-exclamation-circle"></i>
-                </div>
-                <h3>Peringatan</h3>
-                <p><?= htmlspecialchars($_SESSION['error_popup']) ?></p>
-            </div>
-        </div>
-        <?php unset($_SESSION['error_popup']); ?>
-    <?php endif; ?>
-
-    <?php if (isset($_SESSION['update_success'])): ?>
-        <div class="success-overlay" id="successModal">
-            <div class="success-modal">
-                <button class="close-btn" onclick="closeModal('successModal')"><i class="fas fa-times"></i></button>
-                <div class="success-icon">
-                    <i class="fas fa-check-circle"></i>
-                </div>
-                <h3>Ubah <?php echo $_SESSION['update_success'] == 'password' ? 'Password' : ($_SESSION['update_success'] == 'email' ? 'Email' : 'Username'); ?> Berhasil!</h3>
-                <p id="countdownText">Akan keluar dalam <span id="countdown">3</span> detik</p>
-                <?php for ($i = 0; $i < 20; $i++): ?>
-                    <div class="confetti" style="left: <?= rand(0, 100) ?>%; top: <?= rand(-50, -10) ?>%; animation-delay: <?= rand(0, 2000) / 1000 ?>s;"></div>
-                <?php endfor; ?>
-            </div>
-        </div>
-        <?php unset($_SESSION['update_success']); ?>
-    <?php endif; ?>
-
     <script>
-        function togglePassword(fieldId) {
-            const input = document.getElementById(fieldId);
-            const icon = document.getElementById(fieldId + '_icon');
-            if (input.type === 'password') {
-                input.type = 'text';
+        document.addEventListener('DOMContentLoaded', () => {
+            const menuToggle = document.getElementById('menuToggle');
+            const sidebar = document.getElementById('sidebar');
+            if (menuToggle && sidebar) {
+                menuToggle.addEventListener('click', e => {
+                    e.stopPropagation();
+                    sidebar.classList.toggle('active');
+                    document.body.classList.toggle('sidebar-active');
+                });
+                document.addEventListener('click', e => {
+                    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+                        sidebar.classList.remove('active');
+                        document.body.classList.remove('sidebar-active');
+                    }
+                });
+            }
+        });
+
+        // Toggle Edit Username
+        $('#editUsernameBtn').on('click', function(e) {
+            e.preventDefault();
+            const displayInput = $('#username_display');
+            const realInput = $('#username_real');
+            
+            if (displayInput.prop('disabled')) {
+                displayInput.prop('disabled', false)
+                    .val(realInput.val())
+                    .focus()
+                    .css({
+                        'background-color': '#fff',
+                        'color': 'var(--text-primary)',
+                        'padding-right': '15px'
+                    });
+                $(this).text('Batal Ubah');
+            } else {
+                displayInput.prop('disabled', true)
+                    .val('<?= $masked_username ?>')
+                    .css({
+                        'background-color': '#f8fafc',
+                        'color': '#64748b'
+                    });
+                realInput.val('<?= htmlspecialchars($current_user['username']) ?>');
+                $(this).text('Ubah Username?');
+            }
+        });
+
+        $('#username_display').on('input', function() {
+            $('#username_real').val($(this).val());
+        });
+
+        function togglePassword(id) {
+            const input = document.getElementById(id);
+            const icon = input.nextElementSibling.querySelector('i');
+            if (input.type === "password") {
+                input.type = "text";
                 icon.classList.remove('fa-eye');
                 icon.classList.add('fa-eye-slash');
             } else {
-                input.type = 'password';
+                input.type = "password";
                 icon.classList.remove('fa-eye-slash');
                 icon.classList.add('fa-eye');
             }
         }
 
-        function checkPasswordStrength() {
-            const password = document.getElementById('new_password').value;
-            const meter = document.getElementById('password-meter');
-            let strength = 0;
+        $('#password_baru').on('input', function() {
+            const val = $(this).val();
+            updateIndicator('rule-length', val.length >= 8);
+            updateIndicator('rule-number', /[0-9]/.test(val));
+            updateIndicator('rule-capital', /[A-Z]/.test(val));
+        });
 
-            if (password.length >= 6) strength += 20;
-            if (password.match(/[A-Z]/)) strength += 20;
-            if (password.match(/[a-z]/)) strength += 20;
-            if (password.match(/[0-9]/)) strength += 20;
-            if (password.match(/[^A-Za-z0-9]/)) strength += 20;
-
-            meter.style.width = strength + '%';
-            meter.style.backgroundColor = strength < 40 ? '#ef4444' : strength < 80 ? '#f59e0b' : '#10b981';
-        }
-
-        function checkPasswordMatch() {
-            const newPassword = document.getElementById('new_password').value;
-            const confirmPassword = document.getElementById('confirm_password').value;
-            const match = document.getElementById('password-match');
-            const mismatch = document.getElementById('password-mismatch');
-
-            if (newPassword && confirmPassword) {
-                if (newPassword === confirmPassword) {
-                    match.style.display = 'block';
-                    mismatch.style.display = 'none';
-                } else {
-                    match.style.display = 'none';
-                    mismatch.style.display = 'block';
-                }
+        function updateIndicator(id, isValid) {
+            const el = $('#' + id);
+            const icon = el.find('i');
+            if (isValid) {
+                el.addClass('valid').removeClass('invalid');
+                icon.removeClass('fa-circle').addClass('fa-check-circle');
             } else {
-                match.style.display = 'none';
-                mismatch.style.display = 'none';
+                el.removeClass('valid').addClass('invalid');
+                icon.removeClass('fa-check-circle').addClass('fa-circle');
             }
         }
 
-        function closeModal(modalId) {
-            const modal = document.getElementById(modalId);
-            if (modal) {
-                modal.style.animation = 'fadeOutOverlay 0.5s ease-in-out forwards';
-                setTimeout(() => {
-                    modal.style.display = 'none';
-                }, 500);
+        $('#accountForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            const passBaru = $('#password_baru').val();
+            const passKonf = $('#konfirmasi_password').val();
+
+            if (passBaru) {
+                if (passBaru.length < 8) {
+                    Swal.fire({
+                        icon: 'warning', 
+                        title: 'Password Lemah', 
+                        text: 'Password minimal 8 karakter.', 
+                        confirmButtonColor: '#1e3a8a'
+                    });
+                    return;
+                }
+                if (!/[0-9]/.test(passBaru) || !/[A-Z]/.test(passBaru)) {
+                    Swal.fire({
+                        icon: 'warning', 
+                        title: 'Password Lemah', 
+                        text: 'Harus mengandung angka dan huruf kapital.', 
+                        confirmButtonColor: '#1e3a8a'
+                    });
+                    return;
+                }
+                if (passBaru !== passKonf) {
+                    Swal.fire({
+                        icon: 'error', 
+                        title: 'Tidak Cocok', 
+                        text: 'Konfirmasi password tidak sesuai.', 
+                        confirmButtonColor: '#dc2626'
+                    });
+                    return;
+                }
             }
-        }
 
-        function startCountdown(elementId, redirectUrl) {
-            let seconds = 3;
-            const countdownElement = document.getElementById(elementId);
-            if (countdownElement) {
-                const interval = setInterval(() => {
-                    countdownElement.textContent = seconds;
-                    seconds--;
-                    if (seconds < 0) {
-                        clearInterval(interval);
-                        window.location.href = redirectUrl;
-                    }
-                }, 1000);
-            }
-        }
+            Swal.fire({
+                title: 'Simpan Perubahan?',
+                text: 'Anda akan otomatis logout setelah berhasil.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Ya, Simpan & Logout',
+                cancelButtonText: 'Batal',
+                confirmButtonColor: '#1e3a8a',
+                cancelButtonColor: '#64748b'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Menyimpan...', 
+                        allowOutsideClick: false, 
+                        didOpen: () => Swal.showLoading()
+                    });
 
-        // Start countdown for no username modal
-        if (document.getElementById('noUsernameModal')) {
-            startCountdown('countdownNoUsername', 'profile.php');
-        }
-
-        // Start countdown for success modal
-        if (document.getElementById('successModal')) {
-            const updateType = '<?php echo isset($_SESSION['update_success']) ? $_SESSION['update_success'] : ''; ?>';
-            const redirectUrl = updateType === 'email' ? '../admin/pengaturan.php' : '../login.php';
-            startCountdown('countdown', redirectUrl);
-        }
-
-        // Auto-close error modal after 2 seconds
-        if (document.getElementById('errorModal')) {
-            setTimeout(() => {
-                closeModal('errorModal');
-            }, 2000);
-        }
+                    $.ajax({
+                        url: '',
+                        type: 'POST',
+                        data: $(this).serialize(),
+                        dataType: 'json',
+                        success: function(res) {
+                            if (res.status === 'success') {
+                                Swal.fire({
+                                    icon: 'success', 
+                                    title: 'Berhasil!', 
+                                    text: res.message, 
+                                    confirmButtonColor: '#10b981',
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                }).then(() => {
+                                    window.location.href = '../login.php';
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error', 
+                                    title: 'Gagal', 
+                                    text: res.message, 
+                                    confirmButtonColor: '#dc2626'
+                                });
+                            }
+                        },
+                        error: function() {
+                            Swal.close();
+                            Swal.fire({
+                                icon: 'error', 
+                                title: 'Error', 
+                                text: 'Terjadi kesalahan server.', 
+                                confirmButtonColor: '#dc2626'
+                            });
+                        }
+                    });
+                }
+            });
+        });
     </script>
 </body>
 </html>

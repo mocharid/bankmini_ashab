@@ -100,93 +100,37 @@ $stmt_saldo_harian->execute();
 $result_saldo_harian = $stmt_saldo_harian->get_result();
 $saldo_harian = floatval($result_saldo_harian->fetch_assoc()['saldo_harian'] ?? 0);
 
-// Get net setoran for last 7 days (for pop-up, hanya transaksi oleh petugas)
-$query_net_setoran = "
-    SELECT 
-        dates.tanggal,
-        CASE 
-            WHEN dates.tanggal = CURDATE() THEN ?
-            ELSE (
-                COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'setor' AND t.status = 'approved' THEN t.jumlah ELSE 0 END), 0) -
-                COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'tarik' AND t.status = 'approved' THEN t.jumlah ELSE 0 END), 0)
-            )
-        END as net_setoran
-    FROM (
-        SELECT CURDATE() - INTERVAL n DAY as tanggal
-        FROM (
-            SELECT a.N + b.N * 10 + c.N * 100 as n
-            FROM 
-                (SELECT 0 AS N UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) a,
-                (SELECT 0 AS N) b,
-                (SELECT 0 AS N) c
-            ORDER BY n
-            LIMIT 7
-        ) numbers
-    ) as dates
-    LEFT JOIN transaksi t ON DATE(t.created_at) = dates.tanggal
-        AND t.created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-        AND t.petugas_id IS NOT NULL
-    GROUP BY dates.tanggal
-    ORDER BY dates.tanggal DESC";
-$stmt = $conn->prepare($query_net_setoran);
-$stmt->bind_param("d", $saldo_harian);
-$stmt->execute();
-$result_net_setoran = $stmt->get_result();
-$net_setoran_data = [];
-while ($row = $result_net_setoran->fetch_assoc()) {
-    $net_setoran_data[$row['tanggal']] = $row['net_setoran'];
-}
-
-// Complete 7-day data with zeros for missing dates
-$seven_days = [];
-for ($i = 0; $i <= 6; $i++) {
-    $date = date('Y-m-d', strtotime("-$i days"));
-    $seven_days[] = [
-        'tanggal' => $date,
-        'net_setoran' => isset($net_setoran_data[$date]) ? $net_setoran_data[$date] : 0
-    ];
-}
-$net_setoran_data = array_reverse($seven_days);
-
-// Query untuk data chart (7 hari terakhir, semua transaksi admin dan petugas)
+// Query untuk data chart line (7 hari terakhir, semua transaksi admin dan petugas)
 $query_chart = "SELECT DATE(created_at) as tanggal, COUNT(id) as jumlah_transaksi 
                 FROM transaksi 
-                WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY) 
+                WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) 
                 AND status = 'approved'
                 GROUP BY DATE(created_at) 
                 ORDER BY DATE(created_at) ASC";
 $result_chart = $conn->query($query_chart);
 $chart_data = $result_chart->fetch_all(MYSQLI_ASSOC);
 
-// Query untuk data siswa per kelas berdasarkan jurusan
-$query_students = "SELECT j.nama_jurusan, k.nama_kelas, COUNT(u.id) as jumlah_siswa 
-                   FROM jurusan j 
-                   LEFT JOIN kelas k ON j.id = k.jurusan_id 
-                   LEFT JOIN users u ON k.id = u.kelas_id 
-                   WHERE u.role = 'siswa' OR u.id IS NULL 
-                   GROUP BY j.id, k.id 
-                   ORDER BY j.nama_jurusan, k.nama_kelas";
-$result_students = $conn->query($query_students);
-
-// Organize data by jurusan
-$students_by_jurusan = [];
-while ($row = $result_students->fetch_assoc()) {
-    $jurusan = $row['nama_jurusan'];
-    if (!isset($students_by_jurusan[$jurusan])) {
-        $students_by_jurusan[$jurusan] = ['kelas_list' => []];
-    }
-    $students_by_jurusan[$jurusan]['kelas_list'][] = [
-        'kelas' => $row['nama_kelas'] ?: 'Tidak ada kelas',
-        'jumlah_siswa' => $row['jumlah_siswa']
-    ];
-}
+// Query untuk data pie chart (komposisi setor vs tarik 7 hari terakhir)
+$query_pie = "SELECT 
+                SUM(CASE WHEN jenis_transaksi = 'setor' THEN 1 ELSE 0 END) as setor_count,
+                SUM(CASE WHEN jenis_transaksi = 'tarik' THEN 1 ELSE 0 END) as tarik_count
+              FROM transaksi 
+              WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY) 
+              AND status = 'approved'";
+$result_pie = $conn->query($query_pie);
+$pie_data = $result_pie->fetch_assoc();
+$setor_count = $pie_data['setor_count'] ?? 0;
+$tarik_count = $pie_data['tarik_count'] ?? 0;
+$total_transaksi = $setor_count + $tarik_count;
+$setor_percentage = $total_transaksi > 0 ? round(($setor_count / $total_transaksi) * 100, 1) : 0;
+$tarik_percentage = $total_transaksi > 0 ? round(($tarik_count / $total_transaksi) * 100, 1) : 0;
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Dashboard - SCHOBANK SYSTEM</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <title>Dashboard Administrator | MY Schobank</title>
+    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css" rel="stylesheet">
@@ -219,7 +163,7 @@ while ($row = $result_students->fetch_assoc()) {
             -ms-user-select: none;
             user-select: none;
             -webkit-touch-callout: none;
-            touch-action: pan-y; /* Restrict pinch-to-zoom */
+            touch-action: pan-y;
         }
 
         html, body {
@@ -227,8 +171,8 @@ while ($row = $result_students->fetch_assoc()) {
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
-            zoom: 1; /* Force fixed zoom level */
-            -webkit-text-size-adjust: 100%; /* Prevent text scaling */
+            zoom: 1;
+            -webkit-text-size-adjust: 100%;
         }
 
         body {
@@ -236,214 +180,7 @@ while ($row = $result_students->fetch_assoc()) {
             color: var(--text-primary);
             display: flex;
             transition: background-color 0.3s ease;
-            overscroll-behavior: none; /* Prevent pull-to-refresh or overscroll zoom */
-        }
-
-        /* Sidebar Utama */
-        .sidebar {
-            width: 280px;
-            background: linear-gradient(180deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-            color: white;
-            position: fixed;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            z-index: 100;
-            box-shadow: 5px 0 15px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease-in-out;
-        }
-
-        /* Sidebar Header (Fixed) */
-        .sidebar-header {
-            padding: 25px 20px;
-            background: var(--primary-dark);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            position: sticky;
-            top: 0;
-            z-index: 101;
-            text-align: center;
-        }
-
-        .sidebar-header .bank-name {
-            font-size: 1.6rem;
-            font-weight: 600;
-            letter-spacing: 1.2px;
-            margin: 0;
-            color: white;
-        }
-
-        /* Sidebar Content (Scrollable) */
-        .sidebar-content {
-            flex: 1;
-            overflow-y: auto;
-            padding-top: 10px;
-            padding-bottom: 10px;
-        }
-
-        /* Sidebar Footer (Fixed) */
-        .sidebar-footer {
-            background: var(--primary-dark);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            position: sticky;
-            bottom: 0;
-            z-index: 101;
-            padding: 5px 0;
-        }
-
-        /* Scrollbar Styling */
-        .sidebar-content::-webkit-scrollbar,
-        .popup-content::-webkit-scrollbar,
-        .saldo-content::-webkit-scrollbar,
-        .transfer-content::-webkit-scrollbar {
-            width: 8px;
-        }
-
-        .sidebar-content::-webkit-scrollbar-track,
-        .popup-content::-webkit-scrollbar-track,
-        .saldo-content::-webkit-scrollbar-track,
-        .transfer-content::-webkit-scrollbar-track {
-            background: var(--scrollbar-track);
-            border-radius: 4px;
-        }
-
-        .sidebar-content::-webkit-scrollbar-thumb,
-        .popup-content::-webkit-scrollbar-thumb,
-        .saldo-content::-webkit-scrollbar-thumb,
-        .transfer-content::-webkit-scrollbar-thumb {
-            background: var(--scrollbar-thumb);
-            border-radius: 4px;
-            border: 2px solid var(--scrollbar-track);
-        }
-
-        .sidebar-content::-webkit-scrollbar-thumb:hover,
-        .popup-content::-webkit-scrollbar-thumb:hover,
-        .saldo-content::-webkit-scrollbar-thumb:hover,
-        .transfer-content::-webkit-scrollbar-thumb:hover {
-            background: var(--scrollbar-thumb-hover);
-        }
-
-        /* Menu Items */
-        .sidebar-menu {
-            padding: 10px 0;
-        }
-
-        .menu-label {
-            padding: 15px 25px 10px;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: rgba(255, 255, 255, 0.6);
-            font-weight: 500;
-            margin-top: 10px;
-        }
-
-        .menu-item {
-            position: relative;
-            margin: 5px 0;
-        }
-
-        .menu-item a {
-            display: flex;
-            align-items: center;
-            padding: 14px 25px;
-            color: rgba(255, 255, 255, 0.85);
-            text-decoration: none;
-            transition: var(--transition);
-            border-left: 4px solid transparent;
-            font-weight: 400;
-            font-size: 0.9rem;
-        }
-
-        .menu-item a:hover, .menu-item a.active {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: var(--secondary-color);
-            color: white;
-        }
-
-        .menu-item i {
-            margin-right: 12px;
-            width: 20px;
-            text-align: center;
-            font-size: 1.1rem;
-        }
-
-        /* Dropdown Menu */
-        .dropdown-btn {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 25px;
-            width: 100%;
-            text-align: left;
-            background: none;
-            color: rgba(255, 255, 255, 0.85);
-            border: none;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: var(--transition);
-            border-left: 4px solid transparent;
-            font-weight: 400;
-        }
-
-        .dropdown-btn:hover, .dropdown-btn.active {
-            background-color: rgba(255, 255, 255, 0.1);
-            border-left-color: var(--secondary-color);
-            color: white;
-        }
-
-        .dropdown-btn .menu-icon {
-            display: flex;
-            align-items: center;
-        }
-
-        .dropdown-btn .menu-icon i:first-child {
-            margin-right: 12px;
-            width: 20px;
-            text-align: center;
-            font-size: 1.1rem;
-        }
-
-        .dropdown-btn .arrow {
-            transition: transform 0.3s ease;
-            font-size: 0.8rem;
-        }
-
-        .dropdown-btn.active .arrow {
-            transform: rotate(180deg);
-        }
-
-        .dropdown-container {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            background-color: rgba(0, 0, 0, 0.15);
-        }
-
-        .dropdown-container.show {
-            max-height: 300px;
-        }
-
-        .dropdown-container a {
-            padding: 12px 20px 12px 60px;
-            display: flex;
-            align-items: center;
-            color: rgba(255, 255, 255, 0.75);
-            text-decoration: none;
-            transition: var(--transition);
-            font-size: 0.85rem;
-            border-left: 4px solid transparent;
-        }
-
-        .dropdown-container a:hover, .dropdown-container a.active {
-            background-color: rgba(255, 255, 255, 0.08);
-            border-left-color: var(--secondary-color);
-            color: white;
-        }
-
-        /* Tombol Logout (Warna Merah) */
-        .logout-btn {
-            color: var(--danger-color);
-            font-weight: 500;
+            overscroll-behavior: none;
         }
 
         /* Main Content */
@@ -460,7 +197,7 @@ while ($row = $result_students->fetch_assoc()) {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
             padding: 30px;
-            border-radius: 18px;
+            border-radius: 5px;
             margin-bottom: 35px;
             box-shadow: var(--shadow-md);
             position: relative;
@@ -530,7 +267,7 @@ while ($row = $result_students->fetch_assoc()) {
 
         .stat-box {
             background: white;
-            border-radius: 16px;
+            border-radius: 5px;
             padding: 25px;
             position: relative;
             transition: var(--transition);
@@ -539,17 +276,6 @@ while ($row = $result_students->fetch_assoc()) {
             display: flex;
             flex-direction: column;
             animation: slideIn 0.5s ease-in-out;
-            cursor: pointer;
-        }
-
-        .stat-box::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
         }
 
         .stat-box:hover {
@@ -560,7 +286,7 @@ while ($row = $result_students->fetch_assoc()) {
         .stat-icon {
             width: 54px;
             height: 54px;
-            border-radius: 12px;
+            border-radius: 5px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -610,14 +336,21 @@ while ($row = $result_students->fetch_assoc()) {
             margin-right: 8px;
         }
 
-        /* Chart Container */
+        /* Chart Section */
+        .chart-section {
+            display: flex;
+            gap: 25px;
+            margin-bottom: 25px;
+        }
+
         .chart-container {
             background: white;
-            border-radius: 16px;
+            border-radius: 5px;
             padding: 25px;
-            margin-bottom: 25px;
             box-shadow: var(--shadow-sm);
             animation: fadeIn 1s ease-in-out;
+            flex: 1;
+            max-width: none;
         }
 
         .chart-title {
@@ -627,253 +360,15 @@ while ($row = $result_students->fetch_assoc()) {
             margin-bottom: 20px;
         }
 
-        /* Pop-up Styles */
-        .popup-overlay, .saldo-popup, .transfer-popup {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.65);
-            z-index: 2000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            cursor: pointer;
+        #transactionChart {
+            max-width: 100%;
+            height: auto;
         }
 
-        .popup-overlay.active, .saldo-popup.active, .transfer-popup.active {
-            display: block;
-            opacity: 1;
-        }
-
-        .popup-content, .saldo-content, .transfer-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) scale(0.95);
-            background: white;
-            border-radius: 12px;
-            padding: 25px;
-            width: 90%;
-            max-width: 700px;
-            max-height: 85vh;
-            overflow-y: auto;
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
-            animation: popupScaleIn 0.3s ease-out forwards;
-            cursor: default;
-        }
-
-        .popup-content h2, .saldo-content h2, .transfer-content h2 {
-            font-size: 1.4rem;
-            font-weight: 600;
-            color: var(--primary-dark);
-            margin-bottom: 20px;
-            text-align: center;
-            letter-spacing: 0.3px;
-        }
-
-        /* Jurusan Card */
-        .jurusan-card {
-            margin-bottom: 10px;
-            border-radius: 8px;
-            overflow: hidden;
-            background: #ffffff;
-            box-shadow: var(--shadow-sm);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .jurusan-card:hover {
-            transform: scale(1.015);
-            box-shadow: var(--shadow-md);
-        }
-
-        .jurusan-header {
-            padding: 12px 15px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            color: white;
-            font-size: 0.95rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
-            border-radius: 8px 8px 8px 8px;
-            height: 48px;
-            transition: background 0.2s ease;
-        }
-
-        .jurusan-header.active {
-            border-radius: 8px 8px 0 0;
-        }
-
-        .jurusan-header:hover {
-            background: linear-gradient(135deg, var(--secondary-dark), var(--primary-dark));
-        }
-
-        .jurusan-header .logo {
-            font-size: 1.3rem;
-            margin-right: 10px;
-            color: #e0f2fe;
-            transition: transform 0.2s ease;
-        }
-
-        .jurusan-header:hover .logo {
-            transform: scale(1.15);
-        }
-
-        .jurusan-header .arrow {
-            font-size: 0.8rem;
-            color: #e0f2fe;
-            margin-right: 10px;
-            transition: transform 0.3s ease;
-        }
-
-        .jurusan-header.active .arrow {
-            transform: rotate(180deg);
-        }
-
-        .kelas-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            background: #f8fafc;
-            border: 1px solid #bfdbfe;
-            border-top: none;
-            border-radius: 0 0 8px 8px;
-        }
-
-        .kelas-content.show {
-            max-height: 400px;
-            padding: 15px;
-        }
-
-        .kelas-card {
-            background: #eff6ff;
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: var(--shadow-sm);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            border-left: 3px solid var(--primary-color);
-        }
-
-        .kelas-card:last-child {
-            margin-bottom: 0;
-        }
-
-        .kelas-card:hover {
-            transform: scale(1.01);
-            box-shadow: var(--shadow-md);
-            border-left-color: var(--secondary-color);
-        }
-
-        .kelas-card .logo {
-            font-size: 1.1rem;
-            margin-right: 10px;
-            color: var(--primary-color);
-            transition: transform 0.2s ease;
-        }
-
-        .kelas-card:hover .logo {
-            transform: scale(1.15);
-        }
-
-        .kelas-card .kelas-name {
-            font-size: 0.9rem;
-            color: var(--primary-dark);
-            flex: 1;
-        }
-
-        .kelas-card .jumlah-siswa {
-            font-size: 0.9rem;
-            font-weight: 600;
-            color: var(--primary-color);
-        }
-
-        /* Tanggal Card (Saldo and Transfer) */
-        .tanggal-card {
-            margin-bottom: 10px;
-            border-radius: 8px;
-            overflow: hidden;
-            background: #ffffff;
-            box-shadow: var(--shadow-sm);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .tanggal-card:hover {
-            transform: scale(1.015);
-            box-shadow: var(--shadow-md);
-        }
-
-        .tanggal-header {
-            padding: 12px 15px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            color: white;
-            font-size: 0.95rem;
-            font-weight: 600;
-            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
-            border-radius: 8px 8px 8px 8px;
-            height: 48px;
-            transition: background 0.2s ease;
-        }
-
-        .tanggal-header.active {
-            border-radius: 8px 8px 0 0;
-        }
-
-        .tanggal-header:hover {
-            background: linear-gradient(135deg, var(--secondary-dark), var(--primary-dark));
-        }
-
-        .tanggal-header .logo {
-            font-size: 1.3rem;
-            margin-right: 10px;
-            color: #e0f2fe;
-            transition: transform 0.2s ease;
-        }
-
-        .tanggal-header:hover .logo {
-            transform: scale(1.15);
-        }
-
-        .tanggal-header .arrow {
-            font-size: 0.8rem;
-            color: #e0f2fe;
-            margin-right: 10px;
-            transition: transform 0.3s ease;
-        }
-
-        .tanggal-header.active .arrow {
-            transform: rotate(180deg);
-        }
-
-        .setoran-content, .transfer-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            background: #eff6ff;
-            border: 1px solid #bfdbfe;
-            border-top: none;
-            border-radius: 0 0 8px 8px;
-        }
-
-        .setoran-content.show, .transfer-content.show {
-            max-height: 150px;
-            padding: 15px;
-        }
-
-        .setoran-value, .transfer-value {
-            font-size: 0.95rem;
-            font-weight: 600;
-            color: var(--primary-dark);
-            text-align: center;
+        #pieChart {
+            max-width: 100%;
+            height: 250px;
+            max-height: 250px;
         }
 
         /* Empty State */
@@ -883,7 +378,7 @@ while ($row = $result_students->fetch_assoc()) {
             font-size: 0.9rem;
             padding: 20px;
             background: #f8fafc;
-            border-radius: 8px;
+            border-radius: 5px;
             border: 1px solid #e2e8f0;
             font-weight: 400;
         }
@@ -912,17 +407,6 @@ while ($row = $result_students->fetch_assoc()) {
             to { transform: translateY(0); opacity: 1; }
         }
 
-        @keyframes popupScaleIn {
-            from {
-                condense: translate(-50%, -50%) scale(0.95);
-                opacity: 0;
-            }
-            to {
-                transform: translate(-50%, -50%) scale(1);
-                opacity: 1;
-            }
-        }
-
         /* Responsive Design for Tablets (max-width: 768px) */
         @media (max-width: 768px) {
             .menu-toggle {
@@ -932,16 +416,6 @@ while ($row = $result_students->fetch_assoc()) {
                 left: 20px;
                 transform: translateY(-50%);
                 z-index: 1000;
-            }
-
-            .sidebar {
-                transform: translateX(-100%);
-                width: 260px;
-            }
-
-            .sidebar.active {
-                transform: translateX(0);
-                z-index: 999;
             }
 
             body.sidebar-active::before {
@@ -976,7 +450,7 @@ while ($row = $result_students->fetch_assoc()) {
 
             .welcome-banner {
                 padding: 20px;
-                border-radius: 12px;
+                border-radius: 5px;
                 box-shadow: var(--shadow-md);
                 position: relative;
                 display: flex;
@@ -1001,60 +475,6 @@ while ($row = $result_students->fetch_assoc()) {
                 font-weight: 400;
             }
 
-            .popup-content, .saldo-content, .transfer-content {
-                width: 95%;
-                max-width: 500px;
-                padding: 20px;
-            }
-
-            .popup-content h2, .saldo-content h2, .transfer-content h2 {
-                font-size: 1.2rem;
-                margin-bottom: 15px;
-            }
-
-            .jurusan-header, .tanggal-header {
-                font-size: 0.9rem;
-                padding: 10px 12px;
-                height: 44px;
-            }
-
-            .jurusan-header .logo, .tanggal-header .logo {
-                font-size: 1.2rem;
-                margin-right: 8px;
-            }
-
-            .jurusan-header .arrow, .tanggal-header .arrow {
-                font-size: 0.75rem;
-                margin-right: 8px;
-            }
-
-            .kelas-content.show {
-                padding: 12px;
-            }
-
-            .kelas-card {
-                padding: 10px;
-                margin-bottom: 6px;
-            }
-
-            .kelas-card .logo {
-                font-size: 1rem;
-                margin-right: 8px;
-            }
-
-            .kelas-card .kelas-name,
-            .kelas-card .jumlah-siswa {
-                font-size: 0.85rem;
-            }
-
-            .setoran-content.show, .transfer-content.show {
-                padding: 12px;
-            }
-
-            .setoran-value, .transfer-value {
-                font-size: 0.85rem;
-            }
-
             .summary-header h2 {
                 font-size: 1.2rem;
             }
@@ -1071,7 +491,7 @@ while ($row = $result_students->fetch_assoc()) {
 
             .stat-box {
                 padding: 18px;
-                border-radius: 12px;
+                border-radius: 5px;
                 box-shadow: var(--shadow-sm);
             }
 
@@ -1079,7 +499,7 @@ while ($row = $result_students->fetch_assoc()) {
                 width: 48px;
                 height: 48px;
                 font-size: 1.3rem;
-                border-radius: 10px;
+                border-radius: 5px;
             }
 
             .stat-title {
@@ -1096,9 +516,14 @@ while ($row = $result_students->fetch_assoc()) {
                 font-size: 0.8rem;
             }
 
+            .chart-section {
+                flex-direction: column;
+                gap: 20px;
+            }
+
             .chart-container {
                 padding: 15px;
-                border-radius: 12px;
+                border-radius: 5px;
             }
 
             .chart-title {
@@ -1107,6 +532,11 @@ while ($row = $result_students->fetch_assoc()) {
             }
 
             #transactionChart {
+                max-height: 200px;
+            }
+
+            #pieChart {
+                height: 200px;
                 max-height: 200px;
             }
         }
@@ -1120,31 +550,13 @@ while ($row = $result_students->fetch_assoc()) {
                 transform: translateY(-50%);
             }
 
-            .sidebar {
-                width: 240px;
-            }
-
-            .sidebar-header .bank-name {
-                font-size: 1.4rem;
-            }
-
-            .menu-item a, .dropdown-btn {
-                padding: 12px 20px;
-                font-size: 0.85rem;
-            }
-
-            .dropdown-container a {
-                padding: 10px 15px 10px 50px;
-                font-size: 0.8rem;
-            }
-
             .main-content {
                 padding: 10px;
             }
 
             .welcome-banner {
                 padding: 15px;
-                border-radius: 10px;
+                border-radius: 5px;
             }
 
             .welcome-banner .content {
@@ -1159,64 +571,6 @@ while ($row = $result_students->fetch_assoc()) {
                 font-size: 0.8rem;
             }
 
-            .popup-content, .saldo-content, .transfer-content {
-                width: 95%;
-                max-width: 340px;
-                padding: 15px;
-            }
-
-            .popup-content h2, .saldo-content h2, .transfer-content h2 {
-                font-size: 1.1rem;
-                margin-bottom: 12px;
-            }
-
-            .jurusan-card, .tanggal-card {
-                margin-bottom: 8px;
-            }
-
-            .jurusan-header, .tanggal-header {
-                font-size: 0.85rem;
-                padding: 8px 10px;
-                height: 40px;
-            }
-
-            .jurusan-header .logo, .tanggal-header .logo {
-                font-size: 1.1rem;
-                margin-right: 6px;
-            }
-
-            .jurusan-header .arrow, .tanggal-header .arrow {
-                font-size: 0.7rem;
-                margin-right: 6px;
-            }
-
-            .kelas-content.show {
-                padding: 10px;
-            }
-
-            .kelas-card {
-                padding: 8px;
-                margin-bottom: 5px;
-            }
-
-            .kelas-card .logo {
-                font-size: 0.9rem;
-                margin-right: 6px;
-            }
-
-            .kelas-card .kelas-name,
-            .kelas-card .jumlah-siswa {
-                font-size: 0.8rem;
-            }
-
-            .setoran-content.show, .transfer-content.show {
-                padding: 10px;
-            }
-
-            .setoran-value, .transfer-value {
-                font-size: 0.8rem;
-            }
-
             .summary-header h2 {
                 font-size: 1.1rem;
             }
@@ -1227,7 +581,7 @@ while ($row = $result_students->fetch_assoc()) {
 
             .stat-box {
                 padding: 15px;
-                border-radius: 10px;
+                border-radius: 5px;
             }
 
             .stat-icon {
@@ -1248,6 +602,10 @@ while ($row = $result_students->fetch_assoc()) {
                 font-size: 0.75rem;
             }
 
+            .chart-section {
+                gap: 15px;
+            }
+
             .chart-container {
                 padding: 12px;
             }
@@ -1259,165 +617,16 @@ while ($row = $result_students->fetch_assoc()) {
             #transactionChart {
                 max-height: 180px;
             }
+
+            #pieChart {
+                height: 180px;
+                max-height: 180px;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <h1 class="bank-name">SchoBank</h1>
-        </div>
-        
-    <div class="sidebar-content">
-        <div class="sidebar-menu">
-            <!-- MENU UTAMA -->
-            <div class="menu-label">Menu Utama</div>
-
-            <div class="menu-item">
-                <button class="dropdown-btn" id="dataMasterDropdown">
-                    <div class="menu-icon">
-                        <i class="fas fa-database"></i> Data Master
-                    </div>
-                    <i class="fas fa-chevron-down arrow"></i>
-                </button>
-                <div class="dropdown-container" id="dataMasterDropdownContainer">
-                    <a href="tambah_jurusan.php">
-                        <i class="fas fa-layer-group"></i> Kelola Jurusan
-                    </a>
-                    <a href="tambah_tingkatan.php">
-                        <i class="fas fa-sort-amount-up-alt"></i> Kelola Tingkatan Kelas
-                    </a>
-                    <a href="tambah_kelas.php">
-                        <i class="fas fa-door-open"></i> Kelola Kelas
-                    </a>
-                    <a href="tambah_petugas.php">
-                        <i class="fas fa-user-cog"></i> Kelola Akun Petugas
-                    </a>
-                    <a href="buat_jadwal.php">
-                        <i class="fas fa-calendar-check"></i> Kelola Jadwal Petugas
-                    </a>
-                </div>
-            </div>
-
-            <!-- REKENING -->
-            <div class="menu-item">
-                <button class="dropdown-btn" id="rekeningDropdown">
-                    <div class="menu-icon">
-                        <i class="fas fa-id-card-alt"></i> Rekening Siswa
-                    </div>
-                    <i class="fas fa-chevron-down arrow"></i>
-                </button>
-                <div class="dropdown-container" id="rekeningDropdownContainer">
-                    <a href="tambah_nasabah.php">
-                        <i class="fas fa-university"></i> Buka Rekening
-                    </a>
-                    <a href="tutup_rek.php">
-                        <i class="fas fa-user-times"></i> Tutup Rekening
-                    </a>
-                </div>
-            </div>
-
-            <!-- TRANSAKSI -->
-            <div class="menu-item">
-                <button class="dropdown-btn" id="transaksiDropdown">
-                    <div class="menu-icon">
-                        <i class="fas fa-wallet"></i> Transaksi Tunai
-                    </div>
-                    <i class="fas fa-chevron-down arrow"></i>
-                </button>
-                <div class="dropdown-container" id="transaksiDropdownContainer">
-                    <a href="setor_saldo_admin.php">
-                        <i class="fas fa-arrow-down"></i> Setor Tunai
-                    </a>
-                    <a href="tarik_saldo_admin.php">
-                        <i class="fas fa-arrow-up"></i> Tarik Tunai
-                    </a>
-                </div>
-            </div>
-
-            <!-- LAPORAN & REKAP -->
-            <div class="menu-item">
-                <button class="dropdown-btn" id="laporanDropdown">
-                    <div class="menu-icon">
-                        <i class="fas fa-file-alt"></i> Laporan & Rekap
-                    </div>
-                    <i class="fas fa-chevron-down arrow"></i>
-                </button>
-                <div class="dropdown-container" id="laporanDropdownContainer">
-                    <a href="laporan_admin.php">
-                        <i class="fas fa-user-tie"></i> Transaksi Admin
-                    </a>
-                    <a href="laporan.php">
-                        <i class="fas fa-user-cog"></i> Transaksi Petugas
-                    </a>
-                    <a href="rekap_transaksi.php">
-                        <i class="fas fa-file-invoice-dollar"></i> Semua Transaksi
-                    </a>
-                    <a href="rekap_absen.php">
-                        <i class="fas fa-user-check"></i> Rekap Absen Petugas
-                    </a>
-                    <a href="data_siswa.php">
-                        <i class="fas fa-users"></i> Data Rekening Siswa
-                    </a>
-                </div>
-            </div>
-
-            <!-- MANAJEMEN AKUN -->
-            <div class="menu-label">Manajemen Akun</div>
-
-            <div class="menu-item">
-                <button class="dropdown-btn" id="akunSiswaDropdown">
-                    <div class="menu-icon">
-                        <i class="fas fa-user-graduate"></i> Akun Siswa
-                    </div>
-                    <i class="fas fa-chevron-down arrow"></i>
-                </button>
-                <div class="dropdown-container" id="akunSiswaDropdownContainer">
-                    <a href="recover_account.php">
-                        <i class="fas fa-user-lock"></i> Pemulihan Akun
-                    </a>
-                    <a href="freeze_account.php">
-                        <i class="fas fa-ban"></i> Nonaktifkan Akun
-                    </a>
-                </div>
-            </div>
-
-            <div class="menu-item">
-                <button class="dropdown-btn" id="kontrolPetugasDropdown">
-                    <div class="menu-icon">
-                        <i class="fas fa-user-shield"></i> Akses Petugas
-                    </div>
-                    <i class="fas fa-chevron-down arrow"></i>
-                </button>
-                <div class="dropdown-container" id="kontrolPetugasDropdownContainer">
-                    <a href="manage_petugas_status.php">
-                        <i class="fas fa-lock"></i> Pembatasan Akses
-                    </a>
-                    <a href="kode_akses_petugas.php">
-                        <i class="fas fa-key"></i> Kode Akses Login
-                    </a>
-                </div>
-            </div>
-
-            <!-- PENGATURAN -->
-            <div class="menu-label">Pengaturan</div>
-            <div class="menu-item">
-                <a href="pengaturan.php">
-                    <i class="fas fa-cog"></i> Pengaturan Profil
-                </a>
-            </div>
-        </div>
-    </div>
-
-        
-        <div class="sidebar-footer">
-            <div class="menu-item">
-                <a href="../../logout.php" class="logout-btn">
-                    <i class="fas fa-sign-out-alt"></i> Logout
-                </a>
-            </div>
-        </div>
-    </div>
+    <?php include '../../includes/sidebar_admin.php'; ?>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
@@ -1425,7 +634,7 @@ while ($row = $result_students->fetch_assoc()) {
                 <i class="fas fa-bars"></i>
             </span>
             <div class="content">
-                <h2>Selamat Datang, Admin!</h2>
+                <h2>Selamat Datang, Administrator</h2>
                 <div class="date">
                     <i class="far fa-calendar-alt"></i> <?= getHariIndonesia(date('Y-m-d')) . ', ' . formatTanggalIndonesia(date('Y-m-d')) ?>
                 </div>
@@ -1434,7 +643,7 @@ while ($row = $result_students->fetch_assoc()) {
 
         <div class="summary-section">
             <div class="summary-header">
-                <h2>Ringkasan Data</h2>
+                <h2>Ikhtisar Keuangan</h2>
             </div>
             
             <div class="stats-container">
@@ -1443,11 +652,11 @@ while ($row = $result_students->fetch_assoc()) {
                         <i class="fas fa-users"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Total Rekening</div>
+                        <div class="stat-title">Total Rekening Nasabah</div>
                         <div class="stat-value counter" data-target="<?= $total_siswa ?>">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-user-graduate"></i>
-                            <span>Rekening Aktif</span>
+                            <span>Rekening Aktif Terdaftar</span>
                         </div>
                     </div>
                 </div>
@@ -1456,11 +665,11 @@ while ($row = $result_students->fetch_assoc()) {
                         <i class="fas fa-wallet"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Perkiraan Total Kas Admin</div>
+                        <div class="stat-title">Proyeksi Total Kas</div>
                         <div class="stat-value counter" data-target="<?= $total_saldo + $saldo_harian ?>" data-prefix="Rp ">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-chart-line"></i>
-                            <span>Perkiraan Total Saldo setelah setoran Petugas</span>
+                            <span>Estimasi Saldo Setelah Setoran Teller</span>
                         </div>
                     </div>
                 </div>
@@ -1469,11 +678,11 @@ while ($row = $result_students->fetch_assoc()) {
                         <i class="fas fa-wallet"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Total Saldo di Kas Admin</div>
+                        <div class="stat-title">Saldo Kas Administrator</div>
                         <div class="stat-value counter" data-target="<?= $total_saldo ?>" data-prefix="Rp ">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-chart-line"></i>
-                            <span>Total Saldo di Kas Admin</span>
+                            <span>Posisi Kas Terkini</span>
                         </div>
                     </div>
                 </div>
@@ -1482,74 +691,24 @@ while ($row = $result_students->fetch_assoc()) {
                         <i class="fas fa-money-bill-wave"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-title">Perkiraan Setoran Petugas</div>
+                        <div class="stat-title">Proyeksi Setoran Teller</div>
                         <div class="stat-value counter" data-target="<?= $saldo_harian ?>" data-prefix="Rp ">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-calendar-day"></i>
-                            <span>Total Saldo Bersih Petugas Hari ini</span>
+                            <span>Saldo Bersih Teller Hari Ini</span>
                         </div>
                     </div>
                 </div>
             </div>
         
-            <div class="chart-container">
-                <h3 class="chart-title">Statik Semua Transaksi Terakhir</h3>
-                <canvas id="transactionChart"></canvas>
-            </div>
-
-            <!-- Pop-up for Students Breakdown -->
-            <div class="popup-overlay" id="studentsPopup">
-                <div class="popup-content">
-                    <h2>Rincian Siswa per Kelas</h2>
-                    <?php if (empty($students_by_jurusan)): ?>
-                        <div class="empty-state">Tidak ada data siswa tersedia.</div>
-                    <?php else: ?>
-                        <?php foreach ($students_by_jurusan as $jurusan => $data): ?>
-                            <div class="jurusan-card">
-                                <div class="jurusan-header">
-                                    <div>
-                                        <i class="fas fa-graduation-cap logo"></i>
-                                        <span><?= htmlspecialchars($jurusan) ?></span>
-                                    </div>
-                                    <i class="fas fa-chevron-down arrow"></i>
-                                </div>
-                                <div class="kelas-content">
-                                    <?php foreach ($data['kelas_list'] as $kelas): ?>
-                                        <div class="kelas-card">
-                                            <i class="fas fa-chalkboard logo"></i>
-                                            <span class="kelas-name"><?= htmlspecialchars($kelas['kelas']) ?></span>
-                                            <span class="jumlah-siswa"><?= $kelas['jumlah_siswa'] ?> Siswa</span>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+            <div class="chart-section">
+                <div class="chart-container">
+                    <h3 class="chart-title">Grafik Transaksi 7 Hari Terakhir</h3>
+                    <canvas id="transactionChart"></canvas>
                 </div>
-            </div>
-
-            <!-- Pop-up for Net Setoran Breakdown -->
-            <div class="saldo-popup" id="saldoPopup">
-                <div class="saldo-content">
-                    <h2>Rincian Net Setoran 7 Hari</h2>
-                    <?php if (empty($net_setoran_data)): ?>
-                        <div class="empty-state">Tidak ada data setoran tersedia.</div>
-                    <?php else: ?>
-                        <?php foreach ($net_setoran_data as $data): ?>
-                            <div class="tanggal-card">
-                                <div class="tanggal-header">
-                                    <div>
-                                        <i class="fas fa-wallet logo"></i>
-                                        <span><?= formatTanggalIndonesia($data['tanggal']) ?></span>
-                                    </div>
-                                    <i class="fas fa-chevron-down arrow"></i>
-                                </div>
-                                <div class="setoran-content">
-                                    <div class="setoran-value">Rp <?= number_format($data['net_setoran'], 0, ',', '.') ?></div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                <div class="chart-container">
+                    <h3 class="chart-title">Komposisi Jenis Transaksi 7 Hari Terakhir</h3>
+                    <canvas id="pieChart"></canvas>
                 </div>
             </div>
         </div>
@@ -1560,42 +719,42 @@ while ($row = $result_students->fetch_assoc()) {
         // Prevent zooming via JavaScript
         document.addEventListener('wheel', function(e) {
             if (e.ctrlKey) {
-                e.preventDefault(); // Prevent Ctrl + Scroll zooming
+                e.preventDefault();
             }
         }, { passive: false });
 
         document.addEventListener('gesturestart', function(e) {
-            e.preventDefault(); // Prevent pinch-to-zoom on iOS
+            e.preventDefault();
         }, { passive: false });
 
         document.addEventListener('touchstart', function(e) {
             if (e.touches.length > 1) {
-                e.preventDefault(); // Prevent multi-touch zooming
+                e.preventDefault();
             }
         }, { passive: false });
 
         document.addEventListener('keydown', function(e) {
             if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '0')) {
-                e.preventDefault(); // Prevent Ctrl + Plus/Minus/Zero zooming
+                e.preventDefault();
             }
         });
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Chart.js configuration
-            const ctx = document.getElementById('transactionChart').getContext('2d');
-            const transactionChart = new Chart(ctx, {
+            // Line Chart Configuration
+            const ctxLine = document.getElementById('transactionChart').getContext('2d');
+            const transactionChart = new Chart(ctxLine, {
                 type: 'line',
                 data: {
                     labels: <?= json_encode(array_column($chart_data, 'tanggal')) ?>,
                     datasets: [{
                         label: 'Jumlah Transaksi',
                         data: <?= json_encode(array_column($chart_data, 'jumlah_transaksi')) ?>,
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
                         borderWidth: 3,
                         pointRadius: 6,
                         pointHoverRadius: 8,
-                        pointBackgroundColor: 'rgba(75, 192, 192, 1)',
+                        pointBackgroundColor: 'rgba(59, 130, 246, 1)',
                         pointBorderColor: '#fff',
                         pointStyle: 'circle',
                         tension: 0.4,
@@ -1630,7 +789,48 @@ while ($row = $result_students->fetch_assoc()) {
                     },
                     responsive: true,
                     maintainAspectRatio: true,
-                    aspectRatio: window.innerWidth <= 768 ? 1.5 : 2.5,
+                    aspectRatio: 2,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuad'
+                    }
+                }
+            });
+
+            // Pie Chart Configuration
+            const ctxPie = document.getElementById('pieChart').getContext('2d');
+            const pieChart = new Chart(ctxPie, {
+                type: 'pie',
+                data: {
+                    labels: ['Setoran', 'Penarikan'],
+                    datasets: [{
+                        data: [<?= $setor_count ?>, <?= $tarik_count ?>],
+                        backgroundColor: [
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(30, 58, 138, 0.8)'
+                        ],
+                        borderColor: [
+                            'rgba(59, 130, 246, 1)',
+                            'rgba(30, 58, 138, 1)'
+                        ],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: {
+                                    family: 'Poppins',
+                                    size: 12,
+                                    weight: '500'
+                                }
+                            }
+                        }
+                    },
                     animation: {
                         duration: 1000,
                         easing: 'easeInOutQuad'
@@ -1654,133 +854,6 @@ while ($row = $result_students->fetch_assoc()) {
                     sidebar.classList.remove('active');
                     document.body.classList.remove('sidebar-active');
                 }
-            });
-
-            // Dropdown functionality (only one open at a time)
-            const dropdownButtons = document.querySelectorAll('.dropdown-btn');
-            dropdownButtons.forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const dropdownContainer = this.nextElementSibling;
-                    const isActive = this.classList.contains('active');
-
-                    dropdownButtons.forEach(btn => {
-                        const container = btn.nextElementSibling;
-                        btn.classList.remove('active');
-                        container.classList.remove('show');
-                    });
-
-                    if (!isActive) {
-                        this.classList.add('active');
-                        dropdownContainer.classList.add('show');
-                    }
-                });
-            });
-
-            document.addEventListener('click', function(e) {
-                dropdownButtons.forEach(button => {
-                    const dropdownContainer = button.nextElementSibling;
-                    if (!button.contains(e.target)) {
-                        button.classList.remove('active');
-                        dropdownContainer.classList.remove('show');
-                    }
-                });
-            });
-
-            // Students Pop-up functionality
-            const studentsBox = document.querySelector('.stat-box.students');
-            const studentsPopup = document.getElementById('studentsPopup');
-            if (studentsBox && studentsPopup) {
-                studentsBox.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    studentsPopup.classList.add('active');
-                    document.body.classList.add('popup-active');
-                });
-
-                studentsPopup.addEventListener('click', function(e) {
-                    if (e.target === studentsPopup) {
-                        studentsPopup.classList.remove('active');
-                        document.body.classList.remove('popup-active');
-                    }
-                });
-
-                const popupContent = document.querySelector('.popup-content');
-                if (popupContent) {
-                    popupContent.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                    });
-                }
-            }
-
-            // Saldo Pop-up functionality
-            const saldoBox = document.querySelector('.stat-box.setor');
-            const saldoPopup = document.getElementById('saldoPopup');
-            if (saldoBox && saldoPopup) {
-                saldoBox.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    saldoPopup.classList.add('active');
-                    document.body.classList.add('popup-active');
-                });
-
-                saldoPopup.addEventListener('click', function(e) {
-                    if (e.target === saldoPopup) {
-                        saldoPopup.classList.remove('active');
-                        document.body.classList.remove('popup-active');
-                    }
-                });
-
-                const saldoContent = document.querySelector('.saldo-content');
-                if (saldoContent) {
-                    saldoContent.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                    });
-                }
-            }
-
-            // Jurusan card toggle (single-open)
-            const jurusanHeaders = document.querySelectorAll('.jurusan-header');
-            jurusanHeaders.forEach(header => {
-                header.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const jurusanCard = this.parentElement;
-                    const kelasContent = this.nextElementSibling;
-                    const isActive = jurusanCard.classList.contains('active');
-
-                    document.querySelectorAll('.jurusan-card').forEach(card => {
-                        card.classList.remove('active');
-                        card.querySelector('.kelas-content').classList.remove('show');
-                        card.querySelector('.jurusan-header').classList.remove('active');
-                    });
-
-                    if (!isActive) {
-                        jurusanCard.classList.add('active');
-                        kelasContent.classList.add('show');
-                        this.classList.add('active');
-                    }
-                });
-            });
-
-            // Tanggal card toggle (single-open for saldo)
-            const tanggalHeaders = document.querySelectorAll('.tanggal-header');
-            tanggalHeaders.forEach(header => {
-                header.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const tanggalCard = this.parentElement;
-                    const content = this.nextElementSibling;
-                    const isActive = tanggalCard.classList.contains('active');
-
-                    tanggalCard.parentElement.querySelectorAll('.tanggal-card').forEach(card => {
-                        card.classList.remove('active');
-                        card.querySelector('.setoran-content').classList.remove('show');
-                        card.querySelector('.tanggal-header').classList.remove('active');
-                    });
-
-                    if (!isActive) {
-                        tanggalCard.classList.add('active');
-                        content.classList.add('show');
-                        this.classList.add('active');
-                    }
-                });
             });
 
             // Animated Counter for Numbers

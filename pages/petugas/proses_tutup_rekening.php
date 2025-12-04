@@ -1,0 +1,263 @@
+<?php
+require_once '../../includes/auth.php';
+require_once '../../includes/db_connection.php';
+require_once '../../includes/session_validator.php'; 
+
+// Set timezone to Asia/Jakarta
+date_default_timezone_set('Asia/Jakarta');
+
+// Validate session and role
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
+    header('Location: ../login.php');
+    exit();
+}
+
+// Function to mask no_rekening (e.g., 01234567 -> 012****7)
+function maskNoRekening($no_rekening) {
+    if (empty($no_rekening) || strlen($no_rekening) < 5) {
+        return '-';
+    }
+    return substr($no_rekening, 0, 3) . '****' . substr($no_rekening, -1);
+}
+
+// Function to mask username (e.g., abcd -> ab**d)
+function maskUsername($username) {
+    if (empty($username) || strlen($username) < 3) {
+        return $username ?: '-';
+    }
+    $masked = substr($username, 0, 2);
+    $masked .= str_repeat('*', strlen($username) - 3);
+    $masked .= substr($username, -1);
+    return $masked;
+}
+
+// Indonesian month names
+$bulan_indonesia = [
+    'January' => 'Januari',
+    'February' => 'Februari',
+    'March' => 'Maret',
+    'April' => 'April',
+    'May' => 'Mei',
+    'June' => 'Juni',
+    'July' => 'Juli',
+    'August' => 'Agustus',
+    'September' => 'September',
+    'October' => 'Oktober',
+    'November' => 'November',
+    'December' => 'Desember'
+];
+
+// Handle AJAX check rekening
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'check_rekening' && isset($_POST['token']) && $_POST['token'] === $_SESSION['form_token']) {
+    $no_rekening = trim($_POST['no_rekening'] ?? '');
+    
+    if (empty($no_rekening) || !preg_match('/^\d{8}$/', $no_rekening)) {
+        echo json_encode(['success' => false, 'message' => 'Nomor rekening harus 8 digit angka.']);
+        exit();
+    }
+
+    // Fetch rekening and user details
+    $stmt = $conn->prepare("
+        SELECT u.id AS user_id, u.nama, u.username, u.email, u.alamat_lengkap, u.nis_nisn, 
+               u.jenis_kelamin, u.tanggal_lahir, u.password, u.is_frozen,
+               r.id AS rekening_id, r.no_rekening, r.saldo,
+               j.nama_jurusan,
+               CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas
+        FROM rekening r
+        JOIN users u ON r.user_id = u.id
+        LEFT JOIN jurusan j ON u.jurusan_id = j.id
+        LEFT JOIN kelas k ON u.kelas_id = k.id
+        LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
+        WHERE r.no_rekening = ? AND u.role = 'siswa'
+    ");
+    $stmt->bind_param("s", $no_rekening);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows === 0) {
+        echo json_encode(['success' => false, 'message' => 'Rekening tidak ditemukan!']);
+        $stmt->close();
+        exit();
+    }
+    
+    $data = $result->fetch_assoc();
+    $stmt->close();
+    
+    // Format additional fields
+    $data['jenis_kelamin_display'] = $data['jenis_kelamin'] ? ($data['jenis_kelamin'] === 'L' ? 'Laki-laki' : 'Perempuan') : '-';
+    $data['tanggal_lahir_display'] = $data['tanggal_lahir'] ? strtr(date('d F Y', strtotime($data['tanggal_lahir'])), $bulan_indonesia) : '-';
+    $data['alamat_lengkap'] = $data['alamat_lengkap'] ?: '-';
+    $data['nis_nisn'] = $data['nis_nisn'] ?: '-';
+    $data['email'] = $data['email'] ?: '-';
+    $data['username_display'] = maskUsername($data['username']);
+    $data['nama_jurusan'] = $data['nama_jurusan'] ?? '-';
+    $data['nama_kelas'] = $data['nama_kelas'] ?? '-';
+    $data['no_rekening_display'] = $data['no_rekening'];
+    
+    // Check conditions
+    $errors = [];
+    $has_saldo = false;
+    if ($data['saldo'] != 0) {
+        $has_saldo = true;
+        $errors[] = 'Saldo masih tersisa Rp ' . number_format($data['saldo'], 0, ',', '.') . '. Silakan tarik sisa saldo terlebih dahulu.';
+    }
+    if ($data['is_frozen']) {
+        $errors[] = 'Akun sedang dibekukan.';
+    }
+    
+    // Additional check: no pending transaksi
+    $stmt_pending = $conn->prepare("SELECT COUNT(*) as count FROM transaksi WHERE (rekening_id = ? OR rekening_tujuan_id = ?) AND status = 'pending'");
+    $stmt_pending->bind_param("ii", $data['rekening_id'], $data['rekening_id']);
+    $stmt_pending->execute();
+    $pending = $stmt_pending->get_result()->fetch_assoc()['count'];
+    $stmt_pending->close();
+    
+    if ($pending > 0) {
+        $errors[] = 'Ada ' . $pending . ' transaksi pending.';
+    }
+    
+    $can_close = empty($errors);
+    
+    echo json_encode([
+        'success' => true,
+        'data' => [
+            'user_id' => $data['user_id'],
+            'nama' => $data['nama'],
+            'username' => $data['username_display'],
+            'email' => $data['email'],
+            'alamat_lengkap' => $data['alamat_lengkap'],
+            'nis_nisn' => $data['nis_nisn'],
+            'jenis_kelamin_display' => $data['jenis_kelamin_display'],
+            'tanggal_lahir_display' => $data['tanggal_lahir_display'],
+            'no_rekening' => $data['no_rekening'],
+            'no_rekening_display' => $data['no_rekening_display'],
+            'nama_jurusan' => $data['nama_jurusan'],
+            'nama_kelas' => $data['nama_kelas'],
+            'saldo' => $data['saldo'],
+            'is_frozen' => $data['is_frozen']
+        ],
+        'can_close' => $can_close,
+        'has_saldo' => $has_saldo,
+        'errors' => $errors,
+        'rekening_id' => $data['rekening_id']
+    ]);
+    exit();
+}
+
+// Handle AJAX close rekening
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'close_rekening' && isset($_POST['token']) && $_POST['token'] === $_SESSION['form_token']) {
+    $user_id = intval($_POST['user_id'] ?? 0);
+    $password = trim($_POST['password'] ?? '');
+    $no_rekening = trim($_POST['no_rekening'] ?? '');
+    
+    if ($user_id <= 0 || empty($password)) {
+        echo json_encode(['success' => false, 'message' => 'Data tidak lengkap.']);
+        exit();
+    }
+    
+    $conn->begin_transaction();
+    try {
+        $stmt = $conn->prepare("SELECT password FROM users WHERE id = ? AND role = 'siswa'");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows === 0) {
+            throw new Exception("User tidak ditemukan.");
+        }
+        
+        $user = $result->fetch_assoc();
+        $stmt->close();
+        
+        $hashed_password = hash('sha256', $password);
+        
+        if (empty($user['password'])) {
+            throw new Exception("Gagal menutup rekening. Password siswa belum diatur.");
+        } elseif ($user['password'] !== $hashed_password) {
+            throw new Exception("Gagal menutup rekening. Password tidak sesuai.");
+        }
+        
+        $stmt = $conn->prepare("SELECT r.id AS rekening_id, r.saldo, u.is_frozen FROM users u JOIN rekening r ON u.id = r.user_id WHERE u.id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $data = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        
+        if ($data['saldo'] != 0) {
+            throw new Exception("Gagal menutup rekening. Saldo masih tersisa Rp " . number_format($data['saldo'], 0, ',', '.') . ". Silakan tarik saldo terlebih dahulu.");
+        }
+        
+        if ($data['is_frozen']) {
+            throw new Exception("Gagal menutup rekening. Akun sedang dibekukan.");
+        }
+        
+        $rekening_id = $data['rekening_id'];
+        
+        $stmt_pending = $conn->prepare("SELECT COUNT(*) as count FROM transaksi WHERE (rekening_id = ? OR rekening_tujuan_id = ?) AND status = 'pending'");
+        $stmt_pending->bind_param("ii", $rekening_id, $rekening_id);
+        $stmt_pending->execute();
+        $pending_result = $stmt_pending->get_result()->fetch_assoc();
+        $stmt_pending->close();
+        
+        if ($pending_result['count'] > 0) {
+            throw new Exception("Gagal menutup rekening. Ada transaksi pending.");
+        }
+        
+        $stmt = $conn->prepare("DELETE m FROM mutasi m JOIN transaksi t ON m.transaksi_id = t.id WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?");
+        $stmt->bind_param("ii", $rekening_id, $rekening_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        $stmt = $conn->prepare("DELETE FROM transaksi WHERE rekening_id = ? OR rekening_tujuan_id = ?");
+        $stmt->bind_param("ii", $rekening_id, $rekening_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        $stmt = $conn->prepare("DELETE FROM rekening WHERE id = ?");
+        $stmt->bind_param("i", $rekening_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        $tables = [
+            'account_freeze_log' => 'siswa_id',
+            'log_aktivitas' => 'siswa_id',
+            'notifications' => 'user_id',
+            'reset_request_cooldown' => 'user_id',
+            'absensi' => 'user_id',
+            'password_reset' => 'user_id',
+        ];
+        
+        foreach ($tables as $table => $column) {
+            if ($conn->query("SHOW TABLES LIKE '$table'")->num_rows > 0) {
+                $stmt = $conn->prepare("DELETE FROM $table WHERE $column = ?");
+                $stmt->bind_param("i", $user_id);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+        
+        $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $stmt->close();
+        
+        $stmt = $conn->prepare("SELECT id FROM users WHERE id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            throw new Exception("Gagal menghapus user.");
+        }
+        $stmt->close();
+        
+        $conn->commit();
+        
+        echo json_encode(['success' => true, 'message' => "Rekening $no_rekening berhasil ditutup."]);
+    } catch (Exception $e) {
+        $conn->rollback();
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit();
+}
+?>

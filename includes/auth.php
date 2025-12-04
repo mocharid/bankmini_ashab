@@ -1,6 +1,8 @@
 <?php
 require_once 'functions.php'; // Memuat fungsi seperti isLoggedIn dan redirect
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 function logout() {
     session_unset(); // Hapus semua variabel sesi

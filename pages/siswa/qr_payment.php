@@ -1,148 +1,243 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
-require_once '../../includes/qr_generator.php'; // Assume a QR code generator library is included
 
-// Set timezone to WIB
 date_default_timezone_set('Asia/Jakarta');
 
-// Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../login.php");
+    header("Location: ../login.php");
     exit();
 }
 
 $user_id = $_SESSION['user_id'];
 
-// Fetch user details
-$query = "SELECT u.nama, u.email, u.pin FROM users WHERE u.id = ?";
+// Configuration: Set to true if PINs are stored as SHA-256 hashes, false for plain text
+$use_sha256_pin = false; // Change to true if your database uses SHA-256 hashed PINs
+
+// Fetch user data
+$query = "SELECT u.nama, u.email, u.has_pin, u.pin, u.is_frozen, u.failed_pin_attempts, u.pin_block_until, r.no_rekening, r.id AS rekening_id, r.saldo 
+          FROM users u 
+          JOIN rekening r ON u.id = r.user_id 
+          WHERE u.id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
-$user_data = $stmt->get_result()->fetch_assoc();
+$result = $stmt->get_result();
+$user_data = $result->fetch_assoc();
+$stmt->close();
 
-// Check if PIN is set
-$has_pin = !empty($user_data['pin']);
-if (!$has_pin) {
+if (!$user_data || !$user_data['has_pin']) {
     header("Location: dashboard.php");
     exit();
 }
 
-// Fetch rekening details
-$query = "SELECT r.id, r.no_rekening, r.saldo FROM rekening WHERE r.user_id = ?";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$rekening_data = $stmt->get_result()->fetch_assoc();
-
-$no_rekening = $rekening_data ? $rekening_data['no_rekening'] : 'N/A';
-$saldo = $rekening_data ? $rekening_data['saldo'] : 0;
-$rekening_id = $rekening_data ? $rekening_data['id'] : null;
-
-// Handle QR scan submission
+// Initialize popup variables
 $show_error_popup = false;
 $error_message = '';
+$show_success_popup = false;
 $success_message = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
-    $qr_code = trim($_POST['qr_code']);
-    $amount = floatval($_POST['amount']);
-    $pin = $_POST['pin'];
+$form_token = bin2hex(random_bytes(32));
+$_SESSION['qr_payment_form_token'] = $form_token;
 
-    // Verify PIN
-    if (hash('sha256', $pin) !== $user_data['pin']) {
+// Clear previous transaction result on page load
+unset($_SESSION['transaction_result']);
+
+// Check for transaction result in session (set only after a transaction attempt)
+if (isset($_SESSION['transaction_result'])) {
+    if ($_SESSION['transaction_result']['status'] === 'error') {
         $show_error_popup = true;
-        $error_message = "PIN salah!";
+        $error_message = $_SESSION['transaction_result']['message'];
+    } elseif ($_SESSION['transaction_result']['status'] === 'success') {
+        $show_success_popup = true;
+        $success_message = $_SESSION['transaction_result']['message'];
+    }
+    // Clear the transaction result after capturing it
+    unset($_SESSION['transaction_result']);
+}
+
+// Check if account is frozen or PIN is blocked (set error only for transaction attempts)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_pin_validation'])) {
+    if ($user_data['is_frozen']) {
+        $_SESSION['transaction_result'] = [
+            'status' => 'error',
+            'message' => 'Akun Anda sedang dibekukan. Silakan hubungi petugas.'
+        ];
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $_SESSION['transaction_result']['message'], 'blocked' => true]);
+        exit();
+    } elseif ($user_data['pin_block_until'] && new DateTime() < new DateTime($user_data['pin_block_until'])) {
+        $_SESSION['transaction_result'] = [
+            'status' => 'error',
+            'message' => 'PIN Anda diblokir hingga ' . date('d-m-Y H:i:s', strtotime($user_data['pin_block_until'])) . '.'
+        ];
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => $_SESSION['transaction_result']['message'], 'blocked' => true]);
+        exit();
+    }
+}
+
+// Handle form submission for payment via AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_pin_validation'])) {
+    header('Content-Type: application/json');
+    $no_rekening_tujuan = trim($_POST['no_rekening_tujuan'] ?? '');
+    $jumlah = trim($_POST['jumlah_raw'] ?? '');
+    $pin = trim($_POST['pin'] ?? '');
+
+    // Remove any non-numeric characters for processing
+    $jumlah = preg_replace('/[^0-9]/', '', $jumlah);
+
+    // Validate input
+    if (empty($no_rekening_tujuan) || empty($jumlah) || empty($pin)) {
+        echo json_encode(['success' => false, 'message' => 'Nomor rekening tujuan, nominal, dan PIN harus diisi.']);
+        exit();
+    } elseif (!is_numeric($jumlah) || $jumlah <= 0) {
+        echo json_encode(['success' => false, 'message' => 'Nominal harus berupa angka positif.']);
+        exit();
+    } elseif ($jumlah > $user_data['saldo']) {
+        echo json_encode(['success' => false, 'message' => 'Saldo tidak mencukupi.']);
+        exit();
     } else {
-        // Decode QR code (assuming QR contains JSON with recipient's rekening number)
-        $qr_data = json_decode($qr_code, true);
-        if ($qr_data && isset($qr_data['no_rekening'])) {
-            $recipient_no_rekening = $qr_data['no_rekening'];
+        // Verify PIN
+        $entered_pin = $use_sha256_pin ? hash('sha256', $pin) : $pin;
+        if ($entered_pin !== $user_data['pin']) {
+            $failed_attempts = $user_data['failed_pin_attempts'] + 1;
+            $max_attempts = 3;
+            $block_duration = 5 * 60; // 5 minutes in seconds
 
-            // Fetch recipient rekening
-            $query = "SELECT r.id, r.user_id FROM rekening r WHERE r.no_rekening = ?";
+            // Update failed attempts
+            $query = "UPDATE users SET failed_pin_attempts = ? WHERE id = ?";
             $stmt = $conn->prepare($query);
-            $stmt->bind_param("s", $recipient_no_rekening);
+            $stmt->bind_param("ii", $failed_attempts, $user_id);
             $stmt->execute();
-            $recipient_data = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
 
-            if ($recipient_data && $recipient_data['user_id'] != $user_id) {
-                if ($saldo >= $amount && $amount > 0) {
-                    // Start transaction
-                    $conn->begin_transaction();
-                    try {
-                        // Create transaction
-                        $no_transaksi = 'TX' . time() . rand(1000, 9999);
-                        $query = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, status, rekening_tujuan_id) 
-                                  VALUES (?, ?, 'transfer', ?, 'pending', ?)";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("sidi", $no_transaksi, $rekening_id, $amount, $recipient_data['id']);
-                        $stmt->execute();
-
-                        // Update sender balance
-                        $new_saldo = $saldo - $amount;
-                        $query = "UPDATE rekening SET saldo = ? WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("di", $new_saldo, $rekening_id);
-                        $stmt->execute();
-
-                        // Update recipient balance
-                        $query = "UPDATE rekening SET saldo = saldo + ? WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("di", $amount, $recipient_data['id']);
-                        $stmt->execute();
-
-                        // Create mutation record for sender
-                        $query = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) 
-                                  VALUES (LAST_INSERT_ID(), ?, ?, ?)";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("idd", $rekening_id, $amount, $new_saldo);
-                        $stmt->execute();
-
-                        // Create mutation record for recipient
-                        $query = "SELECT saldo FROM rekening WHERE id = ?";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("i", $recipient_data['id']);
-                        $stmt->execute();
-                        $recipient_new_saldo = $stmt->get_result()->fetch_assoc()['saldo'];
-                        $query = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) 
-                                  VALUES (LAST_INSERT_ID(), ?, ?, ?)";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("idd", $recipient_data['id'], $amount, $recipient_new_saldo);
-                        $stmt->execute();
-
-                        // Create notification for sender
-                        $message = "Transfer Rp " . number_format($amount, 0, ',', '.') . " ke $recipient_no_rekening berhasil.";
-                        $query = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("is", $user_id, $message);
-                        $stmt->execute();
-
-                        // Create notification for recipient
-                        $recipient_message = "Menerima transfer Rp " . number_format($amount, 0, ',', '.') . " dari $no_rekening.";
-                        $query = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("is", $recipient_data['user_id'], $recipient_message);
-                        $stmt->execute();
-
-                        $conn->commit();
-                        $success_message = "Transfer berhasil!";
-                        $saldo = $new_saldo; // Update displayed balance
-                    } catch (Exception $e) {
-                        $conn->rollback();
-                        $show_error_popup = true;
-                        $error_message = "Transfer gagal: " . $e->getMessage();
-                    }
-                } else {
-                    $show_error_popup = true;
-                    $error_message = "Saldo tidak cukup atau jumlah tidak valid!";
-                }
+            if ($failed_attempts >= $max_attempts) {
+                $block_until = date('Y-m-d H:i:s', time() + $block_duration);
+                $query = "UPDATE users SET pin_block_until = ?, failed_pin_attempts = 0 WHERE id = ?";
+                $stmt = $conn->prepare($query);
+                $stmt->bind_param("si", $block_until, $user_id);
+                $stmt->execute();
+                $stmt->close();
+                $_SESSION['transaction_result'] = [
+                    'status' => 'error',
+                    'message' => 'PIN salah. Akun Anda diblokir hingga ' . date('d-m-Y H:i:s', strtotime($block_until)) . '.'
+                ];
+                echo json_encode(['success' => false, 'message' => $_SESSION['transaction_result']['message'], 'blocked' => true]);
+                exit();
             } else {
-                $show_error_popup = true;
-                $error_message = "Rekening tujuan tidak valid atau tidak boleh transfer ke diri sendiri!";
+                $attempts_left = $max_attempts - $failed_attempts;
+                $message = 'PIN salah. Sisa percobaan: ' . $attempts_left . '.';
+                if ($attempts_left === 1) {
+                    $message .= ' Jika salah lagi, PIN akan diblokir sementara.';
+                }
+                echo json_encode(['success' => false, 'message' => $message, 'attempts_left' => $attempts_left]);
+                exit();
             }
         } else {
-            $show_error_popup = true;
-            $error_message = "QR code tidak valid!";
+            // Reset failed attempts on successful PIN
+            $query = "UPDATE users SET failed_pin_attempts = 0 WHERE id = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $stmt->close();
+
+            // Check if destination account exists
+            $query = "SELECT r.id, r.saldo, r.user_id, u.nama 
+                      FROM rekening r 
+                      JOIN users u ON r.user_id = u.id 
+                      WHERE r.no_rekening = ? AND r.user_id != ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("si", $no_rekening_tujuan, $user_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $tujuan_data = $result->fetch_assoc();
+            $stmt->close();
+
+            if (!$tujuan_data) {
+                echo json_encode(['success' => false, 'message' => 'Nomor rekening tujuan tidak ditemukan.']);
+                exit();
+            } else {
+                // Generate unique transaction number
+                $no_transaksi = 'SQR' . date('YmdHis') . rand(100, 999);
+                $jumlah = (float)$jumlah;
+
+                // Begin transaction
+                $conn->begin_transaction();
+                try {
+                    // Insert transaction
+                    $query = "INSERT INTO transaksi (no_transaksi, rekening_id, jenis_transaksi, jumlah, status, rekening_tujuan_id) 
+                              VALUES (?, ?, 'transaksi_qr', ?, 'approved', ?)";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("sidi", $no_transaksi, $user_data['rekening_id'], $jumlah, $tujuan_data['id']);
+                    $stmt->execute();
+                    $transaksi_id = $conn->insert_id;
+                    $stmt->close();
+
+                    // Update sender's balance
+                    $new_saldo_pengirim = $user_data['saldo'] - $jumlah;
+                    $query = "UPDATE rekening SET saldo = ? WHERE id = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("di", $new_saldo_pengirim, $user_data['rekening_id']);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // Update receiver's balance
+                    $new_saldo_penerima = $tujuan_data['saldo'] + $jumlah;
+                    $query = "UPDATE rekening SET saldo = ? WHERE id = ?";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("di", $new_saldo_penerima, $tujuan_data['id']);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // Insert mutation for sender
+                    $query = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) VALUES (?, ?, ?, ?)";
+                    $stmt = $conn->prepare($query);
+                    $jumlah_negatif = -$jumlah;
+                    $stmt->bind_param("iidd", $transaksi_id, $user_data['rekening_id'], $jumlah_negatif, $new_saldo_pengirim);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // Insert mutation for receiver
+                    $query = "INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir) VALUES (?, ?, ?, ?)";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("iidd", $transaksi_id, $tujuan_data['id'], $jumlah, $new_saldo_penerima);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // Insert notification for sender
+                    $message = "Yey, transaksi QR sebesar Rp " . number_format($jumlah, 0, ',', '.') . " ke " . $tujuan_data['nama'] . " berhasil dilakukan. Cek saldo kamu yu!";
+                    $query = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("is", $user_id, $message);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // Insert notification for receiver
+                    $message = "Yey, kamu menerima saldo sebesar Rp " . number_format($jumlah, 0, ',', '.') . " dari " . $user_data['nama'] . ".";
+                    $query = "INSERT INTO notifications (user_id, message) VALUES (?, ?)";
+                    $stmt = $conn->prepare($query);
+                    $stmt->bind_param("is", $tujuan_data['user_id'], $message);
+                    $stmt->execute();
+                    $stmt->close();
+
+                    // Commit transaction
+                    $conn->commit();
+                    $_SESSION['transaction_result'] = [
+                        'status' => 'success',
+                        'message' => "Transaksi QR sebesar Rp " . number_format($jumlah, 0, ',', '.') . " ke " . $tujuan_data['nama'] . " berhasil!"
+                    ];
+                    echo json_encode(['success' => true, 'redirect' => 'struk_transaksi.php?no_transaksi=' . urlencode($no_transaksi)]);
+                    exit();
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    $_SESSION['transaction_result'] = [
+                        'status' => 'error',
+                        'message' => 'Gagal melakukan transaksi QR: ' . $e->getMessage()
+                    ];
+                    echo json_encode(['success' => false, 'message' => $_SESSION['transaction_result']['message']]);
+                    exit();
+                }
+            }
         }
     }
 }
@@ -151,78 +246,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <title>Pembayaran QR - SCHOBANK SYSTEM</title>
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <title>Transaksi QR - SCHOBANK SYSTEM</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+        :root {
+            --primary-color: #1e3a8a;
+            --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6;
+            --text-primary: #2d3748;
+            --text-secondary: #4a5568;
+            --bg-light: #f7fafc;
+            --bg-table: #ffffff;
+            --border-color: #e2e8f0;
+            --error-color: #e74c3c;
+            --success-color: #34a853;
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+            --button-bg: #1e3a8a;
+            --button-bg-hover: #1e1b4b;
+            --button-text: #ffffff;
+        }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Outfit', 'DM Sans', 'Poppins', sans-serif;
-        }
-
-        body {
-            background-color: #f5f7fa;
-            color: #333;
-            line-height: 1.6;
-            font-size: clamp(14px, 2.5vw, 16px);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
+            font-family: 'Poppins', sans-serif;
+            -webkit-text-size-adjust: none;
             -webkit-user-select: none;
             user-select: none;
         }
 
-        .wrapper {
-            flex: 1;
-            padding: clamp(1rem, 2vw, 1.5rem);
+        body {
+            background-color: var(--bg-light);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            font-size: clamp(0.9rem, 2vw, 1rem);
         }
 
-        :root {
-            --font-size-xs: clamp(12px, 2vw, 14px);
-            --font-size-sm: clamp(14px, 2.5vw, 16px);
-            --font-size-md: clamp(16px, 3vw, 18px);
-            --font-size-lg: clamp(18px, 3.5vw, 22px);
-            --font-size-xl: clamp(24px, 4vw, 28px);
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #3b82f6;
-            --error-color: #e74c3c;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
-
-        .header {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            padding: clamp(1rem, 3vw, 1.5rem) clamp(1.5rem, 4vw, 2rem);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            border-bottom-left-radius: 16px;
-            border-bottom-right-radius: 16px;
-            margin-bottom: clamp(1.5rem, 3vw, 2rem);
+        .top-nav {
+            background: var(--primary-dark);
+            padding: 15px 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-        }
-
-        .header h1 {
-            font-size: var(--font-size-xl);
-            font-weight: 600;
-            letter-spacing: -0.5px;
+            color: white;
+            box-shadow: var(--shadow-sm);
+            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
         }
 
         .back-btn {
             background: rgba(255, 255, 255, 0.1);
-            color: white;
+            color: var(--button-text);
             border: none;
             padding: 10px;
             border-radius: 50%;
@@ -240,181 +324,191 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
             transform: translateY(-2px);
         }
 
-        .tab-container {
-            display: flex;
-            justify-content: center;
-            margin: clamp(1rem, 2vw, 1.5rem) auto;
-            max-width: clamp(300px, 80vw, 400px);
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: var(--shadow-sm);
-            overflow: hidden;
+        .back-btn:active {
+            transform: scale(0.95);
         }
 
-        .tab {
+        .main-content {
             flex: 1;
-            padding: clamp(0.8rem, 2vw, 1rem);
-            text-align: center;
-            cursor: pointer;
-            font-size: var(--font-size-md);
-            font-weight: 500;
-            color: #333;
-            transition: var(--transition);
-        }
-
-        .tab.active {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-        }
-
-        .tab:hover {
-            background: rgba(30, 60, 114, 0.1);
-        }
-
-        .tab-content {
-            display: none;
-            margin: clamp(1.5rem, 3vw, 2rem) auto;
-            max-width: clamp(300px, 80vw, 400px);
-            background: white;
-            border-radius: 16px;
-            padding: clamp(1rem, 2vw, 1.5rem);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .form-group {
-            margin-bottom: 1.5rem;
+            padding: 20px;
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            position: relative;
-        }
-
-        .form-group label {
-            font-size: var(--font-size-sm);
-            font-weight: 500;
-            color: #333;
-        }
-
-        .form-group input,
-        .form-group textarea {
-            width: 100%;
-            padding: clamp(0.6rem, 1.5vw, 0.8rem);
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            font-size: var(--font-size-sm);
-            transition: var(--transition);
-            -webkit-user-select: text;
-            user-select: text;
-        }
-
-        .form-group input:focus,
-        .form-group textarea:focus {
-            border-color: var(--primary-color);
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-            transform: scale(1.02);
-        }
-
-        .input-container {
-            position: relative;
-            width: 100%;
-            display: flex;
             align-items: center;
-            gap: 10px;
         }
 
-        .qr-btn {
-            background: var(--primary-color);
+        .welcome-banner {
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 10px;
-            cursor: pointer;
-            width: 44px;
-            height: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: var(--transition);
-        }
-
-        .qr-btn:hover {
-            background: var(--secondary-color);
-            transform: translateY(-2px);
-        }
-
-        .btn {
-            display: block;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+            animation: fadeInBanner 0.8s ease-out;
             width: 100%;
-            padding: clamp(0.8rem, 2vw, 1rem);
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: var(--font-size-md);
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
+            max-width: 600px;
+            text-align: center;
         }
 
-        .btn:hover {
-            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
-            transform: translateY(-2px);
-        }
-
-        .btn.loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .btn.loading .btn-content {
-            visibility: hidden;
-        }
-
-        .btn.loading::after {
-            content: '\f110';
-            font-family: 'Font Awesome 6 Free';
-            font-weight: 900;
+        .welcome-banner::before {
+            content: '';
             position: absolute;
-            animation: spin 1.5s linear infinite;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%);
+            transform: rotate(30deg);
+            animation: shimmer 8s infinite linear;
         }
 
-        @keyframes spin {
+        @keyframes shimmer {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
 
-        .qr-image-container {
+        @keyframes fadeInBanner {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .welcome-banner h2 {
+            margin-bottom: 10px;
+            font-size: clamp(1.5rem, 3vw, 1.8rem);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .welcome-banner p {
+            position: relative;
+            z-index: 1;
+            opacity: 0.9;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+        }
+
+        .mode-selection {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .mode-box {
+            background: var(--bg-table);
+            border: 1px solid var(--border-color);
+            border-radius: 15px;
+            padding: 20px;
+            cursor: pointer;
+            width: 100%;
+            max-width: 300px;
             text-align: center;
-            margin: clamp(1rem, 2vw, 1.5rem) 0;
+            transition: var(--transition);
+            box-shadow: var(--shadow-sm);
+            font-weight: 500;
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
         }
 
-        .qr-image {
-            max-width: 100%;
-            height: auto;
-            border: 1px solid #ddd;
-            border-radius: 8px;
+        .mode-box:hover {
+            background: var(--button-bg);
+            color: var(--button-text);
+            border-color: var(--button-bg);
+            transform: translateY(-2px);
         }
 
-        .alert {
-            padding: clamp(0.8rem, 2vw, 1rem);
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            font-size: var(--font-size-sm);
+        .mode-box:active {
+            transform: scale(0.98);
         }
 
-        .alert-success {
-            background-color: #e6f4ea;
-            color: #28a745;
+        .mode-box i {
+            font-size: 2rem;
         }
 
-        .alert-error {
-            background-color: #fee2e2;
-            color: #dc3545;
+        .mode-box.active {
+            background: var(--button-bg);
+            color: var(--button-text);
+            border-color: var(--button-bg);
+        }
+
+        .qr-section {
+            background: var(--bg-table);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 30px;
+            animation: slideIn 0.5s ease-out;
+            display: none;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qr-section.active {
+            display: flex;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .qr-content {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qr-content.active {
+            display: flex;
+            animation: fadeInContent 0.5s ease-out;
+        }
+
+        @keyframes fadeInContent {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .qr-code {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 20px auto;
+            padding: 10px;
+            background: var(--bg-light);
+            border-radius: 10px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .qr-code canvas {
+            width: clamp(180px, 50vw, 250px);
+            height: clamp(180px, 50vw, 250px);
+            border: 5px solid var(--bg-light);
+            border-radius: 10px;
+        }
+
+        .qr-info {
+            text-align: center;
+            margin-top: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            color: var(--text-secondary);
         }
 
         .modal-overlay {
@@ -438,12 +532,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
             to { opacity: 1; }
         }
 
-        @keyframes fadeOutOverlay {
-            from { opacity: 1; }
-            to { opacity: 0; }
-        }
-
-        .success-modal, .error-modal, .qr-modal {
+        .success-modal, .error-modal, .amount-modal, .pin-modal, .qr-modal {
             position: relative;
             text-align: center;
             width: clamp(280px, 70vw, 360px);
@@ -462,7 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
             background: linear-gradient(135deg, var(--error-color) 0%, #c0392b 100%);
         }
 
-        .success-modal::before, .error-modal::before, .qr-modal::before {
+        .success-modal::before, .error-modal::before, .amount-modal::before, .pin-modal::before, .qr-modal::before {
             content: '';
             position: absolute;
             inset: 0;
@@ -476,7 +565,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-icon, .error-icon, .qr-icon {
+        .success-icon, .error-icon, .amount-icon, .pin-icon, .qr-icon {
             font-size: clamp(2rem, 4.5vw, 2.5rem);
             margin: 0 auto 10px;
             color: white;
@@ -489,19 +578,146 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
             100% { transform: scale(1); opacity: 1; }
         }
 
-        .success-modal h3, .error-modal h3, .qr-modal h3 {
+        .success-modal h3, .error-modal h3, .amount-modal h3, .pin-modal h3, .qr-modal h3 {
             color: white;
-            margin: 0 0 8px;
             font-size: clamp(1rem, 2vw, 1.1rem);
             font-weight: 600;
+            letter-spacing: 0.02em;
+            margin-bottom: 8px;
         }
 
-        .success-modal p, .error-modal p, .qr-modal p {
+        .success-modal p, .error-modal p, .amount-modal p, .pin-modal p, .qr-modal p {
             color: white;
             font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             margin: 0;
             line-height: 1.5;
             padding: 0 10px;
+        }
+
+        .amount-modal form, .pin-modal form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .amount-modal .form-group, .pin-modal .form-group {
+            position: relative;
+        }
+
+        .amount-modal input[type="text"],
+        .amount-modal input[type="number"] {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
+            min-height: 44px;
+            transition: var(--transition);
+            -webkit-user-select: text;
+            user-select: text;
+            background-color: #fff;
+        }
+
+        .amount-modal input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
+        }
+
+        .pin-modal .pin-inputs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .pin-modal input[type="password"] {
+            width: 40px;
+            height: 40px;
+            text-align: center;
+            font-size: 1.2rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            transition: var(--transition);
+            background-color: #fff;
+            -webkit-user-select: text;
+            user-select: text;
+        }
+
+        .pin-modal input[type="password"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
+            transform: scale(1.02);
+        }
+
+        .pin-modal input[type="password"].error {
+            border-color: var(--error-color);
+        }
+
+        .amount-modal .error-message, .pin-modal .error-message {
+            color: var(--error-color);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            margin-top: 4px;
+            display: none;
+        }
+
+        .amount-modal .error-message.show, .pin-modal .error-message.show {
+            display: block;
+        }
+
+        .btn {
+            background: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 500;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn:hover {
+            background: var(--button-bg-hover);
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--button-text);
+            border-top: 3px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
         .qr-modal video {
@@ -510,13 +726,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
             margin-top: 10px;
         }
 
-        .qr-modal .btn {
-            margin-top: 10px;
-            width: 100%;
-        }
-
         .form-error {
-            animation: shake 0.4s ease;
+            animation: shake 0.8s ease;
         }
 
         @keyframes shake {
@@ -525,111 +736,130 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
             40%, 80% { transform: translateX(5px); }
         }
 
-        @media (max-width: 576px) {
-            .header h1 {
-                font-size: var(--font-size-lg);
+        @media (max-width: 768px) {
+            .top-nav {
+                padding: 15px;
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
-            .tab-container {
-                max-width: clamp(280px, 90vw, 340px);
+            .main-content {
+                padding: 15px;
             }
 
-            .tab {
-                font-size: var(--font-size-sm);
-                padding: clamp(0.6rem, 1.5vw, 0.8rem);
+            .welcome-banner {
+                padding: 20px;
             }
 
-            .tab-content {
-                max-width: clamp(280px, 90vw, 340px);
-                padding: clamp(0.8rem, 1.5vw, 1rem);
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.6rem);
             }
 
-            .success-modal, .error-modal, .qr-modal {
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.9rem);
+            }
+
+            .mode-selection {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .mode-box {
+                width: 100%;
+                max-width: 300px;
+            }
+
+            .qr-section {
+                max-width: 350px;
+            }
+
+            .qr-code canvas {
+                width: clamp(150px, 45vw, 200px);
+                height: clamp(150px, 45vw, 200px);
+            }
+
+            .success-modal, .error-modal, .amount-modal, .pin-modal, .qr-modal {
                 width: clamp(260px, 80vw, 340px);
                 padding: clamp(12px, 3vw, 15px);
             }
 
-            .success-icon, .error-icon, .qr-icon {
+            .success-icon, .error-icon, .amount-icon, .pin-icon, .qr-icon {
                 font-size: clamp(1.8rem, 4vw, 2rem);
             }
 
-            .success-modal h3, .error-modal h3, .qr-modal h3 {
-                font-size: clamp(0.9rem, 1.9vw, 1rem);
+            .pin-modal input[type="password"] {
+                width: 35px;
+                height: 35px;
+                font-size: 1rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .top-nav {
+                padding: 10px;
             }
 
-            .success-modal p, .error-modal p, .qr-modal p {
-                font-size: clamp(0.75rem, 1.7vw, 0.85rem);
+            .welcome-banner {
+                padding: 15px;
             }
 
-            .qr-btn {
-                width: 40px;
-                height: 40px;
+            .qr-section {
+                max-width: 300px;
+            }
+
+            .qr-code canvas {
+                width: clamp(120px, 40vw, 160px);
+                height: clamp(120px, 40vw, 160px);
+            }
+
+            .success-modal, .error-modal, .amount-modal, .pin-modal, .qr-modal {
+                width: clamp(240px, 85vw, 320px);
+                padding: clamp(10px, 2.5vw, 12px);
+            }
+
+            .pin-modal input[type="password"] {
+                width: 30px;
+                height: 30px;
+                font-size: 0.9rem;
             }
         }
     </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
 <body>
-    <div class="wrapper">
-        <div class="header">
-            <button class="back-btn" onclick="window.location.href='dashboard.php'">
-                <i class="fas fa-arrow-left"></i>
-            </button>
-            <h1>Pembayaran QR - SchoBank</h1>
-            <div style="width: 40px;"></div>
+    <nav class="top-nav">
+        <button class="back-btn" onclick="window.location.href='dashboard.php'">
+            <i class="fas fa-xmark"></i>
+        </button>
+        <h1>SCHOBANK</h1>
+        <div style="width: 40px;"></div>
+    </nav>
+
+    <div class="main-content">
+        <div class="welcome-banner">
+            <h2><i class="fas fa-qrcode"></i> Transaksi QR</h2>
+            <p>Pilih untuk memindai QR code atau menampilkan QR code untuk transaksi</p>
         </div>
 
         <div id="alertContainer"></div>
 
-        <div class="tab-container">
-            <div class="tab active" data-tab="scan">Scan QR</div>
-            <div class="tab" data-tab="show">Tampilkan QR</div>
-        </div>
-
-        <div class="tab-content active" id="scan-tab">
-            <form id="qrForm" method="POST" action="">
-                <?php if ($success_message): ?>
-                    <div class="alert alert-success"><?php echo htmlspecialchars($success_message); ?></div>
-                <?php endif; ?>
-                <?php if ($error_message): ?>
-                    <div class="alert alert-error"><?php echo htmlspecialchars($error_message); ?></div>
-                <?php endif; ?>
-                <div class="form-group">
-                    <label for="qr_code">Kode QR (Masukkan kode JSON dari QR)</label>
-                    <div class="input-container">
-                        <textarea id="qr_code" name="qr_code" rows="4" placeholder="Tempel kode QR di sini" required></textarea>
-                        <button type="button" class="qr-btn" id="scanQrBtn" title="Scan QR Code">
-                            <i class="fas fa-qrcode"></i>
-                        </button>
-                    </div>
-                    <span class="error-message" id="qr_code-error"></span>
-                </div>
-                <div class="form-group">
-                    <label for="amount">Jumlah Transfer (Rp)</label>
-                    <input type="number" id="amount" name="amount" min="1000" step="1000" placeholder="Masukkan jumlah" required>
-                </div>
-                <div class="form-group">
-                    <label for="pin">PIN Keamanan</label>
-                    <input type="password" id="pin" name="pin" maxlength="6" placeholder="Masukkan PIN" required>
-                </div>
-                <button type="submit" class="btn" id="submitBtn">
-                    <span class="btn-content"><i class="fas fa-paper-plane"></i> Kirim Transfer</span>
-                </button>
-            </form>
-        </div>
-
-        <div class="tab-content" id="show-tab">
-            <div class="qr-image-container">
-                <?php
-                // Generate QR code
-                $qr_data = json_encode(['no_rekening' => $no_rekening]);
-                $qr_image = generateQRCode($qr_data); // Function from qr_generator.php
-                ?>
-                <img src="<?php echo $qr_image; ?>" alt="QR Code" class="qr-image">
+        <div class="mode-selection">
+            <div class="mode-box scan-mode" data-mode="scan">
+                <i class="fas fa-camera"></i>
+                <span>Scan QR Code</span>
             </div>
-            <div class="form-group">
-                <label>Nomor Rekening Anda</label>
-                <input type="text" value="<?php echo htmlspecialchars($no_rekening); ?>" readonly>
+            <div class="mode-box generate-mode" data-mode="generate">
+                <i class="fas fa-qrcode"></i>
+                <span>Tampilkan QR Code</span>
+            </div>
+        </div>
+
+        <div class="qr-section" id="generate-qr">
+            <div class="qr-content" id="qrContent">
+                <div class="qr-code" id="qrcode"></div>
+                <div class="qr-info">
+                    <p>Nomor Rekening: <?php echo htmlspecialchars($user_data['no_rekening']); ?></p>
+                    <p>Nama: <?php echo htmlspecialchars($user_data['nama']); ?></p>
+                </div>
             </div>
         </div>
     </div>
@@ -662,92 +892,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
                 event.preventDefault();
             }, { passive: false });
 
-            // Tab switching
-            const tabs = document.querySelectorAll('.tab');
-            tabs.forEach(tab => {
-                tab.addEventListener('click', () => {
-                    tabs.forEach(t => t.classList.remove('active'));
-                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-                    tab.classList.add('active');
-                    document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+            const generateQr = document.getElementById('generate-qr');
+            const qrContent = document.getElementById('qrContent');
+            const alertContainer = document.getElementById('alertContainer');
+            const modeBoxes = document.querySelectorAll('.mode-box');
+            let stream = null;
+            let scanning = false;
+
+            // Function to format number to Rupiah
+            function formatRupiah(angka) {
+                let number_string = angka.toString().replace(/[^,\d]/g, ''),
+                    split = number_string.split(','),
+                    sisa = split[0].length % 3,
+                    rupiah = split[0].substr(0, sisa),
+                    ribuan = split[0].substr(sisa).match(/\d{3}/gi);
+
+                if (ribuan) {
+                    separator = sisa ? '.' : '';
+                    rupiah += separator + ribuan.join('.');
+                }
+
+                return rupiah ? rupiah : '';
+            }
+
+            // Function to clean Rupiah format to numeric
+            function cleanRupiah(rupiah) {
+                return rupiah.replace(/[^0-9]/g, '');
+            }
+
+            // Helper function for clamping values
+            function clamp(min, val, max) {
+                return Math.min(Math.max(val, min), max);
+            }
+
+            // Generate QR code for receiving payments
+            function generateQRCode() {
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = '';
+                new QRCode(qrContainer, {
+                    text: "<?php echo htmlspecialchars($user_data['no_rekening']); ?>",
+                    width: clamp(180, 50 * window.innerWidth / 100, 250),
+                    height: clamp(180, 50 * window.innerWidth / 100, 250),
+                    colorDark: "#000000",
+                    colorLight: "#ffffff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
+
+            // Mode selection
+            modeBoxes.forEach(box => {
+                box.addEventListener('click', function() {
+                    modeBoxes.forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    const mode = this.dataset.mode;
+                    generateQr.classList.toggle('active', mode === 'generate');
+                    qrContent.classList.remove('active'); // Hide QR content when switching modes
+                    if (mode === 'generate') {
+                        qrContent.classList.add('active');
+                        generateQRCode();
+                    } else if (mode === 'scan') {
+                        startQrScan();
+                    }
                 });
             });
 
-            // Form handling
-            const qrForm = document.getElementById('qrForm');
-            const submitBtn = document.getElementById('submitBtn');
-            const qrCodeInput = document.getElementById('qr_code');
-            const scanQrBtn = document.getElementById('scanQrBtn');
-            const amountInput = document.getElementById('amount');
-            const pinInput = document.getElementById('pin');
-            const alertContainer = document.getElementById('alertContainer');
-            let stream = null;
-            let scanning = false;
-            let isSubmitting = false;
-
-            // Clear form inputs on load
-            qrCodeInput.value = '';
-            amountInput.value = '';
-            pinInput.value = '';
-
-            // Handle QR code input
-            qrCodeInput.addEventListener('input', function() {
-                this.value = this.value.trim();
-                document.getElementById('qr_code-error').classList.remove('show');
-            });
-
-            qrCodeInput.addEventListener('paste', function(e) {
-                e.preventDefault();
-                let pastedData = (e.clipboardData || window.clipboardData).getData('text');
-                this.value = pastedData;
-            });
-
-            // Form submission
-            qrForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                if (isSubmitting) return;
-                isSubmitting = true;
-
-                const qrCode = qrCodeInput.value.trim();
-                const amount = parseFloat(amountInput.value);
-                const pin = pinInput.value;
-
-                if (!qrCode) {
-                    showAlert('Kode QR tidak boleh kosong!', 'error');
-                    qrCodeInput.classList.add('form-error');
-                    setTimeout(() => qrCodeInput.classList.remove('form-error'), 400);
-                    qrCodeInput.focus();
-                    isSubmitting = false;
-                    return;
-                }
-
-                if (!amount || amount < 1000) {
-                    showAlert('Jumlah transfer harus minimal Rp 1.000!', 'error');
-                    amountInput.classList.add('form-error');
-                    setTimeout(() => amountInput.classList.remove('form-error'), 400);
-                    amountInput.focus();
-                    isSubmitting = false;
-                    return;
-                }
-
-                if (!pin || pin.length !== 6) {
-                    showAlert('PIN harus 6 digit!', 'error');
-                    pinInput.classList.add('form-error');
-                    setTimeout(() => pinInput.classList.remove('form-error'), 400);
-                    pinInput.focus();
-                    isSubmitting = false;
-                    return;
-                }
-
-                submitBtn.classList.add('loading');
-                submitBtn.innerHTML = '<span class="btn-content"><i class="fas fa-spinner"></i> Memproses...</span>';
-                setTimeout(() => {
-                    qrForm.submit();
-                }, 1000);
-            });
-
             // QR Code Scanning
-            scanQrBtn.addEventListener('click', function() {
+            function startQrScan() {
                 if (scanning) return;
                 scanning = true;
 
@@ -760,7 +970,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
                             <i class="fas fa-qrcode"></i>
                         </div>
                         <h3>Scan QR Code</h3>
-                        <p>Arahkan kamera ke QR code transaksi</p>
+                        <p>Arahkan kamera ke QR code rekening tujuan</p>
                         <video id="qr-video" autoplay playsinline></video>
                         <canvas id="qr-canvas" style="display: none;"></canvas>
                         <button class="btn" id="closeQrBtn">
@@ -801,22 +1011,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
                             inversionAttempts: 'dontInvert'
                         });
 
-                        if (code) {
-                            try {
-                                const qrData = JSON.parse(code.data);
-                                if (qrData.no_rekening) {
-                                    qrCodeInput.value = code.data;
-                                    showAlert('QR Code berhasil discan!', 'success');
+                        if (code && code.data.length <= 20) {
+                            // Fetch recipient's name via AJAX
+                            $.ajax({
+                                url: 'get_recipient_name.php',
+                                method: 'POST',
+                                data: { no_rekening: code.data },
+                                dataType: 'json',
+                                success: function(response) {
+                                    if (response.success) {
+                                        showAmountModal(code.data, response.nama);
+                                    } else {
+                                        showAlert('Nomor rekening tidak ditemukan.', 'error');
+                                    }
                                     closeModal(modal.id);
                                     stopCamera();
-                                    amountInput.focus();
-                                    return;
-                                } else {
-                                    showAlert('QR Code tidak valid: Tidak mengandung nomor rekening!', 'error');
+                                },
+                                error: function() {
+                                    showAlert('Gagal memverifikasi nomor rekening.', 'error');
+                                    closeModal(modal.id);
+                                    stopCamera();
                                 }
-                            } catch (e) {
-                                showAlert('QR Code tidak valid: Format JSON salah!', 'error');
-                            }
+                            });
+                            return;
+                        } else if (code) {
+                            showAlert('QR Code tidak valid. Maksimum 20 karakter.', 'error');
                         }
                     }
                     requestAnimationFrame(scanQrCode);
@@ -842,23 +1061,307 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
                     }
                     scanning = false;
                 }
-            });
+            }
 
-            // Show error or success popup
+            // Amount input modal
+            function showAmountModal(noRekening, namaPenerima) {
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.id = 'amount-modal-' + Date.now();
+                modal.innerHTML = `
+                    <div class="amount-modal">
+                        <div class="amount-icon">
+                            <i class="fas fa-money-bill-wave"></i>
+                        </div>
+                        <h3>Masukkan Nominal</h3>
+                        <p>Transaksi QR ke: ${namaPenerima}</p>
+                        <form id="amountForm">
+                            <input type="hidden" name="no_rekening_tujuan" value="${noRekening}">
+                            <input type="hidden" name="jumlah_raw" id="jumlah_raw">
+                            <div class="form-group">
+                                <input type="text" id="jumlah" placeholder="0" required inputmode="numeric">
+                                <span class="error-message" id="jumlah-error"></span>
+                            </div>
+                            <button type="submit" class="btn" id="submitAmountBtn">
+                                <span class="btn-content"><i class="fas fa-arrow-right"></i> Lanjut</span>
+                            </button>
+                        </form>
+                    </div>
+                `;
+                alertContainer.appendChild(modal);
+
+                const amountForm = document.getElementById('amountForm');
+                const jumlahInput = document.getElementById('jumlah');
+                const jumlahRawInput = document.getElementById('jumlah_raw');
+                const submitAmountBtn = document.getElementById('submitAmountBtn');
+                let isSubmitting = false;
+
+                // Format input as Rupiah
+                jumlahInput.addEventListener('input', function() {
+                    let value = cleanRupiah(this.value);
+                    if (value && !isNaN(value) && value > 0) {
+                        this.value = formatRupiah(value);
+                        jumlahRawInput.value = value;
+                        document.getElementById('jumlah-error').classList.remove('show');
+                    } else {
+                        this.value = '';
+                        jumlahRawInput.value = '';
+                    }
+                });
+
+                // Ensure numeric input only
+                jumlahInput.addEventListener('keypress', function(e) {
+                    const charCode = e.which ? e.which : e.keyCode;
+                    if (charCode < 48 || charCode > 57) {
+                        e.preventDefault();
+                    }
+                });
+
+                amountForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    if (isSubmitting) return;
+                    isSubmitting = true;
+
+                    const jumlah = parseFloat(jumlahRawInput.value);
+
+                    if (!jumlah || jumlah <= 0) {
+                        showAlert('Nominal harus angka positif.', 'error');
+                        jumlahInput.classList.add('form-error');
+                        setTimeout(() => jumlahInput.classList.remove('form-error'), 800);
+                        document.getElementById('jumlah-error').classList.add('show');
+                        document.getElementById('jumlah-error').textContent = 'Nominal harus angka positif.';
+                        isSubmitting = false;
+                        return;
+                    }
+
+                    submitAmountBtn.classList.add('loading');
+                    setTimeout(() => {
+                        closeModal(modal.id);
+                        showPinModal(noRekening, namaPenerima, jumlah);
+                        isSubmitting = false;
+                    }, 1000);
+                });
+
+                jumlahInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        submitAmountBtn.click();
+                    }
+                });
+
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeModal(modal.id);
+                    }
+                });
+            }
+
+            // PIN input modal
+            function showPinModal(noRekening, namaPenerima, jumlah) {
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.id = 'pin-modal-' + Date.now();
+                modal.innerHTML = `
+                    <div class="pin-modal">
+                        <div class="pin-icon">
+                            <i class="fas fa-lock"></i>
+                        </div>
+                        <h3>Masukkan PIN</h3>
+                        <p>Transaksi QR ke: ${namaPenerima}</p>
+                        <p>Nominal: Rp ${formatRupiah(jumlah)}</p>
+                        <form id="pinForm">
+                            <input type="hidden" name="form_token" value="<?php echo htmlspecialchars($form_token); ?>">
+                            <input type="hidden" name="no_rekening_tujuan" value="${noRekening}">
+                            <input type="hidden" name="jumlah_raw" value="${jumlah}">
+                            <input type="hidden" name="pin" id="pin">
+                            <div class="form-group">
+                                <div class="pin-inputs">
+                                    <input type="password" maxlength="1" class="pin-input" inputmode="numeric">
+                                    <input type="password" maxlength="1" class="pin-input" inputmode="numeric">
+                                    <input type="password" maxlength="1" class="pin-input" inputmode="numeric">
+                                    <input type="password" maxlength="1" class="pin-input" inputmode="numeric">
+                                    <input type="password" maxlength="1" class="pin-input" inputmode="numeric">
+                                    <input type="password" maxlength="1" class="pin-input" inputmode="numeric">
+                                </div>
+                                <span class="error-message" id="pin-error"></span>
+                            </div>
+                            <button type="submit" class="btn" id="submitPinBtn">
+                                <span class="btn-content"><i class="fas fa-paper-plane"></i> Kirim</span>
+                            </button>
+                        </form>
+                    </div>
+                `;
+                alertContainer.appendChild(modal);
+
+                const pinForm = document.getElementById('pinForm');
+                const pinInputs = document.querySelectorAll('.pin-input');
+                const pinHiddenInput = document.getElementById('pin');
+                const submitPinBtn = document.getElementById('submitPinBtn');
+                const pinError = document.getElementById('pin-error');
+                let isSubmitting = false;
+                let clearTimeoutId = null;
+
+                // Handle PIN input
+                pinInputs.forEach((input, index) => {
+                    input.addEventListener('input', function() {
+                        if (this.value.length === 1 && index < pinInputs.length - 1) {
+                            pinInputs[index + 1].focus();
+                        }
+                        updatePinValue();
+                    });
+
+                    input.addEventListener('keydown', function(e) {
+                        if (e.key === 'Backspace' && this.value === '' && index > 0) {
+                            pinInputs[index - 1].focus();
+                        }
+                    });
+
+                    input.addEventListener('keypress', function(e) {
+                        const charCode = e.which ? e.which : e.keyCode;
+                        if (charCode < 48 || charCode > 57) {
+                            e.preventDefault();
+                        }
+                    });
+
+                    // Handle paste event
+                    input.addEventListener('paste', function(e) {
+                        e.preventDefault();
+                        const pastedData = e.clipboardData.getData('text').replace(/\D/g, '');
+                        if (pastedData.length > 0) {
+                            for (let i = 0; i < Math.min(pastedData.length, pinInputs.length); i++) {
+                                pinInputs[i].value = pastedData[i] || '';
+                            }
+                            updatePinValue();
+                            if (pastedData.length >= pinInputs.length) {
+                                submitPinBtn.focus();
+                            } else {
+                                pinInputs[Math.min(pastedData.length, pinInputs.length - 1)].focus();
+                            }
+                        }
+                    });
+                });
+
+                // Update hidden PIN input and clear error on new input
+                function updatePinValue() {
+                    const pinValue = Array.from(pinInputs).map(input => input.value).join('');
+                    pinHiddenInput.value = pinValue;
+                    if (pinValue.length > 0) {
+                        pinError.classList.remove('show');
+                        pinInputs.forEach(input => input.classList.remove('error', 'form-error'));
+                        if (clearTimeoutId) {
+                            clearTimeout(clearTimeoutId);
+                            clearTimeoutId = null;
+                        }
+                    }
+                    if (pinValue.length === 6) {
+                        pinError.classList.remove('show');
+                        pinInputs.forEach(input => input.classList.remove('error', 'form-error'));
+                    }
+                }
+
+                // Clear PIN inputs
+                function clearPinInputs() {
+                    pinInputs.forEach(input => {
+                        input.value = '';
+                        input.classList.remove('error', 'form-error');
+                    });
+                    pinHiddenInput.value = '';
+                    pinError.classList.remove('show');
+                    pinInputs[0].focus();
+                }
+
+                pinForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    if (isSubmitting) return;
+                    isSubmitting = true;
+
+                    const pin = pinHiddenInput.value;
+
+                    if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+                        pinError.classList.add('show');
+                        pinError.textContent = 'PIN harus 6 digit angka.';
+                        pinInputs.forEach(input => {
+                            input.classList.add('error', 'form-error');
+                        });
+                        clearTimeoutId = setTimeout(() => {
+                            pinInputs.forEach(input => input.classList.remove('form-error'));
+                            clearPinInputs();
+                        }, 15000); // 15 seconds
+                        isSubmitting = false;
+                        return;
+                    }
+
+                    submitPinBtn.classList.add('loading');
+
+                    // Validate PIN via AJAX
+                    $.ajax({
+                        url: '',
+                        method: 'POST',
+                        data: {
+                            ajax_pin_validation: 1,
+                            form_token: '<?php echo htmlspecialchars($form_token); ?>',
+                            no_rekening_tujuan: noRekening,
+                            jumlah_raw: jumlah,
+                            pin: pin
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            submitPinBtn.classList.remove('loading');
+                            isSubmitting = false;
+
+                            if (response.success) {
+                                closeModal(modal.id);
+                                window.location.href = response.redirect;
+                            } else {
+                                pinError.classList.add('show');
+                                pinError.textContent = response.message;
+                                pinInputs.forEach(input => {
+                                    input.classList.add('error', 'form-error');
+                                });
+                                clearTimeoutId = setTimeout(() => {
+                                    pinInputs.forEach(input => input.classList.remove('form-error'));
+                                    clearPinInputs();
+                                }, 15000); // 15 seconds
+                                if (response.blocked) {
+                                    closeModal(modal.id);
+                                    showAlert(response.message, 'error');
+                                }
+                            }
+                        },
+                        error: function() {
+                            submitPinBtn.classList.remove('loading');
+                            isSubmitting = false;
+                            pinError.classList.add('show');
+                            pinError.textContent = 'Gagal memvalidasi PIN. Coba lagi.';
+                            pinInputs.forEach(input => {
+                                input.classList.add('error', 'form-error');
+                            });
+                            clearTimeoutId = setTimeout(() => {
+                                pinInputs.forEach(input => input.classList.remove('form-error'));
+                                clearPinInputs();
+                            }, 15000); // 15 seconds
+                        }
+                    });
+                });
+
+                // Handle modal close (clicking outside)
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        closeModal(modal.id);
+                    }
+                });
+
+                pinInputs[0].focus();
+            }
+
+            // Show alerts
             <?php if ($show_error_popup): ?>
                 setTimeout(() => {
                     showAlert('<?php echo addslashes($error_message); ?>', 'error');
-                    document.getElementById('qr_code').value = '';
-                    document.getElementById('amount').value = '';
-                    document.getElementById('pin').value = '';
                 }, 500);
             <?php endif; ?>
-            <?php if ($success_message): ?>
+            <?php if ($show_success_popup): ?>
                 setTimeout(() => {
                     showAlert('<?php echo addslashes($success_message); ?>', 'success');
-                    document.getElementById('qr_code').value = '';
-                    document.getElementById('amount').value = '';
-                    document.getElementById('pin').value = '';
                 }, 500);
             <?php endif; ?>
 
@@ -897,16 +1400,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['qr_code'])) {
                 }
             }
 
-            // Enter key support
-            pinInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    submitBtn.click();
+            // Prevent text selection on double-click
+            document.addEventListener('mousedown', function(e) {
+                if (e.detail > 1) {
+                    e.preventDefault();
                 }
             });
 
-            // Focus on QR code input
-            qrCodeInput.focus();
+            // Fix touch issues in Safari
+            document.addEventListener('touchstart', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
         });
     </script>
 </body>
 </html>
+<?php
+$conn->close();
+?>

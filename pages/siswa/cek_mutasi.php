@@ -1,1292 +1,826 @@
 <?php
 require_once '../../includes/auth.php';
 require_once '../../includes/db_connection.php';
-
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../../login.php");
     exit();
 }
-
+// Pastikan user adalah siswa
+$user_role = $_SESSION['role'] ?? '';
+if ($user_role !== 'siswa') {
+    header("Location: ../../unauthorized.php");
+    exit();
+}
 $user_id = $_SESSION['user_id'];
-
-// Fetch user name
-$query = "SELECT nama FROM users WHERE id = ?";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$user_data = $result->fetch_assoc();
-$nama_pemilik = $user_data['nama'] ?? 'Pengguna';
-
-// Fetch account details
-$query = "SELECT id, no_rekening FROM rekening WHERE user_id = ?";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$result = $stmt->get_result();
-$rekening_data = $result->fetch_assoc();
-
-if (!$rekening_data) {
-    $error = "Rekening tidak ditemukan!";
-} else {
-    $rekening_id = $rekening_data['id'];
-    $no_rekening = $rekening_data['no_rekening'];
-
-    // Date filter handling
-    $is_filtered = isset($_GET['start_date']) && isset($_GET['end_date']);
-    $filter_type = $_GET['filter_type'] ?? 'custom';
-    $today = date('Y-m-d');
-
-    if ($filter_type === 'yesterday') {
-        $start_date = date('Y-m-d', strtotime('-1 day'));
-        $end_date = $start_date;
-    } elseif ($filter_type === 'last7days') {
-        $start_date = date('Y-m-d', strtotime('-7 days'));
-        $end_date = $today;
-    } elseif ($filter_type === 'last30days') {
-        $start_date = date('Y-m-d', strtotime('-30 days'));
-        $end_date = $today;
+// Ambil info siswa dan rekening
+$siswa_info = null;
+$mutasi_data = [];
+$error_message = '';
+$success_message = '';
+// Filter parameters
+$filter_jenis = $_GET['jenis'] ?? '';
+$filter_status = $_GET['status'] ?? '';
+$filter_start_date = $_GET['start_date'] ?? '';
+$filter_end_date = $_GET['end_date'] ?? '';
+$where_conditions = "WHERE rek.user_id = ? AND (t.jenis_transaksi != 'transaksi_qr' OR t.jenis_transaksi IS NULL OR t.jenis_transaksi IS NOT NULL)";
+$params = [$user_id];
+$types = "i";
+if (!empty($filter_jenis)) {
+    if ($filter_jenis === 'transfer_masuk') {
+        $where_conditions .= " AND (t.jenis_transaksi IS NULL OR (t.jenis_transaksi = 'transfer' AND m.rekening_id = t.rekening_tujuan_id))";
+    } elseif ($filter_jenis === 'transfer_keluar') {
+        $where_conditions .= " AND t.jenis_transaksi = 'transfer' AND m.rekening_id = t.rekening_id";
     } else {
-        $start_date = $is_filtered ? $_GET['start_date'] : date('Y-m-01');
-        $end_date = $is_filtered ? $_GET['end_date'] : $today;
-    }
-
-    // Validate dates
-    if (strtotime($start_date) > strtotime($end_date)) {
-        $error = "Tanggal awal tidak boleh lebih besar dari tanggal akhir!";
-    } elseif (strtotime($start_date) > strtotime($today) || strtotime($end_date) > strtotime($today)) {
-        $error = "Tanggal tidak boleh di masa depan!";
-    } else {
-        // Pagination handling
-        $items_per_page = 5; // 5 dates per page
-        $current_page = isset($_GET['page']) && is_numeric($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
-        $offset = ($current_page - 1) * $items_per_page;
-
-        // Fetch transactions grouped by date
-        $query = "SELECT 
-                    t.no_transaksi, 
-                    t.jenis_transaksi, 
-                    t.jumlah, 
-                    t.created_at, 
-                    t.rekening_id, 
-                    t.rekening_tujuan_id,
-                    r1.no_rekening as rekening_asal,
-                    r2.no_rekening as rekening_tujuan,
-                    u1.nama as nama_pengirim,
-                    u2.nama as nama_penerima,
-                    p.nama as petugas_nama,
-                    pt.petugas1_nama,
-                    pt.petugas2_nama,
-                    DATE(t.created_at) as transaction_date
-                  FROM transaksi t
-                  LEFT JOIN rekening r1 ON t.rekening_id = r1.id
-                  LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
-                  LEFT JOIN users u1 ON r1.user_id = u1.id
-                  LEFT JOIN users u2 ON r2.user_id = u2.id
-                  LEFT JOIN users p ON t.petugas_id = p.id
-                  LEFT JOIN petugas_tugas pt ON DATE(t.created_at) = pt.tanggal
-                  WHERE (r1.user_id = ? OR r2.user_id = ?)";
-        
-        $params = ["ii", $user_id, $user_id];
-        if ($is_filtered || in_array($filter_type, ['yesterday', 'last7days', 'last30days'])) {
-            $query .= " AND t.created_at BETWEEN ? AND ?";
-            $params[0] .= "ss";
-            $params[] = $start_date . ' 00:00:00';
-            $params[] = $end_date . ' 23:59:59';
-        }
-        
-        $query .= " ORDER BY t.created_at DESC";
-        $stmt = $conn->prepare($query);
-        if (!$stmt) {
-            $error = "Error preparing query: " . $conn->error;
-        } else {
-            $stmt->bind_param(...$params);
-            if (!$stmt->execute()) {
-                $error = "Error executing query: " . $stmt->error;
-            } else {
-                $result = $stmt->get_result();
-                $transactions = [];
-                
-                while ($row = $result->fetch_assoc()) {
-                    $transactions[$row['transaction_date']][] = $row;
-                }
-
-                // Pagination logic
-                $total_dates = count($transactions);
-                $total_pages = max(1, ceil($total_dates / $items_per_page));
-                $current_page = min($current_page, $total_pages); // Ensure current_page doesn't exceed total_pages
-                $offset = ($current_page - 1) * $items_per_page;
-                $transactions_paginated = array_slice($transactions, $offset, $items_per_page, true);
-            }
-        }
+        $where_conditions .= " AND t.jenis_transaksi = ?";
+        $params[] = $filter_jenis;
+        $types .= "s";
     }
 }
+if (!empty($filter_status)) {
+    $where_conditions .= " AND t.status = ?";
+    $params[] = $filter_status;
+    $types .= "s";
+}
+if (!empty($filter_start_date)) {
+    $where_conditions .= " AND m.created_at >= ?";
+    $params[] = $filter_start_date . ' 00:00:00';
+    $types .= "s";
+}
+if (!empty($filter_end_date)) {
+    $where_conditions .= " AND m.created_at <= ?";
+    $params[] = $filter_end_date . ' 23:59:59';
+    $types .= "s";
+}
+$stmt = $conn->prepare("
+    SELECT u.id, u.nama, u.nis_nisn, r.no_rekening, r.saldo, r.id as rekening_id
+    FROM users u
+    LEFT JOIN rekening r ON u.id = r.user_id
+    WHERE u.id = ? AND u.role = 'siswa'
+");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$result = $stmt->get_result();
+$siswa_info = $result->fetch_assoc();
+$stmt->close();
+if (!$siswa_info) {
+    $error_message = "Akun tidak ditemukan.";
+} else {
+    $user_rekening_id = $siswa_info['rekening_id'];
+    
+    // Ambil mutasi dengan filter, exclude QR, tanpa pagination
+    $query = "
+        SELECT m.id, m.jumlah, m.saldo_akhir, m.created_at, m.rekening_id,
+               t.jenis_transaksi, t.no_transaksi, t.status, t.keterangan, t.rekening_id as transaksi_rekening_id, t.rekening_tujuan_id,
+               u_petugas.nama as petugas_nama
+        FROM mutasi m
+        LEFT JOIN transaksi t ON m.transaksi_id = t.id
+        LEFT JOIN rekening rek ON m.rekening_id = rek.id
+        LEFT JOIN users u_petugas ON t.petugas_id = u_petugas.id
+        $where_conditions
+        ORDER BY m.created_at DESC
+    ";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param($types, ...$params);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $mutasi_data = $result->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+}
+$conn->close();
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mutasi - SchoBank</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="format-detection" content="telephone=no">
+    <title>Mutasi - SCHOBANK</title>
+    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
     <style>
-        :root {
-            --primary-color: #0c4da2;
-            --primary-dark: #0a2e5c;
-            --primary-light: #e0e9f5;
-            --secondary-color: #1e88e5;
-            --secondary-dark: #1565c0;
-            --accent-color: #ff9800;
-            --danger-color: #f44336;
-            --success-color: #10b981;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f8faff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
-
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-            -webkit-text-size-adjust: none;
-            -webkit-user-select: none;
-            user-select: none;
         }
-
+        html {
+            scroll-padding-top: 70px;
+            scroll-behavior: smooth;
+        }
+        :root {
+            --primary: #0066FF;
+            --primary-dark: #0052CC;
+            --secondary: #00C2FF;
+            --success: #00D084;
+            --warning: #FFB020;
+            --danger: #FF3B30;
+            --dark: #1C1C1E;
+            --elegant-dark: #2c3e50;
+            --elegant-gray: #434343;
+            --gray-50: #F9FAFB;
+            --gray-100: #F3F4F6;
+            --gray-200: #E5E7EB;
+            --gray-300: #D1D5DB;
+            --gray-400: #9CA3AF;
+            --gray-500: #6B7280;
+            --gray-600: #4B5563;
+            --gray-700: #374151;
+            --gray-800: #1F2937;
+            --gray-900: #111827;
+            --white: #FFFFFF;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+            --shadow-md: 0 6px 15px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+            --radius-sm: 8px;
+            --radius: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+        }
         body {
-            background-color: var(--bg-light);
-            color: var(--text-primary);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-900);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            padding-top: 70px;
+            padding-bottom: 80px;
         }
-
+        /* Top Navigation */
         .top-nav {
-            background: var(--primary-dark);
-            padding: 15px 25px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--gray-50);
+            border-bottom: none;
+            padding: 8px 20px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            color: white;
+            z-index: 100;
+            height: 70px;
+        }
+        .nav-brand {
+            display: flex;
+            align-items: center;
+            height: 100%;
+        }
+        .nav-logo {
+            height: 45px;
+            width: auto;
+            max-width: 180px;
+            object-fit: contain;
+            object-position: left center;
+            display: block;
+        }
+        /* Sticky Header */
+        .sticky-header {
+            position: -webkit-sticky;
+            position: sticky;
+            top: 70px;
+            left: 0;
+            right: 0;
+            background: var(--gray-50);
+            z-index: 99;
             box-shadow: var(--shadow-sm);
-            font-size: clamp(1.1rem, 2.2vw, 1.2rem);
-        }
-
-        .back-btn {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: none;
-            padding: 8px;
-            border-radius: 50%;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            transition: var(--transition);
-        }
-
-        .back-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
-        }
-
-        .main-content {
-            flex: 1;
-            padding: 25px;
-            width: 100%;
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 12px;
-            margin-bottom: 25px;
-            box-shadow: var(--shadow-md);
-            position: relative;
-            overflow: hidden;
-            animation: fadeInBanner 0.8s ease-out;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            text-align: center;
-        }
-
-        .welcome-banner::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%);
-            transform: rotate(30deg);
-            animation: shimmer 8s infinite linear;
-        }
-
-        @keyframes shimmer {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @keyframes fadeInBanner {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .welcome-banner h2 {
-            margin-bottom: 12px;
-            font-size: clamp(1.4rem, 2.6vw, 1.6rem);
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            justify-content: center;
-            position: relative;
-            z-index: 1;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-        }
-
-        .filter-card {
-            background: white;
-            border-radius: 12px;
             padding: 20px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 25px;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            animation: slideIn 0.5s ease-out;
         }
-
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+        .sticky-header.stuck {
+            box-shadow: var(--shadow-md);
         }
-
-        .filter-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            align-items: flex-end;
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px 20px;
+            background: var(--gray-50);
+        }
+        /* Page Header */
+        .page-header {
             margin-bottom: 20px;
         }
-
-        .filter-group {
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 16px;
+            letter-spacing: -0.5px;
+        }
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .tab {
             flex: 1;
-            min-width: 150px;
+            padding: 12px 20px;
+            border-radius: var(--radius-lg);
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            background: var(--white);
+            color: var(--gray-600);
+            box-shadow: var(--shadow-sm);
         }
-
-        .filter-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+        .tab.active {
+            background: var(--elegant-dark);
+            color: var(--white);
         }
-
-        .filter-group input[type="date"] {
+        /* Account & Filter Row */
+        .account-filter-row {
+            display: flex;
+            gap: 12px;
+            align-items: stretch;
+            margin-bottom: 20px;
+        }
+        /* Account Info (Static, No Dropdown) */
+        .account-info-box {
+            flex: 1;
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            padding: 0 16px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 60px;
+        }
+        .account-label {
+            font-size: 11px;
+            color: var(--gray-600);
+            margin-bottom: 4px;
+            line-height: 1.2;
+        }
+        .account-number {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--gray-900);
+            letter-spacing: 0.5px;
+            line-height: 1.2;
+        }
+        /* Filter Button (Icon Only) */
+        .filter-icon-btn {
+            width: 60px;
+            height: 60px;
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius-lg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-sm);
+            flex-shrink: 0;
+        }
+        .filter-icon-btn:hover {
+            background: var(--gray-50);
+            border-color: var(--gray-300);
+            box-shadow: var(--shadow-md);
+        }
+        .filter-icon-btn:active {
+            transform: scale(0.98);
+        }
+        .filter-icon-btn i {
+            font-size: 20px;
+            color: var(--gray-700);
+        }
+        /* Filter Modal */
+        .filter-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: flex-end;
+        }
+        .filter-modal.active {
+            display: flex;
+        }
+        .filter-content {
+            background: var(--white);
+            border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+            padding: 24px 20px;
             width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            transition: var(--transition);
-            background: #f8faff;
+            max-height: 80vh;
+            overflow-y: auto;
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+            }
+            to {
+                transform: translateY(0);
+            }
+        }
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .filter-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+        .close-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: var(--gray-100);
+            color: var(--gray-600);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .close-btn:hover {
+            background: var(--gray-200);
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: 8px;
+            display: block;
+        }
+        .form-control, .form-select {
+            padding: 12px 14px;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            font-size: 15px;
+            transition: all 0.2s ease;
+            background: var(--white);
+            color: var(--gray-900);
+            width: 100%;
             -webkit-appearance: none;
             -moz-appearance: none;
             appearance: none;
-            -webkit-user-select: text;
-            user-select: text;
+            height: 48px;
         }
-
-        .filter-group input[type="date"]:focus {
+        .form-select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23333' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            padding-right: 40px;
+        }
+        .form-control:focus, .form-select:focus {
             outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 2px rgba(12, 77, 162, 0.1);
+            border-color: var(--elegant-dark);
+            box-shadow: 0 0 0 3px rgba(44, 62, 80, 0.1);
         }
-
-        .filter-group input[type="date"]::-webkit-calendar-picker-indicator {
-            opacity: 0.7;
-            cursor: pointer;
-            padding: 6px;
-            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%23333' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z'/%3E%3C/svg%3E") no-repeat center;
-            background-size: 16px;
+        .filter-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 24px;
         }
-
-        .filter-buttons {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-            align-items: center;
-            justify-content: flex-start;
-        }
-
-        .filter-presets {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-            margin-bottom: 25px;
-        }
-
         .btn {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: var(--transition);
-            min-width: 120px;
-            justify-content: center;
-            position: relative;
-        }
-
-        .btn:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-        }
-
-        .btn:active {
-            transform: scale(0.98);
-        }
-
-        .btn-download {
-            background-color: var(--secondary-color);
-        }
-
-        .btn-download:hover {
-            background-color: var(--secondary-dark);
-        }
-
-        .btn-preset {
-            background-color: #e0e0e0;
-            color: var(--text-primary);
-            min-width: 110px;
-            padding: 10px 20px;
-        }
-
-        .btn-preset:hover {
-            background-color: #d0d0d0;
-        }
-
-        .btn-preset.active {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        .btn-toggle {
-            background-color: var(--accent-color);
-            margin: 10px auto;
-            display: block;
-            min-width: 150px;
-        }
-
-        .btn-toggle:hover {
-            background-color: #f57c00;
-        }
-
-        .spinner {
-            display: none;
-            width: 14px;
-            height: 14px;
-            border: 2px solid #ffffff;
-            border-top: 2px solid transparent;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .btn.loading .spinner {
-            display: block;
-        }
-
-        .btn.loading .btn-text {
-            display: none;
-        }
-
-        .alert {
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            animation: slideIn 0.5s ease-out;
-            font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-        }
-
-        .alert.hide {
-            animation: slideOut 0.5s ease-out forwards;
-        }
-
-        @keyframes slideOut {
-            from { transform: translateY(0); opacity: 1; }
-            to { transform: translateY(-20px); opacity: 0; }
-        }
-
-        .alert-error {
-            background-color: #fee2e2;
-            color: #b91c1c;
-            border-left: 4px solid #fecaca;
-        }
-
-        .transactions-container {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-            transition: var(--transition);
-        }
-
-        .transactions-container:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-3px);
-        }
-
-        .date-group {
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-        }
-
-        .date-group-header {
-            font-size: clamp(1.1rem, 2.2vw, 1.2rem);
+            padding: 14px 20px;
+            border-radius: var(--radius);
+            font-size: 15px;
             font-weight: 600;
-            color: var(--primary-dark);
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+            height: 48px;
+        }
+        .btn-primary {
+            background: var(--elegant-dark);
+            color: var(--white);
+        }
+        .btn-primary:hover {
+            background: var(--elegant-gray);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .btn-secondary {
+            background: var(--gray-200);
+            color: var(--gray-700);
+        }
+        .btn-secondary:hover {
+            background: var(--gray-300);
+        }
+        /* Transaction List - Grouped by Date */
+        .date-group {
+            margin-bottom: 24px;
+        }
+        .date-header {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-600);
             margin-bottom: 12px;
-            padding: 12px 20px;
-            background: linear-gradient(90deg, var(--primary-light) 0%, #ffffff 100%);
-            border-left: 4px solid var(--primary-color);
-            border-radius: 6px;
+            padding-left: 4px;
+        }
+        .transaction-card {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+            margin-bottom: 12px;
             box-shadow: var(--shadow-sm);
+            transition: all 0.2s ease;
+        }
+        .transaction-card:hover {
+            box-shadow: var(--shadow-md);
+        }
+        .transaction-header-row {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            transition: var(--transition);
+            align-items: flex-start;
         }
-
-        .date-group-header:hover {
-            transform: translateX(5px);
+        .transaction-left {
+            flex: 1;
         }
-
-        .date-group-header .date-text {
+        .transaction-type {
+            font-size: 15px;
             font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 4px;
         }
-
-        .date-group-header .transaction-count {
-            font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            color: var(--text-secondary);
-            font-weight: 500;
+        .transaction-no {
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            color: var(--gray-500);
         }
-
-        .table-container {
-            position: relative;
-            width: 100%;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-            user-select: none;
-            -webkit-user-drag: none;
-            -webkit-touch-callout: none;
-        }
-
-        table, th, td {
-            -webkit-user-drag: none;
-            user-drag: none;
-            dragable: false;
-        }
-
-        th, td {
-            padding: 8px 10px;
-            text-align: left;
-            font-size: clamp(0.7rem, 1.4vw, 0.8rem);
-            border-bottom: 1px solid #e5e7eb;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        th {
-            background: var(--primary-light);
-            color: var(--text-primary);
-            font-weight: 600;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        td {
-            color: var(--text-primary);
-            font-weight: 400;
-        }
-
-        tr {
-            cursor: pointer;
-        }
-
-        tr:nth-child(even) {
-            background-color: #fafafa;
-        }
-
-        tr:hover {
-            background-color: var(--primary-light);
-            transition: background-color 0.2s ease;
-        }
-
-        .amount {
+        .transaction-right {
             text-align: right;
-            font-weight: 500;
-            font-family: 'Poppins', sans-serif;
         }
-
-        .amount.incoming {
-            color: var(--success-color);
+        .transaction-amount {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 4px;
         }
-
-        .amount.outgoing {
-            color: var(--danger-color);
+        .transaction-amount.debit {
+            color: var(--danger);
         }
-
-        .no-transaksi {
-            font-weight: 500;
-            color: var(--text-secondary);
+        .transaction-time {
+            font-size: 11px;
+            color: var(--gray-500);
         }
-
-        .detail-cell {
-            position: relative;
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray-500);
         }
-
-        .detail-cell .tooltip {
-            visibility: hidden;
-            width: 180px;
-            background-color: white;
-            color: var(--text-primary);
-            text-align: left;
-            border-radius: 8px;
-            padding: 8px;
-            position: absolute;
-            z-index: 10;
-            top: 100%;
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.3;
+        }
+        .empty-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--gray-700);
+        }
+        .empty-text {
+            font-size: 14px;
+        }
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
             left: 0;
-            opacity: 0;
-            transition: opacity 0.3s, transform 0.3s;
-            font-size: clamp(0.7rem, 1.4vw, 0.8rem);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            border: 1px solid #e5e7eb;
-            transform: translateY(8px);
-        }
-
-        .detail-cell:hover .tooltip {
-            visibility: visible;
-            opacity: 1;
+            right: 0;
+            background: var(--gray-50);
+            padding: 12px 20px 20px;
+            display: flex;
+            justify-content: space-around;
+            z-index: 100;
+            transition: transform 0.3s ease, opacity 0.3s ease;
             transform: translateY(0);
+            opacity: 1;
         }
-
-        .petugas-list {
+        .bottom-nav.hidden {
+            transform: translateY(100%);
+            opacity: 0;
+        }
+        .nav-item {
             display: flex;
             flex-direction: column;
-            gap: 4px;
-        }
-
-        .petugas-label {
-            font-weight: 500;
-            font-size: clamp(0.7rem, 1.4vw, 0.8rem);
-            color: var(--text-primary);
-        }
-
-        .petugas-item {
-            font-size: clamp(0.65rem, 1.3vw, 0.75rem);
-            color: var(--text-secondary);
-            max-width: 150px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .no-data {
-            text-align: center;
-            padding: 20px;
-            color: var(--text-secondary);
-            animation: slideIn 0.5s ease-out;
-        }
-
-        .no-data i {
-            font-size: clamp(1.3rem, 2.8vw, 1.6rem);
-            color: #d1d5db;
-            margin-bottom: 8px;
-        }
-
-        .no-data p {
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
             align-items: center;
-            gap: 10px;
-            margin-top: 20px;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            gap: 4px;
+            text-decoration: none;
+            color: var(--gray-400);
+            transition: all 0.2s ease;
+            padding: 8px 16px;
         }
-
-        .pagination button {
-            background-color: #e0e0e0;
-            color: var(--text-primary);
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: var(--transition);
-            font-weight: 500;
+        .nav-item i {
+            font-size: 22px;
+            transition: color 0.2s ease;
         }
-
-        .pagination button:hover {
-            background-color: var(--primary-color);
-            color: white;
+        .nav-item span {
+            font-size: 11px;
+            font-weight: 600;
+            transition: color 0.2s ease;
         }
-
-        .pagination button:disabled {
-            background-color: #f0f0f0;
-            color: #aaa;
-            cursor: not-allowed;
+        .nav-item:hover i,
+        .nav-item:hover span,
+        .nav-item.active i,
+        .nav-item.active span {
+            color: var(--elegant-dark);
         }
-
-        .pagination .page-info {
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-
-        .hidden-transaction {
-            display: none;
-        }
-
+        /* Responsive */
         @media (max-width: 768px) {
-            .top-nav {
-                padding: 12px 20px;
-                font-size: clamp(1rem, 2vw, 1.1rem);
+            .container {
+                padding: 16px;
             }
-
-            .main-content {
-                padding: 20px;
+            .page-title {
+                font-size: 20px;
             }
-
-            .welcome-banner {
-                padding: 20px;
-                margin-bottom: 20px;
+            .filter-content {
+                max-height: 90vh;
             }
-
-            .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.4vw, 1.4rem);
+            .nav-logo {
+                height: 38px;
+                max-width: 140px;
             }
-
-            .filter-card {
-                padding: 15px;
-                gap: 15px;
-                margin-bottom: 20px;
+            .account-info-box {
+                height: 56px;
             }
-
-            .filter-row {
-                flex-direction: column;
-                gap: 15px;
-                margin-bottom: 15px;
+            .account-number {
+                font-size: 14px;
             }
-
-            .filter-group {
-                min-width: 100%;
-            }
-
-            .filter-group label {
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-                margin-bottom: 6px;
-            }
-
-            .filter-group input[type="date"] {
-                padding: 8px 10px;
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-            }
-
-            .filter-buttons {
-                flex-direction: row;
-                gap: 12px;
-                justify-content: space-between;
-            }
-
-            .filter-presets {
-                gap: 12px;
-                margin-bottom: 20px;
-            }
-
-            .btn {
-                width: 48%;
-                padding: 8px 20px;
-                font-size: clamp(0.85rem, 1.7vw, 0.95rem);
-                min-width: unset;
-            }
-
-            .btn-preset {
-                width: 32%;
-                padding: 8px 16px;
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-            }
-
-            .btn-toggle {
-                min-width: 120px;
-                padding: 8px 16px;
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-            }
-
-            .transactions-container {
-                padding: 15px;
-            }
-
-            .date-group {
-                margin-bottom: 25px;
-                padding-bottom: 15px;
-            }
-
-            .date-group-header {
-                font-size: clamp(1rem, 2vw, 1.1rem);
-                padding: 10px 15px;
-                margin-bottom: 10px;
-            }
-
-            .date-group-header .transaction-count {
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            }
-
-            th, td {
-                padding: 6px 8px;
-                font-size: clamp(0.65rem, 1.3vw, 0.75rem);
-            }
-
-            .petugas-item {
-                max-width: 120px;
-                font-size: clamp(0.6rem, 1.2vw, 0.7rem);
-            }
-
-            .pagination {
-                gap: 8px;
-                margin-top: 15px;
-            }
-
-            .pagination button {
-                padding: 6px 10px;
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
+            .filter-icon-btn {
+                width: 56px;
+                height: 56px;
             }
         }
-
         @media (max-width: 480px) {
-            body {
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+            .nav-logo {
+                height: 32px;
+                max-width: 120px;
             }
-
-            .top-nav {
-                padding: 10px 15px;
+            .transaction-amount {
+                font-size: 14px;
             }
-
-            .main-content {
-                padding: 15px;
+            .transaction-type {
+                font-size: 14px;
             }
-
-            .welcome-banner {
-                padding: 15px;
-                margin-bottom: 15px;
+            .account-info-box {
+                height: 52px;
+                padding: 0 12px;
             }
-
-            .welcome-banner h2 {
-                font-size: clamp(1.1rem, 2.2vw, 1.3rem);
+            .account-label {
+                font-size: 10px;
             }
-
-            .filter-card {
-                padding: 12px;
-                gap: 12px;
-                margin-bottom: 15px;
+            .account-number {
+                font-size: 13px;
             }
-
-            .filter-row {
-                gap: 12px;
-                margin-bottom: 12px;
+            .filter-icon-btn {
+                width: 52px;
+                height: 52px;
             }
-
-            .filter-group label {
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            }
-
-            .filter-group input[type="date"] {
-                padding: 7px 8px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            }
-
-            .filter-buttons {
-                gap: 10px;
-            }
-
-            .filter-presets {
-                gap: 10px;
-                margin-bottom: 15px;
-            }
-
-            .btn {
-                width: 48%;
-                padding: 7px 16px;
-                font-size: clamp(0.8rem, 1.6vw, 0.9rem);
-            }
-
-            .btn-preset {
-                width: 31%;
-                padding: 7px 12px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            }
-
-            .btn-toggle {
-                min-width: 100px;
-                padding: 7px 12px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-            }
-
-            .transactions-container {
-                padding: 12px;
-            }
-
-            .date-group {
-                margin-bottom: 20px;
-                padding-bottom: 12px;
-            }
-
-            .date-group-header {
-                font-size: clamp(0.9rem, 1.8vw, 1rem);
-                padding: 8px 12px;
-            }
-
-            .no-data {
-                padding: 15px;
-            }
-
-            .no-data i {
-                font-size: clamp(1.2rem, 2.5vw, 1.5rem);
-            }
-
-            .pagination {
-                gap: 6px;
-                margin-top: 12px;
-            }
-
-            .pagination button {
-                padding: 5px 8px;
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+            .filter-icon-btn i {
+                font-size: 18px;
             }
         }
     </style>
 </head>
 <body>
+    <!-- Top Navigation -->
     <nav class="top-nav">
-        <button class="back-btn" onclick="window.location.href='dashboard.php'">
-            <i class="fas fa-xmark"></i>
-        </button>
-        <h1>SchoBank</h1>
-        <div style="width: 36px;"></div>
+        <div class="nav-brand">
+            <img src="/schobank/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
+        </div>
     </nav>
 
-    <div class="main-content">
-        <div class="welcome-banner">
-            <h2 style="font-family: 'Poppins', sans-serif; font-weight: 700;">
-                Mutasi Rekening
-            </h2>
+    <!-- Sticky Header -->
+    <?php if ($siswa_info): ?>
+        <div class="sticky-header" id="stickyHeader">
+            <!-- Page Header -->
+            <div class="page-header">
+                <h1 class="page-title">Mutasi</h1>
+            </div>
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active">Mutasi Transaksi</button>
+                <button class="tab" onclick="window.location.href = 'e_statement.php'">e-Statement</button>
+            </div>
+            <!-- Account & Filter Row -->
+            <div class="account-filter-row">
+                <!-- Account Info (Static) -->
+                <div class="account-info-box">
+                    <div class="account-label">Sumber Rekening</div>
+                    <div class="account-number"><?php echo htmlspecialchars($siswa_info['no_rekening']); ?></div>
+                </div>
+                <!-- Filter Button (Icon Only) -->
+                <button class="filter-icon-btn" onclick="openFilterModal()">
+                    <i class="fas fa-calendar-alt"></i>
+                </button>
+            </div>
         </div>
 
-        <div id="alertContainer">
-            <?php if (isset($error)): ?>
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-circle"></i>
-                    <?= htmlspecialchars($error) ?>
+        <!-- Main Container untuk Transaksi (Scrollable) -->
+        <div class="container">
+            <!-- Transaction List -->
+            <?php if (empty($mutasi_data)): ?>
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <h3 class="empty-title">Belum Ada Transaksi</h3>
+                    <p class="empty-text">Akun Anda belum memiliki riwayat transaksi</p>
                 </div>
+            <?php else: ?>
+                <?php
+                // Group transactions by date
+                $grouped_data = [];
+                foreach ($mutasi_data as $mutasi) {
+                    $date = date('d M Y', strtotime($mutasi['created_at'] ?? 'now'));
+                    if (!isset($grouped_data[$date])) {
+                        $grouped_data[$date] = [];
+                    }
+                    $grouped_data[$date][] = $mutasi;
+                }
+                ?>
+                <?php foreach ($grouped_data as $date => $transactions): ?>
+                    <div class="date-group">
+                        <div class="date-header"><?php echo $date; ?></div>
+                        <?php foreach ($transactions as $mutasi): ?>
+                            <?php
+                            $is_debit = false;
+                            $jenis_text = '';
+                            if ($mutasi['jenis_transaksi'] === 'transfer') {
+                                $is_debit = ($mutasi['rekening_id'] == $mutasi['transaksi_rekening_id']);
+                                if ($is_debit) {
+                                    $jenis_text = 'Transfer Keluar';
+                                } else {
+                                    $jenis_text = 'Transfer Masuk';
+                                }
+                            } elseif ($mutasi['jenis_transaksi'] === null) {
+                                $jenis_text = 'Transfer Masuk';
+                            } else {
+                                $jenis_text = ucfirst(str_replace('_', ' ', $mutasi['jenis_transaksi']));
+                                switch ($mutasi['jenis_transaksi']) {
+                                    case 'setor':
+                                        $is_debit = false;
+                                        break;
+                                    case 'tarik':
+                                        $is_debit = true;
+                                        break;
+                                    default:
+                                        $is_debit = true;
+                                }
+                            }
+                            ?>
+                            <div class="transaction-card">
+                                <div class="transaction-header-row">
+                                    <div class="transaction-left">
+                                        <div class="transaction-type"><?php echo htmlspecialchars($jenis_text); ?></div>
+                                        <div class="transaction-no"><?php echo htmlspecialchars($mutasi['no_transaksi'] ?? '-'); ?></div>
+                                    </div>
+                                    <div class="transaction-right">
+                                        <div class="transaction-amount <?php echo $is_debit ? 'debit' : ''; ?>">
+                                            <?php
+                                            $sign = $is_debit ? '- ' : '';
+                                            $jumlah = abs($mutasi['jumlah'] ?? 0);
+                                            echo $sign . 'Rp' . number_format($jumlah, 0, ',', '.');
+                                            ?>
+                                        </div>
+                                        <div class="transaction-time">
+                                            <?php echo date('H:i', strtotime($mutasi['created_at'] ?? 'now')); ?> WIB
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endforeach; ?>
             <?php endif; ?>
         </div>
+    <?php endif; ?>
 
-        <?php if (!isset($error)): ?>
-            <div class="filter-card">
-                <form id="filterForm" method="GET" action="">
-                    <div class="filter-row">
-                        <div class="filter-group">
-                            <label for="start_date">Dari Tanggal</label>
-                            <input type="date" id="start_date" name="start_date" 
-                                   value="<?= htmlspecialchars($start_date) ?>" 
-                                   max="<?= date('Y-m-d') ?>" required>
-                        </div>
-                        <div class="filter-group">
-                            <label for="end_date">Sampai Tanggal</label>
-                            <input type="date" id="end_date" name="end_date" 
-                                   value="<?= htmlspecialchars($end_date) ?>" 
-                                   max="<?= date('Y-m-d') ?>" required>
-                        </div>
-                    </div>
-                    <div class="filter-presets">
-                        <button type="button" class="btn btn-preset <?= $filter_type === 'yesterday' ? 'active' : '' ?>" 
-                                onclick="setFilter('yesterday')">Kemarin</button>
-                        <button type="button" class="btn btn-preset <?= $filter_type === 'last7days' ? 'active' : '' ?>" 
-                                onclick="setFilter('last7days')">7 Hari</button>
-                        <button type="button" class="btn btn-preset <?= $filter_type === 'last30days' ? 'active' : '' ?>" 
-                                onclick="setFilter('last30days')">1 Bulan</button>
-                    </div>
-                    <div class="filter-buttons">
-                        <button type="submit" class="btn" id="filterBtn">
-                            <span class="spinner"></span>
-                            <span class="btn-text"><i class="fas fa-filter"></i> Filter</span>
-                        </button>
-                        <button type="button" onclick="downloadMutasi()" class="btn btn-download" id="downloadBtn">
-                            <span class="spinner"></span>
-                            <span class="btn-text"><i class="fas fa-download"></i> Download</span>
-                        </button>
-                    </div>
-                    <input type="hidden" name="filter_type" id="filter_type" value="<?= htmlspecialchars($filter_type) ?>">
-                    <input type="hidden" name="page" id="page" value="<?= htmlspecialchars($current_page) ?>">
-                </form>
+    <!-- Filter Modal -->
+    <div class="filter-modal" id="filterModal" onclick="closeFilterModal(event)">
+        <div class="filter-content" onclick="event.stopPropagation()">
+            <div class="filter-header">
+                <h3 class="filter-title">Filter Transaksi</h3>
+                <button class="close-btn" onclick="closeFilterModal()">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-
-            <div class="transactions-container">
-                <?php if (empty($transactions_paginated)): ?>
-                    <div class="no-data">
-                        <i class="fas fa-info-circle"></i>
-                        <p>Tidak ada transaksi dalam periode ini</p>
-                    </div>
-                <?php else: ?>
-                    <?php foreach ($transactions_paginated as $date => $daily_transactions): ?>
-                        <div class="date-group">
-                            <div class="date-group-header">
-                                <span class="date-text"><?= date('d F Y', strtotime($date)) ?></span>
-                                <span class="transaction-count"><?= count($daily_transactions) ?> Transaksi</span>
-                            </div>
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Jenis Transaksi</th>
-                                            <th>Jumlah</th>
-                                            <th>No. Transaksi</th>
-                                            <th>Detail</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php 
-                                        $visible_count = 5;
-                                        $index = 0;
-                                        foreach ($daily_transactions as $transaksi): 
-                                            $is_transfer_masuk = $transaksi['jenis_transaksi'] === 'transfer' && 
-                                                                $transaksi['rekening_tujuan'] === $no_rekening;
-                                            $is_incoming = $transaksi['jenis_transaksi'] === 'setor' || $is_transfer_masuk;
-                                            $amount = $transaksi['jumlah'];
-                                            $is_hidden = $index >= $visible_count ? 'hidden-transaction' : '';
-                                        ?>
-                                            <tr class="<?= $is_hidden ?>" data-date="<?= htmlspecialchars($date) ?>" 
-                                                onclick="window.location.href='struk_transaksi.php?no_transaksi=<?= htmlspecialchars($transaksi['no_transaksi']) ?>'">
-                                                <td>
-                                                    <?php if ($transaksi['jenis_transaksi'] === 'setor'): ?>
-                                                        Debit
-                                                    <?php elseif ($transaksi['jenis_transaksi'] === 'tarik'): ?>
-                                                        Kredit
-                                                    <?php elseif ($transaksi['jenis_transaksi'] === 'transfer'): ?>
-                                                        <?php if ($transaksi['rekening_asal'] === $no_rekening): ?>
-                                                            Transfer Keluar
-                                                        <?php else: ?>
-                                                            Transfer Masuk
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td class="amount <?= $is_incoming ? 'incoming' : 'outgoing' ?>">
-                                                    Rp <?= number_format($amount, 0, ',', '.') ?>
-                                                </td>
-                                                <td class="no-transaksi">
-                                                    <?= htmlspecialchars($transaksi['no_transaksi'] ?? 'N/A') ?>
-                                                </td>
-                                                <td class="detail-cell">
-                                                    <?php if ($transaksi['jenis_transaksi'] === 'setor' || $transaksi['jenis_transaksi'] === 'tarik'): ?>
-                                                        <div class="petugas-list">
-                                                            <span class="petugas-label">Oleh:</span>
-                                                            <?php if ($transaksi['petugas1_nama']): ?>
-                                                                <span class="petugas-item" title="<?= htmlspecialchars($transaksi['petugas1_nama']) ?>">
-                                                                    <?= htmlspecialchars($transaksi['petugas1_nama']) ?>
-                                                                </span>
-                                                            <?php else: ?>
-                                                                <span class="petugas-item">Tidak tersedia</span>
-                                                            <?php endif; ?>
-                                                            <?php if ($transaksi['petugas2_nama']): ?>
-                                                                <span class="petugas-item" title="<?= htmlspecialchars($transaksi['petugas2_nama']) ?>">
-                                                                    <?= htmlspecialchars($transaksi['petugas2_nama']) ?>
-                                                                </span>
-                                                            <?php else: ?>
-                                                                <span class="petugas-item">Tidak tersedia</span>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                        <span class="tooltip">
-                                                            <?php if ($transaksi['petugas1_nama'] || $transaksi['petugas2_nama']): ?>
-                                                                <?= $transaksi['petugas1_nama'] ? htmlspecialchars($transaksi['petugas1_nama']) . "<br>" : "" ?>
-                                                                <?= $transaksi['petugas2_nama'] ? htmlspecialchars($transaksi['petugas2_nama']) : "" ?>
-                                                            <?php else: ?>
-                                                                Tidak ada petugas terkait
-                                                            <?php endif; ?>
-                                                        </span>
-                                                    <?php elseif ($transaksi['jenis_transaksi'] === 'transfer'): ?>
-                                                        <?php if ($transaksi['rekening_asal'] === $no_rekening): ?>
-                                                            Ke: <?= htmlspecialchars($transaksi['nama_penerima'] ?? 'N/A') ?>
-                                                        <?php else: ?>
-                                                            Dari: <?= htmlspecialchars($transaksi['nama_pengirim'] ?? 'N/A') ?>
-                                                        <?php endif; ?>
-                                                    <?php endif; ?>
-                                                </td>
-                                            </tr>
-                                        <?php 
-                                            $index++;
-                                        endforeach; ?>
-                                    </tbody>
-                                </table>
-                                <?php if (count($daily_transactions) > $visible_count): ?>
-                                    <button class="btn btn-toggle" onclick="toggleTransactions('<?= htmlspecialchars($date) ?>')">
-                                        <span class="toggle-text">Lihat Lainnya</span>
-                                    </button>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                    <?php if ($total_pages > 1): ?>
-                        <div class="pagination">
-                            <button onclick="changePage(<?= $current_page - 1 ?>)" <?= $current_page <= 1 ? 'disabled' : '' ?>>
-                                <i class="fas fa-chevron-left"></i> Sebelumnya
-                            </button>
-                            <span class="page-info">Halaman <?= $current_page ?> dari <?= $total_pages ?></span>
-                            <button onclick="changePage(<?= $current_page + 1 ?>)" <?= $current_page >= $total_pages ? 'disabled' : '' ?>>
-                                Berikutnya <i class="fas fa-chevron-right"></i>
-                            </button>
-                        </div>
-                    <?php endif; ?>
-                <?php endif; ?>
-            </div>
-        <?php endif; ?>
+            <form method="GET">
+                <div class="form-group">
+                    <label class="form-label">Jenis Transaksi</label>
+                    <select name="jenis" class="form-select">
+                        <option value="">Semua Jenis</option>
+                        <option value="setor" <?php echo ($filter_jenis === 'setor') ? 'selected' : ''; ?>>Setor</option>
+                        <option value="tarik" <?php echo ($filter_jenis === 'tarik') ? 'selected' : ''; ?>>Tarik</option>
+                        <option value="transfer" <?php echo ($filter_jenis === 'transfer') ? 'selected' : ''; ?>>Transfer</option>
+                        <option value="transfer_masuk" <?php echo ($filter_jenis === 'transfer_masuk') ? 'selected' : ''; ?>>Transfer Masuk</option>
+                        <option value="transfer_keluar" <?php echo ($filter_jenis === 'transfer_keluar') ? 'selected' : ''; ?>>Transfer Keluar</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">Semua Status</option>
+                        <option value="approved" <?php echo ($filter_status === 'approved') ? 'selected' : ''; ?>>Berhasil</option>
+                        <option value="pending" <?php echo ($filter_status === 'pending') ? 'selected' : ''; ?>>Menunggu</option>
+                        <option value="rejected" <?php echo ($filter_status === 'rejected') ? 'selected' : ''; ?>>Ditolak</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tanggal Mulai</label>
+                    <input type="date" name="start_date" value="<?php echo htmlspecialchars($filter_start_date); ?>" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tanggal Akhir</label>
+                    <input type="date" name="end_date" value="<?php echo htmlspecialchars($filter_end_date); ?>" class="form-control">
+                </div>
+                <div class="filter-actions">
+                    <a href="<?php echo htmlspecialchars(strtok($_SERVER['REQUEST_URI'], '?')); ?>" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Reset
+                    </a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Terapkan
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav" id="bottomNav">
+        <a href="dashboard.php" class="nav-item">
+            <i class="fas fa-home"></i>
+            <span>Beranda</span>
+        </a>
+        <a href="cek_mutasi.php" class="nav-item active">
+            <i class="fas fa-list-alt"></i>
+            <span>Mutasi</span>
+        </a>
+        <a href="aktivitas.php" class="nav-item">
+            <i class="fas fa-history"></i>
+            <span>Aktivitas</span>
+        </a>
+        <a href="profil.php" class="nav-item">
+            <i class="fas fa-user"></i>
+            <span>Profil</span>
+        </a>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        function showAlert(message, type) {
-            const alertContainer = document.getElementById('alertContainer');
-            const existingAlerts = document.querySelectorAll('.alert');
-            existingAlerts.forEach(alert => {
-                alert.classList.add('hide');
-                setTimeout(() => alert.remove(), 500);
-            });
-            const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type}`;
-            let icon = 'info-circle';
-            if (type === 'success') icon = 'check-circle';
-            if (type === 'error') icon = 'exclamation-circle';
-            alertDiv.innerHTML = `
-                <i class="fas fa-${icon}"></i>
-                <span>${message}</span>`;
-            alertContainer.appendChild(alertDiv);
-            setTimeout(() => {
-                alertDiv.classList.add('hide');
-                setTimeout(() => alertDiv.remove(), 500);
-            }, 5000);
-        }
-
-        function setFilter(type) {
-            const startDateInput = document.getElementById('start_date');
-            const endDateInput = document.getElementById('end_date');
-            const filterTypeInput = document.getElementById('filter_type');
-            const currentFilterType = filterTypeInput.value;
-            const today = new Date();
-            const formatDate = (date) => date.toISOString().split('T')[0];
-
-            if (currentFilterType === type) {
-                startDateInput.value = formatDate(new Date(today.getFullYear(), today.getMonth(), 1));
-                endDateInput.value = formatDate(today);
-                filterTypeInput.value = 'custom';
-                document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+        // Detect Sticky Header
+        let stickyHeader = document.getElementById('stickyHeader');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 70) {
+                stickyHeader.classList.add('stuck');
             } else {
-                if (type === 'yesterday') {
-                    const yesterday = new Date(today);
-                    yesterday.setDate(today.getDate() - 1);
-                    startDateInput.value = formatDate(yesterday);
-                    endDateInput.value = formatDate(yesterday);
-                } else if (type === 'last7days') {
-                    const last7days = new Date(today);
-                    last7days.setDate(today.getDate() - 7);
-                    startDateInput.value = formatDate(last7days);
-                    endDateInput.value = formatDate(today);
-                } else if (type === 'last30days') {
-                    const last30days = new Date(today);
-                    last30days.setDate(today.getDate() - 30);
-                    startDateInput.value = formatDate(last30days);
-                    endDateInput.value = formatDate(today);
-                }
-                filterTypeInput.value = type;
-                document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
-                document.querySelector(`.btn-preset[onclick="setFilter('${type}')"]`).classList.add('active');
+                stickyHeader.classList.remove('stuck');
             }
-
-            document.getElementById('page').value = 1;
-            document.getElementById('filterForm').submit();
-        }
-
-        function downloadMutasi() {
-            const startDate = document.getElementById('start_date').value;
-            const endDate = document.getElementById('end_date').value;
-            
-            if (!startDate || !endDate) {
-                showAlert('Silakan pilih tanggal untuk mengunduh', 'error');
-                return;
-            }
-
-            const downloadBtn = document.getElementById('downloadBtn');
-            downloadBtn.classList.add('loading');
-            downloadBtn.disabled = true;
-            
-            window.open(`cetak_mutasi.php?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`, '_blank');
-            
-            setTimeout(() => {
-                downloadBtn.classList.remove('loading');
-                downloadBtn.disabled = false;
-            }, 1000);
-        }
-
-        function changePage(page) {
-            if (page < 1 || page > <?= $total_pages ?>) {
-                console.log('Invalid page number: ' + page);
-                return;
-            }
-            console.log('Navigating to page: ' + page);
-            const pageInput = document.getElementById('page');
-            pageInput.value = page;
-            document.getElementById('filterForm').submit();
-        }
-
-        function toggleTransactions(date) {
-            const rows = document.querySelectorAll(`tr[data-date="${date}"]`);
-            const button = document.querySelector(`button[onclick="toggleTransactions('${date}')"]`);
-            const text = button.querySelector('.toggle-text');
-            let isHidden = false;
-
-            rows.forEach((row, index) => {
-                if (index >= 5) {
-                    if (row.classList.contains('hidden-transaction')) {
-                        row.classList.remove('hidden-transaction');
-                    } else {
-                        row.classList.add('hidden-transaction');
-                        isHidden = true;
-                    }
-                }
-            });
-
-            text.textContent = isHidden ? 'Lihat Lainnya' : 'Tutup';
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const filterForm = document.getElementById('filterForm');
-            const filterBtn = document.getElementById('filterBtn');
-
-            if (filterForm) {
-                filterForm.addEventListener('submit', function(e) {
-                    const startDate = document.getElementById('start_date').value;
-                    const endDate = document.getElementById('end_date').value;
-                    
-                    if (!startDate || !endDate) {
-                        e.preventDefault();
-                        showAlert('Silakan pilih tanggal yang valid', 'error');
-                        return;
-                    }
-                    if (new Date(startDate) > new Date(endDate)) {
-                        e.preventDefault();
-                        showAlert('Tanggal awal tidak boleh lebih besar dari tanggal akhir', 'error');
-                        return;
-                    }
-                    if (new Date(startDate) > new Date() || new Date(endDate) > new Date()) {
-                        e.preventDefault();
-                        showAlert('Tanggal tidak boleh di masa depan', 'error');
-                        return;
-                    }
-                    
-                    filterBtn.classList.add('loading');
-                    filterBtn.disabled = true;
-                    console.log('Form submitted with start_date: ' + startDate + ', end_date: ' + endDate + ', page: ' + document.getElementById('page').value);
-                });
-            }
-
-            const alerts = document.querySelectorAll('.alert');
-            alerts.forEach(alert => {
-                setTimeout(() => {
-                    alert.classList.add('hide');
-                    setTimeout(() => alert.remove(), 500);
-                }, 5000);
-            });
-
-            const dateInputs = document.querySelectorAll('input[type="date"]');
-            dateInputs.forEach(input => {
-                input.addEventListener('change', () => {
-                    const today = new Date().toISOString().split('T')[0];
-                    if (input.value > today) {
-                        showAlert('Tanggal tidak boleh di masa depan!', 'error');
-                        input.value = today;
-                    }
-                    document.getElementById('filter_type').value = 'custom';
-                    document.getElementById('page').value = 1;
-                    document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
-                });
-            });
-
-            const tables = document.querySelectorAll('table');
-            tables.forEach(table => {
-                table.addEventListener('dragstart', (e) => e.preventDefault());
-            });
-
-            // Debug: Log pagination details
-            console.log('Total dates: <?= $total_dates ?>, Total pages: <?= $total_pages ?>, Current page: <?= $current_page ?>');
         });
 
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
+        // Filter Modal Functions
+        function openFilterModal() {
+            document.getElementById('filterModal').classList.add('active');
+        }
+        function closeFilterModal(event) {
+            if (!event || event.target.id === 'filterModal') {
+                document.getElementById('filterModal').classList.remove('active');
             }
-        }, { passive: false });
+        }
 
-        document.addEventListener('touchend', function(event) {
-            const now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                event.preventDefault();
+        // Bottom Bar Auto Hide/Show on Scroll
+        let scrollTimer;
+        let lastScrollTop = 0;
+        const bottomNav = document.getElementById('bottomNav');
+        window.addEventListener('scroll', () => {
+            const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
+            if (currentScroll > lastScrollTop || currentScroll < lastScrollTop) {
+                bottomNav.classList.add('hidden');
             }
-            lastTouchEnd = now;
-        }, { passive: false });
-
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        let lastTouchEnd = 0;
+            lastScrollTop = currentScroll <= 0 ? 0 : currentScroll;
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(() => {
+                bottomNav.classList.remove('hidden');
+            }, 500);
+        }, { passive: true });
     </script>
 </body>
 </html>
