@@ -1,6 +1,98 @@
 <?php
+/**
+ * Reset Password Page - Adaptive Path Version (BCRYPT + Normalized DB)
+ * File: pages/reset_password.php
+ * 
+ * Compatible with:
+ * - Local: localhost/schobank/pages/reset_password.php
+ * - Hosting: domain.com/pages/reset_password.php
+ */
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: Check if we're in 'pages' folder
+if (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: Check if includes/ exists in current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 3: Check if includes/ exists in parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 4: Search upward for includes/ folder (max 5 levels)
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: Use current directory
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// DEFINE WEB BASE URL (for browser access)
+// ============================================
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    
+    // Remove filename and get directory
+    $base_path = dirname($script);
+    
+    // Remove '/pages' if exists
+    $base_path = preg_replace('#/pages$#', '', $base_path);
+    
+    // Ensure base_path starts with /
+    if ($base_path !== '/' && !empty($base_path)) {
+        $base_path = '/' . ltrim($base_path, '/');
+    }
+    
+    return $protocol . $host . $base_path;
+}
+
+if (!defined('BASE_URL')) {
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
+}
+
+// Asset URLs for browser
+define('ASSETS_URL', BASE_URL . '/assets');
+
+// ============================================
+// START SESSION & LOAD DB
+// ============================================
 session_start();
-require_once '../includes/db_connection.php';
+require_once INCLUDES_PATH . '/db_connection.php';
 date_default_timezone_set('Asia/Jakarta'); // Set timezone to WIB
 
 $error_message = "";
@@ -11,7 +103,7 @@ $current_time = date('H:i:s - d M Y'); // Format time in WIB
 $token = isset($_GET['token']) ? $_GET['token'] : (isset($_POST['token']) ? $_POST['token'] : '');
 
 if (empty($token)) {
-    header("Location: forgot_password.php");
+    header("Location: " . BASE_URL . "/pages/forgot_password.php");
     exit();
 }
 
@@ -49,8 +141,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $row = $check_result->fetch_assoc();
             $user_id = $row['user_id'];
 
-            // Hash new password with SHA2-256
-            $hashed_password = hash('sha256', $new_password);
+            // Hash new password with BCRYPT
+            $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
 
             // Start Transaction
             $conn->begin_transaction();
@@ -93,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 <html lang="id">
 <head>
     <title>Reset Password - My Schobank</title>
-    <link rel="icon" type="image/jpeg" href="/schobank/assets/images/logo.jpg">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -317,13 +409,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 </head>
 <body>
     <div class="login-container">
-        <button type="button" class="close-btn" onclick="window.location.href='login.php'">
+        <button type="button" class="close-btn" onclick="window.location.href='<?= BASE_URL ?>/pages/login.php'">
             <i class="fas fa-times"></i>
         </button>
 
         <div class="header-section">
             <div class="logo-container">
-                <img src="/schobank/assets/images/header.png" alt="My Schobank Logo" class="logo">
+                <img src="<?= ASSETS_URL ?>/images/header.png" alt="My Schobank Logo" class="logo">
             </div>
         </div>
 
@@ -343,7 +435,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <div class="success-message" id="success-alert">
                 <i class="fas fa-check-circle"></i> <?= htmlspecialchars($success_message) ?>
             </div>
-            <script> setTimeout(function() { window.location.href = 'login.php'; }, 3000); </script>
+            <script> setTimeout(function() { window.location.href = '<?= BASE_URL ?>/pages/login.php'; }, 3000); </script>
 
         <!-- FORM: Reset Password -->
         <?php else: ?>

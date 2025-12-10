@@ -1,35 +1,120 @@
 <?php
+/**
+ * Profile Page - Adaptive Path Version (BCRYPT + Normalized DB)
+ * File: pages/siswa/profil.php
+ *
+ * Compatible with:
+ * - Local: localhost/schobank/pages/siswa/profil.php
+ * - Hosting: domain.com/pages/siswa/profil.php
+ */
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages/siswa'
+if (basename($current_dir) === 'siswa' && basename(dirname($current_dir)) === 'pages') {
+    $project_root = dirname(dirname($current_dir));
+}
+// Strategy 2: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 3: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// DEFINE WEB BASE URL (for browser access)
+// ============================================
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+  
+    // Remove filename and get directory
+    $base_path = dirname($script);
+  
+    // Remove '/pages/siswa' if exists
+    $base_path = preg_replace('#/pages/siswa$#', '', $base_path);
+  
+    // Ensure base_path starts with /
+    if ($base_path !== '/' && !empty($base_path)) {
+        $base_path = '/' . ltrim($base_path, '/');
+    }
+  
+    return $protocol . $host . $base_path;
+}
+if (!defined('BASE_URL')) {
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
+}
+// Asset URLs for browser
+define('ASSETS_URL', BASE_URL . '/assets');
+// ============================================
+// START SESSION & LOAD DB + VENDOR
+// ============================================
 session_start();
-require_once '../../includes/db_connection.php';
-require_once '../../vendor/autoload.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once PROJECT_ROOT . '/vendor/autoload.php';
 date_default_timezone_set('Asia/Jakarta');
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-
 // Initialize message variables
 $message = isset($_GET['message']) ? htmlspecialchars($_GET['message']) : '';
 $error = isset($_GET['error']) ? htmlspecialchars($_GET['error']) : '';
-
-// Fetch user data with edit tracking
-$query = "SELECT u.username, u.nama, u.role, u.email, u.no_wa, u.tanggal_lahir, u.jenis_kelamin, u.alamat_lengkap, u.nis_nisn,
-          k.nama_kelas, tk.nama_tingkatan, j.nama_jurusan, r.no_rekening, r.saldo, u.created_at AS tanggal_bergabung,
-          u.pin, u.jurusan_id, u.kelas_id, u.is_frozen, u.pin_block_until, k.tingkatan_kelas_id,
-          u.tanggal_lahir_edited, u.jenis_kelamin_edited, u.nis_nisn_edited
-          FROM users u
-          LEFT JOIN rekening r ON u.id = r.user_id
-          LEFT JOIN kelas k ON u.kelas_id = k.id
-          LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
-          LEFT JOIN jurusan j ON u.jurusan_id = j.id
-          WHERE u.id = ?";
+// ============================================
+// FETCH USER DATA WITH NORMALIZED DB
+// ============================================
+$query = "SELECT
+    u.username, u.nama, u.role, u.email, u.created_at AS tanggal_bergabung,
+    sp.nis_nisn, sp.nis_nisn_edited, sp.no_wa, sp.tanggal_lahir, sp.tanggal_lahir_edited,
+    sp.jenis_kelamin, sp.jenis_kelamin_edited, sp.alamat_lengkap, sp.jurusan_id, sp.kelas_id,
+    us.pin, us.has_pin, us.is_frozen, us.pin_block_until,
+    k.nama_kelas, tk.nama_tingkatan, j.nama_jurusan,
+    r.no_rekening, r.saldo
+FROM users u
+LEFT JOIN siswa_profiles sp ON u.id = sp.user_id
+LEFT JOIN user_security us ON u.id = us.user_id
+LEFT JOIN rekening r ON u.id = r.user_id
+LEFT JOIN kelas k ON sp.kelas_id = k.id
+LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
+LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+WHERE u.id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $_SESSION['user_id']);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
-
 if (!$user) {
     die("Data pengguna tidak ditemukan.");
 }
-
 // Determine account status function
 function getAccountStatus($user_data, $current_time) {
     if ($user_data['is_frozen']) {
@@ -40,10 +125,8 @@ function getAccountStatus($user_data, $current_time) {
     }
     return 'aktif';
 }
-
 $current_time = date('Y-m-d H:i:s');
 $account_status = getAccountStatus($user, $current_time);
-
 // Send email function
 function sendEmail($email, $subject, $body) {
     $mail = new PHPMailer(true);
@@ -56,15 +139,15 @@ function sendEmail($email, $subject, $body) {
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
-       
+    
         $mail->setFrom('schobanksystem@gmail.com', 'SCHOBANK SYSTEM');
         $mail->addAddress($email);
-       
+    
         $mail->isHTML(true);
         $mail->Subject = $subject;
         $mail->Body = $body;
         $mail->AltBody = strip_tags($body);
-       
+    
         $mail->send();
         return true;
     } catch (Exception $e) {
@@ -72,7 +155,6 @@ function sendEmail($email, $subject, $body) {
         return false;
     }
 }
-
 // Insert notification function
 function insertNotification($conn, $user_id, $message) {
     $query = "INSERT INTO notifications (user_id, message, is_read, created_at) VALUES (?, ?, 0, NOW())";
@@ -81,7 +163,6 @@ function insertNotification($conn, $user_id, $message) {
     $stmt->execute();
     $stmt->close();
 }
-
 // Get Indonesian month name function
 function getIndonesianMonth($date) {
     $months = [
@@ -90,55 +171,30 @@ function getIndonesianMonth($date) {
     ];
     return date('d', strtotime($date)) . ' ' . $months[(int)date('m', strtotime($date))] . ' ' . date('Y', strtotime($date));
 }
-
-// Email template function
-function getEmailTemplate($title, $greeting, $content, $additionalInfo = '') {
-    return "<!DOCTYPE html>
-<html lang='id'>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>{$title}</title>
-</head>
-<body style='margin: 0; padding: 0; background-color: #f5f5f5; font-family: Helvetica, Arial, sans-serif; color: #333333;'>
-    <table align='center' border='0' cellpadding='0' cellspacing='0' width='100%' style='max-width: 600px; background-color: #ffffff; margin: 40px auto; border: 1px solid #e0e0e0;'>
-        <tr>
-            <td style='padding: 20px; border-bottom: 2px solid #0c4da2;'>
-                <table width='100%' border='0' cellpadding='0' cellspacing='0'>
-                    <tr>
-                        <td style='font-size: calc(1rem + 0.2vw); font-weight: bold; color: #0c4da2;'>SCHOBANK</td>
-                        <td style='text-align: right;'>
-                            <span style='font-size: calc(0.75rem + 0.1vw); color: #666666;'>SCHOBANK SYSTEM</span><br>
-                            <span style='font-size: calc(0.65rem + 0.1vw); color: #999999;'>Tanggal: " . getIndonesianMonth(date('Y-m-d')) . "</span>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-        <tr>
-            <td style='padding: 30px 20px;'>
-                <h2 style='font-size: calc(1.2rem + 0.3vw); color: #0c4da2; margin: 0 0 15px 0; font-weight: bold;'>{$title}</h2>
-                <p style='font-size: calc(0.85rem + 0.2vw); line-height: 1.5; margin: 0 0 20px 0;'>{$greeting}</p>
-                <table border='0' cellpadding='0' cellspacing='0' width='100%' style='border: 1px solid #e0e0e0; padding: 15px; background-color: #fafafa;'>
-                    <tr>
-                        <td style='font-size: calc(0.85rem + 0.2vw); color: #333333;'>{$content}</td>
-                    </tr>
-                </table>
-                {$additionalInfo}
-            </td>
-        </tr>
-        <tr>
-            <td style='padding: 20px; background-color: #f9f9f9; border-top: 1px solid #e0e0e0; font-size: calc(0.75rem + 0.1vw); color: #666666; text-align: center;'>
-                <p style='margin: 0 0 10px 0;'>Hubungi kami di <a href='mailto:support@schobank.com' style='color: #0c4da2; text-decoration: none;'>support@schobank.com</a> jika ada pertanyaan.</p>
-                <p style='margin: 0;'>© " . date('Y') . " SCHOBANK. Hak cipta dilindungi.</p>
-                <p style='margin: 10px 0 0 0; font-size: calc(0.7rem + 0.1vw); color: #999999;'>Pesan ini dikirim secara otomatis. Mohon tidak membalas pesan ini.</p>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>";
+// Email template function (Updated to match proses_setor style)
+function getEmailTemplate($title, $content, $additionalInfo = '') {
+    $tanggal = getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i') . " WIB";
+    return "
+<div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
+  
+    <h2 style='color: #1e3a8a; margin-bottom: 20px; font-size: 24px;'>{$title}</h2>
+  
+    <p style='margin-bottom: 20px;'>{$content}</p>
+  
+    {$additionalInfo}
+  
+    <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal Perubahan</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$tanggal}</p>
+    </div>
+  
+    <p style='font-size: 12px; color: #999;'>
+        Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+        Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
+    </p>
+</div>";
 }
-
 // Validate date function
 function validateDate($date) {
     $inputDate = DateTime::createFromFormat('Y-m-d', $date);
@@ -149,13 +205,11 @@ function validateDate($date) {
     $currentDate = new DateTime();
     return ($inputDate >= $minDate && $inputDate <= $currentDate);
 }
-
-// Handle OTP generation and storage
+// Handle OTP generation and storage (in siswa_profiles)
 function generateAndStoreOTP($conn, $user_id) {
     $otp = rand(100000, 999999);
     $expiry = date('Y-m-d H:i:s', strtotime('+5 minutes'));
-   
-    $update = $conn->prepare("UPDATE users SET otp = ?, otp_expiry = ? WHERE id = ?");
+    $update = $conn->prepare("UPDATE siswa_profiles SET otp = ?, otp_expiry = ? WHERE user_id = ?");
     $update->bind_param("ssi", $otp, $expiry, $user_id);
     if ($update->execute()) {
         return ['otp' => $otp, 'expiry' => $expiry];
@@ -163,22 +217,21 @@ function generateAndStoreOTP($conn, $user_id) {
     error_log("Failed to store OTP for user $user_id");
     return false;
 }
-
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (isset($_POST['update_username'])) {
         $new_username = trim($_POST['new_username']);
-       
+    
         if (empty($new_username)) {
             header("Location: profil.php?error=" . urlencode("Username tidak boleh kosong!"));
             exit();
         }
-       
+    
         if ($new_username == $user['username']) {
             header("Location: profil.php?error=" . urlencode("Username baru tidak boleh sama!"));
             exit();
         }
-       
+    
         $check = $conn->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
         $check->bind_param("si", $new_username, $_SESSION['user_id']);
         $check->execute();
@@ -186,166 +239,164 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             header("Location: profil.php?error=" . urlencode("Username sudah digunakan!"));
             exit();
         }
-       
+    
         $update = $conn->prepare("UPDATE users SET username = ? WHERE id = ?");
         $update->bind_param("si", $new_username, $_SESSION['user_id']);
         if ($update->execute()) {
             $notif_message = "Username kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
             insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
+        
             if ($user['email']) {
                 $email_body = getEmailTemplate(
                     "Pemberitahuan Perubahan Username",
-                    "Yth. {$user['nama']},",
-                    "Username akun SCHOBANK Anda telah diperbarui menjadi <strong>{$new_username}</strong>.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
+                    "Username kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
                 );
                 sendEmail($user['email'], "Perubahan Username", $email_body);
             }
             session_destroy();
-            header("Location: ../../pages/login.php");
+            header("Location: " . BASE_URL . "/pages/login.php");
             exit();
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengubah username!"));
         exit();
-       
+    
     } elseif (isset($_POST['update_password'])) {
         $current_password = $_POST['current_password'];
         $new_password = $_POST['new_password'];
         $confirm_password = $_POST['confirm_password'];
-       
+    
         if (empty($current_password) || empty($new_password) || empty($confirm_password)) {
             header("Location: profil.php?error=" . urlencode("Semua field password harus diisi!"));
             exit();
         }
-       
+    
         if ($new_password != $confirm_password) {
             header("Location: profil.php?error=" . urlencode("Password baru tidak cocok!"));
             exit();
         }
-       
+    
         if (strlen($new_password) < 8) {
             header("Location: profil.php?error=" . urlencode("Password minimal 8 karakter!"));
             exit();
         }
-       
+    
         if (!preg_match('/[A-Za-z]/', $new_password)) {
             header("Location: profil.php?error=" . urlencode("Password harus mengandung huruf!"));
             exit();
         }
-       
+    
         $verify = $conn->prepare("SELECT password FROM users WHERE id = ?");
         $verify->bind_param("i", $_SESSION['user_id']);
         $verify->execute();
         $user_data = $verify->get_result()->fetch_assoc();
-       
+    
         if (!$user_data || !password_verify($current_password, $user_data['password'])) {
             header("Location: profil.php?error=" . urlencode("Password saat ini salah!"));
             exit();
         }
-       
-        $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+    
+        $hashed_password = password_hash($new_password, PASSWORD_BCRYPT);
         $update = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
         $update->bind_param("si", $hashed_password, $_SESSION['user_id']);
         if ($update->execute()) {
             $notif_message = "Password kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
             insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
+        
             if ($user['email']) {
                 $email_body = getEmailTemplate(
                     "Pemberitahuan Perubahan Password",
-                    "Yth. {$user['nama']},",
-                    "Password akun SCHOBANK Anda telah diperbarui.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
+                    "Password kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
                 );
                 sendEmail($user['email'], "Perubahan Password", $email_body);
             }
             session_destroy();
-            header("Location: ../../pages/login.php");
+            header("Location: " . BASE_URL . "/pages/login.php");
             exit();
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengubah password!"));
         exit();
-       
+    
     } elseif (isset($_POST['update_pin'])) {
         $new_pin = $_POST['new_pin'];
         $confirm_pin = $_POST['confirm_pin'];
-       
+    
         if (empty($new_pin) || empty($confirm_pin)) {
             header("Location: profil.php?error=" . urlencode("Semua field PIN harus diisi!"));
             exit();
         }
-       
+    
         if ($new_pin != $confirm_pin) {
             header("Location: profil.php?error=" . urlencode("PIN baru tidak cocok!"));
             exit();
         }
-       
+    
         if (strlen($new_pin) != 6 || !ctype_digit($new_pin)) {
             header("Location: profil.php?error=" . urlencode("PIN harus 6 digit angka!"));
             exit();
         }
-       
-        $hashed_new_pin = hash('sha256', $new_pin);
-       
+    
+        $hashed_new_pin = password_hash($new_pin, PASSWORD_BCRYPT);
+    
         if ($user['pin']) {
             $current_pin = $_POST['current_pin'] ?? '';
             if (empty($current_pin) || strlen($current_pin) != 6 || !ctype_digit($current_pin)) {
                 header("Location: profil.php?error=" . urlencode("PIN saat ini tidak valid!"));
                 exit();
             }
-           
-            $hashed_current_pin = hash('sha256', $current_pin);
-            if ($hashed_current_pin != $user['pin']) {
+        
+            if (!password_verify($current_pin, $user['pin'])) {
                 header("Location: profil.php?error=" . urlencode("PIN saat ini salah!"));
                 exit();
             }
         }
-       
-        $update = $conn->prepare("UPDATE users SET pin = ?, has_pin = 1 WHERE id = ?");
+    
+        $update = $conn->prepare("UPDATE user_security SET pin = ?, has_pin = 1 WHERE user_id = ?");
         $update->bind_param("si", $hashed_new_pin, $_SESSION['user_id']);
-        if ($update->execute()) {
-            $action = $user['pin'] ? 'diubah' : 'dibuat';
-            $notif_message = "PIN kamu telah {$action} pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
-            insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
-            if ($user['email']) {
-                $email_body = getEmailTemplate(
-                    $user['pin'] ? "Pemberitahuan Perubahan PIN" : "Pemberitahuan Pembuatan PIN",
-                    "Yth. {$user['nama']},",
-                    $user['pin'] ? "PIN akun SCHOBANK Anda telah diperbarui." : "PIN akun SCHOBANK Anda telah dibuat.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
-                );
-                sendEmail($user['email'], $user['pin'] ? "Perubahan PIN" : "Pembuatan PIN", $email_body);
+        $update->execute();
+        if ($update->affected_rows > 0) {
+            // Updated successfully
+        } else {
+            // No row affected, likely no security row exists - insert new
+            $insert = $conn->prepare("INSERT INTO user_security (user_id, pin, has_pin) VALUES (?, ?, 1)");
+            $insert->bind_param("is", $_SESSION['user_id'], $hashed_new_pin);
+            if (!$insert->execute()) {
+                header("Location: profil.php?error=" . urlencode("Gagal mengubah PIN!"));
+                exit();
             }
-            $_SESSION['success_message'] = $user['pin'] ? "PIN berhasil diubah!" : "PIN berhasil dibuat!";
-            header("Location: profil.php");
-            exit();
         }
-        header("Location: profil.php?error=" . urlencode("Gagal mengubah PIN!"));
+        $action = $user['pin'] ? 'diubah' : 'dibuat';
+        $notif_message = "PIN kamu telah {$action} pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
+        insertNotification($conn, $_SESSION['user_id'], $notif_message);
+    
+        if ($user['email']) {
+            $email_body = getEmailTemplate(
+                $user['pin'] ? "Pemberitahuan Perubahan PIN" : "Pemberitahuan Pembuatan PIN",
+                "PIN kamu telah {$action} pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
+            );
+            sendEmail($user['email'], $user['pin'] ? "Perubahan PIN" : "Pembuatan PIN", $email_body);
+        }
+        $_SESSION['success_message'] = $user['pin'] ? "PIN berhasil diubah!" : "PIN berhasil dibuat!";
+        header("Location: profil.php");
         exit();
-       
+    
     } elseif (isset($_POST['update_email'])) {
         $email = trim($_POST['email']);
-       
+    
         if (empty($email)) {
             header("Location: profil.php?error=" . urlencode("Email tidak boleh kosong!"));
             exit();
         }
-       
+    
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             header("Location: profil.php?error=" . urlencode("Format email tidak valid!"));
             exit();
         }
-       
+    
         if ($email == $user['email']) {
             header("Location: profil.php?error=" . urlencode("Email sama dengan email saat ini!"));
             exit();
         }
-       
+    
         $check = $conn->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
         $check->bind_param("si", $email, $_SESSION['user_id']);
         $check->execute();
@@ -353,55 +404,48 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             header("Location: profil.php?error=" . urlencode("Email sudah digunakan oleh pengguna lain!"));
             exit();
         }
-       
+    
         $otp_data = generateAndStoreOTP($conn, $_SESSION['user_id']);
         if ($otp_data) {
             $email_body = getEmailTemplate(
                 "Verifikasi Perubahan Email",
-                "Yth. {$user['nama']},",
-                "Kode OTP untuk verifikasi perubahan email Anda adalah <strong>{$otp_data['otp']}</strong>",
-                "<span style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Kode ini berlaku hingga <strong>" . getIndonesianMonth($otp_data['expiry']) . ", " . date('H:i:s', strtotime($otp_data['expiry'])) . " WIB</strong></span>
-                <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak meminta perubahan ini, abaikan pesan ini.</p>"
+                "Berikut OTP kamu: <strong>{$otp_data['otp']}</strong><br>Kode ini berlaku hingga " . getIndonesianMonth($otp_data['expiry']) . ", " . date('H:i:s', strtotime($otp_data['expiry'])) . " WIB.<br>Jika kamu tidak melakukan ini, abaikan pesan ini."
             );
-           
+        
             if (sendEmail($email, "Verifikasi Email", $email_body)) {
                 $_SESSION['new_email'] = $email;
                 $_SESSION['otp_type'] = 'email';
-                header("Location: ../../pages/siswa/verify_otp.php");
+                header("Location: " . BASE_URL . "/pages/siswa/verify_otp.php");
                 exit();
             }
             error_log("Failed to send OTP email to $email");
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengirim OTP!"));
         exit();
-       
+    
     } elseif (isset($_POST['update_alamat'])) {
         $alamat = trim($_POST['alamat_lengkap']);
-       
+    
         if (empty($alamat)) {
             header("Location: profil.php?error=" . urlencode("Alamat tidak boleh kosong!"));
             exit();
         }
-       
+    
         if ($alamat == $user['alamat_lengkap']) {
             header("Location: profil.php?error=" . urlencode("Alamat sama dengan saat ini!"));
             exit();
         }
-       
-        $update = $conn->prepare("UPDATE users SET alamat_lengkap = ? WHERE id = ?");
+    
+        $update = $conn->prepare("UPDATE siswa_profiles SET alamat_lengkap = ? WHERE user_id = ?");
         $update->bind_param("si", $alamat, $_SESSION['user_id']);
         if ($update->execute()) {
             $notif_message = "Alamat kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
             insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
+        
             if ($user['email']) {
                 $email_body = getEmailTemplate(
                     "Pemberitahuan Perubahan Alamat",
-                    "Yth. {$user['nama']},",
-                    "Alamat lengkap Anda telah diperbarui.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Alamat Baru: <strong>" . htmlspecialchars($alamat) . "</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
+                    "Alamat lengkap kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
                 );
                 sendEmail($user['email'], "Perubahan Alamat", $email_body);
             }
@@ -411,45 +455,42 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengubah alamat!"));
         exit();
-       
+    
     } elseif (isset($_POST['update_tanggal_lahir'])) {
         // Check if already edited
         if ($user['tanggal_lahir_edited'] == 1) {
             header("Location: profil.php?error=" . urlencode("Tanggal lahir hanya bisa diubah sekali!"));
             exit();
         }
-        
+     
         $tanggal_lahir = trim($_POST['tanggal_lahir']);
-       
+    
         if (empty($tanggal_lahir)) {
             header("Location: profil.php?error=" . urlencode("Tanggal lahir tidak boleh kosong!"));
             exit();
         }
-       
+    
         if (!validateDate($tanggal_lahir)) {
             header("Location: profil.php?error=" . urlencode("Format tanggal tidak valid!"));
             exit();
         }
-       
+    
         if ($tanggal_lahir == $user['tanggal_lahir']) {
             header("Location: profil.php?error=" . urlencode("Tanggal lahir sama dengan saat ini!"));
             exit();
         }
-       
-        $update = $conn->prepare("UPDATE users SET tanggal_lahir = ?, tanggal_lahir_edited = 1 WHERE id = ?");
+    
+        $update = $conn->prepare("UPDATE siswa_profiles SET tanggal_lahir = ?, tanggal_lahir_edited = 1 WHERE user_id = ?");
         $update->bind_param("si", $tanggal_lahir, $_SESSION['user_id']);
         if ($update->execute()) {
             $formatted_date = date('d/m/Y', strtotime($tanggal_lahir));
             $notif_message = "Tanggal lahir kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
             insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
+        
             if ($user['email']) {
                 $email_body = getEmailTemplate(
                     "Pemberitahuan Perubahan Tanggal Lahir",
-                    "Yth. {$user['nama']},",
-                    "Tanggal lahir Anda telah diperbarui menjadi <strong>" . getIndonesianMonth($tanggal_lahir) . "</strong>.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
+                    "Tanggal lahir kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
                 );
                 sendEmail($user['email'], "Perubahan Tanggal Lahir", $email_body);
             }
@@ -459,40 +500,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengubah tanggal lahir!"));
         exit();
-       
+    
     } elseif (isset($_POST['update_jenis_kelamin'])) {
         // Check if already edited
         if ($user['jenis_kelamin_edited'] == 1) {
             header("Location: profil.php?error=" . urlencode("Jenis kelamin hanya bisa diubah sekali!"));
             exit();
         }
-        
+     
         $jenis_kelamin = trim($_POST['jenis_kelamin']);
-       
+    
         if (empty($jenis_kelamin) || !in_array($jenis_kelamin, ['L', 'P'])) {
             header("Location: profil.php?error=" . urlencode("Jenis kelamin tidak valid!"));
             exit();
         }
-       
+    
         if ($jenis_kelamin == $user['jenis_kelamin']) {
             header("Location: profil.php?error=" . urlencode("Jenis kelamin sama dengan saat ini!"));
             exit();
         }
-       
-        $update = $conn->prepare("UPDATE users SET jenis_kelamin = ?, jenis_kelamin_edited = 1 WHERE id = ?");
+    
+        $update = $conn->prepare("UPDATE siswa_profiles SET jenis_kelamin = ?, jenis_kelamin_edited = 1 WHERE user_id = ?");
         $update->bind_param("si", $jenis_kelamin, $_SESSION['user_id']);
         if ($update->execute()) {
             $jk_text = $jenis_kelamin == 'L' ? 'Laki-laki' : 'Perempuan';
             $notif_message = "Jenis kelamin kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
             insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
+        
             if ($user['email']) {
                 $email_body = getEmailTemplate(
                     "Pemberitahuan Perubahan Jenis Kelamin",
-                    "Yth. {$user['nama']},",
-                    "Jenis kelamin Anda telah diperbarui menjadi <strong>{$jk_text}</strong>.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
+                    "Jenis kelamin kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
                 );
                 sendEmail($user['email'], "Perubahan Jenis Kelamin", $email_body);
             }
@@ -502,47 +540,44 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengubah jenis kelamin!"));
         exit();
-        
+     
     } elseif (isset($_POST['update_nisn'])) {
         // Check if already edited
         if ($user['nis_nisn_edited'] == 1) {
             header("Location: profil.php?error=" . urlencode("NIS/NISN hanya bisa diubah sekali!"));
             exit();
         }
-        
+     
         $nisn = trim($_POST['nis_nisn']);
-       
+    
         if (empty($nisn)) {
             header("Location: profil.php?error=" . urlencode("NIS/NISN tidak boleh kosong!"));
             exit();
         }
-       
+    
         if ($nisn == $user['nis_nisn']) {
             header("Location: profil.php?error=" . urlencode("NIS/NISN sama dengan saat ini!"));
             exit();
         }
-       
-        $check = $conn->prepare("SELECT id FROM users WHERE nis_nisn = ? AND id != ?");
+    
+        $check = $conn->prepare("SELECT id FROM siswa_profiles WHERE nis_nisn = ? AND user_id != ?");
         $check->bind_param("si", $nisn, $_SESSION['user_id']);
         $check->execute();
         if ($check->get_result()->num_rows > 0) {
             header("Location: profil.php?error=" . urlencode("NIS/NISN sudah digunakan oleh pengguna lain!"));
             exit();
         }
-       
-        $update = $conn->prepare("UPDATE users SET nis_nisn = ?, nis_nisn_edited = 1 WHERE id = ?");
+    
+        $update = $conn->prepare("UPDATE siswa_profiles SET nis_nisn = ?, nis_nisn_edited = 1 WHERE user_id = ?");
         $update->bind_param("si", $nisn, $_SESSION['user_id']);
         if ($update->execute()) {
             $notif_message = "NIS/NISN kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
             insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
+        
             if ($user['email']) {
                 $email_body = getEmailTemplate(
                     "Pemberitahuan Perubahan NIS/NISN",
-                    "Yth. {$user['nama']},",
-                    "NIS/NISN Anda telah diperbarui menjadi <strong>" . htmlspecialchars($nisn) . "</strong>.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
+                    "NIS/NISN kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
                 );
                 sendEmail($user['email'], "Perubahan NIS/NISN", $email_body);
             }
@@ -552,20 +587,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengubah NIS/NISN!"));
         exit();
-        
+     
     } elseif (isset($_POST['update_kelas'])) {
         $new_kelas_id = $_POST['new_kelas_id'];
-       
+    
         if (empty($new_kelas_id)) {
             header("Location: profil.php?error=" . urlencode("Kelas harus dipilih!"));
             exit();
         }
-       
+    
         if ($new_kelas_id == $user['kelas_id']) {
             header("Location: profil.php?error=" . urlencode("Kelas baru tidak boleh sama!"));
             exit();
         }
-       
+    
         $check = $conn->prepare("SELECT id FROM kelas WHERE id = ? AND jurusan_id = ?");
         $check->bind_param("ii", $new_kelas_id, $user['jurusan_id']);
         $check->execute();
@@ -573,8 +608,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             header("Location: profil.php?error=" . urlencode("Kelas tidak valid!"));
             exit();
         }
-       
-        $update = $conn->prepare("UPDATE users SET kelas_id = ? WHERE id = ?");
+    
+        $update = $conn->prepare("UPDATE siswa_profiles SET kelas_id = ? WHERE user_id = ?");
         $update->bind_param("ii", $new_kelas_id, $_SESSION['user_id']);
         if ($update->execute()) {
             $kelas_query = $conn->prepare("SELECT k.nama_kelas, tk.nama_tingkatan AS nama_tingkatan
@@ -584,17 +619,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $kelas_query->bind_param("i", $new_kelas_id);
             $kelas_query->execute();
             $kelas_data = $kelas_query->get_result()->fetch_assoc();
-           
+        
             $notif_message = "Kelas kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami.";
             insertNotification($conn, $_SESSION['user_id'], $notif_message);
-           
+        
             if ($user['email']) {
                 $email_body = getEmailTemplate(
                     "Pemberitahuan Perubahan Kelas",
-                    "Yth. {$user['nama']},",
-                    "Kelas Anda telah diperbarui menjadi <strong>{$kelas_data['nama_tingkatan']} {$kelas_data['nama_kelas']}</strong>.",
-                    "<p style='font-size: calc(0.8rem + 0.1vw); color: #666666; margin: 20px 0 0 0;'>Tanggal Perubahan: <strong>" . getIndonesianMonth(date('Y-m-d')) . ", " . date('H:i:s') . " WIB</strong></p>
-                    <p style='font-size: calc(0.8rem + 0.1vw); color: #666666;'>Jika Anda tidak melakukan perubahan ini, segera hubungi kami.</p>"
+                    "Kelas kamu telah diubah pada " . date('d/m/Y H:i') . " WIB. Jika kamu tidak melakukan ini hubungi kami."
                 );
                 sendEmail($user['email'], "Perubahan Kelas", $email_body);
             }
@@ -604,14 +636,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         }
         header("Location: profil.php?error=" . urlencode("Gagal mengubah kelas!"));
         exit();
-       
+    
     } elseif (isset($_POST['logout'])) {
         session_destroy();
-        header("Location: ../../pages/login.php");
+        header("Location: " . BASE_URL . "/pages/login.php");
         exit();
     }
 }
-
 function formatRupiah($amount) {
     return 'Rp ' . number_format($amount, 0, '.', '.');
 }
@@ -621,7 +652,7 @@ function formatRupiah($amount) {
 <head>
     <title>Profil - SCHOBANK</title>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="format-detection" content="telephone=no">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -633,7 +664,7 @@ function formatRupiah($amount) {
             padding: 0;
             box-sizing: border-box;
         }
-        
+     
         :root {
             --elegant-dark: #2c3e50;
             --elegant-gray: #434343;
@@ -658,7 +689,7 @@ function formatRupiah($amount) {
             --radius: 12px;
             --radius-lg: 16px;
         }
-        
+     
         body {
             font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--gray-50);
@@ -667,12 +698,12 @@ function formatRupiah($amount) {
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             padding-top: 70px;
-            padding-bottom: 80px;
+            padding-bottom: 100px;
             display: flex;
             flex-direction: column;
             min-height: 100vh;
         }
-        
+     
         /* iOS Date Input Fixes */
         input[type="date"] {
             -webkit-appearance: none;
@@ -681,7 +712,7 @@ function formatRupiah($amount) {
             font-size: 16px !important; /* Prevent zoom on iOS */
             min-height: 44px; /* iOS tap target */
         }
-        
+     
         /* iOS Safari specific */
         @supports (-webkit-touch-callout: none) {
             input[type="date"] {
@@ -693,18 +724,18 @@ function formatRupiah($amount) {
                 border-radius: var(--radius);
                 font-family: 'Poppins', sans-serif;
             }
-            
+         
             input[type="date"]::-webkit-date-and-time-value {
                 text-align: left;
             }
-            
+         
             input[type="date"]::-webkit-calendar-picker-indicator {
                 position: absolute;
                 right: 12px;
                 opacity: 0.6;
             }
         }
-        
+     
         /* Top Navigation */
         .top-nav {
             position: fixed;
@@ -720,13 +751,13 @@ function formatRupiah($amount) {
             z-index: 100;
             height: 70px;
         }
-        
+     
         .nav-brand {
             display: flex;
             align-items: center;
             height: 100%;
         }
-        
+     
         .nav-logo {
             height: 45px;
             width: auto;
@@ -735,13 +766,13 @@ function formatRupiah($amount) {
             object-position: left center;
             display: block;
         }
-        
+     
         .nav-actions {
             display: flex;
             gap: 12px;
             align-items: center;
         }
-        
+     
         .nav-btn {
             width: 40px;
             height: 40px;
@@ -759,13 +790,13 @@ function formatRupiah($amount) {
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
             text-decoration: none;
         }
-        
+     
         .nav-btn:hover {
             background: var(--white);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
             transform: scale(1.05);
         }
-        
+     
         /* Container */
         .container {
             max-width: 1200px;
@@ -773,13 +804,13 @@ function formatRupiah($amount) {
             padding: 20px;
             flex: 1;
         }
-        
+     
         /* Page Header */
         .page-header {
             margin-bottom: 32px;
             text-align: center;
         }
-        
+     
         .profile-avatar {
             width: 80px;
             height: 80px;
@@ -794,7 +825,7 @@ function formatRupiah($amount) {
             color: var(--white);
             text-transform: uppercase;
         }
-        
+     
         .page-title {
             font-size: 24px;
             font-weight: 700;
@@ -802,25 +833,25 @@ function formatRupiah($amount) {
             margin-bottom: 4px;
             letter-spacing: -0.5px;
         }
-        
+     
         .page-subtitle {
             font-size: 14px;
             color: var(--gray-500);
             font-weight: 400;
         }
-        
+     
         /* Profile Container */
         .profile-container {
             background: transparent;
             border-radius: 0;
             margin-bottom: 24px;
         }
-        
+     
         .section {
             padding: 0;
             margin-bottom: 32px;
         }
-        
+     
         .section-title {
             background: transparent;
             color: var(--gray-900);
@@ -835,13 +866,13 @@ function formatRupiah($amount) {
             letter-spacing: -0.3px;
             margin-bottom: 16px;
         }
-        
+     
         .section-title i {
             font-size: 18px;
             color: var(--elegant-dark);
             flex-shrink: 0;
         }
-        
+     
         .menu-item {
             display: flex;
             align-items: center;
@@ -854,47 +885,45 @@ function formatRupiah($amount) {
             border-radius: var(--radius);
             margin-bottom: 8px;
         }
-        
+     
         .menu-item:last-child {
             border-bottom: none;
         }
-        
+     
         .menu-item:hover {
             background: var(--gray-50);
         }
-        
+     
         .menu-item.logout-item {
             background: #fee2e2;
             cursor: pointer;
         }
-        
+     
         .menu-item.logout-item:hover {
             background: #fecaca;
         }
-        
+     
         .menu-icon {
             width: 40px;
             height: 40px;
-            background: var(--gray-100);
-            border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             justify-content: center;
             margin-right: 16px;
             flex-shrink: 0;
         }
-        
+     
         .menu-icon i {
             color: var(--gray-600);
             font-size: 16px;
         }
-        
+     
         .menu-content {
             flex: 1;
             min-width: 0;
             overflow: hidden;
         }
-        
+     
         .menu-label {
             font-size: 12px;
             color: var(--gray-500);
@@ -903,7 +932,7 @@ function formatRupiah($amount) {
             text-transform: uppercase;
             letter-spacing: 0.3px;
         }
-        
+     
         .menu-value {
             font-size: 14px;
             color: var(--gray-900);
@@ -914,25 +943,25 @@ function formatRupiah($amount) {
             word-break: break-word;
             flex-wrap: wrap;
         }
-        
+     
         .menu-value.status-aktif {
             color: var(--success);
         }
-        
+     
         .menu-value.status-dibekukan,
         .menu-value.status-terblokir-sementara {
             color: var(--danger);
         }
-        
+     
         .menu-value.copyable {
             cursor: pointer;
             transition: opacity 0.2s ease;
         }
-        
+     
         .menu-value.copyable:hover {
             opacity: 0.8;
         }
-        
+     
         .menu-arrow {
             color: var(--gray-500);
             font-size: 14px;
@@ -940,15 +969,15 @@ function formatRupiah($amount) {
             flex-shrink: 0;
             margin-left: 8px;
         }
-        
+     
         .menu-item:hover .menu-arrow {
             color: var(--gray-900);
         }
-        
+     
         .menu-arrow.hidden {
             display: none;
         }
-        
+     
         .status-badge {
             background: var(--success);
             color: var(--white);
@@ -959,22 +988,22 @@ function formatRupiah($amount) {
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        
+     
         .status-badge.dibekukan,
         .status-badge.terblokir-sementara {
             background: var(--danger);
         }
-        
+     
         .copy-icon {
             font-size: 14px;
             opacity: 0.8;
             transition: opacity 0.2s ease;
         }
-        
+     
         .menu-value:hover .copy-icon {
             opacity: 1;
         }
-        
+     
         /* Modal */
         .modal {
             display: none;
@@ -986,13 +1015,13 @@ function formatRupiah($amount) {
             height: 100%;
             background-color: rgba(0, 0, 0, 0.5);
         }
-        
+     
         .modal.active {
             display: flex !important;
             align-items: center;
             justify-content: center;
         }
-        
+     
         .modal-content {
             background: var(--white);
             margin: 1rem;
@@ -1006,7 +1035,7 @@ function formatRupiah($amount) {
             max-height: 90vh;
             overflow-y: auto;
         }
-        
+     
         @keyframes zoomIn {
             from {
                 opacity: 0;
@@ -1017,7 +1046,7 @@ function formatRupiah($amount) {
                 transform: scale(1);
             }
         }
-        
+     
         .modal-header {
             display: flex;
             justify-content: space-between;
@@ -1026,7 +1055,7 @@ function formatRupiah($amount) {
             padding-bottom: 12px;
             border-bottom: 1px solid var(--gray-200);
         }
-        
+     
         .modal-header h3 {
             margin: 0;
             font-size: 18px;
@@ -1036,13 +1065,13 @@ function formatRupiah($amount) {
             align-items: center;
             flex: 1;
         }
-        
+     
         .modal-header h3 i {
             margin-right: 8px;
             font-size: 16px;
             color: var(--gray-600);
         }
-        
+     
         .modal-header .close-modal {
             background: none;
             border: none;
@@ -1053,15 +1082,15 @@ function formatRupiah($amount) {
             line-height: 1;
             flex-shrink: 0;
         }
-        
+     
         .modal-header .close-modal:hover {
             color: var(--gray-900);
         }
-        
+     
         .modal-body {
             margin-bottom: 20px;
         }
-        
+     
         .modal-footer {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -1069,18 +1098,18 @@ function formatRupiah($amount) {
             padding-top: 12px;
             border-top: 1px solid var(--gray-200);
         }
-        
+     
         .modal-footer-single {
             display: flex;
             justify-content: center;
             padding-top: 12px;
             border-top: 1px solid var(--gray-200);
         }
-        
+     
         .form-group {
             margin-bottom: 20px;
         }
-        
+     
         .form-group label {
             display: block;
             margin-bottom: 6px;
@@ -1088,7 +1117,7 @@ function formatRupiah($amount) {
             font-weight: 600;
             color: var(--gray-700);
         }
-        
+     
         .form-group input,
         .form-group select,
         .form-group textarea {
@@ -1101,7 +1130,7 @@ function formatRupiah($amount) {
             background: var(--white);
             font-family: 'Poppins', sans-serif;
         }
-        
+     
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
@@ -1109,38 +1138,38 @@ function formatRupiah($amount) {
             box-shadow: 0 0 0 3px rgba(44, 62, 80, 0.1);
             outline: none;
         }
-        
+     
         .form-group select {
             appearance: none;
             background: var(--white) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236c757d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>") no-repeat right 12px center / 12px 12px;
             padding-right: 40px;
         }
-        
+     
         .form-group textarea {
             resize: vertical;
             min-height: 80px;
         }
-        
+     
         .form-group small {
             display: block;
             margin-top: 4px;
             font-size: 12px;
             color: var(--gray-500);
         }
-        
+     
         .form-group .checkbox-container {
             display: flex;
             align-items: center;
             margin-top: 8px;
         }
-        
+     
         .form-group .checkbox-container input[type="checkbox"] {
             width: 16px;
             height: 16px;
             margin-right: 8px;
             accent-color: var(--elegant-dark);
         }
-        
+     
         .form-group .checkbox-container label {
             font-size: 13px;
             color: var(--gray-600);
@@ -1148,11 +1177,11 @@ function formatRupiah($amount) {
             margin: 0;
             font-weight: 400;
         }
-        
+     
         .password-requirements {
             margin-top: 8px;
         }
-        
+     
         .requirement-item {
             display: flex;
             align-items: center;
@@ -1160,7 +1189,7 @@ function formatRupiah($amount) {
             color: var(--gray-600);
             margin-bottom: 4px;
         }
-        
+     
         .requirement-icon {
             margin-right: 8px;
             font-size: 10px;
@@ -1168,15 +1197,15 @@ function formatRupiah($amount) {
             width: 12px;
             text-align: center;
         }
-        
+     
         .requirement-fulfilled .requirement-icon {
             color: var(--success);
         }
-        
+     
         .requirement-unfulfilled .requirement-icon {
             color: var(--danger);
         }
-        
+     
         .pin-match-label {
             font-size: 12px;
             margin-top: 4px;
@@ -1184,15 +1213,15 @@ function formatRupiah($amount) {
             transition: color 0.3s ease;
             font-weight: 600;
         }
-        
+     
         .pin-match-unmatched {
             color: var(--danger);
         }
-        
+     
         .pin-match-matched {
             color: var(--success);
         }
-        
+     
         /* Buttons */
         .btn {
             padding: 12px 20px;
@@ -1208,21 +1237,21 @@ function formatRupiah($amount) {
             justify-content: center;
             gap: 4px;
         }
-        
+     
         .btn-primary {
             background: var(--elegant-dark);
             color: var(--white);
         }
-        
+     
         .btn-primary:hover {
             background: var(--elegant-gray);
             transform: translateY(-1px);
         }
-        
+     
         .btn-primary.btn-loading span {
             display: none;
         }
-        
+     
         .btn-primary.btn-loading::after {
             content: '';
             display: inline-block;
@@ -1234,108 +1263,71 @@ function formatRupiah($amount) {
             animation: spin 0.8s linear infinite;
             margin-left: 0;
         }
-        
+     
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
+     
         .btn-outline {
             background: transparent;
             color: var(--elegant-dark);
             border: 1px solid var(--gray-300);
         }
-        
+     
         .btn-outline:hover {
             background: var(--gray-100);
             transform: translateY(-1px);
         }
-        
-        /* Bottom Navigation */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--gray-50);
-            border-top: none;
-            padding: 12px 20px 20px;
-            display: flex;
-            justify-content: space-around;
-            z-index: 100;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            transform: translateY(0);
-            opacity: 1;
-        }
-        
-        .nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            text-decoration: none;
-            color: var(--gray-400);
-            transition: all 0.2s ease;
-            padding: 8px 16px;
-        }
-        
-        .nav-item i {
-            font-size: 22px;
-            transition: color 0.2s ease;
-        }
-        
-        .nav-item span {
-            font-size: 11px;
-            font-weight: 600;
-            transition: color 0.2s ease;
-        }
-        
-        .nav-item:hover i,
-        .nav-item:hover span,
-        .nav-item.active i,
-        .nav-item.active span {
-            color: var(--elegant-dark);
-        }
-        
+     
         /* Responsive */
         @media (max-width: 768px) {
+            body {
+                padding-bottom: 110px;
+            }
             .container {
                 padding: 16px;
             }
-            
+         
             .menu-item {
                 padding: 14px 16px;
             }
-            
+         
             .section-title {
                 padding: 0 0 10px 0;
             }
-            
+         
             .menu-icon {
                 width: 36px;
                 height: 36px;
                 margin-right: 12px;
             }
-            
+         
             .modal-content {
                 margin: 1rem;
                 width: calc(100% - 2rem);
                 max-width: none;
             }
-            
+         
             .profile-avatar {
                 width: 64px;
                 height: 64px;
                 font-size: 24px;
             }
-            
+         
             .page-title {
                 font-size: 20px;
             }
-            
+         
             .nav-logo {
                 height: 38px;
                 max-width: 140px;
+            }
+        }
+       
+        @media (max-width: 480px) {
+            body {
+                padding-bottom: 115px;
             }
         }
     </style>
@@ -1344,10 +1336,9 @@ function formatRupiah($amount) {
     <!-- Top Navigation -->
     <nav class="top-nav">
         <div class="nav-brand">
-            <img src="/schobank/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
+            <img src="<?= ASSETS_URL ?>/images/header.png" alt="SCHOBANK" class="nav-logo">
         </div>
     </nav>
-
     <!-- Main Container -->
     <div class="container">
         <?php if ($error): ?>
@@ -1360,7 +1351,7 @@ function formatRupiah($amount) {
                 });
             </script>
         <?php endif; ?>
-        
+     
         <?php if (isset($_SESSION['success_message'])): ?>
             <script>
                 Swal.fire({
@@ -1372,7 +1363,7 @@ function formatRupiah($amount) {
             </script>
             <?php unset($_SESSION['success_message']); ?>
         <?php endif; ?>
-        
+     
         <?php if ($message): ?>
             <script>
                 Swal.fire({
@@ -1383,7 +1374,6 @@ function formatRupiah($amount) {
                 });
             </script>
         <?php endif; ?>
-
         <!-- Page Header -->
         <div class="page-header">
             <div class="profile-avatar">
@@ -1403,14 +1393,13 @@ function formatRupiah($amount) {
             <h1 class="page-title"><?php echo htmlspecialchars($user['nama']); ?></h1>
             <p class="page-subtitle"><?php echo htmlspecialchars($user['nama_jurusan']); ?></p>
         </div>
-
         <div class="profile-container">
             <!-- Personal Information Section -->
             <div class="section">
                 <div class="section-title">
                     <i class="fas fa-user"></i> Informasi Pribadi
                 </div>
-               
+            
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-calendar-alt"></i>
@@ -1423,7 +1412,6 @@ function formatRupiah($amount) {
                         <i class="fas fa-edit menu-arrow" data-target="tanggalLahirModal"></i>
                     <?php endif; ?>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-venus-mars"></i>
@@ -1436,7 +1424,6 @@ function formatRupiah($amount) {
                         <i class="fas fa-edit menu-arrow" data-target="jenisKelaminModal"></i>
                     <?php endif; ?>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-id-card"></i>
@@ -1449,7 +1436,6 @@ function formatRupiah($amount) {
                         <i class="fas fa-edit menu-arrow" data-target="nisnModal"></i>
                     <?php endif; ?>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-map-marker-alt"></i>
@@ -1460,7 +1446,6 @@ function formatRupiah($amount) {
                     </div>
                     <i class="fas fa-edit menu-arrow" data-target="alamatModal"></i>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-school"></i>
@@ -1472,13 +1457,12 @@ function formatRupiah($amount) {
                     <i class="fas fa-edit menu-arrow" data-target="tingkatankelasModal"></i>
                 </div>
             </div>
-
             <!-- Rekening Information Section -->
             <div class="section">
                 <div class="section-title">
                     <i class="fas fa-credit-card"></i> Informasi Rekening
                 </div>
-               
+            
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-university"></i>
@@ -1493,7 +1477,6 @@ function formatRupiah($amount) {
                         </div>
                     </div>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-wallet"></i>
@@ -1504,13 +1487,12 @@ function formatRupiah($amount) {
                     </div>
                 </div>
             </div>
-
             <!-- Account Settings Section -->
             <div class="section">
                 <div class="section-title">
                     <i class="fas fa-cog"></i> Pengaturan Akun
                 </div>
-               
+            
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-at"></i>
@@ -1524,7 +1506,6 @@ function formatRupiah($amount) {
                     </div>
                     <i class="fas fa-edit menu-arrow" data-target="usernameModal"></i>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-shield-alt"></i>
@@ -1535,7 +1516,6 @@ function formatRupiah($amount) {
                     </div>
                     <i class="fas fa-edit menu-arrow" data-target="passwordModal"></i>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-fingerprint"></i>
@@ -1546,7 +1526,6 @@ function formatRupiah($amount) {
                     </div>
                     <i class="fas fa-edit menu-arrow" data-target="pinModal"></i>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-envelope"></i>
@@ -1557,7 +1536,6 @@ function formatRupiah($amount) {
                     </div>
                     <i class="fas fa-edit menu-arrow" data-target="emailModal"></i>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-check-circle"></i>
@@ -1571,7 +1549,6 @@ function formatRupiah($amount) {
                         </div>
                     </div>
                 </div>
-
                 <div class="menu-item">
                     <div class="menu-icon">
                         <i class="fas fa-calendar-plus"></i>
@@ -1581,7 +1558,6 @@ function formatRupiah($amount) {
                         <div class="menu-value"><?php echo getIndonesianMonth($user['tanggal_bergabung']); ?></div>
                     </div>
                 </div>
-
                 <!-- Logout Item -->
                 <form method="POST" id="logoutForm" style="display: none;">
                     <input type="hidden" name="logout">
@@ -1599,27 +1575,8 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
-    <!-- Bottom Navigation -->
-    <div class="bottom-nav">
-        <a href="dashboard.php" class="nav-item">
-            <i class="fas fa-home"></i>
-            <span>Beranda</span>
-        </a>
-        <a href="cek_mutasi.php" class="nav-item">
-            <i class="fas fa-list-alt"></i>
-            <span>Mutasi</span>
-        </a>
-        <a href="aktivitas.php" class="nav-item">
-            <i class="fas fa-history"></i>
-            <span>Aktivitas</span>
-        </a>
-        <a href="profil.php" class="nav-item active">
-            <i class="fas fa-user"></i>
-            <span>Profil</span>
-        </a>
-    </div>
-
+    <!-- Bottom Navigation - Included from separate file -->
+    <?php include 'bottom_navbar.php'; ?>
     <!-- Modal Username -->
     <div id="usernameModal" class="modal">
         <div class="modal-content">
@@ -1641,7 +1598,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal Email -->
     <div id="emailModal" class="modal">
         <div class="modal-content">
@@ -1663,7 +1619,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal Password -->
     <div id="passwordModal" class="modal">
         <div class="modal-content">
@@ -1716,7 +1671,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal PIN -->
     <div id="pinModal" class="modal">
         <div class="modal-content">
@@ -1767,7 +1721,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal Alamat -->
     <div id="alamatModal" class="modal">
         <div class="modal-content">
@@ -1789,7 +1742,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal Tanggal Lahir -->
     <div id="tanggalLahirModal" class="modal">
         <div class="modal-content">
@@ -1812,7 +1764,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal Jenis Kelamin -->
     <div id="jenisKelaminModal" class="modal">
         <div class="modal-content">
@@ -1839,7 +1790,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal NISN -->
     <div id="nisnModal" class="modal">
         <div class="modal-content">
@@ -1862,7 +1812,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <!-- Modal Tingkatan Kelas -->
     <div id="tingkatankelasModal" class="modal">
         <div class="modal-content">
@@ -1901,7 +1850,6 @@ function formatRupiah($amount) {
             </div>
         </div>
     </div>
-
     <script>
         // Logout confirmation
         function confirmLogout() {
@@ -1920,7 +1868,6 @@ function formatRupiah($amount) {
                 }
             });
         }
-
         document.addEventListener('DOMContentLoaded', function() {
             // Copy functionality
             document.querySelectorAll('.copyable').forEach(el => {
@@ -1944,7 +1891,6 @@ function formatRupiah($amount) {
                     }
                 });
             });
-
             // Reset form function
             function resetForm(modalId) {
                 const modal = document.getElementById(modalId);
@@ -1952,7 +1898,7 @@ function formatRupiah($amount) {
                 if (form) {
                     form.reset();
                 }
-               
+            
                 if (modalId === 'tingkatankelasModal') {
                     const tingkatanSelect = document.getElementById('new_tingkatan_kelas_id');
                     const kelasSelect = document.getElementById('new_kelas_id');
@@ -1964,35 +1910,35 @@ function formatRupiah($amount) {
                         kelasSelect.disabled = true;
                     }
                 }
-               
+            
                 if (modalId === 'alamatModal') {
                     const alamatInput = document.getElementById('alamat_lengkap');
                     if (alamatInput) {
                         alamatInput.value = '<?php echo htmlspecialchars($user['alamat_lengkap'] ?? ''); ?>';
                     }
                 }
-               
+            
                 if (modalId === 'tanggalLahirModal') {
                     const tanggalInput = document.getElementById('tanggal_lahir');
                     if (tanggalInput) {
                         tanggalInput.value = '<?php echo htmlspecialchars($user['tanggal_lahir'] ?? ''); ?>';
                     }
                 }
-               
+            
                 if (modalId === 'nisnModal') {
                     const nisnInput = document.getElementById('nis_nisn');
                     if (nisnInput) {
                         nisnInput.value = '<?php echo htmlspecialchars($user['nis_nisn'] ?? ''); ?>';
                     }
                 }
-                
+             
                 if (modalId === 'jenisKelaminModal') {
                     const jkSelect = document.getElementById('jenis_kelamin');
                     if (jkSelect) {
                         jkSelect.value = '<?php echo htmlspecialchars($user['jenis_kelamin'] ?? ''); ?>';
                     }
                 }
-               
+            
                 modal.querySelectorAll('.checkbox-container input[type="checkbox"]').forEach(checkbox => {
                     checkbox.checked = false;
                     const input = document.getElementById(checkbox.dataset.target);
@@ -2000,7 +1946,7 @@ function formatRupiah($amount) {
                         input.type = 'password';
                     }
                 });
-               
+            
                 if (modalId === 'passwordModal') {
                     const requirements = document.getElementById('passwordRequirements').querySelectorAll('.requirement-item');
                     requirements.forEach(item => {
@@ -2014,7 +1960,7 @@ function formatRupiah($amount) {
                         confirmMatchLabel.textContent = 'Tidak cocok';
                     }
                 }
-               
+            
                 if (modalId === 'pinModal') {
                     const requirements = document.getElementById('pinRequirements').querySelectorAll('.requirement-item');
                     requirements.forEach(item => {
@@ -2029,17 +1975,15 @@ function formatRupiah($amount) {
                     }
                 }
             }
-
             // Fetch kelas based on tingkatan_kelas_id
             function fetchKelas(tingkatanId) {
                 const kelasSelect = document.getElementById('new_kelas_id');
                 kelasSelect.innerHTML = '<option value="">Pilih Kelas</option>';
-               
                 if (!tingkatanId) {
                     kelasSelect.disabled = true;
                     return;
                 }
-               
+            
                 fetch(`get_kelas.php?tingkatan_kelas_id=${tingkatanId}&jurusan_id=<?php echo $user['jurusan_id'] ?? ''; ?>`)
                     .then(response => response.json())
                     .then(data => {
@@ -2061,7 +2005,6 @@ function formatRupiah($amount) {
                         kelasSelect.disabled = true;
                     });
             }
-
             // Checkbox show/hide functionality
             document.querySelectorAll('.checkbox-container input[type="checkbox"]').forEach(checkbox => {
                 checkbox.addEventListener('change', () => {
@@ -2071,7 +2014,6 @@ function formatRupiah($amount) {
                     }
                 });
             });
-
             // Modal handling
             document.querySelectorAll('.menu-arrow[data-target]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -2084,7 +2026,6 @@ function formatRupiah($amount) {
                     }
                 });
             });
-
             document.querySelectorAll('.close-modal').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const modal = btn.closest('.modal');
@@ -2094,14 +2035,12 @@ function formatRupiah($amount) {
                     }
                 });
             });
-
             window.addEventListener('click', (e) => {
                 if (e.target.classList.contains('modal')) {
                     e.target.classList.remove('active');
                     e.target.style.display = 'none';
                 }
             });
-
             // Password requirements check
             const newPasswordInput = document.getElementById('new_password');
             if (newPasswordInput) {
@@ -2110,7 +2049,7 @@ function formatRupiah($amount) {
                     const requirements = document.getElementById('passwordRequirements').querySelectorAll('.requirement-item');
                     const lengthReq = requirements[0];
                     const letterReq = requirements[1];
-                   
+                
                     if (password.length >= 8) {
                         lengthReq.className = 'requirement-item requirement-fulfilled';
                         lengthReq.querySelector('.requirement-icon').className = 'fas fa-check requirement-icon';
@@ -2118,7 +2057,7 @@ function formatRupiah($amount) {
                         lengthReq.className = 'requirement-item requirement-unfulfilled';
                         lengthReq.querySelector('.requirement-icon').className = 'fas fa-times requirement-icon';
                     }
-                   
+                
                     if (/[A-Za-z]/.test(password)) {
                         letterReq.className = 'requirement-item requirement-fulfilled';
                         letterReq.querySelector('.requirement-icon').className = 'fas fa-check requirement-icon';
@@ -2126,7 +2065,7 @@ function formatRupiah($amount) {
                         letterReq.className = 'requirement-item requirement-unfulfilled';
                         letterReq.querySelector('.requirement-icon').className = 'fas fa-times requirement-icon';
                     }
-                   
+                
                     const confirmPass = document.getElementById('confirm_password').value;
                     const confirmMatchLabel = document.getElementById('confirmMatchLabel');
                     if (password && confirmPass) {
@@ -2143,17 +2082,16 @@ function formatRupiah($amount) {
                     }
                 });
             }
-
             // PIN requirements check
             const newPinInput = document.getElementById('new_pin');
             if (newPinInput) {
                 newPinInput.addEventListener('input', () => {
                     const pin = newPinInput.value.replace(/[^0-9]/g, '');
                     newPinInput.value = pin.slice(0, 6);
-                   
+                
                     const requirements = document.getElementById('pinRequirements').querySelectorAll('.requirement-item');
                     const lengthReq = requirements[0];
-                   
+                
                     if (pin.length === 6) {
                         lengthReq.className = 'requirement-item requirement-fulfilled';
                         lengthReq.querySelector('.requirement-icon').className = 'fas fa-check requirement-icon';
@@ -2161,7 +2099,7 @@ function formatRupiah($amount) {
                         lengthReq.className = 'requirement-item requirement-unfulfilled';
                         lengthReq.querySelector('.requirement-icon').className = 'fas fa-times requirement-icon';
                     }
-                   
+                
                     const confirmPin = document.getElementById('confirm_pin').value;
                     const pinMatchLabel = document.getElementById('pinMatchLabel');
                     if (pin && confirmPin) {
@@ -2178,14 +2116,13 @@ function formatRupiah($amount) {
                     }
                 });
             }
-
             // PIN confirm match
             const confirmPinInput = document.getElementById('confirm_pin');
             if (confirmPinInput) {
                 confirmPinInput.addEventListener('input', () => {
                     const confirmPin = confirmPinInput.value.replace(/[^0-9]/g, '');
                     confirmPinInput.value = confirmPin.slice(0, 6);
-                   
+                
                     const newPin = document.getElementById('new_pin').value;
                     const pinMatchLabel = document.getElementById('pinMatchLabel');
                     if (newPin && confirmPin) {
@@ -2202,7 +2139,6 @@ function formatRupiah($amount) {
                     }
                 });
             }
-
             // Confirm password match
             const confirmPasswordInput = document.getElementById('confirm_password');
             if (confirmPasswordInput) {
@@ -2224,7 +2160,6 @@ function formatRupiah($amount) {
                     }
                 });
             }
-
             // Form validations
             ['passwordForm', 'pinForm', 'tingkatanKelasForm', 'usernameForm', 'emailForm', 'alamatForm', 'tanggalLahirForm', 'nisnForm', 'jenisKelaminForm'].forEach(id => {
                 const form = document.getElementById(id);
@@ -2237,7 +2172,6 @@ function formatRupiah($amount) {
                     });
                 }
             });
-
             // Input validations for PIN fields
             ['current_pin', 'new_pin', 'confirm_pin'].forEach(id => {
                 const input = document.getElementById(id);
@@ -2247,7 +2181,6 @@ function formatRupiah($amount) {
                     });
                 }
             });
-
             // Tingkatan change
             const tingkatanSelect = document.getElementById('new_tingkatan_kelas_id');
             if (tingkatanSelect) {
@@ -2260,7 +2193,7 @@ function formatRupiah($amount) {
                         kelasSelect.disabled = true;
                     }
                 });
-               
+            
                 if (tingkatanSelect.value) {
                     fetchKelas(tingkatanSelect.value);
                 }

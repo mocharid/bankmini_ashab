@@ -1,13 +1,112 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Setor Saldo Admin - Adaptive Path Version
+ * File: pages/admin/setor.php
+ * 
+ * Compatible with:
+ * - Local: schobank/pages/admin/setor.php
+ * - Hosting: public_html/pages/admin/setor.php
+ */
 
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: jika di folder 'pages' atau 'admin'
+if (basename($current_dir) === 'admin') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/auth.php')) {
+    die('Error: File auth.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('Error: File db_connection.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header('Location: ../login.php');
     exit();
 }
 
 $username = $_SESSION['username'] ?? 'Admin';
+
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
 
 <!DOCTYPE html>
@@ -16,11 +115,10 @@ $username = $_SESSION['username'] ?? 'Admin';
     <title>Setor | MY Schobank</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- SweetAlert2 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
@@ -94,9 +192,6 @@ $username = $_SESSION['username'] ?? 'Admin';
             margin-bottom: 10px;
             font-size: 1.6rem;
             font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
 
         .welcome-banner p {
@@ -128,9 +223,6 @@ $username = $_SESSION['username'] ?? 'Admin';
             margin-left: auto;
             margin-right: auto;
         }
-
-        /* DIHAPUS: hover effect */
-        /* .combined-container:hover { ... } */
 
         .steps-section {
             display: flex;
@@ -206,9 +298,6 @@ $username = $_SESSION['username'] ?? 'Admin';
             transition: var(--transition);
         }
 
-        /* DIHAPUS: hover effect */
-        /* .deposit-card:hover, .account-details:hover { ... } */
-
         .account-details {
             display: none;
         }
@@ -253,65 +342,85 @@ $username = $_SESSION['username'] ?? 'Admin';
             width: 100%;
         }
 
+        /* INPUT FIELD - BOTTOM BORDER ONLY */
         .single-rek-input {
             width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            padding: 12px 8px;
+            border: none;
+            border-bottom: 2px solid #ddd;
+            background: transparent;
+            font-size: clamp(1rem, 2vw, 1.1rem);
             text-align: center;
             font-family: 'Courier New', monospace;
             letter-spacing: 2px;
+            font-weight: 700;
             -webkit-appearance: none;
+            transition: var(--transition);
         }
 
         .single-rek-input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-            transform: scale(1.02);
+            outline: none;
+            border-bottom-color: var(--primary-color);
         }
 
         .single-rek-input[aria-invalid="true"] {
-            border-color: var(--danger-color);
+            border-bottom-color: var(--danger-color);
         }
 
         .currency-input {
             position: relative;
         }
 
-        .currency-prefix {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-            pointer-events: none;
-            font-size: clamp(0.9rem, 1.8vw, 1rem);
-        }
-
+        /* INPUT JUMLAH - BOTTOM BORDER ONLY */
         input.currency {
             width: 100%;
-            padding: 12px 40px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            padding: 12px 8px;
+            border: none;
+            border-bottom: 2px solid #ddd;
+            background: transparent;
+            font-size: clamp(1rem, 2vw, 1.1rem);
             line-height: 1.5;
             min-height: 44px;
             transition: var(--transition);
             -webkit-user-select: text;
             user-select: text;
-            background-color: #fff;
+            text-align: center;
+            font-weight: 700;
         }
 
         input.currency:focus {
             outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-            transform: scale(1.02);
+            border-bottom-color: var(--primary-color);
         }
 
         input[aria-invalid="true"] {
-            border-color: var(--danger-color);
+            border-bottom-color: var(--danger-color);
+        }
+
+        /* QUICK AMOUNT BUTTONS */
+        .quick-amounts {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .quick-amount-btn {
+            background: #f0f5ff;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .quick-amount-btn:hover {
+            background: var(--primary-color);
+            color: white;
         }
 
         .error-message {
@@ -414,7 +523,7 @@ $username = $_SESSION['username'] ?? 'Admin';
         }
 
         .detail-value {
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-primary);
         }
 
@@ -538,6 +647,15 @@ $username = $_SESSION['username'] ?? 'Admin';
                 gap: 8px;
                 max-width: 100%;
             }
+
+            .quick-amounts {
+                gap: 8px;
+            }
+
+            .quick-amount-btn {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
         }
 
         @media (max-width: 480px) {
@@ -581,7 +699,7 @@ $username = $_SESSION['username'] ?? 'Admin';
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_admin.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_admin.php'; ?>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
@@ -589,7 +707,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                 <i class="fas fa-bars"></i>
             </span>
             <div class="content">
-                <h2><i class="fas fa-plus-circle"></i> Setor Saldo Siswa</h2>
+                <h2>Setor Saldo Siswa</h2>
                 <p>Layanan penyetoran saldo untuk siswa secara cepat dan aman</p>
             </div>
         </div>
@@ -613,51 +731,55 @@ $username = $_SESSION['username'] ?? 'Admin';
             <div class="transaction-container">
                 <!-- Step 1: Check Account -->
                 <div class="deposit-card" id="checkAccountStep">
-                    <h3 class="section-title"><i class="fas fa-search"></i> Masukkan Nomor Rekening</h3>
+                    <h3 class="section-title">Masukkan Nomor Rekening</h3>
                     <form id="cekRekening" class="deposit-form" novalidate>
                         <div class="form-group">
-                            <label for="no_rekening">No Rekening (8 Digit):</label>
+                            <label for="no_rekening">Nomor Rekening:</label>
                             <input type="text" id="no_rekening" class="single-rek-input" maxlength="8" inputmode="numeric" pattern="[0-9]*" placeholder="00000000" required aria-describedby="rek-error">
                             <span class="error-message" id="rek-error"></span>
                         </div>
                         <button type="submit" id="cekButton" class="btn btn-confirm">
-                            <span class="btn-content"><i class="fas fa-search"></i> Cek Rekening</span>
+                            <span class="btn-content">Cek Rekening</span>
                         </button>
                     </form>
                 </div>
 
                 <!-- Step 2: Input Amount -->
                 <div class="account-details" id="amountDetails">
-                    <h3 class="section-title"><i class="fas fa-user"></i> Detail Rekening</h3>
+                    <h3 class="section-title">Detail Rekening</h3>
                     <div class="detail-row">
                         <div class="detail-label">Nomor Rekening:</div>
-                        <div class="detail-value" id="displayNoRek">-</div>
+                        <div class="detail-value" id="displayNoRek">12345678</div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Nama Pemilik:</div>
-                        <div class="detail-value" id="displayNama">-</div>
+                        <div class="detail-value" id="displayNama">Ahmad Fauzi</div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Jurusan:</div>
-                        <div class="detail-value" id="displayJurusan">-</div>
+                        <div class="detail-value" id="displayJurusan">Rekayasa Perangkat Lunak</div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Kelas:</div>
-                        <div class="detail-value" id="displayKelas">-</div>
+                        <div class="detail-value" id="displayKelas">XII RPL 1</div>
                     </div>
                     <form id="formPenyetoran" class="deposit-form" novalidate>
                         <div class="form-group currency-input">
-                            <label for="jumlah">Jumlah Penyetoran (Rp):</label>
-                            <span class="currency-prefix">Rp</span>
-                            <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="Masukan Jumlah Setoran" inputmode="numeric" required aria-describedby="jumlah-error">
+                            <label for="jumlah">Nominal:</label>
+                            <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="0" inputmode="numeric" required aria-describedby="jumlah-error">
                             <span class="error-message" id="jumlah-error"></span>
+                            <div class="quick-amounts">
+                                <button type="button" class="quick-amount-btn" data-amount="1000">Rp 1.000</button>
+                                <button type="button" class="quick-amount-btn" data-amount="5000">Rp 5.000</button>
+                                <button type="button" class="quick-amount-btn" data-amount="10000">Rp 10.000</button>
+                            </div>
                         </div>
                         <div class="confirm-buttons">
                             <button type="button" id="confirmAmount" class="btn btn-confirm">
-                                <span class="btn-content"><i class="fas fa-arrow-right"></i> Lanjutkan</span>
+                                <span class="btn-content">Lanjutkan</span>
                             </button>
                             <button type="button" id="cancelAmount" class="btn btn-cancel">
-                                <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
+                                <span class="btn-content">Batal</span>
                             </button>
                         </div>
                     </form>
@@ -665,33 +787,33 @@ $username = $_SESSION['username'] ?? 'Admin';
 
                 <!-- Step 3: Confirmation -->
                 <div class="account-details" id="confirmationDetails">
-                    <h3 class="section-title"><i class="fas fa-check-circle"></i> Konfirmasi Penyetoran</h3>
+                    <h3 class="section-title">Konfirmasi Penyetoran</h3>
                     <div class="detail-row">
                         <div class="detail-label">Nomor Rekening:</div>
-                        <div class="detail-value" id="confirmNoRek">-</div>
+                        <div class="detail-value" id="confirmNoRek">12345678</div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Nama Pemilik:</div>
-                        <div class="detail-value" id="confirmNama">-</div>
+                        <div class="detail-value" id="confirmNama">Ahmad Fauzi</div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Jurusan:</div>
-                        <div class="detail-value" id="confirmJurusan">-</div>
+                        <div class="detail-value" id="confirmJurusan">Rekayasa Perangkat Lunak</div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Kelas:</div>
-                        <div class="detail-value" id="confirmKelas">-</div>
+                        <div class="detail-value" id="confirmKelas">XII RPL 1</div>
                     </div>
                     <div class="detail-row">
                         <div class="detail-label">Jumlah Penyetoran:</div>
-                        <div class="detail-value" id="confirmJumlah">-</div>
+                        <div class="detail-value" id="confirmJumlah">Rp 50.000</div>
                     </div>
                     <div class="confirm-buttons">
                         <button type="button" id="processDeposit" class="btn btn-confirm">
-                            <span class="btn-content"><i class="fas fa-check"></i> Proses</span>
+                            <span class="btn-content">Proses</span>
                         </button>
                         <button type="button" id="backToAmount" class="btn btn-cancel">
-                            <span class="btn-content"><i class="fas fa-arrow-left"></i> Kembali</span>
+                            <span class="btn-content">Kembali</span>
                         </button>
                     </div>
                 </div>
@@ -785,15 +907,15 @@ $username = $_SESSION['username'] ?? 'Admin';
                 rekError.classList.remove('show');
                 accountData = {};
                 depositAmount = 0;
-                document.getElementById('displayNoRek').textContent = '-';
-                document.getElementById('displayNama').textContent = '-';
-                document.getElementById('displayJurusan').textContent = '-';
-                document.getElementById('displayKelas').textContent = '-';
-                document.getElementById('confirmNoRek').textContent = '-';
-                document.getElementById('confirmNama').textContent = '-';
-                document.getElementById('confirmJurusan').textContent = '-';
-                document.getElementById('confirmKelas').textContent = '-';
-                document.getElementById('confirmJumlah').textContent = '-';
+                document.getElementById('displayNoRek').textContent = '12345678';
+                document.getElementById('displayNama').textContent = 'Ahmad Fauzi';
+                document.getElementById('displayJurusan').textContent = 'Rekayasa Perangkat Lunak';
+                document.getElementById('displayKelas').textContent = 'XII RPL 1';
+                document.getElementById('confirmNoRek').textContent = '12345678';
+                document.getElementById('confirmNama').textContent = 'Ahmad Fauzi';
+                document.getElementById('confirmJurusan').textContent = 'Rekayasa Perangkat Lunak';
+                document.getElementById('confirmKelas').textContent = 'XII RPL 1';
+                document.getElementById('confirmJumlah').textContent = 'Rp 50.000';
                 showStep(1);
                 inputRekening.focus();
             }
@@ -831,7 +953,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                 inputRekening.setAttribute('aria-invalid', 'false');
                 rekError.classList.remove('show');
 
-                // Loading SweetAlert2 SERAGAM
+                // Loading SweetAlert2
                 Swal.fire({
                     title: 'Sedang mengecek rekening...',
                     allowOutsideClick: false,
@@ -883,7 +1005,17 @@ $username = $_SESSION['username'] ?? 'Admin';
                 }, 3000);
             });
 
-            // Step 2: Input Amount - Handle submit form untuk Enter key
+            // Quick amount buttons
+            document.querySelectorAll('.quick-amount-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const amount = parseInt(this.getAttribute('data-amount'));
+                    inputJumlah.value = formatRupiahInput(amount);
+                    inputJumlah.setAttribute('aria-invalid', 'false');
+                    jumlahError.classList.remove('show');
+                });
+            });
+
+            // Step 2: Input Amount
             penyetoranForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 confirmAmount.click();
@@ -975,8 +1107,8 @@ $username = $_SESSION['username'] ?? 'Admin';
                     `,
                     icon: 'question',
                     showCancelButton: true,
-                    confirmButtonText: '<i class="fas fa-check"></i> Proses Sekarang',
-                    cancelButtonText: '<i class="fas fa-times"></i> Batal',
+                    confirmButtonText: 'Proses Sekarang',
+                    cancelButtonText: 'Batal',
                     confirmButtonColor: '#1e3a8a',
                     cancelButtonColor: '#e74c3c',
                     width: window.innerWidth < 600 ? '95%' : '600px'

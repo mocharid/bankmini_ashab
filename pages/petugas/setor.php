@@ -1,25 +1,120 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
+/**
+ * Setor Tunai - Petugas
+ * File: pages/petugas/setor.php
+ */
 
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/auth.php')) {
+    die('Error: File auth.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('Error: File db_connection.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'petugas') {
     header('Location: ../login.php');
     exit();
 }
 
 $username = $_SESSION['username'] ?? 'Petugas';
+
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <title>Setor | MY Schobank</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
@@ -37,9 +132,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             --transition: all 0.3s ease;
             --button-width: 140px;
             --button-height: 44px;
-            --scrollbar-track: #1e1b4b;
-            --scrollbar-thumb: #3b82f6;
-            --scrollbar-thumb-hover: #60a5fa;
         }
 
         * {
@@ -47,44 +139,33 @@ $username = $_SESSION['username'] ?? 'Petugas';
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
-            -webkit-text-size-adjust: none;
             -webkit-user-select: none;
             user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: pan-y;
         }
 
-        html {
+        html, body {
             width: 100%;
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
+            -webkit-text-size-adjust: 100%;
         }
 
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
             display: flex;
-            transition: background-color 0.3s ease;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            min-height: 100vh;
-            touch-action: pan-y;
         }
 
         .main-content {
             flex: 1;
             margin-left: 280px;
             padding: 30px;
-            transition: margin-left 0.3s ease;
             max-width: calc(100% - 280px);
-            overflow-y: auto;
-            min-height: 100vh;
         }
-        
-        body.sidebar-active .main-content {
-            opacity: 0.3;
-            pointer-events: none;
-        }
-        
-        /* Welcome Banner - Updated to match previous syntax */
+
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
@@ -98,26 +179,23 @@ $username = $_SESSION['username'] ?? 'Petugas';
             align-items: center;
             gap: 15px;
         }
-        
+
         .welcome-banner .content {
             flex: 1;
         }
-        
+
         .welcome-banner h2 {
             margin-bottom: 10px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            font-size: 1.6rem;
             font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
-        
+
         .welcome-banner p {
-            font-size: clamp(0.85rem, 2vw, 0.9rem);
+            font-size: 0.9rem;
             font-weight: 400;
             opacity: 0.8;
         }
-        
+
         .menu-toggle {
             font-size: 1.5rem;
             cursor: pointer;
@@ -127,17 +205,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
             align-self: center;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
         .combined-container {
             background: white;
             border-radius: 5px;
             padding: 25px;
-            box-shadow: var(--shadow-md);
-            margin-bottom: 30px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 35px;
             animation: slideIn 0.5s ease-out;
             display: flex;
             flex-direction: column;
@@ -147,26 +220,18 @@ $username = $_SESSION['username'] ?? 'Petugas';
             margin-right: auto;
         }
 
-        /* DESKTOP: JARAK STEP LEBIH KECIL */
         .steps-section {
             display: flex;
             justify-content: center;
-            gap: 15px;
+            gap: 80px;
             position: relative;
-            max-width: 500px;
-            margin: 0 auto;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
         }
 
         .step-item {
             display: flex;
             flex-direction: column;
             align-items: center;
-            flex: 0 0 auto;
+            flex: none;
             position: relative;
             z-index: 1;
             padding: 10px;
@@ -195,7 +260,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             text-align: center;
             line-height: 1.2;
             transition: var(--transition);
-            white-space: nowrap;
         }
 
         .step-item.active .step-number {
@@ -239,6 +303,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
             animation: slideIn 0.5s ease-out;
         }
 
+        @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
         .deposit-form {
             display: flex;
             flex-direction: column;
@@ -256,53 +325,110 @@ $username = $_SESSION['username'] ?? 'Petugas';
             position: relative;
         }
 
+        .form-group.error {
+            animation: shake 0.4s ease;
+        }
+
         label {
             font-weight: 500;
             color: var(--text-secondary);
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             text-align: center;
+            display: block;
+            width: 100%;
+        }
+
+        /* INPUT FIELD - BOTTOM BORDER ONLY */
+        .single-rek-input {
+            width: 100%;
+            padding: 12px 8px;
+            border: none;
+            border-bottom: 2px solid #ddd;
+            background: transparent;
+            font-size: clamp(1rem, 2vw, 1.1rem);
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+            font-weight: 700;
+            -webkit-appearance: none;
+            transition: var(--transition);
+        }
+
+        .single-rek-input:focus {
+            outline: none;
+            border-bottom-color: var(--primary-color);
+        }
+
+        .single-rek-input[aria-invalid="true"] {
+            border-bottom-color: var(--danger-color);
         }
 
         .currency-input {
             position: relative;
         }
 
-        .currency-prefix {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-            pointer-events: none;
-            font-size: clamp(0.9rem, 1.8vw, 1rem);
-        }
-
-        input[type="text"],
+        /* INPUT JUMLAH - BOTTOM BORDER ONLY */
         input.currency {
             width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            padding: 12px 8px;
+            border: none;
+            border-bottom: 2px solid #ddd;
+            background: transparent;
+            font-size: clamp(1rem, 2vw, 1.1rem);
             line-height: 1.5;
             min-height: 44px;
             transition: var(--transition);
             -webkit-user-select: text;
             user-select: text;
-            background-color: #fff;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        input.currency:focus {
+            outline: none;
+            border-bottom-color: var(--primary-color);
+        }
+
+        input[aria-invalid="true"] {
+            border-bottom-color: var(--danger-color);
+        }
+
+        /* QUICK AMOUNT BUTTONS */
+        .quick-amounts {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .quick-amount-btn {
+            background: #f0f5ff;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: var(--transition);
+        }
+
+        .quick-amount-btn:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .error-message {
+            color: var(--danger-color);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            margin-top: 4px;
+            display: none;
             text-align: center;
         }
 
-        input.currency {
-            padding-left: 40px;
-        }
-
-        input[type="text"]:focus,
-        input.currency:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-            transform: scale(1.02);
+        .error-message.show {
+            display: block;
         }
 
         .btn {
@@ -320,13 +446,17 @@ $username = $_SESSION['username'] ?? 'Petugas';
             width: var(--button-width);
             height: var(--button-height);
             margin: 0;
-            position: relative;
         }
 
         .btn:hover {
             background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
             box-shadow: var(--shadow-sm);
+        }
+
+        .btn:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
         }
 
         .btn:active {
@@ -342,11 +472,27 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .btn-cancel {
-            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+            background: #f0f0f0;
+            color: var(--text-secondary);
         }
 
         .btn-cancel:hover {
-            background: linear-gradient(135deg, #d32f2f 0%, var(--danger-color) 100%);
+            background: #e0e0e0;
+            transform: translateY(-2px);
+        }
+
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .detail-row {
@@ -373,7 +519,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .detail-value {
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-primary);
         }
 
@@ -399,16 +545,31 @@ $username = $_SESSION['username'] ?? 'Petugas';
             gap: 10px;
         }
 
-        /* Responsive Design for Tablets */
-        @media (max-width: 768px) {
-            .menu-toggle {
-                display: block;
-            }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
 
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+
+        @media (max-width: 768px) {
             .main-content {
                 margin-left: 0;
                 padding: 15px;
                 max-width: 100%;
+            }
+
+            body.sidebar-active .main-content {
+                opacity: 0.3;
+                pointer-events: none;
+            }
+
+            .menu-toggle {
+                display: block;
             }
 
             .welcome-banner {
@@ -416,89 +577,125 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 border-radius: 5px;
                 align-items: center;
             }
-            
+
             .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.4rem);
+                font-size: 1.4rem;
             }
-            
+
             .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.85rem);
+                font-size: 0.85rem;
             }
 
             .combined-container {
                 padding: 15px;
+                border-radius: 5px;
                 max-width: 100%;
             }
 
             .steps-section {
-                gap: 10px;
-                max-width: 100%;
-                justify-content: center;
-                padding: 0 10px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
             }
 
             .step-item {
-                flex-direction: column;
+                flex-direction: row;
                 align-items: center;
-                padding: 5px;
+                width: 100%;
+                margin-bottom: 16px;
+                padding: 5px 0;
             }
 
             .step-number {
-                width: 40px;
-                height: 40px;
-                margin-bottom: 8px;
+                width: 36px;
+                height: 36px;
+                margin-right: 10px;
+                margin-bottom: 0;
                 font-size: clamp(0.9rem, 1.8vw, 1rem);
+                border-radius: 50%;
             }
 
             .step-text {
-                font-size: clamp(0.7rem, 1.5vw, 0.8rem);
-                white-space: nowrap;
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+                text-align: left;
+                max-width: none;
+                margin-bottom: 0;
+            }
+
+            .deposit-card, .account-details {
+                padding: 15px;
+                border-radius: 5px;
+                max-width: 100%;
+            }
+
+            .form-group {
+                max-width: 100%;
+            }
+
+            .btn {
+                width: var(--button-width);
+                height: var(--button-height);
+                font-size: clamp(0.8rem, 1.7vw, 0.9rem);
+                border-radius: 5px;
+            }
+
+            .confirm-buttons {
+                gap: 8px;
+                max-width: 100%;
+            }
+
+            .quick-amounts {
+                gap: 8px;
+            }
+
+            .quick-amount-btn {
+                padding: 6px 12px;
+                font-size: 0.8rem;
             }
         }
 
-        /* Responsive Design for Small Phones */
         @media (max-width: 480px) {
-            .main-content {
-                padding: 10px;
+            body {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
             .welcome-banner {
                 padding: 15px;
                 border-radius: 5px;
             }
-            
+
             .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.8vw, 1.3rem);
+                font-size: clamp(1.2rem, 2.5vw, 1.3rem);
             }
-            
+
             .welcome-banner p {
                 font-size: clamp(0.75rem, 1.8vw, 0.8rem);
             }
 
-            .steps-section {
-                gap: 8px;
-                padding: 0 5px;
+            .section-title {
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
-            .step-item {
-                padding: 3px;
+            .detail-row {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
-            .step-number {
-                width: 36px;
-                height: 36px;
-                margin-bottom: 6px;
-                font-size: 0.85rem;
+            .btn {
+                width: var(--button-width);
+                height: var(--button-height);
+                font-size: clamp(0.75rem, 1.6vw, 0.85rem);
+                border-radius: 5px;
             }
 
-            .step-text {
-                font-size: 0.7rem;
+            .confirm-buttons {
+                gap: 6px;
+                max-width: 100%;
             }
         }
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
@@ -506,8 +703,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 <i class="fas fa-bars"></i>
             </span>
             <div class="content">
-                <h2><i class="fas fa-hand-holding-usd"></i> Setor Tunai</h2>
-                <p>Layanan untuk nasabah menabung</p>
+                <h2>Setor Saldo Siswa</h2>
+                <p>Layanan penyetoran saldo untuk siswa secara cepat dan aman</p>
             </div>
         </div>
 
@@ -527,142 +724,103 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 </div>
             </div>
 
-            <div class="deposit-card" id="checkAccountStep">
-                <h3 class="section-title">Masukkan Nomor Rekening</h3>
-                <form id="cekRekening" class="deposit-form" novalidate>
-                    <div class="form-group">
-                        <label for="no_rekening">No Rekening (8 Digit):</label>
-                        <input type="text" id="no_rekening" name="no_rekening" placeholder="Input nomor rekening" maxlength="8" inputmode="numeric" pattern="[0-9]*" required>
-                    </div>
-                    <button type="submit" id="cekButton" class="btn">
-                        <span class="btn-content">Cek Rekening</span>
-                    </button>
-                </form>
-            </div>
+            <div class="transaction-container">
+                <!-- Step 1: Check Account -->
+                <div class="deposit-card" id="checkAccountStep">
+                    <h3 class="section-title">Masukkan Nomor Rekening</h3>
+                    <form id="cekRekening" class="deposit-form" novalidate>
+                        <div class="form-group">
+                            <label for="no_rekening">Nomor Rekening:</label>
+                            <input type="text" id="no_rekening" class="single-rek-input" maxlength="8" inputmode="numeric" pattern="[0-9]*" placeholder="00000000" required aria-describedby="rek-error">
+                            <span class="error-message" id="rek-error"></span>
+                        </div>
+                        <button type="submit" id="cekButton" class="btn btn-confirm">
+                            <span class="btn-content">Cek Rekening</span>
+                        </button>
+                    </form>
+                </div>
 
-            <div class="account-details" id="amountDetails">
-                <h3 class="section-title">Detail Rekening</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nomor Rekening:</div>
-                    <div class="detail-value" id="displayNoRek">-</div>
+                <!-- Step 2: Input Amount -->
+                <div class="account-details" id="amountDetails">
+                    <h3 class="section-title">Detail Rekening</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">Nomor Rekening:</div>
+                        <div class="detail-value" id="displayNoRek">12345678</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Pemilik:</div>
+                        <div class="detail-value" id="displayNama">Ahmad Fauzi</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan:</div>
+                        <div class="detail-value" id="displayJurusan">Rekayasa Perangkat Lunak</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas:</div>
+                        <div class="detail-value" id="displayKelas">XII RPL 1</div>
+                    </div>
+                    <form id="formPenyetoran" class="deposit-form" novalidate>
+                        <div class="form-group currency-input">
+                            <label for="jumlah">Nominal:</label>
+                            <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="0" inputmode="numeric" required aria-describedby="jumlah-error">
+                            <span class="error-message" id="jumlah-error"></span>
+                            <div class="quick-amounts">
+                                <button type="button" class="quick-amount-btn" data-amount="1000">Rp 1.000</button>
+                                <button type="button" class="quick-amount-btn" data-amount="5000">Rp 5.000</button>
+                                <button type="button" class="quick-amount-btn" data-amount="10000">Rp 10.000</button>
+                            </div>
+                        </div>
+                        <div class="confirm-buttons">
+                            <button type="button" id="confirmAmount" class="btn btn-confirm">
+                                <span class="btn-content">Lanjutkan</span>
+                            </button>
+                            <button type="button" id="cancelAmount" class="btn btn-cancel">
+                                <span class="btn-content">Batal</span>
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Pemilik:</div>
-                    <div class="detail-value" id="displayNama">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan:</div>
-                    <div class="detail-value" id="displayJurusan">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas:</div>
-                    <div class="detail-value" id="displayKelas">-</div>
-                </div>
-                <form id="formSetoran" class="deposit-form">
-                    <div class="form-group currency-input">
-                        <label for="jumlah">Jumlah Setoran (Rp):</label>
-                        <span class="currency-prefix">Rp</span>
-                        <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="Input nominal Setor...." inputmode="numeric" pattern="[0-9]*" required>
+
+                <!-- Step 3: Confirmation -->
+                <div class="account-details" id="confirmationDetails">
+                    <h3 class="section-title">Konfirmasi Penyetoran</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">Nomor Rekening:</div>
+                        <div class="detail-value" id="confirmNoRek">12345678</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Pemilik:</div>
+                        <div class="detail-value" id="confirmNama">Ahmad Fauzi</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan:</div>
+                        <div class="detail-value" id="confirmJurusan">Rekayasa Perangkat Lunak</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas:</div>
+                        <div class="detail-value" id="confirmKelas">XII RPL 1</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jumlah Penyetoran:</div>
+                        <div class="detail-value" id="confirmJumlah">Rp 50.000</div>
                     </div>
                     <div class="confirm-buttons">
-                        <button type="button" id="confirmAmount" class="btn btn-confirm">
-                            <span class="btn-content">Lanjutkan</span>
+                        <button type="button" id="processDeposit" class="btn btn-confirm">
+                            <span class="btn-content">Proses</span>
                         </button>
-                        <button type="button" id="cancelAmount" class="btn btn-cancel">
-                            <span class="btn-content">Batal</span>
+                        <button type="button" id="backToAmount" class="btn btn-cancel">
+                            <span class="btn-content">Kembali</span>
                         </button>
                     </div>
-                </form>
-            </div>
-
-            <div class="account-details" id="confirmationDetails">
-                <h3 class="section-title">Konfirmasi Setoran</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nomor Rekening:</div>
-                    <div class="detail-value" id="confirmNoRek">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Pemilik:</div>
-                    <div class="detail-value" id="confirmNama">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan:</div>
-                    <div class="detail-value" id="confirmJurusan">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas:</div>
-                    <div class="detail-value" id="confirmKelas">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jumlah Setoran:</div>
-                    <div class="detail-value" id="confirmJumlah">-</div>
-                </div>
-                <div class="confirm-buttons">
-                    <button type="button" id="processDeposit" class="btn btn-confirm">
-                        <span class="btn-content">Proses Setoran</span>
-                    </button>
-                    <button type="button" id="backToAmount" class="btn btn-cancel">
-                        <span class="btn-content">Kembali</span>
-                    </button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Prevention scripts
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', function(event) {
-            const now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                event.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, { passive: false });
-
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        document.addEventListener('dblclick', function(event) {
-            event.preventDefault();
-        }, { passive: false });
-
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && (e.key === '+' || e.key === '-' || e.key === '=')) {
-                e.preventDefault();
-            }
-        });
-
         document.addEventListener('DOMContentLoaded', function() {
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            
-            if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
-                });
-            }
-
-            document.addEventListener('click', function(e) {
-                if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                    sidebar.classList.remove('active');
-                    document.body.classList.remove('sidebar-active');
-                }
-            });
-
             const cekForm = document.getElementById('cekRekening');
-            const setoranForm = document.getElementById('formSetoran');
+            const penyetoranForm = document.getElementById('formPenyetoran');
             const checkAccountStep = document.getElementById('checkAccountStep');
             const amountDetails = document.getElementById('amountDetails');
             const confirmationDetails = document.getElementById('confirmationDetails');
@@ -671,50 +829,38 @@ $username = $_SESSION['username'] ?? 'Petugas';
             const step2Indicator = document.getElementById('step2-indicator');
             const step3Indicator = document.getElementById('step3-indicator');
 
-            const inputNoRek = document.getElementById('no_rekening');
+            const inputRekening = document.getElementById('no_rekening');
+            const rekError = document.getElementById('rek-error');
             const inputJumlah = document.getElementById('jumlah');
+            const jumlahError = document.getElementById('jumlah-error');
 
             const cekButton = document.getElementById('cekButton');
             const confirmAmount = document.getElementById('confirmAmount');
             const cancelAmount = document.getElementById('cancelAmount');
             const processDeposit = document.getElementById('processDeposit');
             const backToAmount = document.getElementById('backToAmount');
+            const menuToggle = document.getElementById('menuToggle');
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
 
             let accountData = {};
+            let depositAmount = 0;
 
-            inputNoRek.addEventListener('input', function(e) {
-                let value = this.value.replace(/[^0-9]/g, '');
-                if (value.length > 8) {
-                    value = value.slice(0, 8);
-                }
-                this.value = value;
-            });
+            // Sidebar toggle
+            if (menuToggle && sidebar && mainContent) {
+                menuToggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    sidebar.classList.toggle('active');
+                    document.body.classList.toggle('sidebar-active');
+                });
 
-            inputNoRek.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    cekButton.click();
-                }
-            });
-
-            inputJumlah.addEventListener('input', function(e) {
-                let value = this.value.replace(/[^0-9]/g, '');
-                if (value.length > 8) {
-                    value = value.slice(0, 8);
-                }
-                if (value === '') {
-                    this.value = '';
-                    return;
-                }
-                this.value = formatRupiahInput(value);
-            });
-
-            inputJumlah.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    confirmAmount.click();
-                }
-            });
+                document.addEventListener('click', function(e) {
+                    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+                        sidebar.classList.remove('active');
+                        document.body.classList.remove('sidebar-active');
+                    }
+                });
+            }
 
             function formatRupiahInput(value) {
                 value = parseInt(value) || 0;
@@ -736,7 +882,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 if (activeStep >= 2) {
                     step2Indicator.className = activeStep > 2 ? 'step-item completed' : 'step-item active';
                 }
-                if (activeStep === 3) {
+                if (activeStep >= 3) {
                     step3Indicator.className = 'step-item active';
                 }
             }
@@ -750,213 +896,274 @@ $username = $_SESSION['username'] ?? 'Petugas';
 
             function resetForm() {
                 cekForm.reset();
-                setoranForm.reset();
-                inputNoRek.value = '';
-                inputJumlah.value = '';
-                showStep(1);
+                penyetoranForm.reset();
+                inputRekening.value = '';
+                inputRekening.setAttribute('aria-invalid', 'false');
+                rekError.textContent = '';
+                rekError.classList.remove('show');
                 accountData = {};
+                depositAmount = 0;
+                document.getElementById('displayNoRek').textContent = '12345678';
+                document.getElementById('displayNama').textContent = 'Ahmad Fauzi';
+                document.getElementById('displayJurusan').textContent = 'Rekayasa Perangkat Lunak';
+                document.getElementById('displayKelas').textContent = 'XII RPL 1';
+                document.getElementById('confirmNoRek').textContent = '12345678';
+                document.getElementById('confirmNama').textContent = 'Ahmad Fauzi';
+                document.getElementById('confirmJurusan').textContent = 'Rekayasa Perangkat Lunak';
+                document.getElementById('confirmKelas').textContent = 'XII RPL 1';
+                document.getElementById('confirmJumlah').textContent = 'Rp 50.000';
+                showStep(1);
+                inputRekening.focus();
             }
 
+            // Input rekening hanya angka
+            inputRekening.addEventListener('input', function(e) {
+                let value = this.value.replace(/[^0-9]/g, '').slice(0, 8);
+                this.value = value;
+            });
+
+            inputRekening.addEventListener('paste', function(e) {
+                e.preventDefault();
+                let pasted = (e.clipboardData.getData('text') || '').replace(/[^0-9]/g, '').slice(0, 8);
+                this.value = pasted;
+            });
+
+            // Step 1: Cek Rekening dengan Loading 3 Detik
             cekForm.addEventListener('submit', function(e) {
                 e.preventDefault();
-                const rekening = inputNoRek.value.trim();
-                
-                if (!rekening || rekening.length !== 8 || !/^[0-9]{8}$/.test(rekening)) {
+                const noRek = inputRekening.value.trim();
+
+                if (noRek.length !== 8) {
+                    inputRekening.setAttribute('aria-invalid', 'true');
+                    rekError.textContent = 'Nomor rekening harus 8 digit.';
+                    rekError.classList.add('show');
                     Swal.fire({
                         icon: 'error',
-                        title: 'Nomor Rekening Tidak Valid',
-                        text: 'Nomor rekening harus terdiri dari 8 digit angka',
+                        title: 'Error',
+                        text: 'Nomor rekening harus 8 digit.',
                         confirmButtonColor: '#1e3a8a'
                     });
-                    inputNoRek.focus();
                     return;
                 }
 
+                inputRekening.setAttribute('aria-invalid', 'false');
+                rekError.classList.remove('show');
+
+                // Loading SweetAlert2
                 Swal.fire({
-                    title: 'Memproses...',
-                    html: 'Sedang memeriksa nomor rekening',
+                    title: 'Sedang mengecek rekening...',
                     allowOutsideClick: false,
-                    allowEscapeKey: false,
+                    showConfirmButton: false,
                     didOpen: () => {
                         Swal.showLoading();
                     }
                 });
 
-                fetch('proses_setor.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=cek_rekening&no_rekening=${encodeURIComponent(rekening)}`
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    setTimeout(() => {
+                setTimeout(() => {
+                    fetch('proses_setor.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `action=cek_rekening&no_rekening=${encodeURIComponent(noRek)}`
+                    })
+                    .then(response => response.json())
+                    .then(data => {
                         Swal.close();
-                        if (data.status === 'error') {
+                        if (data.status === 'success') {
+                            accountData = data;
+                            document.getElementById('displayNoRek').textContent = noRek;
+                            document.getElementById('displayNama').textContent = accountData.nama;
+                            document.getElementById('displayJurusan').textContent = accountData.jurusan;
+                            document.getElementById('displayKelas').textContent = accountData.kelas;
+                            showStep(2);
+                            inputJumlah.focus();
+                        } else {
+                            inputRekening.value = '';
+                            inputRekening.focus();
                             Swal.fire({
                                 icon: 'error',
-                                title: 'Gagal',
-                                text: data.message,
+                                title: 'Tidak Ditemukan',
+                                text: data.message || 'Rekening tidak ditemukan.',
                                 confirmButtonColor: '#1e3a8a'
                             });
-                            inputNoRek.value = '';
-                            inputNoRek.focus();
-                            return;
                         }
-                        accountData = data;
-                        document.getElementById('displayNoRek').textContent = data.no_rekening;
-                        document.getElementById('displayNama').textContent = data.nama;
-                        document.getElementById('displayJurusan').textContent = data.jurusan;
-                        document.getElementById('displayKelas').textContent = data.kelas;
-                        showStep(2);
-                        inputJumlah.focus();
-                    }, 3000);
-                })
-                .catch(error => {
-                    setTimeout(() => {
+                    })
+                    .catch(() => {
                         Swal.close();
+                        inputRekening.value = '';
+                        inputRekening.focus();
                         Swal.fire({
                             icon: 'error',
-                            title: 'Kesalahan Sistem',
-                            text: 'Terjadi kesalahan: ' + error.message,
+                            title: 'Error',
+                            text: 'Terjadi kesalahan saat memeriksa rekening.',
                             confirmButtonColor: '#1e3a8a'
                         });
-                        inputNoRek.value = '';
-                        inputNoRek.focus();
-                    }, 3000);
+                    });
+                }, 3000);
+            });
+
+            // Quick amount buttons
+            document.querySelectorAll('.quick-amount-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const amount = parseInt(this.getAttribute('data-amount'));
+                    inputJumlah.value = formatRupiahInput(amount);
+                    inputJumlah.setAttribute('aria-invalid', 'false');
+                    jumlahError.classList.remove('show');
                 });
+            });
+
+            // Step 2: Input Amount
+            penyetoranForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                confirmAmount.click();
+            });
+
+            inputJumlah.addEventListener('input', function(e) {
+                let value = this.value.replace(/[^0-9]/g, '');
+                if (value.length > 8) value = value.slice(0, 8);
+                this.value = value === '' ? '' : formatRupiahInput(value);
+                this.setAttribute('aria-invalid', 'false');
+                jumlahError.classList.remove('show');
             });
 
             confirmAmount.addEventListener('click', function() {
-                let jumlah = inputJumlah.value.replace(/[^0-9]/g, '');
-                jumlah = parseFloat(jumlah);
-                
-                if (isNaN(jumlah) || jumlah < 1) {
+                let amount = parseInt(inputJumlah.value.replace(/[^0-9]/g, '')) || 0;
+                if (amount < 1) {
+                    inputJumlah.setAttribute('aria-invalid', 'true');
+                    jumlahError.textContent = 'Jumlah penyetoran minimal Rp 1.';
+                    jumlahError.classList.add('show');
                     Swal.fire({
-                        icon: 'warning',
-                        title: 'Jumlah Tidak Valid',
-                        text: 'Jumlah setoran minimal Rp 1',
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Jumlah penyetoran minimal Rp 1.',
                         confirmButtonColor: '#1e3a8a'
                     });
-                    inputJumlah.focus();
                     return;
                 }
-                
-                if (jumlah > 99999999) {
+                if (amount > 99999999) {
+                    inputJumlah.setAttribute('aria-invalid', 'true');
+                    jumlahError.textContent = 'Jumlah penyetoran maksimal Rp 99.999.999.';
+                    jumlahError.classList.add('show');
                     Swal.fire({
-                        icon: 'warning',
-                        title: 'Jumlah Terlalu Besar',
-                        text: 'Jumlah setoran maksimal Rp 99.999.999',
+                        icon: 'error',
+                        title: 'Error',
+                        text: 'Jumlah penyetoran maksimal Rp 99.999.999.',
                         confirmButtonColor: '#1e3a8a'
                     });
-                    inputJumlah.focus();
                     return;
                 }
 
-                accountData.jumlah = jumlah;
-                document.getElementById('confirmNoRek').textContent = accountData.no_rekening;
+                depositAmount = amount;
+                document.getElementById('confirmNoRek').textContent = inputRekening.value;
                 document.getElementById('confirmNama').textContent = accountData.nama;
                 document.getElementById('confirmJurusan').textContent = accountData.jurusan;
                 document.getElementById('confirmKelas').textContent = accountData.kelas;
-                document.getElementById('confirmJumlah').textContent = formatRupiah(jumlah);
+                document.getElementById('confirmJumlah').textContent = formatRupiah(amount);
                 showStep(3);
             });
 
-            cancelAmount.addEventListener('click', function() {
+            cancelAmount.addEventListener('click', () => resetForm());
+
+            // Step 3: Proses Setor
+            processDeposit.addEventListener('click', function() {
+                const noRek = inputRekening.value;
+                const nama = accountData.nama;
+                const jurusan = accountData.jurusan;
+                const kelas = accountData.kelas;
+                const jumlah = formatRupiah(depositAmount);
+
                 Swal.fire({
-                    title: 'Batalkan Transaksi?',
-                    text: 'Anda yakin ingin membatalkan transaksi ini?',
-                    icon: 'warning',
+                    title: 'Konfirmasi Penyetoran',
+                    html: `
+                        <div style="text-align:left; font-size:0.95rem; margin:15px 0;">
+                            <div style="background: #f8fafc; border-radius: 5px; padding: 15px; margin-bottom: 10px;">
+                                <div style="display: table; width: 100%; border-collapse: collapse;">
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">No Rekening:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;"><strong>${noRek}</strong></div>
+                                    </div>
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Nama:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${nama}</div>
+                                    </div>
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Jurusan:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${jurusan}</div>
+                                    </div>
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Kelas:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${kelas}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: center; margin-top: 20px; padding: 15px;">
+                                <div style="font-weight: bold; font-size: 1.4rem; margin-bottom: 5px;">Jumlah Penyetoran</div>
+                                <div style="font-weight: bold; font-size: 1.6rem;">${jumlah}</div>
+                            </div>
+                        </div>
+                    `,
+                    icon: 'question',
                     showCancelButton: true,
-                    confirmButtonText: 'Ya, Batalkan',
-                    cancelButtonText: 'Tidak',
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#1e3a8a',
-                    reverseButtons: true
+                    confirmButtonText: 'Proses Sekarang',
+                    cancelButtonText: 'Batal',
+                    confirmButtonColor: '#1e3a8a',
+                    cancelButtonColor: '#e74c3c',
+                    width: window.innerWidth < 600 ? '95%' : '600px'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        resetForm();
-                    }
-                });
-            });
+                        Swal.fire({
+                            title: 'Memproses...',
+                            text: 'Penyetoran sedang diproses',
+                            allowOutsideClick: false,
+                            showConfirmButton: false,
+                            didOpen: () => Swal.showLoading()
+                        });
 
-            processDeposit.addEventListener('click', function() {
-                Swal.fire({
-                    title: 'Memproses Transaksi...',
-                    html: 'Mohon tunggu, sedang memproses setoran',
-                    allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
-
-                fetch('proses_setor.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=setor_tunai&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${accountData.jumlah}&petugas_id=${encodeURIComponent(<?php echo $_SESSION['user_id']; ?>)}`
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    setTimeout(() => {
-                        Swal.close();
-                        if (data.status === 'error') {
+                        fetch('proses_setor.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: `action=setor_tunai&no_rekening=${encodeURIComponent(noRek)}&jumlah=${depositAmount}&petugas_id=${encodeURIComponent(<?php echo $_SESSION['user_id']; ?>)}`
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            Swal.close();
+                            if (data.status === 'success') {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Sukses!',
+                                    text: 'Penyetoran berhasil diproses.',
+                                    confirmButtonColor: '#1e3a8a',
+                                    timer: 3000,
+                                    timerProgressBar: true
+                                }).then(() => resetForm());
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Gagal!',
+                                    text: data.message || 'Gagal memproses penyetoran.',
+                                    confirmButtonColor: '#1e3a8a'
+                                });
+                            }
+                        })
+                        .catch(() => {
+                            Swal.close();
                             Swal.fire({
                                 icon: 'error',
-                                title: 'Transaksi Gagal',
-                                text: data.message,
+                                title: 'Error',
+                                text: 'Terjadi kesalahan saat memproses penyetoran.',
                                 confirmButtonColor: '#1e3a8a'
                             });
-                            return;
-                        }
-                        if (data.email_status === 'failed') {
-                            Swal.fire({
-                                icon: 'warning',
-                                title: 'Transaksi Berhasil',
-                                text: 'Transaksi berhasil, tetapi gagal mengirim bukti transaksi ke email',
-                                confirmButtonColor: '#1e3a8a'
-                            }).then(() => {
-                                resetForm();
-                            });
-                            return;
-                        }
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Berhasil!',
-                            text: data.message,
-                            confirmButtonColor: '#1e3a8a',
-                            timer: 2000
-                        }).then(() => {
-                            resetForm();
                         });
-                    }, 3000);
-                })
-                .catch(error => {
-                    setTimeout(() => {
-                        Swal.close();
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Kesalahan',
-                            text: 'Gagal memproses transaksi: ' + error.message,
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                    }, 3000);
+                    }
                 });
             });
 
-            backToAmount.addEventListener('click', function() {
+            backToAmount.addEventListener('click', () => {
                 showStep(2);
                 inputJumlah.focus();
             });
+
+            // Focus awal
+            inputRekening.focus();
         });
     </script>
 </body>

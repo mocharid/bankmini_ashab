@@ -1,88 +1,166 @@
 <?php
-// sidebar.php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Sidebar Petugas - Adaptive Path Version (Normalized DB)
+ * File: includes/sidebar_petugas.php
+ */
 
-$username   = $_SESSION['username'] ?? 'Petugas';
+// ============================================
+// ADAPTIVE PATH DETECTION (if not already defined)
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    $current_file = __FILE__;
+    $current_dir = dirname($current_file);
+    $project_root = null;
+    
+    // Strategy 1: Check if we're in 'includes' folder
+    if (basename($current_dir) === 'includes') {
+        $project_root = dirname($current_dir);
+    }
+    // Strategy 2: Check if includes/ exists in current dir
+    elseif (is_dir($current_dir . '/includes')) {
+        $project_root = $current_dir;
+    }
+    // Strategy 3: Search upward for includes/ folder (max 5 levels)
+    else {
+        $temp_dir = $current_dir;
+        for ($i = 0; $i < 5; $i++) {
+            $temp_dir = dirname($temp_dir);
+            if (is_dir($temp_dir . '/includes')) {
+                $project_root = $temp_dir;
+                break;
+            }
+        }
+    }
+    
+    if (!$project_root) {
+        $project_root = dirname($current_dir);
+    }
+    
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+
+if (!defined('BASE_URL')) {
+    function getBaseUrlSidebar() {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'];
+        $script = $_SERVER['SCRIPT_NAME'];
+        $base_path = dirname($script);
+        
+        // Remove '/pages/petugas', '/pages/admin', etc.
+        $base_path = preg_replace('#/pages(/[^/]+)?$#', '', $base_path);
+        
+        if ($base_path !== '/' && !empty($base_path)) {
+            $base_path = '/' . ltrim($base_path, '/');
+        }
+        
+        return $protocol . $host . $base_path;
+    }
+    define('BASE_URL', rtrim(getBaseUrlSidebar(), '/'));
+}
+
+// ============================================
+// LOAD AUTH & DB
+// ============================================
+if (!isset($conn)) {
+    require_once PROJECT_ROOT . '/includes/auth.php';
+    require_once PROJECT_ROOT . '/includes/db_connection.php';
+}
+
+$username = $_SESSION['username'] ?? 'Petugas';
 $petugas_id = $_SESSION['user_id'] ?? 0;
 $current_page = basename($_SERVER['PHP_SELF']);
 
-// Cek status blokir operasional bank mini
-$query_block   = "SELECT is_blocked FROM petugas_block_status WHERE id = 1";
-$result_block  = $conn->query($query_block);
-$is_blocked    = $result_block->fetch_assoc()['is_blocked'] ?? 0;
+// ============================================
+// STATUS BLOKIR (Default: tidak ada blocking karena tabel tidak ada)
+// ============================================
+$is_blocked = false;
 
-// Jadwal petugas teller hari ini + join dengan informasi petugas
-$query_schedule = "SELECT pt.*, pi.petugas1_nama, pi.petugas2_nama 
-                   FROM petugas_tugas pt
-                   LEFT JOIN petugas_info pi ON pt.petugas1_id = pi.user_id
-                   WHERE pt.tanggal = CURDATE()";
-$stmt_schedule = $conn->prepare($query_schedule);
-$stmt_schedule->execute();
-$result_schedule = $stmt_schedule->get_result();
-$schedule = $result_schedule->fetch_assoc();
-$stmt_schedule->close();
+// ============================================
+// JADWAL PETUGAS HARI INI (petugas_shift)
+// AMBIL NAMA DARI petugas_profiles
+// ============================================
+$schedule = null;
+$petugas1_nama = '';
+$petugas2_nama = '';
 
-// Nama petugas teller terjadwal hari ini
-$petugas1_nama = $schedule ? $schedule['petugas1_nama'] : '';
-$petugas2_nama = $schedule ? $schedule['petugas2_nama'] : '';
+try {
+    $query_schedule = "SELECT ps.*, 
+                       COALESCE(pp1.petugas1_nama, pp1.petugas2_nama) AS petugas1_nama,
+                       COALESCE(pp2.petugas2_nama, pp2.petugas1_nama) AS petugas2_nama
+                       FROM petugas_shift ps
+                       LEFT JOIN petugas_profiles pp1 ON ps.petugas1_id = pp1.user_id
+                       LEFT JOIN petugas_profiles pp2 ON ps.petugas2_id = pp2.user_id
+                       WHERE ps.tanggal = CURDATE()";
+    $stmt_schedule = $conn->prepare($query_schedule);
+    $stmt_schedule->execute();
+    $result_schedule = $stmt_schedule->get_result();
+    $schedule = $result_schedule->fetch_assoc();
+    $stmt_schedule->close();
 
-// Data absensi hari ini
+    $petugas1_nama = $schedule ? ($schedule['petugas1_nama'] ?? '') : '';
+    $petugas2_nama = $schedule ? ($schedule['petugas2_nama'] ?? '') : '';
+} catch (mysqli_sql_exception $e) {
+    error_log("Sidebar Error: " . $e->getMessage());
+}
+
+// ============================================
+// DATA ABSENSI HARI INI (petugas_status)
+// ============================================
 $attendance_petugas1 = null;
 $attendance_petugas2 = null;
 
-$query_attendance1 = "SELECT * FROM absensi WHERE petugas_type = 'petugas1' AND tanggal = CURDATE()";
-$stmt_attendance1 = $conn->prepare($query_attendance1);
-if ($stmt_attendance1) {
-    $stmt_attendance1->execute();
-    $attendance_petugas1 = $stmt_attendance1->get_result()->fetch_assoc();
-    $stmt_attendance1->close();
+if ($schedule) {
+    try {
+        // Ambil status petugas1
+        $query_attendance1 = "SELECT * FROM petugas_status 
+                             WHERE petugas_shift_id = ? 
+                             AND petugas_type = 'petugas1'";
+        $stmt_attendance1 = $conn->prepare($query_attendance1);
+        $stmt_attendance1->bind_param("i", $schedule['id']);
+        $stmt_attendance1->execute();
+        $attendance_petugas1 = $stmt_attendance1->get_result()->fetch_assoc();
+        $stmt_attendance1->close();
+
+        // Ambil status petugas2
+        $query_attendance2 = "SELECT * FROM petugas_status 
+                             WHERE petugas_shift_id = ? 
+                             AND petugas_type = 'petugas2'";
+        $stmt_attendance2 = $conn->prepare($query_attendance2);
+        $stmt_attendance2->bind_param("i", $schedule['id']);
+        $stmt_attendance2->execute();
+        $attendance_petugas2 = $stmt_attendance2->get_result()->fetch_assoc();
+        $stmt_attendance2->close();
+    } catch (mysqli_sql_exception $e) {
+        error_log("Sidebar Attendance Error: " . $e->getMessage());
+    }
 }
 
-$query_attendance2 = "SELECT * FROM absensi WHERE petugas_type = 'petugas2' AND tanggal = CURDATE()";
-$stmt_attendance2 = $conn->prepare($query_attendance2);
-if ($stmt_attendance2) {
-    $stmt_attendance2->execute();
-    $attendance_petugas2 = $stmt_attendance2->get_result()->fetch_assoc();
-    $stmt_attendance2->close();
-}
-
-// Logika status kehadiran & penutupan layanan
+// ============================================
+// LOGIKA STATUS KEHADIRAN & PENUTUPAN LAYANAN
+// ============================================
 $at_least_one_present = false;
-$all_checked_out      = false;
-$show_thank_you       = false;
+$all_checked_out = false;
+$show_thank_you = false;
 
 if ($schedule) {
-    // Minimal satu petugas teller hadir dan belum cek-out
+    // Petugas1 hadir (status = 'hadir')
+    // Karena tidak ada kolom waktu_keluar di petugas_status, 
+    // kita anggap petugas aktif jika status = 'hadir'
     $petugas1_present = $petugas1_nama && $attendance_petugas1 && 
-                        $attendance_petugas1['petugas1_status'] == 'hadir' && 
-                        !$attendance_petugas1['waktu_keluar'];
+                        $attendance_petugas1['status'] == 'hadir';
 
     $petugas2_present = $petugas2_nama && $attendance_petugas2 && 
-                        $attendance_petugas2['petugas2_status'] == 'hadir' && 
-                        !$attendance_petugas2['waktu_keluar'];
+                        $attendance_petugas2['status'] == 'hadir';
 
     // Sudah melakukan absensi (status apa pun)
-    $petugas1_checked_in = $petugas1_nama && $attendance_petugas1 && $attendance_petugas1['petugas1_status'];
-    $petugas2_checked_in = $petugas2_nama && $attendance_petugas2 && $attendance_petugas2['petugas2_status'];
-
-    // Petugas hadir + sudah cek-out
-    $petugas1_checked_out = $petugas1_nama && $attendance_petugas1 && 
-                            $attendance_petugas1['petugas1_status'] == 'hadir' && 
-                            $attendance_petugas1['waktu_keluar'];
-
-    $petugas2_checked_out = $petugas2_nama && $attendance_petugas2 && 
-                            $attendance_petugas2['petugas2_status'] == 'hadir' && 
-                            $attendance_petugas2['waktu_keluar'];
+    $petugas1_checked_in = $petugas1_nama && $attendance_petugas1 && $attendance_petugas1['status'];
+    $petugas2_checked_in = $petugas2_nama && $attendance_petugas2 && $attendance_petugas2['status'];
 
     $at_least_one_present = $petugas1_present || $petugas2_present;
 
-    // Semua petugas yang terjadwal sudah selesai (cek-out atau status non-hadir)
-    $petugas1_done = !$petugas1_nama || $petugas1_checked_in && 
-                     ($attendance_petugas1['petugas1_status'] != 'hadir' || $petugas1_checked_out);
-
-    $petugas2_done = !$petugas2_nama || $petugas2_checked_in && 
-                     ($attendance_petugas2['petugas2_status'] != 'hadir' || $petugas2_checked_out);
+    // Logika checkout: Jika tidak ada petugas yang hadir (semua non-hadir atau tidak ada status)
+    $petugas1_done = !$petugas1_nama || ($petugas1_checked_in && $attendance_petugas1['status'] != 'hadir');
+    $petugas2_done = !$petugas2_nama || ($petugas2_checked_in && $attendance_petugas2['status'] != 'hadir');
 
     $all_checked_out = $petugas1_done && $petugas2_done;
 
@@ -90,31 +168,33 @@ if ($schedule) {
     $show_thank_you = $all_checked_out && ($petugas1_checked_in || $petugas2_checked_in);
 }
 
-// Pengaturan enable/disable menu berdasarkan status operasional
+// ============================================
+// PENGATURAN ENABLE/DISABLE MENU
+// ============================================
 if ($show_thank_you) {
     // Setelah penutupan operasional harian:
     // hanya Dashboard, Absensi, dan Laporan yang aktif
     $transaksi_enabled = false;
-    $rekening_enabled  = false;
-    $search_enabled    = false;
-    $laporan_enabled   = !$is_blocked;
-    $absensi_enabled   = true;
+    $rekening_enabled = false;
+    $search_enabled = false;
+    $laporan_enabled = !$is_blocked;
+    $absensi_enabled = true;
 } else {
     // Mode operasional normal
     $transaksi_enabled = !$is_blocked && $at_least_one_present;
-    $rekening_enabled  = !$is_blocked && $at_least_one_present;
-    $search_enabled    = !$is_blocked && $at_least_one_present;
-    $laporan_enabled   = !$is_blocked && ($petugas1_checked_in || $petugas2_checked_in);
-    $absensi_enabled   = true;
+    $rekening_enabled = !$is_blocked && $at_least_one_present;
+    $search_enabled = !$is_blocked && $at_least_one_present;
+    $laporan_enabled = !$is_blocked && ($attendance_petugas1 || $attendance_petugas2);
+    $absensi_enabled = true;
 }
 
 $transaksi_pages = ['setor.php', 'tarik.php', 'transfer.php'];
-$rekening_pages  = ['buka_rekening.php', 'tutup_rekening.php', 'ubah_jenis_rekening.php'];
-$search_pages    = ['cek_mutasi.php', 'validasi_transaksi.php', 'cek_saldo.php'];
+$rekening_pages = ['buka_rekening.php', 'tutup_rekening.php', 'ubah_jenis_rekening.php'];
+$search_pages = ['cek_mutasi.php', 'validasi_transaksi.php', 'cek_saldo.php'];
 
 $is_transaksi_active = in_array($current_page, $transaksi_pages);
-$is_rekening_active  = in_array($current_page, $rekening_pages);
-$is_search_active    = in_array($current_page, $search_pages);
+$is_rekening_active = in_array($current_page, $rekening_pages);
+$is_search_active = in_array($current_page, $search_pages);
 ?>
 <!DOCTYPE html>
 <html>
@@ -340,8 +420,11 @@ $is_search_active    = in_array($current_page, $search_pages);
         }
 
         .dropdown-container span {
-            display: block; padding: 10px 20px;
-            color: rgba(255, 255, 255, 0.5); font-size: 0.8rem; font-style: italic;
+            display: block; 
+            padding: 10px 20px;
+            color: rgba(255, 255, 255, 0.5); 
+            font-size: 0.8rem; 
+            font-style: italic;
         }
 
         .logout-btn { color: var(--danger-color); font-weight: 500; }
@@ -350,8 +433,16 @@ $is_search_active    = in_array($current_page, $search_pages);
             .sidebar { transform: translateX(-100%); width: 260px; z-index: 1000; }
             .sidebar.active { transform: translateX(0); }
             body.sidebar-active::before {
-                content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-                background: rgba(0, 0, 0, 0.5); z-index: 999; transition: opacity 0.3s ease; opacity: 1;
+                content: ''; 
+                position: fixed; 
+                top: 0; 
+                left: 0; 
+                width: 100%; 
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5); 
+                z-index: 999; 
+                transition: opacity 0.3s ease; 
+                opacity: 1;
             }
             body:not(.sidebar-active)::before { opacity: 0; pointer-events: none; }
         }
@@ -475,7 +566,7 @@ $is_search_active    = in_array($current_page, $search_pages);
 
                 <!-- Menu Tunggal: Pengaturan Akun -->
                 <div class="menu-item">
-                    <a href="pengaturan_akun.php" class="<?php echo $current_page == 'ganti_password_petugas.php' ? 'active' : ''; ?>">
+                    <a href="pengaturan_akun.php" class="<?php echo $current_page == 'pengaturan_akun.php' ? 'active' : ''; ?>">
                         <i class="fas fa-cog"></i> Pengaturan Akun
                     </a>
                 </div>
@@ -485,7 +576,7 @@ $is_search_active    = in_array($current_page, $search_pages);
 
         <div class="sidebar-footer">
             <div class="menu-item">
-                <a href="../../logout.php" class="logout-btn">
+                <a href="<?= BASE_URL ?>/logout.php" class="logout-btn">
                     <i class="fas fa-sign-out-alt"></i> Keluar dari Sistem
                 </a>
             </div>

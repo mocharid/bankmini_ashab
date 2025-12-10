@@ -1,14 +1,63 @@
 <?php
-/* KELOLA REKENING SISWA */
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Kelola Rekening Siswa - Final Rapih Version
+ * File: pages/admin/kelola_rekening.php
+ */
+
+// ============================================
+// ADAPTIVE PATH & CONFIGURATION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+
+if (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+} elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+} elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+} else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+if (!$project_root) $project_root = $current_dir;
+
+if (!defined('PROJECT_ROOT')) define('PROJECT_ROOT', rtrim($project_root, '/'));
+if (!defined('INCLUDES_PATH')) define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+if (!defined('ASSETS_PATH')) define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    $base_path = dirname($script);
+    $base_path = str_replace('\\', '/', $base_path);
+    $base_path = preg_replace('#/pages.*$#', '', $base_path);
+    if ($base_path !== '/' && !empty($base_path)) $base_path = '/' . ltrim($base_path, '/');
+    return $protocol . $host . $base_path;
+}
+if (!defined('BASE_URL')) define('BASE_URL', rtrim(getBaseUrl(), '/'));
+define('ASSETS_URL', BASE_URL . '/assets');
+
+// ============================================
+// LOGIC & DATABASE
+// ============================================
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
 
 // Ensure TCPDF is included safely
-if (!file_exists('../../tcpdf/tcpdf.php')) {
-    error_log("DEBUG: TCPDF library not found at ../../tcpdf/tcpdf.php");
+if (!file_exists(PROJECT_ROOT . '/tcpdf/tcpdf.php')) {
+    error_log("DEBUG: TCPDF library not found at " . PROJECT_ROOT . "/tcpdf/tcpdf.php");
     die('TCPDF library not found');
 }
-require_once '../../tcpdf/tcpdf.php';
+require_once PROJECT_ROOT . '/tcpdf/tcpdf.php';
 
 // Set timezone to WIB
 date_default_timezone_set('Asia/Jakarta');
@@ -20,7 +69,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Restrict access to admin only
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: ../../pages/login.php?error=' . urlencode('Silakan login sebagai admin terlebih dahulu!'));
+    header('Location: ' . BASE_URL . '/pages/login.php?error=' . urlencode('Silakan login sebagai admin terlebih dahulu!'));
     exit();
 }
 
@@ -121,18 +170,20 @@ if (!$result_kelas) {
     error_log("Error fetching kelas: " . $conn->error);
 }
 
-// Build main query
+// Build main query (adjusted for new schema)
 $where_conditions = [];
 $params = [];
 $types = "";
 
 $query = "SELECT r.id as rekening_id, r.no_rekening, r.saldo,
-                 u.id as user_id, u.nama, u.is_frozen,
+                 u.id as user_id, u.nama, us.is_frozen,
                  j.nama_jurusan, k.nama_kelas, tk.nama_tingkatan
           FROM rekening r
           INNER JOIN users u ON r.user_id = u.id
-          LEFT JOIN jurusan j ON u.jurusan_id = j.id
-          LEFT JOIN kelas k ON u.kelas_id = k.id
+          INNER JOIN siswa_profiles sp ON u.id = sp.user_id
+          LEFT JOIN user_security us ON u.id = us.user_id
+          LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+          LEFT JOIN kelas k ON sp.kelas_id = k.id
           LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
           WHERE u.role = 'siswa'";
 
@@ -146,7 +197,7 @@ if (!empty($search)) {
 }
 
 if (!empty($jurusan_filter)) {
-    $where_conditions[] = "u.jurusan_id = ?";
+    $where_conditions[] = "sp.jurusan_id = ?";
     $params[] = $jurusan_filter;
     $types .= "i";
 }
@@ -158,16 +209,16 @@ if (!empty($tingkatan_filter)) {
 }
 
 if (!empty($kelas_filter)) {
-    $where_conditions[] = "u.kelas_id = ?";
+    $where_conditions[] = "sp.kelas_id = ?";
     $params[] = $kelas_filter;
     $types .= "i";
 }
 
 if (!empty($status_filter)) {
     if ($status_filter === 'frozen') {
-        $where_conditions[] = "u.is_frozen = 1";
+        $where_conditions[] = "us.is_frozen = 1";
     } elseif ($status_filter === 'active') {
-        $where_conditions[] = "u.is_frozen = 0";
+        $where_conditions[] = "us.is_frozen = 0";
     }
 }
 
@@ -180,11 +231,13 @@ $base_query = $query;
 $base_types = $types;
 $base_params = $params;
 
-// Count total
+// Count total (adjusted for new schema)
 $count_query = "SELECT COUNT(*) as total FROM rekening r 
                 INNER JOIN users u ON r.user_id = u.id 
-                LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                LEFT JOIN kelas k ON u.kelas_id = k.id
+                INNER JOIN siswa_profiles sp ON u.id = sp.user_id
+                LEFT JOIN user_security us ON u.id = us.user_id
+                LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+                LEFT JOIN kelas k ON sp.kelas_id = k.id
                 LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE u.role = 'siswa'";
 if (!empty($where_conditions)) {
@@ -232,28 +285,29 @@ if ($stmt) {
     $rekening_data = [];
 }
 
-// PDF Export
+// PDF Export (adjusted for new schema)
 if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
+    $stmt_export = $conn->prepare($base_query);
+    if (!empty($base_params)) {
+        $stmt_export->bind_param($base_types, ...$base_params);
+    }
+    $stmt_export->execute();
+    $all_rekening_data = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt_export->close();
+    
+    if (empty($all_rekening_data)) {
+        $_SESSION['error_message'] = 'Tidak ada data untuk diekspor!';
+        header('Location: ' . BASE_URL . '/pages/admin/kelola_rekening.php');
+        exit;
+    }
+    
     try {
         ini_set('memory_limit', '256M');
         ini_set('max_execution_time', 60);
         
-        $stmt_export = $conn->prepare($base_query);
-        if (!empty($base_params)) {
-            $stmt_export->bind_param($base_types, ...$base_params);
-        }
-        $stmt_export->execute();
-        $all_rekening_data = $stmt_export->get_result()->fetch_all(MYSQLI_ASSOC);
-        $stmt_export->close();
-        
         foreach ($all_rekening_data as &$row) {
             $row['saldo'] = intval($row['saldo'] ?? 0);
             unset($row);
-        }
-        
-        if (empty($all_rekening_data)) {
-            http_response_code(404);
-            die("No data found for export");
         }
         
         $total_saldo_filtered = array_sum(array_column($all_rekening_data, 'saldo'));
@@ -464,509 +518,157 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
-    <meta name="format-detection" content="telephone=no">
-    <title>Kelola Rekening Siswa | MY SCHOBANK</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
+    <title>Kelola Rekening Siswa | MY Schobank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
-            --accent-color: #f59e0b;
-            --danger-color: #e74c3c;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f0f5ff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-            --button-width: 140px;
-            --button-height: 44px;
+            --primary-color: #1e3a8a; --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6; --bg-light: #f0f5ff;
+            --text-primary: #333; --text-secondary: #666;
+            --shadow-sm: 0 2px 10px rgba(0,0,0,0.05);
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-            -webkit-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background-color: var(--bg-light); color: var(--text-primary); display: flex; min-height: 100vh; overflow-x: hidden; }
+        
+        /* SIDEBAR OVERLAY FIX */
+        body.sidebar-open { overflow: hidden; }
+        body.sidebar-open::before {
+            content: ''; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.5); z-index: 998; backdrop-filter: blur(5px);
         }
-
-        html, body {
-            width: 100%;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            -webkit-text-size-adjust: 100%;
+        
+        .main-content { flex: 1; margin-left: 280px; padding: 30px; max-width: calc(100% - 280px); position: relative; z-index: 1; }
+        
+        /* Banner */
+        .welcome-banner { 
+            background: linear-gradient(135deg, var(--primary-dark), var(--secondary-color)); 
+            color: white; 
+            padding: 30px; 
+            border-radius: 8px; 
+            margin-bottom: 30px; 
+            box-shadow: var(--shadow-sm); 
+            display: flex; 
+            align-items: center; 
+            gap: 20px; 
         }
-
-        body {
-            background-color: var(--bg-light);
-            color: var(--text-primary);
-            display: flex;
-            touch-action: pan-y;
-        }
-
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 30px;
-            max-width: calc(100% - 280px);
-        }
-
-        body.sidebar-active .main-content {
-            opacity: 0.3;
-            pointer-events: none;
-        }
-
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            box-shadow: var(--shadow-md);
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .welcome-banner .content {
-            flex: 1;
-        }
-
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .welcome-banner p {
-            font-size: clamp(0.85rem, 2vw, 0.9rem);
-            font-weight: 400;
-            opacity: 0.9;
-        }
-
-        .menu-toggle {
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: white;
-            flex-shrink: 0;
-            display: none;
+        .welcome-banner h2 { font-size: 1.5rem; margin: 0; }
+        .welcome-banner p { margin: 0; opacity: 0.9; }
+        .menu-toggle { 
+            display: none; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
             align-self: center;
+            margin-right: auto;
         }
 
-        .card {
-            background: white;
-            border-radius: 8px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
-            border: 1px solid #e5e7eb;
+        /* Form & Container */
+        .form-card, .jadwal-list { background: white; border-radius: 8px; padding: 25px; box-shadow: var(--shadow-sm); margin-bottom: 30px; }
+        .form-row { display: flex; gap: 20px; margin-bottom: 15px; }
+        .form-group { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        label { font-weight: 500; font-size: 0.9rem; color: var(--text-secondary); }
+
+        /* INPUT STYLING */
+        input[type="text"], input[type="date"], select {
+            width: 100%; padding: 12px 15px; border: 1px solid #e2e8f0; border-radius: 6px;
+            font-size: 0.95rem; transition: all 0.3s; background: #fff;
+            height: 48px;
+        }
+        input:focus, select:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1); outline: none; }
+        
+        /* Date Picker Wrapper */
+        .date-input-wrapper { position: relative; width: 100%; }
+        
+        /* Input Date Specifics */
+        input[type="date"] {
+            appearance: none; -webkit-appearance: none;
+            position: relative; padding-right: 40px;
+        }
+        
+        /* HIDE Native Calendar Icon */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%;
+            opacity: 0; cursor: pointer; z-index: 2;
+        }
+        
+        /* Custom Icon */
+        .calendar-icon {
+            position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
+            color: var(--primary-color); font-size: 1.1rem; z-index: 1; pointer-events: none;
         }
 
-        .card-title {
-            font-size: clamp(1.1rem, 2.5vw, 1.25rem);
-            font-weight: 600;
-            color: var(--primary-dark);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        /* Button */
+        .btn { background: var(--primary-color); color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; transition: 0.3s; text-decoration: none; }
+        .btn:hover { background: var(--primary-dark); transform: translateY(-2px); }
+        .btn-cancel { background: #e2e8f0; color: #475569; }
+        .btn-cancel:hover { background: #cbd5e1; }
+        
+        /* Table */
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #f1f5f9; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th { background: #f8fafc; padding: 15px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid #e2e8f0; }
+        td { padding: 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-primary); }
+        
+        .action-buttons button { padding: 6px 12px; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px; color: white; }
+        .btn-edit { background: var(--secondary-color); }
+        .btn-delete { background: #ef4444; }
 
-        .filter-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            align-items: flex-end;
-            margin-bottom: 20px;
-        }
-
-        .filter-group {
-            flex: 1;
-            min-width: 180px;
-        }
-
-        .filter-group label {
-            display: block;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-            font-size: 0.875rem;
-        }
-
-        .filter-group input,
-        .filter-group select {
-            width: 100%;
-            padding: 11px 14px;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-            font-size: 0.9375rem;
-            -webkit-user-select: text;
-            user-select: text;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-            background-color: white;
-            min-height: 44px;
-            transition: border-color 0.2s;
-        }
-
-        .filter-group select {
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 10px center;
-            background-size: 18px;
-            padding-right: 36px;
-        }
-
-        .filter-group input:focus,
-        .filter-group select:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.08);
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 11px 20px;
-            cursor: pointer;
-            font-size: 0.9375rem;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            min-height: 44px;
-            -webkit-tap-highlight-color: transparent;
-            transition: opacity 0.2s;
-            width: var(--button-width);
-            height: var(--button-height);
-        }
-
-        .btn:hover {
-            opacity: 0.9;
-        }
-
-        .btn:active {
-            transform: scale(0.98);
-        }
-
-        .btn-secondary {
-            background: #e5e7eb;
-            color: var(--text-secondary);
-        }
-
-        .btn-secondary:hover {
-            background: #d1d5db;
-        }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-        }
-
-        .action-buttons {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 18px;
-            gap: 10px;
-        }
-
-        .table-container {
-            width: 100%;
-            overflow-x: auto;
-            overflow-y: visible;
-            margin-bottom: 18px;
-            border-radius: 8px;
-            box-shadow: var(--shadow-sm);
-            border: 1px solid #e5e7eb;
-            -webkit-overflow-scrolling: touch;
-            touch-action: pan-x pan-y;
-            scrollbar-width: thin;
-            scrollbar-color: #d1d5db #f3f4f6;
-        }
-
-        .table-container::-webkit-scrollbar {
-            height: 8px;
-        }
-
-        .table-container::-webkit-scrollbar-track {
-            background: #f3f4f6;
-            border-radius: 4px;
-        }
-
-        .table-container::-webkit-scrollbar-thumb {
-            background: #d1d5db;
-            border-radius: 4px;
-        }
-
-        .table-container::-webkit-scrollbar-thumb:hover {
-            background: #9ca3af;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: auto;
-            background: white;
-            min-width: 800px;
-        }
-
-        th, td {
-            padding: 12px 14px;
-            text-align: left;
-            font-size: 0.875rem;
-            border-bottom: 1px solid #e5e7eb;
-            white-space: nowrap;
-        }
-
-        th {
-            background: #f3f4f6;
-            color: var(--text-secondary);
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.8125rem;
-            letter-spacing: 0.3px;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-
-        td {
-            background: white;
-            color: var(--text-primary);
-        }
-
-        tr:hover td {
-            background-color: #f9fafb;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 50px 30px;
-            background: #f9fafb;
-            border-radius: 8px;
-            border: 2px dashed #e5e7eb;
-            margin: 18px 0;
-        }
-
-        .empty-state i {
-            font-size: 3rem;
-            color: var(--text-secondary);
-            opacity: 0.4;
-            margin-bottom: 12px;
-        }
-
-        .empty-state p {
-            font-size: 1.0625rem;
-            color: var(--text-secondary);
-            font-weight: 500;
-            margin-bottom: 8px;
-        }
-
-        .empty-state .subtext {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
-            font-weight: 400;
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            margin-top: 18px;
-            flex-wrap: wrap;
-        }
-
-        .pagination a,
-        .pagination span {
-            padding: 9px 13px;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
-            text-decoration: none;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            min-width: 42px;
-            min-height: 42px;
-            text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-        }
-
-        .pagination a:hover {
-            background: var(--primary-color);
-            color: white;
-            border-color: var(--primary-color);
-        }
-
-        .pagination span.current {
-            background: var(--primary-color);
-            color: white;
-            border-color: var(--primary-color);
-            font-weight: 600;
-        }
-
+        /* Responsive */
         @media (max-width: 768px) {
-            .main-content {
-                margin-left: 0;
-                padding: 15px;
-                max-width: 100%;
+            .main-content { margin-left: 0; padding: 15px; max-width: 100%; }
+            .menu-toggle { display: block; }
+            .welcome-banner { 
+                flex-direction: row; 
+                align-items: center; 
+                gap: 15px; 
+                padding: 20px; 
             }
-
-            .menu-toggle {
-                display: block;
+            .welcome-banner h2 { 
+                font-size: 1.2rem;
+                margin: 0; 
             }
-
-            .welcome-banner {
-                padding: 20px;
-                border-radius: 8px;
+            .welcome-banner p { 
+                font-size: 0.9rem;
+                margin: 0; 
+                opacity: 0.9; 
             }
-
-            .card {
-                padding: 18px;
-                border-radius: 8px;
-            }
-
-            .filter-container {
-                flex-direction: column;
-            }
-
-            .filter-group {
-                min-width: 100%;
-            }
-
-            .button-group {
-                width: 100%;
-            }
-
-            .button-group .btn {
-                flex: 1;
-                width: auto;
-                min-width: 0;
-            }
-
-            table {
-                min-width: 900px;
-            }
-
-            th, td {
-                font-size: 0.8125rem;
-                padding: 11px 12px;
-            }
+            .form-row { flex-direction: column; gap: 15px; }
         }
 
-        @media (min-width: 769px) {
-            .menu-toggle {
-                display: none;
-            }
-
-            .button-group .btn {
-                width: var(--button-width);
-                flex: 0 0 auto;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .welcome-banner {
-                padding: 16px;
-            }
-
-            .card {
-                padding: 15px;
-            }
-
-            .button-group {
-                gap: 8px;
-            }
-
-            .button-group .btn {
-                font-size: 0.875rem;
-                padding: 10px 8px;
-                flex: 1;
-            }
-
-            table {
-                min-width: 1000px;
-            }
-
-            th, td {
-                font-size: 0.8125rem;
-                padding: 10px 11px;
-            }
-
-            .filter-group input,
-            .filter-group select,
-            .btn {
-                font-size: 16px !important;
-            }
-        }
-
-        @media (hover: none) and (pointer: coarse) {
-            .filter-group input,
-            .filter-group select,
-            .btn {
-                min-height: 44px;
-                font-size: 16px;
-            }
-
-            .menu-toggle {
-                min-width: 44px;
-                min-height: 44px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
-        }
+        /* SweetAlert Custom Fixes */
+        .swal2-input { height: 48px !important; margin: 10px auto !important; }
+        .swal-date-wrapper { position: relative; width: 80%; margin: 10px auto; }
+        .swal-date-wrapper input { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
+        .swal-date-wrapper i { right: 15px; }
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_admin.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_admin.php'; ?>
     
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <span class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></span>
-            <div class="content">
+            <div>
                 <h2><i class="fas fa-file-invoice"></i> Data Rekening Siswa</h2>
                 <p>Lihat dan kelola data rekening siswa secara terpusat</p>
             </div>
         </div>
 
         <!-- CARD FILTER -->
-        <div class="card">
-            <h3 class="card-title"><i class="fas fa-filter"></i> Filter Data</h3>
+        <div class="form-card">
             <form method="GET" action="">
-                <div class="filter-container">
-                    <div class="filter-group">
+                <div class="form-row">
+                    <div class="form-group">
                         <label for="search">Pencarian</label>
                         <input type="text" id="search" name="search" placeholder="Nama, Username, No. Rekening" value="<?php echo htmlspecialchars($search); ?>">
                     </div>
                     
-                    <div class="filter-group">
+                    <div class="form-group">
                         <label for="jurusan">Jurusan</label>
                         <select id="jurusan" name="jurusan" onchange="updateTingkatanOptions()">
                             <option value="">Semua Jurusan</option>
@@ -985,7 +687,7 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                         </select>
                     </div>
                     
-                    <div class="filter-group">
+                    <div class="form-group">
                         <label for="tingkatan">Tingkatan</label>
                         <select id="tingkatan" name="tingkatan" onchange="updateKelasOptions()">
                             <option value="">Semua Tingkatan</option>
@@ -1004,7 +706,7 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                         </select>
                     </div>
                     
-                    <div class="filter-group">
+                    <div class="form-group">
                         <label for="kelas">Kelas</label>
                         <select id="kelas" name="kelas">
                             <option value="">Semua Kelas</option>
@@ -1023,7 +725,7 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                         </select>
                     </div>
                     
-                    <div class="filter-group">
+                    <div class="form-group">
                         <label for="status">Status Rekening</label>
                         <select id="status" name="status">
                             <option value="">Semua Status</option>
@@ -1033,37 +735,23 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                     </div>
                 </div>
                 
-                <div class="button-group">
-                    <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Terapkan</button>
-                    <button type="button" id="resetBtn" class="btn btn-secondary"><i class="fas fa-undo"></i> Reset</button>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="submit" class="btn"><i class="fas fa-filter"></i> Terapkan</button>
+                    <button type="button" id="resetBtn" class="btn btn-cancel"><i class="fas fa-undo"></i> Reset</button>
                 </div>
             </form>
         </div>
         
         <!-- CARD TABEL -->
-        <div class="card">
-            <h3 class="card-title">
-                <i class="fas fa-table"></i> Daftar Rekening Siswa
-                <span style="font-size:0.875rem;color:var(--text-secondary);font-weight:normal;margin-left:8px;">
-                    (<?php echo number_format($total_records, 0, ",", "."); ?> data)
-                </span>
-            </h3>
-            <input type="hidden" id="totalRecords" value="<?php echo $total_records; ?>">
-            
-            <div class="action-buttons">
-                <button class="btn btn-primary export-pdf-btn">
-                    <i class="fas fa-file-pdf"></i> Unduh
-                </button>
+        <div class="jadwal-list">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3><i class="fas fa-table"></i> Daftar Rekening Siswa</h3>
+                <a href="<?= BASE_URL ?>/pages/admin/kelola_rekening.php?export=pdf" class="btn" target="_blank" style="padding: 8px 15px; font-size: 0.9rem;">
+                    <i class="fas fa-print"></i> Cetak PDF
+                </a>
             </div>
             
-            <div class="table-container">
-                <?php if (empty($rekening_data)): ?>
-                    <div class="empty-state">
-                        <i class="fas fa-inbox"></i>
-                        <p>Tidak ada data yang ditemukan</p>
-                        <p class="subtext">Silakan ubah filter atau kata kunci pencarian</p>
-                    </div>
-                <?php else: ?>
+            <div class="table-wrapper">
                     <table>
                         <thead>
                             <tr>
@@ -1075,236 +763,183 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($rekening_data as $rekening): ?>
-                                <tr>
-                                    <td style="font-weight:600;font-family:monospace;font-size:0.8125rem;">
-                                        <?php echo htmlspecialchars(maskAccountNumber($rekening['no_rekening'])); ?>
-                                    </td>
-                                    <td style="font-weight:500;"><?php echo htmlspecialchars($rekening['nama']); ?></td>
-                                    <td style="font-size:0.8125rem;">
-                                        <?php 
-                                        $kelas_lengkap = '';
-                                        if (!empty($rekening['nama_tingkatan']) && !empty($rekening['nama_kelas'])) {
-                                            $kelas_lengkap = $rekening['nama_tingkatan'] . ' ' . $rekening['nama_kelas'];
-                                            if (!empty($rekening['nama_jurusan'])) {
-                                                $kelas_lengkap .= ' - ' . $rekening['nama_jurusan'];
+                            <?php if (empty($rekening_data)): ?>
+                                <tr><td colspan="5" style="text-align:center; padding:30px; color:#999;">Belum ada data rekening.</td></tr>
+                            <?php else: ?>
+                                <?php foreach ($rekening_data as $rekening): ?>
+                                    <tr>
+                                        <td style="font-weight:600;font-family:monospace;font-size:0.8125rem;">
+                                            <?php echo htmlspecialchars(maskAccountNumber($rekening['no_rekening'])); ?>
+                                        </td>
+                                        <td style="font-weight:500;"><?php echo htmlspecialchars($rekening['nama']); ?></td>
+                                        <td style="font-size:0.8125rem;">
+                                            <?php 
+                                            $kelas_lengkap = '';
+                                            if (!empty($rekening['nama_tingkatan']) && !empty($rekening['nama_kelas'])) {
+                                                $kelas_lengkap = $rekening['nama_tingkatan'] . ' ' . $rekening['nama_kelas'];
+                                                if (!empty($rekening['nama_jurusan'])) {
+                                                    $kelas_lengkap .= ' - ' . $rekening['nama_jurusan'];
+                                                }
                                             }
-                                        }
-                                        echo htmlspecialchars($kelas_lengkap ?: '-');
-                                        ?>
-                                    </td>
-                                    <td style="font-weight:600;font-family:monospace;">Rp <?php echo number_format($rekening['saldo'], 0, ",", "."); ?></td>
-                                    <td>
-                                        <?php if ($rekening['is_frozen']): ?>
-                                            <span style="display:inline-block;padding:4px 10px;background:#fef3c7;color:#92400e;border-radius:5px;font-size:0.75rem;font-weight:500;">
-                                                <i class="fas fa-snowflake"></i> Beku
-                                            </span>
-                                        <?php else: ?>
-                                            <span style="display:inline-block;padding:4px 10px;background:#d1fae5;color:#065f46;border-radius:5px;font-size:0.75rem;font-weight:500;">
-                                                <i class="fas fa-check-circle"></i> Aktif
-                                            </span>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
+                                            echo htmlspecialchars($kelas_lengkap ?: '-');
+                                            ?>
+                                        </td>
+                                        <td style="font-weight:600;font-family:monospace;">Rp <?php echo number_format($rekening['saldo'], 0, ",", "."); ?></td>
+                                        <td>
+                                            <?php if ($rekening['is_frozen']): ?>
+                                                <span style="display:inline-block;padding:4px 10px;background:#fef3c7;color:#92400e;border-radius:5px;font-size:0.75rem;font-weight:500;">
+                                                    <i class="fas fa-snowflake"></i> Beku
+                                                </span>
+                                            <?php else: ?>
+                                                <span style="display:inline-block;padding:4px 10px;background:#d1fae5;color:#065f46;border-radius:5px;font-size:0.75rem;font-weight:500;">
+                                                    <i class="fas fa-check-circle"></i> Aktif
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
-                <?php endif; ?>
             </div>
             
-            <?php if ($total_records > 15): ?>
-                <div class="pagination">
-                    <?php if ($page > 1): ?>
-                        <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $page - 1])); ?>">
-                            <i class="fas fa-chevron-left"></i> Sebelumnya
-                        </a>
-                    <?php endif; ?>
-                    
-                    <?php 
-                    $start = max(1, $page - 2);
-                    $end = min($total_pages, $page + 2);
-                    
-                    if ($start > 1) {
-                        echo '<a href="?' . http_build_query(array_merge($_GET, ['page' => 1])) . '">1</a>';
-                        if ($start > 2) echo '<span>...</span>';
-                    }
-                    
-                    for ($i = $start; $i <= $end; $i++): 
-                    ?>
-                        <?php if ($i == $page): ?>
-                            <span class="current"><?php echo $i; ?></span>
-                        <?php else: ?>
-                            <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $i])); ?>"><?php echo $i; ?></a>
-                        <?php endif; 
-                    endfor; ?>
-                    
-                    <?php
-                    if ($end < $total_pages) {
-                        if ($end < $total_pages - 1) echo '<span>...</span>';
-                        echo '<a href="?' . http_build_query(array_merge($_GET, ['page' => $total_pages])) . '">' . $total_pages . '</a>';
-                    }
-                    ?>
-                    
-                    <?php if ($page < $total_pages): ?>
-                        <a href="?<?php echo http_build_query(array_merge($_GET, ['page' => $page + 1])); ?>">
-                            Selanjutnya <i class="fas fa-chevron-right"></i>
-                        </a>
-                    <?php endif; ?>
-                </div>
+            <?php if ($total_pages > 1): ?>
+            <div style="margin-top:20px; display:flex; justify-content:center; gap:5px;">
+                <?php for($i=1; $i<=$total_pages; $i++): ?>
+                    <a href="?page=<?= $i ?>" class="btn" style="padding:8px 12px; <?= $i==$page ? 'background:var(--primary-dark);' : 'opacity:0.7;' ?>"><?= $i ?></a>
+                <?php endfor; ?>
+            </div>
             <?php endif; ?>
         </div>
     </div>
     
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.addEventListener('touchstart', function(event) {
-                if (event.touches.length > 1) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
+        // ============================================
+        // FIXED SIDEBAR MOBILE BEHAVIOR
+        // ============================================
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebar = document.getElementById('sidebar');
+        const body = document.body;
+        const mainContent = document.getElementById('mainContent');
 
-            let lastTouchEnd = 0;
-            document.addEventListener('touchend', function(event) {
-                const now = (new Date()).getTime();
-                if (now - lastTouchEnd <= 300) {
-                    event.preventDefault();
-                }
-                lastTouchEnd = now;
-            }, { passive: false });
+        function openSidebar() {
+            body.classList.add('sidebar-open');
+            if (sidebar) sidebar.classList.add('active');
+        }
 
-            document.addEventListener('wheel', function(event) {
-                if (event.ctrlKey) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
+        function closeSidebar() {
+            body.classList.remove('sidebar-open');
+            if (sidebar) sidebar.classList.remove('active');
+        }
 
-            document.addEventListener('dblclick', function(event) {
-                event.preventDefault();
-            }, { passive: false });
-
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            
-            if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
-                });
-            }
-            
-            document.addEventListener('click', (e) => {
-                if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                    sidebar.classList.remove('active');
-                    document.body.classList.remove('sidebar-active');
-                }
-            });
-            
-            document.getElementById('resetBtn').addEventListener('click', () => {
-                window.location.href = 'kelola_rekening.php';
-            });
-            
-            <?php if (!empty($success_message)): ?>
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Berhasil!',
-                    html: '<?php echo addslashes($success_message); ?>',
-                    confirmButtonText: 'OK'
-                });
-            <?php endif; ?>
-            
-            <?php if (!empty($error_message)): ?>
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Gagal!',
-                    html: '<?php echo addslashes($error_message); ?>',
-                    confirmButtonText: 'OK'
-                });
-            <?php endif; ?>
-            
-            window.updateTingkatanOptions = function() {
-                const jurusan = document.getElementById('jurusan').value;
-                const tingkatanSelect = document.getElementById('tingkatan');
-                const selectedTingkatan = tingkatanSelect.value;
-                
-                tingkatanSelect.innerHTML = '<option value="">Semua Tingkatan</option>';
-                
-                if (jurusan) {
-                    fetch(`../../includes/get_kelas_by_jurusan_dan_tingkatan.php?jurusan_id=${jurusan}&action=get_tingkatan`)
-                        .then(r => r.text())
-                        .then(data => {
-                            if (data.trim()) {
-                                tingkatanSelect.innerHTML += data;
-                                if (selectedTingkatan) {
-                                    const opt = tingkatanSelect.querySelector(`option[value="${selectedTingkatan}"]`);
-                                    if (opt) tingkatanSelect.value = selectedTingkatan;
-                                }
-                            }
-                            updateKelasOptions();
-                        })
-                        .catch(() => {});
+        // Toggle Sidebar
+        if (menuToggle) {
+            menuToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (body.classList.contains('sidebar-open')) {
+                    closeSidebar();
                 } else {
-                    updateKelasOptions();
+                    openSidebar();
                 }
-            };
-            
-            window.updateKelasOptions = function() {
-                const jurusan = document.getElementById('jurusan').value;
-                const tingkatan = document.getElementById('tingkatan').value;
-                const kelasSelect = document.getElementById('kelas');
-                const selectedKelas = kelasSelect.value;
-                
-                kelasSelect.innerHTML = '<option value="">Semua Kelas</option>';
-                
-                if (jurusan) {
-                    let url = `../../includes/get_kelas_by_jurusan_dan_tingkatan.php?jurusan_id=${jurusan}&action=get_kelas`;
-                    if (tingkatan) {
-                        url += `&tingkatan_id=${tingkatan}`;
-                    }
-                    fetch(url)
-                        .then(r => r.text())
-                        .then(data => {
-                            if (data.trim()) {
-                                kelasSelect.innerHTML += data;
-                                if (selectedKelas) {
-                                    const opt = kelasSelect.querySelector(`option[value="${selectedKelas}"]`);
-                                    if (opt) kelasSelect.value = selectedKelas;
-                                }
-                            }
-                        })
-                        .catch(() => {});
-                }
-            };
-            
-            document.querySelectorAll('.export-pdf-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const totalRecords = parseInt(document.getElementById('totalRecords').value);
-                    
-                    if (totalRecords === 0) {
-                        Swal.fire({
-                            icon: 'warning',
-                            title: 'Tidak ada data',
-                            text: 'Tidak ada data untuk dicetak ke PDF.'
-                        });
-                        return;
-                    }
-                    
-                    let url = '?export=pdf';
-                    ['search', 'jurusan', 'tingkatan', 'kelas', 'status'].forEach(id => {
-                        const input = document.getElementById(id);
-                        if (input && input.value) {
-                            url += `&${id}=${encodeURIComponent(input.value)}`;
-                        }
-                    });
-                    
-                    window.open(url, '_blank');
-                });
             });
-            
-            if (document.getElementById('jurusan').value) {
-                updateTingkatanOptions();
+        }
+
+        // Close sidebar on outside click
+        document.addEventListener('click', function(e) {
+            if (body.classList.contains('sidebar-open') && 
+                !sidebar?.contains(e.target) && 
+                !menuToggle?.contains(e.target)) {
+                closeSidebar();
             }
         });
+
+        // Close sidebar on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && body.classList.contains('sidebar-open')) {
+                closeSidebar();
+            }
+        });
+
+        // Prevent body scroll when sidebar open (mobile)
+        let scrollTop = 0;
+        body.addEventListener('scroll', function() {
+            if (window.innerWidth <= 768 && body.classList.contains('sidebar-open')) {
+                scrollTop = body.scrollTop;
+            }
+        }, { passive: true });
+
+        // ============================================
+        // FORM FUNCTIONALITY
+        // ============================================
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            window.location.href = '<?= BASE_URL ?>/pages/admin/kelola_rekening.php';
+        });
+            
+        <?php if (!empty($success_message)): ?>
+            Swal.fire('Berhasil', '<?= addslashes($success_message) ?>', 'success');
+        <?php endif; ?>
+            
+        <?php if (!empty($error_message)): ?>
+            Swal.fire('Gagal', '<?= addslashes($error_message) ?>', 'error');
+        <?php endif; ?>
+            
+        window.updateTingkatanOptions = function() {
+            const jurusan = document.getElementById('jurusan').value;
+            const tingkatanSelect = document.getElementById('tingkatan');
+            const selectedTingkatan = tingkatanSelect.value;
+                
+            tingkatanSelect.innerHTML = '<option value="">Semua Tingkatan</option>';
+                
+            if (jurusan) {
+                fetch(`<?= BASE_URL ?>/includes/get_kelas_by_jurusan_dan_tingkatan.php?jurusan_id=${jurusan}&action=get_tingkatan`)
+                    .then(r => r.text())
+                    .then(data => {
+                        if (data.trim()) {
+                            tingkatanSelect.innerHTML += data;
+                            if (selectedTingkatan) {
+                                const opt = tingkatanSelect.querySelector(`option[value="${selectedTingkatan}"]`);
+                                if (opt) tingkatanSelect.value = selectedTingkatan;
+                            }
+                        }
+                        updateKelasOptions();
+                    })
+                    .catch(() => {});
+            } else {
+                updateKelasOptions();
+            }
+        };
+            
+        window.updateKelasOptions = function() {
+            const jurusan = document.getElementById('jurusan').value;
+            const tingkatan = document.getElementById('tingkatan').value;
+            const kelasSelect = document.getElementById('kelas');
+            const selectedKelas = kelasSelect.value;
+                
+            kelasSelect.innerHTML = '<option value="">Semua Kelas</option>';
+                
+            if (jurusan) {
+                let url = `<?= BASE_URL ?>/includes/get_kelas_by_jurusan_dan_tingkatan.php?jurusan_id=${jurusan}&action=get_kelas`;
+                if (tingkatan) {
+                    url += `&tingkatan_id=${tingkatan}`;
+                }
+                fetch(url)
+                    .then(r => r.text())
+                    .then(data => {
+                        if (data.trim()) {
+                            kelasSelect.innerHTML += data;
+                            if (selectedKelas) {
+                                const opt = kelasSelect.querySelector(`option[value="${selectedKelas}"]`);
+                                if (opt) kelasSelect.value = selectedKelas;
+                            }
+                        }
+                    })
+                    .catch(() => {});
+            }
+        };
+            
+        if (document.getElementById('jurusan').value) {
+            updateTingkatanOptions();
+        }
     </script>
 </body>
 </html>

@@ -1,12 +1,121 @@
 <?php
-session_start();
-require_once '../../includes/db_connection.php';
-require '../../vendor/autoload.php';
+/**
+ * Proses Setor Admin - Adaptive Path Version
+ * File: pages/admin/proses_setor_admin.php
+ * 
+ * Compatible with:
+ * - Local: schobank/pages/admin/proses_setor_admin.php
+ * - Hosting: public_html/pages/admin/proses_setor_admin.php
+ */
+
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: jika di folder 'pages' atau 'admin'
+if (basename($current_dir) === 'admin') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+
+// ============================================
+// SESSION START
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'File db_connection.php tidak ditemukan.',
+        'email_status' => 'none',
+        'debug' => [
+            'includes_path' => INCLUDES_PATH,
+            'project_root'  => PROJECT_ROOT
+        ]
+    ]);
+    exit;
+}
+
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// Load Composer autoloader
+if (!file_exists(VENDOR_PATH . '/autoload.php')) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Composer autoloader tidak ditemukan.',
+        'email_status' => 'none',
+        'debug' => [
+            'vendor_path' => VENDOR_PATH,
+            'project_root' => PROJECT_ROOT
+        ]
+    ]);
+    exit;
+}
+
+require VENDOR_PATH . '/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     echo json_encode(['status' => 'error', 'message' => 'Akses ditolak.', 'email_status' => 'none']);
     exit();
@@ -30,15 +139,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             
             $query_pending = "
                 SELECT t.id as transaksi_id, t.no_transaksi, t.id_transaksi, t.rekening_id, t.jumlah, t.pending_reason,
-                       u.id as user_id, u.nama, u.email, u.is_frozen, u.pin_block_until,
+                       u.id as user_id, u.nama, u.email, us.is_frozen, us.pin_block_until,
                        r.no_rekening, r.saldo as saldo_sekarang,
                        j.nama_jurusan AS jurusan,
                        CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
                 FROM transaksi t
                 JOIN rekening r ON t.rekening_id = r.id
                 JOIN users u ON r.user_id = u.id
-                LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                LEFT JOIN kelas k ON u.kelas_id = k.id
+                JOIN user_security us ON u.id = us.user_id
+                JOIN siswa_profiles sp ON u.id = sp.user_id
+                LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+                LEFT JOIN kelas k ON sp.kelas_id = k.id
                 LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE t.jenis_transaksi = 'setor' AND t.status = 'pending' AND t.petugas_id IS NULL
                 AND (t.pending_reason = 'frozen' OR t.pending_reason = 'blocked')
@@ -131,105 +242,78 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     // Kirim email dengan format baru
                     if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                        $subject = "Bukti Setor Tunai {$no_transaksi}";
-                        
+                        $subject = "Bukti Transaksi Setor {$no_transaksi}";
+
+                        // Konversi bulan ke bahasa Indonesia
                         $bulan = [
                             'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
                             'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
                             'Sep' => 'September', 'Oct' => 'Oktober', 'Nov' => 'November', 'Dec' => 'Desember'
                         ];
                         $tanggal_transaksi = date('d M Y, H:i');
-                        foreach ($bulan as $en => $id) {
-                            $tanggal_transaksi = str_replace($en, $id, $tanggal_transaksi);
+                        foreach ($bulan as $en => $id_bulan) {
+                            $tanggal_transaksi = str_replace($en, $id_bulan, $tanggal_transaksi);
                         }
 
                         $message_email = "
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
-</head>
-<body style='margin:0; padding:0; font-family:Poppins,Arial,sans-serif; background:#f5f5f5;'>
-    <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%'>
-        <tr>
-            <td style='padding:40px 20px;'>
-                <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='margin:0 auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);'>
-                    <!-- Header -->
-                    <tr>
-                        <td style='padding:40px 40px 30px; text-align:center; background:#ffffff;'>
-                            <img src='cid:header_img' alt='Schobank' style='max-width:260px; width:100%; height:auto;' />
-                        </td>
-                    </tr>
+<div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
+    
+    <h2 style='color: #1e3a8a; margin-bottom: 20px; font-size: 24px;'>Bukti Transaksi Setor</h2>
+    
+    <p>Halo <strong>{$nama_nasabah}</strong>,</p>
+    
+    <p>Transaksi penyetoran saldo Anda yang sebelumnya pending kini telah diproses secara otomatis. Setoran dana sebesar <strong>Rp " . number_format($jumlah, 0, ',', '.') . "</strong> telah berhasil masuk ke rekening kamu, berikut rinciannya:</p>
+    
+    <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
 
-                    <!-- Content -->
-                    <tr>
-                        <td style='padding:0 40px 40px;'>
-                            <h2 style='margin:0 0 12px; font-size:20px; font-weight:600; color:#1a1a1a;'>Halo <strong>{$nama_nasabah}</strong>,</h2>
-                            <p style='margin:0 0 24px; font-size:15px; line-height:1.6; color:#4a4a4a;'>
-                                Transaksi penyetoran saldo Anda yang sebelumnya pending kini telah diproses secara otomatis. Saldo Anda telah ditambahkan.
-                            </p>
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nominal</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Biaya Admin</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#16a34a;'>Gratis</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Total</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening}</span></p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>Setor Tunai (Pending Diproses Otomatis)</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal & Waktu</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
+    </div>
+    
+    <div style='margin-bottom:0;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
+        <p style='margin:0; font-size:16px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
+    </div>
 
-                            <hr style='border:none; border-top:1px solid #e5e5e5; margin:30px 0;' />
+    <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
 
-                            <h3 style='margin:0 0 20px; font-size:17px; font-weight:700; color:#1a1a1a;'>Detail Transaksi</h3>
+    <p style='font-size: 12px; color: #999;'>
+        Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+        Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
+    </p>
+</div>";
 
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nominal Setoran</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Biaya Admin</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#22c55e;'>Gratis</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Total</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening}</span></p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>Setor Tunai (Pending Diproses Otomatis)</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal & Waktu</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
-                            </div>
-                            <div style='margin-bottom:0;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
-                                <p style='margin:0; font-size:16px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style='padding:30px 40px; text-align:center; border-top:1px solid #e5e5e5; background:#ffffff;'>
-                            <p style='margin:0 0 8px; font-size:13px; color:#6b7280;'>
-                                © " . date('Y') . " Schobank Student Digital Banking. All rights reserved.
-                            </p>
-                            <p style='margin:0 0 8px; font-size:12px; color:#9ca3af;'>
-                                Email ini dikirim secara otomatis. Mohon tidak membalas email ini.
-                            </p>
-                            <p style='margin:0; font-size:11px; color:#d1d5db;'>
-                                Ref: {$no_transaksi} • ID: {$id_transaksi}
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>";
                         $mail = new PHPMailer(true);
                         try {
                             $mail->isSMTP();
@@ -252,15 +336,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                             $mail->addCustomHeader('X-Priority', '1');
                             $mail->addCustomHeader('Importance', 'High');
                             
-                            $header_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/header.png';
-                            if (file_exists($header_path)) {
-                                $mail->addEmbeddedImage($header_path, 'header_img', 'header.png');
-                            }
-                            
                             $mail->isHTML(true);
                             $mail->Subject = $subject;
                             $mail->Body = $message_email;
-                            $mail->AltBody = strip_tags(str_replace(['<br>', '</tr>', '</td>'], ["\n", "\n", " "], $message_email));
+
+                            // Plain text version
+                            $labels = [
+                                'Nama' => $nama_nasabah,
+                                'Nominal' => 'Rp ' . number_format($jumlah, 0, ',', '.'),
+                                'Biaya Admin' => 'Gratis',
+                                'Total' => 'Rp ' . number_format($jumlah, 0, ',', '.'),
+                                'Rekening Tujuan' => $no_rekening,
+                                'Keterangan' => 'Setor Tunai (Pending Diproses Otomatis)',
+                                'Tanggal & Waktu' => $tanggal_transaksi . ' WIB',
+                                'Nomor Referensi' => $no_transaksi,
+                                'ID Transaksi' => $id_transaksi
+                            ];
+                            $max_label_length = max(array_map('strlen', array_keys($labels)));
+                            $max_label_length = max($max_label_length, 20);
+                            $text_rows = [];
+                            foreach ($labels as $label => $value) {
+                                $text_rows[] = str_pad($label, $max_label_length, ' ') . " : " . $value;
+                            }
+                            $text_rows[] = "\nHormat kami,\nTim Schobank Student Digital Banking";
+                            $text_rows[] = "\nPesan otomatis, mohon tidak membalas.";
+                            $mail->AltBody = implode("\n", $text_rows);
                             
                             if (!$mail->send()) {
                                 error_log("Gagal kirim email update untuk pending {$no_transaksi}: " . $mail->ErrorInfo);
@@ -307,11 +407,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 SELECT r.no_rekening, u.nama, u.email, u.id as user_id, r.id as rekening_id, r.saldo,
                        j.nama_jurusan AS jurusan,
                        CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas,
-                       u.is_frozen, u.pin_block_until
+                       us.is_frozen, us.pin_block_until
                 FROM rekening r
                 JOIN users u ON r.user_id = u.id
-                LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                LEFT JOIN kelas k ON u.kelas_id = k.id
+                JOIN user_security us ON u.id = us.user_id
+                JOIN siswa_profiles sp ON u.id = sp.user_id
+                LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+                LEFT JOIN kelas k ON sp.kelas_id = k.id
                 LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE r.no_rekening = ? AND u.role = 'siswa'
             ";
@@ -381,11 +483,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 SELECT r.id, r.user_id, r.saldo, r.no_rekening, u.nama, u.email,
                        j.nama_jurusan AS jurusan,
                        CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas,
-                       u.is_frozen, u.pin_block_until
+                       us.is_frozen, us.pin_block_until
                 FROM rekening r
                 JOIN users u ON r.user_id = u.id
-                LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                LEFT JOIN kelas k ON u.kelas_id = k.id
+                JOIN user_security us ON u.id = us.user_id
+                JOIN siswa_profiles sp ON u.id = sp.user_id
+                LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+                LEFT JOIN kelas k ON sp.kelas_id = k.id
                 LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE r.no_rekening = ? AND u.role = 'siswa'
                 FOR UPDATE
@@ -515,105 +619,77 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             // Kirim email dengan format baru
             $email_status = 'none';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $subject = "Bukti Setor Tunai {$no_transaksi}";
-                
+                $subject = "Bukti Transaksi Setor {$no_transaksi}";
+
+                // Konversi bulan ke bahasa Indonesia
                 $bulan = [
-                            'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
-                            'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
-                            'Sep' => 'September', 'Oct' => 'Oktober', 'Nov' => 'November', 'Dec' => 'Desember'
+                    'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
+                    'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
+                    'Sep' => 'September', 'Oct' => 'Oktober', 'Nov' => 'November', 'Dec' => 'Desember'
                 ];
                 $tanggal_transaksi = date('d M Y, H:i');
-                foreach ($bulan as $en => $id) {
-                    $tanggal_transaksi = str_replace($en, $id, $tanggal_transaksi);
+                foreach ($bulan as $en => $id_bulan) {
+                    $tanggal_transaksi = str_replace($en, $id_bulan, $tanggal_transaksi);
                 }
 
                 $message_email = "
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
-</head>
-<body style='margin:0; padding:0; font-family:Poppins,Arial,sans-serif; background:#f5f5f5;'>
-    <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%'>
-        <tr>
-            <td style='padding:40px 20px;'>
-                <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='margin:0 auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);'>
-                    <!-- Header -->
-                    <tr>
-                        <td style='padding:40px 40px 30px; text-align:center; background:#ffffff;'>
-                            <img src='cid:header_img' alt='Schobank' style='max-width:260px; width:100%; height:auto;' />
-                        </td>
-                    </tr>
+<div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
+    
+    <h2 style='color: #1e3a8a; margin-bottom: 20px; font-size: 24px;'>Bukti Transaksi Setor</h2>
+    
+    <p>Halo <strong>{$nama_nasabah}</strong>,</p>
+    
+    <p>Setoran dana sebesar <strong>Rp " . number_format($jumlah, 0, ',', '.') . "</strong> telah berhasil masuk ke rekening kamu, berikut rinciannya:</p>
+    
+    <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
 
-                    <!-- Content -->
-                    <tr>
-                        <td style='padding:0 40px 40px;'>
-                            <h2 style='margin:0 0 12px; font-size:20px; font-weight:600; color:#1a1a1a;'>Halo <strong>{$nama_nasabah}</strong>,</h2>
-                            <p style='margin:0 0 24px; font-size:15px; line-height:1.6; color:#4a4a4a;'>
-                                Kamu berhasil setor tunai <strong style='color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</strong> ke rekening Tabungan Utama.
-                            </p>
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nominal</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Biaya Admin</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#16a34a;'>Gratis</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Total</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening_full}</span></p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>Setor Tunai</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal & Waktu</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
+    </div>
+    
+    <div style='margin-bottom:0;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
+        <p style='margin:0; font-size:16px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
+    </div>
 
-                            <hr style='border:none; border-top:1px solid #e5e5e5; margin:30px 0;' />
+    <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
 
-                            <h3 style='margin:0 0 20px; font-size:17px; font-weight:700; color:#1a1a1a;'>Detail Transaksi</h3>
-
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nominal Setoran</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Biaya Admin</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#22c55e;'>Gratis</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Total</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening_full}</span></p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>Setor Tunai</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal & Waktu</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
-                            </div>
-                            <div style='margin-bottom:0;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
-                                <p style='margin:0; font-size:16px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- Footer -->
-                    <tr>
-                        <td style='padding:30px 40px; text-align:center; border-top:1px solid #e5e5e5; background:#ffffff;'>
-                            <p style='margin:0 0 8px; font-size:13px; color:#6b7280;'>
-                                © " . date('Y') . " Schobank Student Digital Banking. All rights reserved.
-                            </p>
-                            <p style='margin:0 0 8px; font-size:12px; color:#9ca3af;'>
-                                Email ini dikirim secara otomatis. Mohon tidak membalas email ini.
-                            </p>
-                            <p style='margin:0; font-size:11px; color:#d1d5db;'>
-                                Ref: {$no_transaksi} • ID: {$id_transaksi}
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>";
+    <p style='font-size: 12px; color: #999;'>
+        Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+        Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
+    </p>
+</div>";
                 try {
                     $mail = new PHPMailer(true);
                     $mail->clearAllRecipients();
@@ -642,15 +718,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $mail->addCustomHeader('X-Priority', '1');
                     $mail->addCustomHeader('Importance', 'High');
                     
-                    $header_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/header.png';
-                    if (file_exists($header_path)) {
-                        $mail->addEmbeddedImage($header_path, 'header_img', 'header.png');
-                    }
-                    
                     $mail->isHTML(true);
                     $mail->Subject = $subject;
                     $mail->Body = $message_email;
-                    $mail->AltBody = strip_tags(str_replace(['<br>', '</tr>', '</td>'], ["\n", "\n", " "], $message_email));
+
+                    // Plain text version
+                    $labels = [
+                        'Nama' => $nama_nasabah,
+                        'Nominal' => 'Rp ' . number_format($jumlah, 0, ',', '.'),
+                        'Biaya Admin' => 'Gratis',
+                        'Total' => 'Rp ' . number_format($jumlah, 0, ',', '.'),
+                        'Rekening Tujuan' => $no_rekening_full,
+                        'Keterangan' => 'Setor Tunai',
+                        'Tanggal & Waktu' => $tanggal_transaksi . ' WIB',
+                        'Nomor Referensi' => $no_transaksi,
+                        'ID Transaksi' => $id_transaksi
+                    ];
+                    $max_label_length = max(array_map('strlen', array_keys($labels)));
+                    $max_label_length = max($max_label_length, 20);
+                    $text_rows = [];
+                    foreach ($labels as $label => $value) {
+                        $text_rows[] = str_pad($label, $max_label_length, ' ') . " : " . $value;
+                    }
+                    $text_rows[] = "\nHormat kami,\nTim Schobank Student Digital Banking";
+                    $text_rows[] = "\nPesan otomatis, mohon tidak membalas.";
+                    $mail->AltBody = implode("\n", $text_rows);
                     
                     if ($mail->send()) {
                         $email_status = 'sent';

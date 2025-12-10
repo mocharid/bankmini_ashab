@@ -1,9 +1,88 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Dashboard Admin - Adaptive Path Version
+ * File: pages/admin/index.php or similar
+ * 
+ * Compatible with:
+ * - Local: schobank/pages/admin/index.php
+ * - Hosting: public_html/pages/admin/index.php
+ */
 
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
 
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: jika di folder 'pages' atau 'admin'
+if (basename($current_dir) === 'admin') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/auth.php')) {
+    die('Error: File auth.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('Error: File db_connection.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
 $admin_id = $_SESSION['user_id'] ?? 0;
 
 // Validasi admin_id
@@ -124,13 +203,31 @@ $tarik_count = $pie_data['tarik_count'] ?? 0;
 $total_transaksi = $setor_count + $tarik_count;
 $setor_percentage = $total_transaksi > 0 ? round(($setor_count / $total_transaksi) * 100, 1) : 0;
 $tarik_percentage = $total_transaksi > 0 ? round(($tarik_count / $total_transaksi) * 100, 1) : 0;
+
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
     <title>Dashboard Administrator | MY Schobank</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.css" rel="stylesheet">
@@ -626,7 +723,7 @@ $tarik_percentage = $total_transaksi > 0 ? round(($tarik_count / $total_transaks
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_admin.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_admin.php'; ?>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
@@ -669,7 +766,7 @@ $tarik_percentage = $total_transaksi > 0 ? round(($tarik_count / $total_transaks
                         <div class="stat-value counter" data-target="<?= $total_saldo + $saldo_harian ?>" data-prefix="Rp ">0</div>
                         <div class="stat-trend">
                             <i class="fas fa-chart-line"></i>
-                            <span>Estimasi Saldo Setelah Setoran Teller</span>
+                            <span>Estimasi Saldo Setelah Setelah Teller</span>
                         </div>
                     </div>
                 </div>

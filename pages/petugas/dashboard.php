@@ -1,83 +1,137 @@
 <?php
-// dashboard.php
-require_once '../../includes/auth.php';
-require_once '../../includes/session_validator.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Petugas Dashboard - Adaptive Path Version (Normalized DB)
+ * File: pages/petugas/dashboard.php
+ */
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: Check if we're in 'pages/petugas' folder
+if (basename(dirname($current_dir)) === 'pages') {
+    $project_root = dirname(dirname($current_dir));
+}
+// Strategy 2: Check if includes/ exists in parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: Search upward for includes/ folder (max 5 levels)
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: Use current directory
+if (!$project_root) {
+    $project_root = dirname(dirname($current_dir));
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/session_validator.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
 $username = $_SESSION['username'] ?? 'Petugas';
 $petugas_id = $_SESSION['user_id'] ?? 0;
 date_default_timezone_set('Asia/Jakarta');
-// Check petugas block status
-$query_block = "SELECT is_blocked FROM petugas_block_status WHERE id = 1";
-$result_block = $conn->query($query_block);
-$is_blocked = $result_block->fetch_assoc()['is_blocked'] ?? 0;
-// Get today's officer schedule
-$query_schedule = "SELECT pt.*,
-                   u1.nama AS petugas1_nama,
-                   u2.nama AS petugas2_nama
-                   FROM petugas_tugas pt
-                   LEFT JOIN users u1 ON pt.petugas1_id = u1.id
-                   LEFT JOIN users u2 ON pt.petugas2_id = u2.id
-                   WHERE pt.tanggal = CURDATE()";
+
+// ============================================
+// CARI TABEL UNTUK BLOCK STATUS (OPTIONAL)
+// Karena tidak ada di DB baru, kita set default false
+// ============================================
+$is_blocked = false;
+
+// ============================================
+// GET TODAY'S OFFICER SCHEDULE (petugas_shift)
+// AMBIL NAMA DARI petugas_profiles, BUKAN users
+// ============================================
+$query_schedule = "SELECT ps.*,
+                   pp1.petugas1_nama AS petugas1_nama,
+                   pp2.petugas2_nama AS petugas2_nama
+                   FROM petugas_shift ps
+                   LEFT JOIN petugas_profiles pp1 ON ps.petugas1_id = pp1.user_id AND pp1.is_petugas1 = 1
+                   LEFT JOIN petugas_profiles pp2 ON ps.petugas2_id = pp2.user_id AND pp2.is_petugas2 = 1
+                   WHERE ps.tanggal = CURDATE()";
 $stmt_schedule = $conn->prepare($query_schedule);
 $stmt_schedule->execute();
 $result_schedule = $stmt_schedule->get_result();
 $schedule = $result_schedule->fetch_assoc();
-$petugas1_nama = $schedule ? $schedule['petugas1_nama'] : 'Tidak Ada';
-$petugas2_nama = $schedule ? $schedule['petugas2_nama'] : 'Tidak Ada';
-// Check attendance
+
+$petugas1_nama = $schedule ? ($schedule['petugas1_nama'] ?? 'Tidak Ada') : 'Tidak Ada';
+$petugas2_nama = $schedule ? ($schedule['petugas2_nama'] ?? 'Tidak Ada') : 'Tidak Ada';
+
+// ============================================
+// CHECK ATTENDANCE (petugas_status)
+// ============================================
 $at_least_one_checked_in = false;
 $petugas1_checked_in = false;
 $petugas2_checked_in = false;
 $petugas1_active = false;
 $petugas2_active = false;
+
 if ($schedule) {
-    $query_attendance = "SELECT * FROM absensi
-                        WHERE tanggal = CURDATE()
-                        AND ((petugas_type = 'petugas1' AND petugas1_status = 'hadir')
-                             OR (petugas_type = 'petugas2' AND petugas2_status = 'hadir'))";
+    // Cek status absensi dari tabel petugas_status
+    $query_attendance = "SELECT * FROM petugas_status
+                        WHERE petugas_shift_id = ?
+                        AND status = 'hadir'";
     $stmt_attendance = $conn->prepare($query_attendance);
+    $stmt_attendance->bind_param("i", $schedule['id']);
     $stmt_attendance->execute();
     $result_attendance = $stmt_attendance->get_result();
     $attendance_records = $result_attendance->fetch_all(MYSQLI_ASSOC);
-   
+    
     foreach ($attendance_records as $record) {
-        if ($record['petugas_type'] === 'petugas1' && $record['petugas1_status'] === 'hadir') {
+        if ($record['petugas_type'] === 'petugas1' && $record['status'] === 'hadir') {
             $petugas1_checked_in = true;
-        }
-        if ($record['petugas_type'] === 'petugas2' && $record['petugas2_status'] === 'hadir') {
-            $petugas2_checked_in = true;
-        }
-    }
-   
-    $at_least_one_checked_in = $petugas1_checked_in || $petugas2_checked_in;
-}
-$at_least_one_active = false;
-if ($schedule) {
-    $query_active = "SELECT * FROM absensi
-                    WHERE tanggal = CURDATE()
-                    AND ((petugas_type = 'petugas1' AND petugas1_status = 'hadir' AND waktu_keluar IS NULL)
-                         OR (petugas_type = 'petugas2' AND petugas2_status = 'hadir' AND waktu_keluar IS NULL))";
-    $stmt_active = $conn->prepare($query_active);
-    $stmt_active->execute();
-    $result_active = $stmt_active->get_result();
-    $active_records = $result_active->fetch_all(MYSQLI_ASSOC);
-   
-    foreach ($active_records as $record) {
-        if ($record['petugas_type'] === 'petugas1' && $record['petugas1_status'] === 'hadir' && is_null($record['waktu_keluar'])) {
+            // Cek apakah masih aktif (belum checkout)
+            // Karena tidak ada waktu_keluar di petugas_status, kita anggap aktif jika hadir
             $petugas1_active = true;
         }
-        if ($record['petugas_type'] === 'petugas2' && $record['petugas2_status'] === 'hadir' && is_null($record['waktu_keluar'])) {
+        if ($record['petugas_type'] === 'petugas2' && $record['status'] === 'hadir') {
+            $petugas2_checked_in = true;
             $petugas2_active = true;
         }
     }
-   
+    
+    $at_least_one_checked_in = $petugas1_checked_in || $petugas2_checked_in;
     $at_least_one_active = $petugas1_active || $petugas2_active;
 }
-// Transaction data
+
+// ============================================
+// TRANSACTION DATA
+// ============================================
 $total_transaksi = 0;
 $uang_masuk = 0;
 $uang_keluar = 0;
 $saldo_bersih = 0;
+
 $query = "SELECT COUNT(t.id) as total_transaksi
           FROM transaksi t
           INNER JOIN users u ON t.petugas_id = u.id
@@ -89,6 +143,7 @@ $stmt = $conn->prepare($query);
 $stmt->execute();
 $result = $stmt->get_result();
 $total_transaksi = $result->fetch_assoc()['total_transaksi'] ?? 0;
+
 $query = "SELECT COALESCE(SUM(t.jumlah), 0) as uang_masuk
           FROM transaksi t
           INNER JOIN users u ON t.petugas_id = u.id
@@ -100,6 +155,7 @@ $stmt = $conn->prepare($query);
 $stmt->execute();
 $result = $stmt->get_result();
 $uang_masuk = $result->fetch_assoc()['uang_masuk'] ?? 0;
+
 $query = "SELECT COALESCE(SUM(t.jumlah), 0) as uang_keluar
           FROM transaksi t
           INNER JOIN users u ON t.petugas_id = u.id
@@ -111,25 +167,34 @@ $stmt = $conn->prepare($query);
 $stmt->execute();
 $result = $stmt->get_result();
 $uang_keluar = $result->fetch_assoc()['uang_keluar'] ?? 0;
+
 $saldo_bersih = $uang_masuk - $uang_keluar;
-// Chart data - Weekly
+
+// ============================================
+// CHART DATA - WEEKLY
+// ============================================
 $chart_labels = [];
 $chart_setor = [];
 $chart_tarik = [];
+
 for ($i = 6; $i >= 0; $i--) {
     $date = date('Y-m-d', strtotime("-$i days"));
     $chart_labels[] = date('d M', strtotime($date));
-   
+    
     $query_daily = "SELECT
         COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'setor' THEN t.jumlah ELSE 0 END), 0) as setor,
         COALESCE(SUM(CASE WHEN t.jenis_transaksi = 'tarik' THEN t.jumlah ELSE 0 END), 0) as tarik
     FROM transaksi t
     INNER JOIN users u ON t.petugas_id = u.id
-    WHERE DATE(t.created_at) = '$date'
+    WHERE DATE(t.created_at) = ?
         AND t.status = 'approved'
         AND u.role = 'petugas'";
-   
-    $result_daily = $conn->query($query_daily);
+    
+    $stmt_daily = $conn->prepare($query_daily);
+    $stmt_daily->bind_param("s", $date);
+    $stmt_daily->execute();
+    $result_daily = $stmt_daily->get_result();
+    
     if ($result_daily && $row = $result_daily->fetch_assoc()) {
         $chart_setor[] = (float)$row['setor'];
         $chart_tarik[] = (float)$row['tarik'];
@@ -138,11 +203,15 @@ for ($i = 6; $i >= 0; $i--) {
         $chart_tarik[] = 0;
     }
 }
-// Check if chart has data
+
 $has_weekly_data = array_sum($chart_setor) > 0 || array_sum($chart_tarik) > 0;
-// Recent transactions
+
+// ============================================
+// RECENT TRANSACTIONS
+// ============================================
 $query_recent = "SELECT t.*,
                  u.nama as siswa_nama,
+                 sp.kelas_id,
                  k.nama_kelas,
                  j.nama_jurusan,
                  tk.nama_tingkatan,
@@ -151,8 +220,9 @@ $query_recent = "SELECT t.*,
                  FROM transaksi t
                  LEFT JOIN rekening r ON t.rekening_id = r.id
                  LEFT JOIN users u ON r.user_id = u.id
-                 LEFT JOIN kelas k ON u.kelas_id = k.id
-                 LEFT JOIN jurusan j ON k.jurusan_id = j.id
+                 LEFT JOIN siswa_profiles sp ON u.id = sp.user_id
+                 LEFT JOIN kelas k ON sp.kelas_id = k.id
+                 LEFT JOIN jurusan j ON sp.jurusan_id = j.id
                  LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                  INNER JOIN users p ON t.petugas_id = p.id
                  WHERE DATE(t.created_at) = CURDATE()
@@ -165,6 +235,10 @@ $stmt_recent = $conn->prepare($query_recent);
 $stmt_recent->execute();
 $result_recent = $stmt_recent->get_result();
 $recent_transactions = $result_recent->fetch_all(MYSQLI_ASSOC);
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 function tanggal_indonesia($tanggal) {
     $bulan = [
         1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
@@ -181,9 +255,11 @@ function tanggal_indonesia($tanggal) {
     $tahun = date('Y', $tanggal);
     return "$hari_ini, $tanggal_format $bulan_ini $tahun";
 }
+
 function format_waktu($datetime) {
     return date('H:i', strtotime($datetime));
 }
+
 function format_kelas($tingkatan, $nama_kelas, $jurusan) {
     if ($tingkatan && $nama_kelas && $jurusan) {
         return "$tingkatan $nama_kelas $jurusan";
@@ -194,12 +270,32 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
     }
     return 'Belum Ada Kelas';
 }
+
+// ============================================
+// DEFINE WEB BASE URL
+// ============================================
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    $base_path = dirname(dirname($script)); // Remove /petugas/dashboard.php
+    $base_path = preg_replace('#/pages$#', '', $base_path);
+    if ($base_path !== '/' && !empty($base_path)) {
+        $base_path = '/' . ltrim($base_path, '/');
+    }
+    return $protocol . $host . $base_path;
+}
+
+if (!defined('BASE_URL')) {
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
+}
+define('ASSETS_URL', BASE_URL . '/assets');
 ?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <title>Dashboard | MY Schobank</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -504,7 +600,6 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
             max-width: 1400px;
             margin: 0 auto;
         }
-        /* Alert Message */
         .alert-message {
             background: var(--bg-white);
             border-radius: 8px;
@@ -617,7 +712,6 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
             font-size: 0.8rem;
             opacity: 0.7;
         }
-        /* ===== TRANSACTION LIST IN CARD ===== */
         .transaction-list {
             display: flex;
             flex-direction: column;
@@ -662,7 +756,6 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
         .transaction-icon.setor {
             background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         }
-       
         .transaction-icon.tarik {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
         }
@@ -738,7 +831,6 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
             margin-bottom: 12px;
             opacity: 0.2;
         }
-       
         .empty-state p {
             font-size: 0.85rem;
             font-weight: 500;
@@ -826,7 +918,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
     <div class="main-content" id="mainContent">
         <div class="top-navbar">
             <div class="navbar-left">
@@ -869,6 +961,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                 </div>
             </div>
         </div>
+        
         <div class="content-wrapper">
             <?php if ($is_blocked): ?>
                 <div class="alert-message">
@@ -886,9 +979,10 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                     <span>Terima kasih atas dedikasi Anda hari ini. Sampai jumpa besok!</span>
                 </div>
             <?php endif; ?>
+            
             <div class="summary-section">
                 <h2 class="section-title">Ikhtisar Operasional Harian</h2>
-               
+                
                 <div class="stats-container">
                     <div class="stat-box transactions">
                         <div class="stat-icon"><i class="fas fa-exchange-alt"></i></div>
@@ -901,7 +995,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                             </div>
                         </div>
                     </div>
-                   
+                    
                     <div class="stat-box income">
                         <div class="stat-icon"><i class="fas fa-arrow-down"></i></div>
                         <div class="stat-content">
@@ -913,7 +1007,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                             </div>
                         </div>
                     </div>
-                   
+                    
                     <div class="stat-box expense">
                         <div class="stat-icon"><i class="fas fa-arrow-up"></i></div>
                         <div class="stat-content">
@@ -925,7 +1019,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                             </div>
                         </div>
                     </div>
-                   
+                    
                     <div class="stat-box balance">
                         <div class="stat-icon"><i class="fas fa-wallet"></i></div>
                         <div class="stat-content">
@@ -939,9 +1033,10 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                     </div>
                 </div>
             </div>
+            
             <div class="charts-section">
                 <h2 class="section-title">Laporan Pergerakan Dana</h2>
-               
+                
                 <div class="charts-grid">
                     <div class="chart-card">
                         <div class="chart-header">
@@ -960,12 +1055,13 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                             <?php endif; ?>
                         </div>
                     </div>
+                    
                     <div class="chart-card">
                         <div class="chart-header">
                             <h3 class="chart-title">Mutasi Rekening Terbaru</h3>
                             <p class="chart-subtitle">5 transaksi terakhir hari ini</p>
                         </div>
-                       
+                        
                         <div class="transaction-list">
                             <?php if (count($recent_transactions) > 0): ?>
                                 <?php foreach ($recent_transactions as $trans): ?>
@@ -1007,6 +1103,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
             </div>
         </div>
     </div>
+    
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             function updateClock() {
@@ -1021,6 +1118,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
             }
             updateClock();
             setInterval(updateClock, 1000);
+            
             const menuToggle = document.getElementById('menuToggle');
             const sidebar = document.getElementById('sidebar');
             if (menuToggle && sidebar) {
@@ -1030,12 +1128,14 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                     document.body.classList.toggle('sidebar-active');
                 });
             }
+            
             document.addEventListener('click', function(e) {
                 if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
                     sidebar.classList.remove('active');
                     document.body.classList.remove('sidebar-active');
                 }
             });
+            
             const dropdownButtons = document.querySelectorAll('.dropdown-btn');
             dropdownButtons.forEach(button => {
                 button.addEventListener('click', function(e) {
@@ -1054,6 +1154,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                     }
                 });
             });
+            
             const counters = document.querySelectorAll('.counter');
             counters.forEach(counter => {
                 const updateCount = () => {
@@ -1072,6 +1173,7 @@ function format_kelas($tingkatan, $nama_kelas, $jurusan) {
                 };
                 updateCount();
             });
+            
             try {
                 if (typeof Chart === 'undefined') {
                     console.error('Chart.js not loaded');

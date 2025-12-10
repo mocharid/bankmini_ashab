@@ -1,24 +1,116 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Rekapan Transaksi Petugas - Adaptive Path Version
+ * File: pages/rekap_petugas.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/rekap_petugas.php
+ * - Hosting: public_html/pages/rekap_petugas.php
+ */
+
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
 
 // Prevent output before PDF generation
 ob_start();
-error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
-ini_set('display_errors', 0);
 
-// Set timezone to Asia/Jakarta
-date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
 
-// Validate session
-if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
+// Strategy 1: jika di folder 'pages'
+if (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+if (!defined('TCPDF_PATH')) {
+    define('TCPDF_PATH', PROJECT_ROOT . '/tcpdf');
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/auth.php')) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'error' => 'File auth.php tidak ditemukan.',
+        'debug' => [
+            'includes_path' => INCLUDES_PATH,
+            'project_root'  => PROJECT_ROOT
+        ]
+    ]);
     exit;
 }
 
-// Get parameters
-$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
-$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d');
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// Set locale ke Indonesia untuk nama bulan
+setlocale(LC_TIME, 'id_ID.UTF-8', 'id_ID', 'id');
+
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
+if (!isset($_SESSION['user_id'])) {
+    header('Location: ' . PROJECT_ROOT . '/login.php');
+    exit;
+}
+
+// ============================================
+// PARAMETER VALIDATION
+// ============================================
+$start_date = isset($_GET['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['start_date'])
+    ? $_GET['start_date']
+    : date('Y-m-01');
+
+$end_date = isset($_GET['end_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['end_date'])
+    ? $_GET['end_date']
+    : date('Y-m-d');
+
 $format = isset($_GET['format']) ? $_GET['format'] : 'pdf';
 
 // Validate dates
@@ -27,13 +119,16 @@ if (empty($start_date) || empty($end_date) || !strtotime($start_date) || !strtot
     echo json_encode(['error' => 'Tanggal tidak valid']);
     exit;
 }
+
 if (strtotime($start_date) > strtotime($end_date)) {
     header('Content-Type: application/json');
     echo json_encode(['error' => 'Tanggal awal tidak boleh lebih dari tanggal akhir']);
     exit;
 }
 
-// Query for totals
+// ============================================
+// QUERY: TRANSACTION TOTALS
+// ============================================
 $total_query = "SELECT 
     COUNT(*) as total_transactions,
     SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_setoran,
@@ -41,27 +136,41 @@ $total_query = "SELECT
     FROM transaksi t
     JOIN rekening r ON t.rekening_id = r.id
     JOIN users u ON r.user_id = u.id
+    JOIN siswa_profiles sp ON u.id = sp.user_id
     WHERE DATE(t.created_at) BETWEEN ? AND ?
     AND t.jenis_transaksi IN ('setor', 'tarik')
     AND t.petugas_id IS NOT NULL";
-$stmt_total = $conn->prepare($total_query);
-if (!$stmt_total) {
-    error_log("Error preparing total query: " . $conn->error);
+
+try {
+    $stmt_total = $conn->prepare($total_query);
+    if (!$stmt_total) {
+        error_log("Error preparing total query: " . $conn->error);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Gagal menyiapkan query total']);
+        exit;
+    }
+    
+    $stmt_total->bind_param("ss", $start_date, $end_date);
+    $stmt_total->execute();
+    $totals_result = $stmt_total->get_result();
+    $totals = $totals_result->fetch_assoc();
+    
+    $totals['total_transactions'] = $totals['total_transactions'] ?? 0;
+    $totals['total_setoran'] = $totals['total_setoran'] ?? 0;
+    $totals['total_penarikan'] = $totals['total_penarikan'] ?? 0;
+    $totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
+    
+    $stmt_total->close();
+} catch (Exception $e) {
+    error_log("Total query error: " . $e->getMessage());
     header('Content-Type: application/json');
-    echo json_encode(['error' => 'Gagal menyiapkan query total']);
+    echo json_encode(['error' => 'Terjadi kesalahan saat menghitung total transaksi']);
     exit;
 }
-$stmt_total->bind_param("ss", $start_date, $end_date);
-$stmt_total->execute();
-$totals_result = $stmt_total->get_result();
-$totals = $totals_result->fetch_assoc();
-$totals['total_transactions'] = $totals['total_transactions'] ?? 0;
-$totals['total_setoran'] = $totals['total_setoran'] ?? 0;
-$totals['total_penarikan'] = $totals['total_penarikan'] ?? 0;
-$totals['total_net'] = $totals['total_setoran'] - $totals['total_penarikan'];
-$stmt_total->close();
 
-// Query for transaction details with tingkatan_kelas
+// ============================================
+// QUERY: TRANSACTION DETAILS
+// ============================================
 $query = "SELECT 
     t.id,
     t.jenis_transaksi,
@@ -75,25 +184,37 @@ $query = "SELECT
     FROM transaksi t 
     JOIN rekening r ON t.rekening_id = r.id
     JOIN users u ON r.user_id = u.id
-    LEFT JOIN kelas k ON u.kelas_id = k.id
+    JOIN siswa_profiles sp ON u.id = sp.user_id
+    LEFT JOIN kelas k ON sp.kelas_id = k.id
     LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
     WHERE DATE(t.created_at) BETWEEN ? AND ?
     AND t.jenis_transaksi IN ('setor', 'tarik')
     AND t.petugas_id IS NOT NULL
     AND (t.status = 'approved' OR t.status IS NULL)
     ORDER BY t.created_at DESC";
-$stmt = $conn->prepare($query);
-if (!$stmt) {
-    error_log("Error preparing transaction query: " . $conn->error);
+
+try {
+    $stmt = $conn->prepare($query);
+    if (!$stmt) {
+        error_log("Error preparing transaction query: " . $conn->error);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Gagal menyiapkan query transaksi']);
+        exit;
+    }
+    
+    $stmt->bind_param("ss", $start_date, $end_date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+} catch (Exception $e) {
+    error_log("Transaction query error: " . $e->getMessage());
     header('Content-Type: application/json');
-    echo json_encode(['error' => 'Gagal menyiapkan query transaksi']);
+    echo json_encode(['error' => 'Terjadi kesalahan saat mengambil data transaksi']);
     exit;
 }
-$stmt->bind_param("ss", $start_date, $end_date);
-$stmt->execute();
-$result = $stmt->get_result();
 
-// Store transactions
+// ============================================
+// PROCESS TRANSACTION DATA
+// ============================================
 $transactions = [];
 while ($row = $result->fetch_assoc()) {
     $no_rekening = $row['no_rekening'] ?? 'N/A';
@@ -108,116 +229,195 @@ while ($row = $result->fetch_assoc()) {
     }
     
     // Combine nama_tingkatan and nama_kelas
-    $row['kelas'] = trim($row['nama_tingkatan']) && trim($row['nama_kelas']) && $row['nama_tingkatan'] !== '-' && $row['nama_kelas'] !== '-' 
-        ? htmlspecialchars($row['nama_tingkatan'] . ' ' . $row['nama_kelas'])
-        : 'N/A';
+    $kelas_parts = [];
+    if (trim($row['nama_tingkatan']) && $row['nama_tingkatan'] !== '-') {
+        $kelas_parts[] = $row['nama_tingkatan'];
+    }
+    if (trim($row['nama_kelas']) && $row['nama_kelas'] !== '-') {
+        $kelas_parts[] = $row['nama_kelas'];
+    }
+    $row['kelas_display'] = !empty($kelas_parts) ? htmlspecialchars(implode(' ', $kelas_parts)) : 'N/A';
+    
     $transactions[] = $row;
 }
 $stmt->close();
 
-// PDF Generation
+// Fungsi format tanggal Indonesia
+function tgl_indo($date) {
+    $bulan = [
+        1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    $split = explode('-', $date);
+    return (int)$split[2] . ' ' . $bulan[(int)$split[1]] . ' ' . $split[0];
+}
+
+// Function to format Rupiah
+function formatRupiah($amount) {
+    return 'Rp ' . number_format($amount, 0, ',', '.');
+}
+
+// ============================================
+// PDF GENERATION
+// ============================================
 if ($format === 'pdf') {
-    require_once '../../tcpdf/tcpdf.php';
+    // === TCPDF LOADING WITH ADAPTIVE PATHS ===
+    $tcpdf_file = null;
+    $possible_tcpdf_paths = [
+        TCPDF_PATH . '/tcpdf.php',
+        PROJECT_ROOT . '/vendor/tecnickcom/tcpdf/tcpdf.php',
+        PROJECT_ROOT . '/lib/tcpdf/tcpdf.php',
+        '/usr/share/php/TCPDF/tcpdf.php',
+        dirname(PROJECT_ROOT) . '/tcpdf/tcpdf.php',
+    ];
 
-    class MYPDF extends TCPDF {
-        public $isFirstPage = true;
-
-        public function Header() {
-            if ($this->isFirstPage) {
-                $image_file = '../../assets/images/logo.png';
-                if (file_exists($image_file)) {
-                    $this->Image($image_file, 15, 5, 20, '', 'PNG');
-                }
-                $this->SetFont('helvetica', 'B', 16);
-                $this->Cell(0, 10, 'MY SCHOBANK', 0, false, 'C', 0);
-                $this->Ln(6);
-                $this->SetFont('helvetica', '', 10);
-                $this->Cell(0, 10, 'Sistem Bank Mini Sekolah', 0, false, 'C', 0);
-                $this->Ln(5);
-                $this->SetFont('helvetica', '', 8);
-                $this->Cell(0, 10, 'Jl. K.H. Saleh No.57A 43212 Cianjur Jawa Barat', 0, false, 'C', 0);
-                $this->Line(15, 30, 195, 30);
-                $this->isFirstPage = false;
-            } else {
-                $this->SetY(15);
-                $col_width = [10, 25, 25, 35, 25, 35, 25];
-                $this->SetFont('helvetica', 'B', 8);
-                $this->SetFillColor(128, 128, 128);
-                $this->SetTextColor(255, 255, 255);
-                $this->Cell($col_width[0], 6, 'No', 1, 0, 'C', true);
-                $this->Cell($col_width[1], 6, 'Tanggal', 1, 0, 'C', true);
-                $this->Cell($col_width[2], 6, 'No Rekening', 1, 0, 'C', true);
-                $this->Cell($col_width[3], 6, 'Nama Siswa', 1, 0, 'C', true);
-                $this->Cell($col_width[4], 6, 'Kelas', 1, 0, 'C', true);
-                $this->Cell($col_width[5], 6, 'Jenis', 1, 0, 'C', true);
-                $this->Cell($col_width[6], 6, 'Jumlah', 1, 1, 'C', true);
-                $this->SetTextColor(0, 0, 0);
-            }
+    // Cari TCPDF di beberapa path
+    foreach ($possible_tcpdf_paths as $path) {
+        if (file_exists($path)) {
+            $tcpdf_file = $path;
+            break;
         }
     }
 
-    $pdf = new MYPDF(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
-    $pdf->SetCreator('MY SCHOBANK');
-    $pdf->SetAuthor('MY SCHOBANK');
+    // Coba Composer autoloader jika belum ketemu
+    if (!$tcpdf_file && file_exists(PROJECT_ROOT . '/vendor/autoload.php')) {
+        require_once PROJECT_ROOT . '/vendor/autoload.php';
+        if (class_exists('TCPDF')) {
+            $tcpdf_file = 'composer';
+        }
+    }
+
+    // Jika tetap tidak tersedia
+    if (!$tcpdf_file) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'error'      => 'Modul PDF (TCPDF) tidak tersedia. Hubungi administrator.',
+            'debug_info' => [
+                'searched_paths' => $possible_tcpdf_paths,
+                'project_root'   => PROJECT_ROOT,
+                'tcpdf_path'     => TCPDF_PATH
+            ]
+        ]);
+        exit;
+    }
+
+    // Load TCPDF jika belum lewat Composer
+    if ($tcpdf_file !== 'composer' && !class_exists('TCPDF')) {
+        require_once $tcpdf_file;
+    }
+
+    // Pastikan class TCPDF ada
+    if (!class_exists('TCPDF')) {
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'Class TCPDF tidak ditemukan setelah include.']);
+        exit;
+    }
+
+    // ---- CUSTOM PDF CLASS ----
+    class MYPDF extends TCPDF {
+        public function Header() {
+            $this->SetY(8);
+
+            // Logo pakai adaptive path ASSETS_PATH
+            $logo = ASSETS_PATH . '/images/logo.png';
+            if (file_exists($logo)) {
+                $this->Image($logo, 15, 9, 24, 24, 'PNG');
+            }
+
+            // Kop Surat Abu-abu Elegan
+            $this->SetFont('helvetica', 'B', 16);
+            $this->SetTextColor(70, 70, 70);
+            $this->Cell(0, 8, 'SMK PLUS ASHABULYAMIN', 0, 1, 'C');
+
+            $this->SetFont('helvetica', 'B', 12);
+            $this->SetTextColor(50, 50, 50);
+            $this->Cell(0, 7, 'SCHOBANK - BANK MINI SEKOLAH', 0, 1, 'C');
+
+            $this->SetFont('helvetica', '', 9.5);
+            $this->SetTextColor(100, 100, 100);
+            $this->Cell(0, 5, 'Jl. K.H. Saleh No.57A, Cianjur 43212, Jawa Barat', 0, 1, 'C');
+            $this->Cell(0, 5, 'Website: schobank.my.id | Email: myschobank@gmail.com', 0, 1, 'C');
+
+            // Garis abu-abu elegan
+            $this->SetDrawColor(120, 120, 120);
+            $this->SetLineWidth(1.2);
+            $this->Line(15, 40, 195, 40);
+            $this->SetDrawColor(200, 200, 200);
+            $this->SetLineWidth(0.3);
+            $this->Line(15, 41.5, 195, 41.5);
+        }
+
+        public function Footer() {
+            $this->SetY(-15);
+            $this->SetFont('helvetica', 'I', 8);
+            $this->SetTextColor(130, 130, 130);
+            $this->Cell(0, 10, 'Dicetak pada ' . date('d/m/Y H:i') . ' WIB • Halaman ' . $this->getAliasNumPage() . ' dari ' . $this->getAliasNbPages(), 0, 0, 'C');
+        }
+    }
+
+    $pdf = new MYPDF('P', 'mm', 'A4', true, 'UTF-8', false);
+    $pdf->SetCreator('Schobank SMK Plus Ashabulyamin');
+    $pdf->SetAuthor('Admin');
     $pdf->SetTitle('Rekapan Transaksi Petugas');
-    $pdf->SetMargins(15, 35, 15);
-    $pdf->SetHeaderMargin(10);
-    $pdf->SetFooterMargin(10);
-    $pdf->SetAutoPageBreak(true, 15);
+    $pdf->SetMargins(12, 48, 12);
+    $pdf->SetAutoPageBreak(true, 20);
     $pdf->AddPage();
 
-    // First page content
-    $pdf->Ln(5);
-    $pdf->SetFont('helvetica', 'B', 14);
-    $pdf->Cell(0, 7, 'REKAPAN TRANSAKSI PETUGAS', 0, 1, 'C');
+    // === JUDUL LAPORAN ===
+    $pdf->Ln(6);
+    $pdf->SetFont('helvetica', 'B', 13);
+    $pdf->SetTextColor(60, 60, 60);
+    $pdf->Cell(0, 8, 'REKAPAN TRANSAKSI PETUGAS', 0, 1, 'C');
+
     $pdf->SetFont('helvetica', '', 10);
-    $pdf->Cell(0, 7, 'Periode: ' . date('d/m/Y', strtotime($start_date)) . ' - ' . date('d/m/Y', strtotime($end_date)), 0, 1, 'C');
+    $pdf->SetTextColor(90, 90, 90);
+    $pdf->Cell(0, 7, 'Periode: ' . tgl_indo($start_date) . ' — ' . tgl_indo($end_date), 0, 1, 'C');
+    $pdf->Ln(10);
 
-    $totalWidth = 180;
-
-    // Summary Section
-    $pdf->Ln(3);
+    // === RINGKASAN (Warna Abu-abu) ===
     $pdf->SetFont('helvetica', 'B', 10);
-    $pdf->SetFillColor(128, 128, 128);
+    $pdf->SetFillColor(110, 110, 110);
     $pdf->SetTextColor(255, 255, 255);
-    $pdf->Cell($totalWidth, 7, 'RINGKASAN TRANSAKSI', 1, 1, 'C', true);
-    $pdf->SetTextColor(0, 0, 0);
+    $pdf->Cell(186, 8, 'RINGKASAN TRANSAKSI', 0, 1, 'C', true);
 
-    $colWidth = $totalWidth / 4;
-    $pdf->SetFillColor(240, 240, 240);
-    $pdf->Cell($colWidth, 6, 'Total Transaksi', 1, 0, 'C', true);
-    $pdf->Cell($colWidth, 6, 'Total Setoran', 1, 0, 'C', true);
-    $pdf->Cell($colWidth, 6, 'Total Penarikan', 1, 0, 'C', true);
-    $pdf->Cell($colWidth, 6, 'Total Bersih', 1, 1, 'C', true);
+    $w = 46.5;
+    $pdf->SetFillColor(245, 245, 245);
+    $pdf->SetTextColor(0, 0, 0);
+    $pdf->SetFont('helvetica', 'B', 9);
+    $pdf->Cell($w, 7, 'Total Transaksi', 1, 0, 'C', true);
+    $pdf->Cell($w, 7, 'Total Setoran', 1, 0, 'C', true);
+    $pdf->Cell($w, 7, 'Total Penarikan', 1, 0, 'C', true);
+    $pdf->Cell($w, 7, 'Saldo Bersih', 1, 1, 'C', true);
 
     $pdf->SetFont('helvetica', '', 9);
-    $pdf->SetFillColor(255, 255, 255);
-    $pdf->Cell($colWidth, 6, $totals['total_transactions'], 1, 0, 'C');
-    $pdf->Cell($colWidth, 6, formatRupiah($totals['total_setoran']), 1, 0, 'C');
-    $pdf->Cell($colWidth, 6, formatRupiah($totals['total_penarikan']), 1, 0, 'C');
-    $pdf->Cell($colWidth, 6, formatRupiah($totals['total_net']), 1, 1, 'C');
+    $pdf->Cell($w, 7, number_format($totals['total_transactions']), 1, 0, 'C');
+    $pdf->Cell($w, 7, formatRupiah($totals['total_setoran']), 1, 0, 'C');
+    $pdf->Cell($w, 7, formatRupiah($totals['total_penarikan']), 1, 0, 'C');
+    $pdf->Cell($w, 7, formatRupiah($totals['total_net']), 1, 1, 'C');
 
-    // Transaction Details Section
-    $pdf->Ln(3);
+    $pdf->Ln(10);
+
+    // === DETAIL TRANSAKSI ===
     $pdf->SetFont('helvetica', 'B', 10);
-    $pdf->SetFillColor(128, 128, 128);
+    $pdf->SetFillColor(110, 110, 110);
     $pdf->SetTextColor(255, 255, 255);
-    $pdf->Cell($totalWidth, 7, 'DETAIL TRANSAKSI', 1, 1, 'C', true);
+    $pdf->Cell(186, 8, 'DETAIL TRANSAKSI', 0, 1, 'C', true);
+
+    // Header tabel - Kolom disesuaikan agar seimbang (total 186mm)
+    $col = [8, 20, 24, 48, 24, 30, 32]; // Total: 186mm
+    $pdf->SetFont('helvetica', 'B', 8.5);
+    $pdf->SetFillColor(230, 230, 230);
     $pdf->SetTextColor(0, 0, 0);
+    $pdf->Cell($col[0], 7, 'No', 1, 0, 'C', true);
+    $pdf->Cell($col[1], 7, 'Tanggal', 1, 0, 'C', true);
+    $pdf->Cell($col[2], 7, 'No Rekening', 1, 0, 'C', true);
+    $pdf->Cell($col[3], 7, 'Nama Siswa', 1, 0, 'C', true);
+    $pdf->Cell($col[4], 7, 'Kelas', 1, 0, 'C', true);
+    $pdf->Cell($col[5], 7, 'Jenis', 1, 0, 'C', true);
+    $pdf->Cell($col[6], 7, 'Jumlah', 1, 1, 'C', true);
 
-    $col_width = [10, 25, 25, 35, 25, 35, 25];
-    $pdf->SetFont('helvetica', 'B', 8);
-    $pdf->SetFillColor(240, 240, 240);
-    $pdf->Cell($col_width[0], 6, 'No', 1, 0, 'C', true);
-    $pdf->Cell($col_width[1], 6, 'Tanggal', 1, 0, 'C', true);
-    $pdf->Cell($col_width[2], 6, 'No Rekening', 1, 0, 'C', true);
-    $pdf->Cell($col_width[3], 6, 'Nama Siswa', 1, 0, 'C', true);
-    $pdf->Cell($col_width[4], 6, 'Kelas', 1, 0, 'C', true);
-    $pdf->Cell($col_width[5], 6, 'Jenis', 1, 0, 'C', true);
-    $pdf->Cell($col_width[6], 6, 'Jumlah', 1, 1, 'C', true);
-
-    $pdf->SetFont('helvetica', '', 8);
-    $row_height = 5;
+    // Isi tabel
+    $pdf->SetFont('helvetica', '', 8.5);
     $total_setoran = 0;
     $total_penarikan = 0;
 
@@ -232,30 +432,39 @@ if ($format === 'pdf') {
                 $displayType = 'Tarik';
                 $total_penarikan += $row['jumlah'];
             }
+            
             $nama_siswa = $row['nama_siswa'] ?? 'N/A';
-            $nama_siswa = mb_strlen($nama_siswa) > 18 ? mb_substr($nama_siswa, 0, 16) . '...' : $nama_siswa;
+            
+            // Truncate long names if needed
+            if (mb_strlen($nama_siswa) > 30) {
+                $nama_siswa = mb_substr($nama_siswa, 0, 28) . '...';
+            }
 
-            $pdf->Cell($col_width[0], $row_height, $no++, 1, 0, 'C');
-            $pdf->Cell($col_width[1], $row_height, date('d/m/Y', strtotime($row['created_at'])), 1, 0, 'C');
-            $pdf->Cell($col_width[2], $row_height, htmlspecialchars($row['no_rekening_display']), 1, 0, 'L');
-            $pdf->Cell($col_width[3], $row_height, htmlspecialchars($nama_siswa), 1, 0, 'L');
-            $pdf->Cell($col_width[4], $row_height, htmlspecialchars($row['kelas']), 1, 0, 'L');
-            $pdf->Cell($col_width[5], $row_height, $displayType, 1, 0, 'C');
-            $pdf->Cell($col_width[6], $row_height, formatRupiah($row['jumlah']), 1, 1, 'R');
+            $pdf->Cell($col[0], 6.5, $no++, 1, 0, 'C');
+            $pdf->Cell($col[1], 6.5, date('d/m/Y', strtotime($row['created_at'])), 1, 0, 'C');
+            $pdf->Cell($col[2], 6.5, $row['no_rekening_display'], 1, 0, 'C');
+            $pdf->Cell($col[3], 6.5, $nama_siswa, 1, 0, 'L');
+            $pdf->Cell($col[4], 6.5, $row['kelas_display'], 1, 0, 'C');
+            $pdf->Cell($col[5], 6.5, $displayType, 1, 0, 'C');
+            $pdf->Cell($col[6], 6.5, formatRupiah($row['jumlah']), 1, 1, 'C');
         }
 
-        // Total row
+        // Total Bersih
         $total = $total_setoran - $total_penarikan;
-        $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->SetFillColor(240, 240, 240);
-        $pdf->Cell(array_sum(array_slice($col_width, 0, 6)), $row_height, 'Total:', 1, 0, 'C', true);
-        $pdf->Cell($col_width[6], $row_height, formatRupiah($total), 1, 1, 'R', true);
+        $pdf->SetFont('helvetica', 'B', 10);
+        $pdf->SetFillColor(110, 110, 110);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->Cell(array_sum($col) - $col[6], 8, 'TOTAL BERSIH', 1, 0, 'C', true);
+        $pdf->Cell($col[6], 8, formatRupiah($total), 1, 1, 'C', true);
     } else {
-        $pdf->Cell(array_sum($col_width), $row_height, 'Tidak ada transaksi petugas dalam periode ini.', 1, 1, 'C');
+        $pdf->SetFont('helvetica', 'I', 9);
+        $pdf->Cell(array_sum($col), 10, 'Tidak ada transaksi petugas pada periode ini.', 1, 1, 'C');
     }
 
+    // === OUTPUT ===
     ob_end_clean();
-    $pdf->Output('laporan_transaksi_petugas_' . $start_date . '_' . $end_date . '.pdf', 'D');
+    $filename = "Rekap_Petugas_Schobank_" . date('d-m-Y', strtotime($start_date)) . "_sd_" . date('d-m-Y', strtotime($end_date)) . ".pdf";
+    $pdf->Output($filename, 'D');
     exit;
 }
 
@@ -263,9 +472,4 @@ if ($format === 'pdf') {
 header('Content-Type: application/json');
 echo json_encode(['error' => 'Format tidak valid']);
 exit;
-
-// Function to format Rupiah
-function formatRupiah($amount) {
-    return 'Rp ' . number_format($amount, 0, ',', '.');
-}
 ?>

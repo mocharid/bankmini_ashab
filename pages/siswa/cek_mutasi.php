@@ -1,14 +1,109 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../login.php");
-    exit();
+/**
+ * Cek Mutasi - Adaptive Path Version
+ * File: pages/user/cek_mutasi.php or similar
+ *
+ * Compatible with:
+ * - Local: schobank/pages/user/cek_mutasi.php
+ * - Hosting: public_html/pages/user/cek_mutasi.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'user'
+if (basename($current_dir) === 'user') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
 }
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+$base_url = $protocol . '://' . $host . $base_path;
+// ============================================
+// SESSION VALIDATION
+// ============================================
 // Pastikan user adalah siswa
 $user_role = $_SESSION['role'] ?? '';
 if ($user_role !== 'siswa') {
-    header("Location: ../../unauthorized.php");
+    header("Location: $base_url/unauthorized.php");
+    exit();
+}
+if (!isset($_SESSION['user_id'])) {
+    header("Location: $base_url/login.php");
     exit();
 }
 $user_id = $_SESSION['user_id'];
@@ -52,8 +147,9 @@ if (!empty($filter_end_date)) {
     $types .= "s";
 }
 $stmt = $conn->prepare("
-    SELECT u.id, u.nama, u.nis_nisn, r.no_rekening, r.saldo, r.id as rekening_id
+    SELECT u.id, u.nama, sp.nis_nisn, r.no_rekening, r.saldo, r.id as rekening_id
     FROM users u
+    LEFT JOIN siswa_profiles sp ON u.id = sp.user_id
     LEFT JOIN rekening r ON u.id = r.user_id
     WHERE u.id = ? AND u.role = 'siswa'
 ");
@@ -66,12 +162,12 @@ if (!$siswa_info) {
     $error_message = "Akun tidak ditemukan.";
 } else {
     $user_rekening_id = $siswa_info['rekening_id'];
-    
+   
     // Ambil mutasi dengan filter, exclude QR, tanpa pagination
     $query = "
         SELECT m.id, m.jumlah, m.saldo_akhir, m.created_at, m.rekening_id,
-               t.jenis_transaksi, t.no_transaksi, t.status, t.keterangan, t.rekening_id as transaksi_rekening_id, t.rekening_tujuan_id,
-               u_petugas.nama as petugas_nama
+              t.jenis_transaksi, t.no_transaksi, t.status, t.keterangan, t.rekening_id as transaksi_rekening_id, t.rekening_tujuan_id,
+              u_petugas.nama as petugas_nama
         FROM mutasi m
         LEFT JOIN transaksi t ON m.transaksi_id = t.id
         LEFT JOIN rekening rek ON m.rekening_id = rek.id
@@ -95,7 +191,7 @@ $conn->close();
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="format-detection" content="telephone=no">
     <title>Mutasi - SCHOBANK</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
@@ -119,6 +215,7 @@ $conn->close();
             --dark: #1C1C1E;
             --elegant-dark: #2c3e50;
             --elegant-gray: #434343;
+            --orange-accent: #FF8C42;
             --gray-50: #F9FAFB;
             --gray-100: #F3F4F6;
             --gray-200: #E5E7EB;
@@ -134,6 +231,7 @@ $conn->close();
             --shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
             --shadow-md: 0 6px 15px rgba(0, 0, 0, 0.1);
             --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.15);
+            --shadow-float: 0 8px 20px rgba(0, 0, 0, 0.2);
             --radius-sm: 8px;
             --radius: 12px;
             --radius-lg: 16px;
@@ -147,7 +245,7 @@ $conn->close();
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             padding-top: 70px;
-            padding-bottom: 80px;
+            padding-bottom: 100px;
         }
         /* Top Navigation */
         .top-nav {
@@ -501,52 +599,11 @@ $conn->close();
         .empty-text {
             font-size: 14px;
         }
-        /* Bottom Navigation */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--gray-50);
-            padding: 12px 20px 20px;
-            display: flex;
-            justify-content: space-around;
-            z-index: 100;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            transform: translateY(0);
-            opacity: 1;
-        }
-        .bottom-nav.hidden {
-            transform: translateY(100%);
-            opacity: 0;
-        }
-        .nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            text-decoration: none;
-            color: var(--gray-400);
-            transition: all 0.2s ease;
-            padding: 8px 16px;
-        }
-        .nav-item i {
-            font-size: 22px;
-            transition: color 0.2s ease;
-        }
-        .nav-item span {
-            font-size: 11px;
-            font-weight: 600;
-            transition: color 0.2s ease;
-        }
-        .nav-item:hover i,
-        .nav-item:hover span,
-        .nav-item.active i,
-        .nav-item.active span {
-            color: var(--elegant-dark);
-        }
         /* Responsive */
         @media (max-width: 768px) {
+            body {
+                padding-bottom: 110px;
+            }
             .container {
                 padding: 16px;
             }
@@ -572,6 +629,9 @@ $conn->close();
             }
         }
         @media (max-width: 480px) {
+            body {
+                padding-bottom: 115px;
+            }
             .nav-logo {
                 height: 32px;
                 max-width: 120px;
@@ -606,10 +666,9 @@ $conn->close();
     <!-- Top Navigation -->
     <nav class="top-nav">
         <div class="nav-brand">
-            <img src="/schobank/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
+            <img src="<?php echo $base_url; ?>/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
         </div>
     </nav>
-
     <!-- Sticky Header -->
     <?php if ($siswa_info): ?>
         <div class="sticky-header" id="stickyHeader">
@@ -631,11 +690,10 @@ $conn->close();
                 </div>
                 <!-- Filter Button (Icon Only) -->
                 <button class="filter-icon-btn" onclick="openFilterModal()">
-                    <i class="fas fa-calendar-alt"></i>
+                    <i class="fas fa-filter"></i>
                 </button>
             </div>
         </div>
-
         <!-- Main Container untuk Transaksi (Scrollable) -->
         <div class="container">
             <!-- Transaction List -->
@@ -713,7 +771,6 @@ $conn->close();
             <?php endif; ?>
         </div>
     <?php endif; ?>
-
     <!-- Filter Modal -->
     <div class="filter-modal" id="filterModal" onclick="closeFilterModal(event)">
         <div class="filter-content" onclick="event.stopPropagation()">
@@ -763,27 +820,8 @@ $conn->close();
             </form>
         </div>
     </div>
-
-    <!-- Bottom Navigation -->
-    <div class="bottom-nav" id="bottomNav">
-        <a href="dashboard.php" class="nav-item">
-            <i class="fas fa-home"></i>
-            <span>Beranda</span>
-        </a>
-        <a href="cek_mutasi.php" class="nav-item active">
-            <i class="fas fa-list-alt"></i>
-            <span>Mutasi</span>
-        </a>
-        <a href="aktivitas.php" class="nav-item">
-            <i class="fas fa-history"></i>
-            <span>Aktivitas</span>
-        </a>
-        <a href="profil.php" class="nav-item">
-            <i class="fas fa-user"></i>
-            <span>Profil</span>
-        </a>
-    </div>
-
+    <!-- Bottom Navigation - Included from separate file -->
+    <?php include 'bottom_navbar.php'; ?>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         // Detect Sticky Header
@@ -795,7 +833,6 @@ $conn->close();
                 stickyHeader.classList.remove('stuck');
             }
         });
-
         // Filter Modal Functions
         function openFilterModal() {
             document.getElementById('filterModal').classList.add('active');
@@ -805,22 +842,6 @@ $conn->close();
                 document.getElementById('filterModal').classList.remove('active');
             }
         }
-
-        // Bottom Bar Auto Hide/Show on Scroll
-        let scrollTimer;
-        let lastScrollTop = 0;
-        const bottomNav = document.getElementById('bottomNav');
-        window.addEventListener('scroll', () => {
-            const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
-            if (currentScroll > lastScrollTop || currentScroll < lastScrollTop) {
-                bottomNav.classList.add('hidden');
-            }
-            lastScrollTop = currentScroll <= 0 ? 0 : currentScroll;
-            clearTimeout(scrollTimer);
-            scrollTimer = setTimeout(() => {
-                bottomNav.classList.remove('hidden');
-            }, 500);
-        }, { passive: true });
     </script>
 </body>
 </html>

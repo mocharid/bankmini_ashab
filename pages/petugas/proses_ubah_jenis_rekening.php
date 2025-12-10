@@ -1,14 +1,87 @@
 <?php
-// proses_ubah_jenis_rekening.php (Logic)
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
-require_once '../../vendor/autoload.php';
+/**
+ * Proses Ubah Jenis Rekening - Adaptive Path Version
+ * File: pages/petugas/proses_ubah_jenis_rekening.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/proses_ubah_jenis_rekening.php
+ * - Hosting: public_html/pages/petugas/proses_ubah_jenis_rekening.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once INCLUDES_PATH . '/session_validator.php'; 
+require_once VENDOR_PATH . '/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
-
-date_default_timezone_set('Asia/Jakarta');
 
 // Set JSON header
 header('Content-Type: application/json');
@@ -187,12 +260,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     }
     
     // Get user data
-    $query_user = "SELECT u.*, r.no_rekening, j.nama_jurusan, t.nama_tingkatan, k.nama_kelas 
+    $query_user = "SELECT u.*, r.no_rekening, j.nama_jurusan, tk.nama_tingkatan, k.nama_kelas, sp.*, us.pin, us.has_pin 
                    FROM users u 
                    JOIN rekening r ON u.id = r.user_id 
-                   LEFT JOIN jurusan j ON u.jurusan_id = j.id 
-                   LEFT JOIN kelas k ON u.kelas_id = k.id 
-                   LEFT JOIN tingkatan_kelas t ON k.tingkatan_kelas_id = t.id 
+                   JOIN siswa_profiles sp ON u.id = sp.user_id 
+                   JOIN user_security us ON u.id = us.user_id 
+                   LEFT JOIN jurusan j ON sp.jurusan_id = j.id 
+                   LEFT JOIN kelas k ON sp.kelas_id = k.id 
+                   LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id 
                    WHERE u.id = ? AND u.role = 'siswa'";
     $stmt_user = $conn->prepare($query_user);
     
@@ -243,9 +318,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
         
-        $hashed_password = hash('sha256', $password_input);
-        
-        if ($selected_user['password'] !== $hashed_password) {
+        if (!password_verify($password_input, $selected_user['password'])) {
             echo json_encode([
                 'success' => false,
                 'error_type' => 'verification',
@@ -327,9 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
         
-        $hashed_pin = hash('sha256', $pin_input);
-        
-        if ($selected_user['pin'] !== $hashed_pin) {
+        if (!password_verify($pin_input, $selected_user['pin'])) {
             echo json_encode([
                 'success' => false,
                 'error_type' => 'verification',
@@ -353,7 +424,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $new_username = generateUsername($selected_user['nama'], $conn);
             $new_email = $email_siswa; // Use user-provided email
             
-            $hashed_password = hash('sha256', $password);
+            $hashed_password = password_hash($password, PASSWORD_BCRYPT);
             $query_update = "UPDATE users SET email = ?, email_status = ?, username = ?, password = ? WHERE id = ?";
             $stmt_update = $conn->prepare($query_update);
             

@@ -1,24 +1,131 @@
 <?php
-session_start();
-require_once '../../includes/db_connection.php';
-require '../../vendor/autoload.php';
+/**
+ * Proses Setor - Adaptive Path Version
+ * File: proses_setor.php
+ * 
+ * Compatible with various deployments
+ */
+
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: jika di folder 'pages' atau 'admin'
+if (basename($current_dir) === 'admin') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+
+// ============================================
+// SESSION START
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'File db_connection.php tidak ditemukan.',
+        'email_status' => 'none',
+        'debug' => [
+            'includes_path' => INCLUDES_PATH,
+            'project_root'  => PROJECT_ROOT
+        ]
+    ]);
+    exit;
+}
+
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// Load Composer autoloader
+if (!file_exists(VENDOR_PATH . '/autoload.php')) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Composer autoloader tidak ditemukan.',
+        'email_status' => 'none',
+        'debug' => [
+            'vendor_path' => VENDOR_PATH,
+            'project_root' => PROJECT_ROOT
+        ]
+    ]);
+    exit;
+}
+
+require VENDOR_PATH . '/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
     echo json_encode(['status' => 'error', 'message' => 'Akses ditolak.', 'email_status' => 'none']);
     exit();
 }
 
-// Validasi keberadaan petugas1_nama dan petugas2_nama di jadwal hari ini
+// Validasi keberadaan petugas1 dan petugas2 di shift hari ini
 $query_schedule = "
     SELECT u1.nama AS petugas1_nama, u2.nama AS petugas2_nama 
-    FROM petugas_tugas pt
-    LEFT JOIN users u1 ON pt.petugas1_id = u1.id
-    LEFT JOIN users u2 ON pt.petugas2_id = u2.id
-    WHERE pt.tanggal = CURDATE()
+    FROM petugas_shift ps
+    LEFT JOIN users u1 ON ps.petugas1_id = u1.id
+    LEFT JOIN users u2 ON ps.petugas2_id = u2.id
+    WHERE ps.tanggal = CURDATE()
 ";
 $stmt_schedule = $conn->prepare($query_schedule);
 $stmt_schedule->execute();
@@ -37,20 +144,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $petugas_id = intval($_POST['petugas_id'] ?? 0);
 
     if ($action === 'cek_rekening') {
-        // Validasi format no_rekening: 8 digit angka tanpa prefix
+        // Validasi format no_rekening: 8 digit angka
         if (empty($no_rekening) || strlen($no_rekening) !== 8 || !preg_match('/^[0-9]{8}$/', $no_rekening)) {
             echo json_encode(['status' => 'error', 'message' => 'Format nomor rekening tidak valid. Harus 8 digit angka.', 'email_status' => 'none']);
             exit();
         }
 
         $query = "
-            SELECT r.no_rekening, u.nama, u.email, u.id as user_id, r.id as rekening_id, 
-                   j.nama_jurusan AS jurusan, 
-                   CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
+            SELECT 
+                r.no_rekening, 
+                u.nama, 
+                u.email, 
+                u.id AS user_id, 
+                r.id AS rekening_id, 
+                j.nama_jurusan AS jurusan, 
+                CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
             FROM rekening r 
             JOIN users u ON r.user_id = u.id 
-            LEFT JOIN jurusan j ON u.jurusan_id = j.id
-            LEFT JOIN kelas k ON u.kelas_id = k.id
+            LEFT JOIN siswa_profiles sp ON u.id = sp.user_id
+            LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+            LEFT JOIN kelas k ON sp.kelas_id = k.id
             LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
             WHERE r.no_rekening = ?
         ";
@@ -80,8 +193,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
         }
         $stmt->close();
+        
     } elseif ($action === 'setor_tunai') {
-        // Validasi format no_rekening: 8 digit angka tanpa prefix
+        // Validasi format no_rekening: 8 digit angka
         if (empty($no_rekening) || strlen($no_rekening) !== 8 || !preg_match('/^[0-9]{8}$/', $no_rekening)) {
             echo json_encode(['status' => 'error', 'message' => 'Format nomor rekening tidak valid. Harus 8 digit angka.', 'email_status' => 'none']);
             exit();
@@ -103,15 +217,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         try {
             $conn->begin_transaction();
 
-            // Periksa status is_frozen
+            // Periksa status is_frozen dari user_security
             $query = "
-                SELECT r.id, r.user_id, r.saldo, u.nama, u.email, u.is_frozen, 
-                       j.nama_jurusan AS jurusan, 
-                       CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
+                SELECT 
+                    r.id, 
+                    r.user_id, 
+                    r.saldo, 
+                    u.nama, 
+                    u.email, 
+                    COALESCE(us.is_frozen, 0) AS is_frozen,
+                    j.nama_jurusan AS jurusan, 
+                    CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS kelas
                 FROM rekening r 
                 JOIN users u ON r.user_id = u.id 
-                LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                LEFT JOIN kelas k ON u.kelas_id = k.id
+                LEFT JOIN user_security us ON u.id = us.user_id
+                LEFT JOIN siswa_profiles sp ON u.id = sp.user_id
+                LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+                LEFT JOIN kelas k ON sp.kelas_id = k.id
                 LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                 WHERE r.no_rekening = ?
             ";
@@ -187,6 +309,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             $transaksi_id = $conn->insert_id;
             $stmt_transaksi->close();
 
+            // Update saldo
             $saldo_baru = $saldo_sekarang + $jumlah;
             $query_update = "UPDATE rekening SET saldo = ?, updated_at = NOW() WHERE id = ?";
             $stmt_update = $conn->prepare($query_update);
@@ -199,6 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             $stmt_update->close();
 
+            // Insert mutasi
             $query_mutasi = "
                 INSERT INTO mutasi (transaksi_id, rekening_id, jumlah, saldo_akhir, created_at)
                 VALUES (?, ?, ?, ?, NOW())
@@ -213,6 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             $stmt_mutasi->close();
 
+            // Insert notifikasi
             $message = "Transaksi setor tunai sebesar Rp " . number_format($jumlah, 0, ',', '.') . " telah berhasil diproses oleh petugas.";
             $query_notifikasi = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
             $stmt_notifikasi = $conn->prepare($query_notifikasi);
@@ -225,9 +350,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
             $stmt_notifikasi->close();
 
+            // Kirim email (jika ada)
             $email_status = 'none';
             if (!empty($email) && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $subject = "Bukti Setor Tunai {$no_transaksi}";
+                $subject = "Bukti Transaksi Setor {$no_transaksi}";
 
                 // Konversi bulan ke bahasa Indonesia
                 $bulan = [
@@ -241,92 +367,63 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 }
 
                 $message_email = "
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset='UTF-8'>
-    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <link href='https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap' rel='stylesheet'>
-</head>
-<body style='margin:0; padding:0; font-family:Poppins,Arial,sans-serif; background:#f5f5f5;'>
-    <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='100%'>
-        <tr>
-            <td style='padding:40px 20px;'>
-                <table role='presentation' cellspacing='0' cellpadding='0' border='0' width='600' style='margin:0 auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,0.08);'>
-                    <!-- Header -->
-                    <tr>
-                        <td style='padding:40px 40px 30px; text-align:center; background:#ffffff;'>
-                            <img src='cid:header_img' alt='Schobank' style='max-width:260px; width:100%; height:auto;' />
-                        </td>
-                    </tr>
+<div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
+    
+    <h2 style='color: #1e3a8a; margin-bottom: 20px; font-size: 24px;'>Bukti Transaksi Setor</h2>
+    
+    <p>Halo <strong>{$nama_nasabah}</strong>,</p>
+    
+    <p>Setoran dana sebesar <strong>Rp " . number_format($jumlah, 0, ',', '.') . "</strong> telah berhasil masuk ke rekening kamu, berikut rinciannya:</p>
+    
+    <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
 
-                    <!-- Content -->
-                    <tr>
-                        <td style='padding:0 40px 40px;'>
-                            <h2 style='margin:0 0 12px; font-size:20px; font-weight:600; color:#1a1a1a;'>Halo <strong>{$nama_nasabah}</strong>,</h2>
-                            <p style='margin:0 0 24px; font-size:15px; line-height:1.6; color:#4a4a4a;'>
-                                Kamu berhasil setor tunai <strong style='color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</strong> ke rekening Tabungan Utama.
-                            </p>
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nominal</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Biaya Admin</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#16a34a;'>Gratis</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Total</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening}</span></p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>Setoran Tabungan</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal & Waktu</p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
+    </div>
+    
+    <div style='margin-bottom: 18px;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
+        <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
+    </div>
+    
+    <div style='margin-bottom:0;'>
+        <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
+        <p style='margin:0; font-size:16px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
+    </div>
 
-                            <hr style='border:none; border-top:1px solid #e5e5e5; margin:30px 0;' />
+    <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
 
-                            <h3 style='margin:0 0 20px; font-size:17px; font-weight:700; color:#1a1a1a;'>Detail Transaksi</h3>
-
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nominal Setoran</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Biaya Admin</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#22c55e;'>Gratis</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Total</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp" . number_format($jumlah, 0, ',', '.') . "</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening}</span></p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>Setoran Tabungan</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal & Waktu</p>
-                                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
-                            </div>
-                            <div style='margin-bottom:18px;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
-                                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
-                            </div>
-                            <div style='margin-bottom:0;'>
-                                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
-                                <p style='margin:0; font-size:16px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
-                            </div>
-                        </td>
-                    </tr>
-
-                    <!-- Footer (tanpa background, lebih bersih) -->
-                    <tr>
-                        <td style='padding:30px 40px; text-align:center; border-top:1px solid #e5e5e5; background:#ffffff;'>
-                            <p style='margin:0 0 8px; font-size:13px; color:#6b7280;'>
-                                © " . date('Y') . " Schobank Student Digital Banking. All rights reserved.
-                            </p>
-                            <p style='margin:0 0 8px; font-size:12px; color:#9ca3af;'>
-                                Email ini dikirim secara otomatis. Mohon tidak membalas email ini.
-                            </p>
-                            <p style='margin:0; font-size:11px; color:#d1d5db;'>
-                                Ref: {$no_transaksi} • ID: {$id_transaksi}
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>";
+    <p style='font-size: 12px; color: #999;'>
+        Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+        Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
+    </p>
+</div>";
 
                 try {
                     $mail = new PHPMailer(true);
@@ -354,15 +451,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $mail->addCustomHeader('X-Transaction-ID', $id_transaksi);
                     $mail->addCustomHeader('X-Reference-Number', $no_transaksi);
 
-                    $header_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/header.png';
-                    if (file_exists($header_path)) {
-                        $mail->addEmbeddedImage($header_path, 'header_img', 'header.png');
-                    }
-
                     $mail->isHTML(true);
                     $mail->Subject = $subject;
                     $mail->Body    = $message_email;
-                    $mail->AltBody = strip_tags(str_replace(['<br>', '</tr>', '</td>'], ["\n", "\n", " "], $message_email));
+                    
+                    // Plain text version
+                    $labels = [
+                        'Nama' => $nama_nasabah,
+                        'Nominal' => 'Rp ' . number_format($jumlah, 0, ',', '.'),
+                        'Biaya Admin' => 'Gratis',
+                        'Total' => 'Rp ' . number_format($jumlah, 0, ',', '.'),
+                        'Rekening Tujuan' => $no_rekening,
+                        'Keterangan' => 'Setoran Tabungan',
+                        'Tanggal & Waktu' => $tanggal_transaksi . ' WIB',
+                        'Nomor Referensi' => $no_transaksi,
+                        'ID Transaksi' => $id_transaksi
+                    ];
+                    $max_label_length = max(array_map('strlen', array_keys($labels)));
+                    $max_label_length = max($max_label_length, 20);
+                    $text_rows = [];
+                    foreach ($labels as $label => $value) {
+                        $text_rows[] = str_pad($label, $max_label_length, ' ') . " : " . $value;
+                    }
+                    $text_rows[] = "\nHormat kami,\nTim Schobank Student Digital Banking";
+                    $text_rows[] = "\nPesan otomatis, mohon tidak membalas.";
+                    $mail->AltBody = implode("\n", $text_rows);
 
                     if ($mail->send()) {
                         $email_status = 'success';

@@ -1,19 +1,146 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Dashboard - Adaptive Path Version
+ * File: pages/user/dashboard.php or similar
+ *
+ * Compatible with:
+ * - Local: schobank/pages/user/dashboard.php
+ * - Hosting: public_html/pages/user/dashboard.php
+ */
 
-// Set timezone to WIB
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
 
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: jika di folder 'pages' atau 'user'
+if (basename($current_dir) === 'user') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+$base_url = $protocol . '://' . $host . $base_path;
+
+// ============================================
+// SESSION VALIDATION
+// ============================================
 // Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../login.php");
+    header("Location: $base_url/login.php");
     exit();
 }
 
 $user_id = $_SESSION['user_id'];
 
-// Function to determine account status
+// ✅ FIXED: Single query ambil semua data dengan JOIN
+$query = "SELECT
+    u.nama, u.username, u.email,
+    COALESCE(us.is_frozen, 0) as is_frozen,
+    COALESCE(us.pin_block_until, '1970-01-01') as pin_block_until,
+    COALESCE(us.pin, '') as pin,
+    COALESCE(r.saldo, 0) as saldo,
+    r.id as rekening_id,
+    r.no_rekening
+FROM users u
+LEFT JOIN user_security us ON u.id = us.user_id
+LEFT JOIN rekening r ON u.id = r.user_id
+WHERE u.id = ?";
+
+$stmt = $conn->prepare($query);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$user_data = $stmt->get_result()->fetch_assoc();
+
+if (!$user_data) {
+    header("Location: $base_url/login.php");
+    exit();
+}
+
+// Determine account status
+$current_time = date('Y-m-d H:i:s');
+
 function getAccountStatus($user_data, $current_time) {
     if ($user_data['is_frozen']) {
         return 'dibekukan';
@@ -22,6 +149,16 @@ function getAccountStatus($user_data, $current_time) {
     }
     return 'aktif';
 }
+
+$account_status = getAccountStatus($user_data, $current_time);
+
+// Fetch balance and rekening ID
+$saldo = $user_data['saldo'];
+$no_rekening = $user_data['no_rekening'] ?? 'N/A';
+$rekening_id = $user_data['rekening_id'] ?? null;
+
+// Format account number with spaces
+$formatted_no_rekening = $no_rekening != 'N/A' ? chunk_split(trim($no_rekening), 4, ' ') : 'N/A';
 
 // Function to determine card level and style based on balance
 function getCardLevelAndStyle($saldo) {
@@ -45,34 +182,9 @@ function getCardLevelAndStyle($saldo) {
     ];
 }
 
-// Fetch user details
-$query = "SELECT nama, username, is_frozen, pin_block_until, email, pin FROM users WHERE id = ?";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$user_data = $stmt->get_result()->fetch_assoc();
-
-// Determine account status
-$current_time = date('Y-m-d H:i:s');
-$account_status = getAccountStatus($user_data, $current_time);
-
-// Fetch balance and rekening ID
-$query = "SELECT id, saldo, no_rekening FROM rekening WHERE user_id = ?";
-$stmt = $conn->prepare($query);
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$rekening_data = $stmt->get_result()->fetch_assoc();
-$saldo = $rekening_data ? $rekening_data['saldo'] : 0;
-$no_rekening = $rekening_data ? $rekening_data['no_rekening'] : 'N/A';
-$rekening_id = $rekening_data ? $rekening_data['id'] : null;
-
-// Format account number with spaces
-$formatted_no_rekening = $no_rekening != 'N/A' ? chunk_split(trim($no_rekening), 4, ' ') : 'N/A';
-
-// Determine card level and style
 $card_info = getCardLevelAndStyle($saldo);
 
-// Check PIN and email
+// ✅ FIXED: Check PIN dan email dari tabel baru
 $has_pin = !empty($user_data['pin']);
 $has_email = !empty($user_data['email']);
 
@@ -90,20 +202,25 @@ $stmt_unread->bind_param("i", $user_id);
 $stmt_unread->execute();
 $unread_notifications = $stmt_unread->get_result()->fetch_assoc()['unread'];
 
-// Fetch recent transactions (last 5)
+// ✅ FIXED: Recent transactions dengan JOIN users yang benar
 $recent_transactions = [];
 if ($rekening_id) {
-    $query = "SELECT t.no_transaksi, t.jenis_transaksi, t.jumlah, t.created_at, t.status, t.rekening_tujuan_id, t.rekening_id,
-              r1.no_rekening as rekening_asal, r2.no_rekening as rekening_tujuan,
-              u1.nama as nama_pengirim, u2.nama as nama_penerima
-              FROM transaksi t
-              LEFT JOIN rekening r1 ON t.rekening_id = r1.id
-              LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
-              LEFT JOIN users u1 ON r1.user_id = u1.id
-              LEFT JOIN users u2 ON r2.user_id = u2.id
-              WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?
-              ORDER BY t.created_at DESC
-              LIMIT 5";
+    $query = "SELECT
+        t.no_transaksi, t.jenis_transaksi, t.jumlah, t.created_at, t.status,
+        t.rekening_tujuan_id, t.rekening_id,
+        r1.no_rekening as rekening_asal,
+        r2.no_rekening as rekening_tujuan,
+        u1.nama as nama_pengirim,
+        u2.nama as nama_penerima
+        FROM transaksi t
+        LEFT JOIN rekening r1 ON t.rekening_id = r1.id
+        LEFT JOIN rekening r2 ON t.rekening_tujuan_id = r2.id
+        LEFT JOIN users u1 ON r1.user_id = u1.id
+        LEFT JOIN users u2 ON r2.user_id = u2.id
+        WHERE t.rekening_id = ? OR t.rekening_tujuan_id = ?
+        ORDER BY t.created_at DESC
+        LIMIT 5";
+    
     $stmt = $conn->prepare($query);
     $stmt->bind_param("ii", $rekening_id, $rekening_id);
     $stmt->execute();
@@ -126,9 +243,38 @@ function formatIndonesianDate($date) {
         1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
         7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
     ];
+    
     $dateObj = new DateTime($date);
     return $dateObj->format('d') . ' ' . $months[(int)$dateObj->format('m')] . ' ' . $dateObj->format('Y H:i');
 }
+
+// Determine greeting based on time
+$hour = date('H');
+if ($hour >= 0 && $hour < 11) {
+    $time_greeting = 'Selamat Pagi';
+} elseif ($hour >= 11 && $hour < 15) {
+    $time_greeting = 'Selamat Siang';
+} elseif ($hour >= 15 && $hour < 18) {
+    $time_greeting = 'Selamat Sore';
+} else {
+    $time_greeting = 'Selamat Malam';
+}
+
+// Random daily greeting
+$greetings = [
+    'Semangat hari ini!',
+    'Selamat beraktivitas!',
+    'Hari yang indah!',
+    'Tetap produktif!',
+    'Nikmati harimu!',
+    'Jaga kesehatan!',
+    'Sukses selalu!',
+    'Tetap semangat!',
+    'Hari penuh berkah!',
+    'Jadilah yang terbaik!'
+];
+$daily_index = date('z') % count($greetings);
+$daily_greeting = $greetings[$daily_index];
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -137,9 +283,10 @@ function formatIndonesianDate($date) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="format-detection" content="telephone=no">
     <title>Dashboard - SCHOBANK</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    
     <style>
         * {
             margin: 0;
@@ -176,6 +323,9 @@ function formatIndonesianDate($date) {
             --radius: 12px;
             --radius-lg: 16px;
             --radius-xl: 24px;
+            --infaq-blue: #1a237e;
+            --infaq-blue-dark: #0d1456;
+            --infaq-blue-light: #283593;
         }
 
         body {
@@ -186,7 +336,7 @@ function formatIndonesianDate($date) {
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             padding-top: 70px;
-            padding-bottom: 80px;
+            padding-bottom: 100px;
         }
 
         /* Top Navigation - NO BORDER, MATCH BACKGROUND */
@@ -301,11 +451,12 @@ function formatIndonesianDate($date) {
             background: <?php echo $card_info['gradient']; ?>;
             border-radius: 16px;
             padding: 24px;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
             box-shadow: 0 20px 40px <?php echo $card_info['glow']; ?>;
             position: relative;
             overflow: hidden;
-            min-height: 200px;
+            min-height: 180px;
+            height: 180px;
         }
 
         .balance-card::before {
@@ -357,7 +508,7 @@ function formatIndonesianDate($date) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 28px;
+            margin-bottom: 22px;
         }
 
         .card-logo {
@@ -379,10 +530,10 @@ function formatIndonesianDate($date) {
         }
 
         .account-number {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 600;
             letter-spacing: 2px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             font-family: 'Courier New', monospace;
             opacity: 0.95;
         }
@@ -467,97 +618,69 @@ function formatIndonesianDate($date) {
             height: 18px;
         }
 
-        /* Quick Actions - Improved Spacing & Alignment */
-        .quick-actions {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin-bottom: 32px;
-            padding: 0 20px;
-        }
-
-        .action-btn {
-            background: transparent;
-            border: none;
-            padding: 12px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-            color: inherit;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            min-width: 80px;
-        }
-
-        .action-btn:hover {
-            transform: translateY(-3px);
-        }
-
-        .action-btn:hover .action-icon {
-            transform: scale(1.15);
-        }
-
-        .action-btn:active {
-            transform: translateY(0);
-        }
-
-        .action-btn.disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-
-        .action-icon {
-            width: 48px;
-            height: 48px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            color: var(--elegant-dark);
-            transition: all 0.2s ease;
-        }
-
-        .action-label {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--gray-900);
-        }
-
-        .action-desc {
-            font-size: 10px;
-            color: var(--gray-500);
-            font-weight: 400;
-        }
-
-        /* Section Header */
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
+        /* Payment Section - PERBAIKAN LAYOUT INFAQ */
+        .payment-section {
+            margin-bottom: 24px;
         }
 
         .section-title {
             font-size: 16px;
             font-weight: 700;
             color: var(--gray-900);
+            margin-bottom: 12px;
         }
 
-        .section-link {
-            font-size: 12px;
-            color: var(--elegant-dark);
-            text-decoration: none;
-            font-weight: 600;
+        /* ✅ PERBAIKAN: Layout Infaq yang Rapi */
+        .infaq-feature {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-left: 32px; /* Spacing lebih luas dari pinggir */
+            width: fit-content;
+        }
+
+        .infaq-feature:hover {
+            transform: scale(1.05);
+        }
+
+        .infaq-feature:active {
+            transform: scale(0.98);
+        }
+
+        .infaq-feature.disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .infaq-icon {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .infaq-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-900);
+            text-align: center; /* Nama di tengah */
         }
 
         /* Transaction List - NO BORDERS BETWEEN ITEMS */
+        .transaction-section {
+            margin-bottom: 40px;
+        }
+
+        .transaction-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
         .transaction-list {
             background: transparent;
             border-radius: 0;
@@ -610,6 +733,11 @@ function formatIndonesianDate($date) {
             color: var(--primary);
         }
 
+        .transaction-icon.infaq {
+            background: rgba(26, 35, 126, 0.1);
+            color: var(--infaq-blue);
+        }
+
         .transaction-details {
             flex: 1;
             min-width: 0;
@@ -646,6 +774,10 @@ function formatIndonesianDate($date) {
             color: var(--danger);
         }
 
+        .transaction-amount.infaq {
+            color: var(--infaq-blue);
+        }
+
         .transaction-status {
             font-size: 10px;
             font-weight: 500;
@@ -678,60 +810,14 @@ function formatIndonesianDate($date) {
             opacity: 0.3;
         }
 
-        /* Bottom Navigation - Hide on Scroll, Show on Stop */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: var(--gray-50);
-            border-top: none;
-            padding: 12px 20px 20px;
+        .view-all-link {
+            font-size: 12px;
+            color: var(--elegant-dark);
+            text-decoration: none;
+            font-weight: 600;
             display: flex;
-            justify-content: space-around;
-            z-index: 100;
-            transition: transform 0.3s ease, opacity 0.3s ease;
-            transform: translateY(0);
-            opacity: 1;
-        }
-
-        .bottom-nav.hidden {
-            transform: translateY(100%);
-            opacity: 0;
-        }
-
-        .nav-item {
-            display: flex;
-            flex-direction: column;
             align-items: center;
             gap: 4px;
-            text-decoration: none;
-            color: var(--gray-400);
-            transition: all 0.2s ease;
-            padding: 8px 16px;
-        }
-
-        .nav-item i {
-            font-size: 22px;
-            transition: color 0.2s ease;
-        }
-
-        .nav-item span {
-            font-size: 11px;
-            font-weight: 600;
-            transition: color 0.2s ease;
-        }
-
-        .nav-item:hover i,
-        .nav-item:hover span,
-        .nav-item.active i,
-        .nav-item.active span {
-            color: var(--elegant-dark);
-        }
-
-        .nav-item.disabled {
-            opacity: 0.4;
-            pointer-events: none;
         }
 
         /* Notification Dropdown - With Read Status */
@@ -941,6 +1027,10 @@ function formatIndonesianDate($date) {
 
         /* Responsive */
         @media (max-width: 768px) {
+            body {
+                padding-bottom: 110px;
+            }
+
             .top-nav {
                 padding: 8px 16px;
             }
@@ -963,8 +1053,9 @@ function formatIndonesianDate($date) {
             }
 
             .balance-card {
-                padding: 22px;
-                min-height: 190px;
+                padding: 20px;
+                min-height: 170px;
+                height: 170px;
                 border-radius: 14px;
             }
 
@@ -978,7 +1069,7 @@ function formatIndonesianDate($date) {
             }
 
             .account-number {
-                font-size: 15px;
+                font-size: 14px;
                 letter-spacing: 1.5px;
             }
 
@@ -991,36 +1082,22 @@ function formatIndonesianDate($date) {
                 font-size: 12px;
             }
 
-            .quick-actions {
-                gap: 30px;
-                padding: 0 10px;
-            }
-
-            .action-btn {
-                padding: 10px;
-                min-width: 70px;
-            }
-
-            .action-icon {
-                width: 44px;
-                height: 44px;
-                font-size: 22px;
-            }
-
-            .action-label {
-                font-size: 11px;
-            }
-
-            .action-desc {
-                font-size: 9px;
-            }
-
             .section-title {
                 font-size: 15px;
             }
 
-            .section-link {
-                font-size: 11px;
+            /* ✅ RESPONSIVE: Infaq spacing lebih kecil di mobile */
+            .infaq-feature {
+                margin-left: 24px;
+            }
+
+            .infaq-icon {
+                width: 70px;
+                height: 70px;
+            }
+
+            .infaq-label {
+                font-size: 13px;
             }
 
             .transaction-item {
@@ -1078,30 +1155,20 @@ function formatIndonesianDate($date) {
                 font-size: 8px;
                 padding: 2px 5px;
             }
-
-            .bottom-nav {
-                padding: 12px 16px 18px;
-            }
         }
 
         @media (max-width: 480px) {
+            body {
+                padding-bottom: 115px;
+            }
+
             .nav-logo {
                 height: 32px;
                 max-width: 120px;
             }
 
-            .nav-btn {
-                width: 36px;
-                height: 36px;
-            }
-
-            .welcome-title {
-                font-size: 17px;
-            }
-
-            .account-number {
-                font-size: 14px;
-                letter-spacing: 1px;
+            .nav-actions {
+                gap: 8px;
             }
 
             .balance-amount {
@@ -1111,18 +1178,23 @@ function formatIndonesianDate($date) {
 
             .balance-card {
                 border-radius: 12px;
-                padding: 20px;
-                min-height: 180px;
+                padding: 18px;
+                min-height: 160px;
+                height: 160px;
             }
 
-            .quick-actions {
-                gap: 20px;
+            /* ✅ RESPONSIVE: Spacing lebih kecil lagi di layar kecil */
+            .infaq-feature {
+                margin-left: 20px;
             }
 
-            .action-icon {
-                width: 40px;
-                height: 40px;
-                font-size: 20px;
+            .infaq-icon {
+                width: 60px;
+                height: 60px;
+            }
+
+            .infaq-label {
+                font-size: 12px;
             }
 
             .transaction-title {
@@ -1148,6 +1220,25 @@ function formatIndonesianDate($date) {
                 font-size: 14px;
                 max-width: 130px;
             }
+
+            .balance-card {
+                min-height: 150px;
+                height: 150px;
+            }
+
+            /* ✅ RESPONSIVE: Spacing minimal di layar sangat kecil */
+            .infaq-feature {
+                margin-left: 16px;
+            }
+
+            .infaq-icon {
+                width: 50px;
+                height: 50px;
+            }
+
+            .infaq-label {
+                font-size: 11px;
+            }
         }
 
         /* Animations */
@@ -1163,7 +1254,7 @@ function formatIndonesianDate($date) {
         }
 
         .balance-card,
-        .quick-actions,
+        .infaq-feature,
         .transaction-list {
             animation: slideUp 0.5s ease;
         }
@@ -1183,13 +1274,19 @@ function formatIndonesianDate($date) {
                 background-position: -200% 0;
             }
         }
+
+        /* Disabled State */
+        .disabled-card {
+            opacity: 0.7;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
-    <!-- Top Navigation -->
     <nav class="top-nav">
         <div class="nav-brand">
-            <img src="/schobank/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
+            <img src="<?php echo $base_url; ?>/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
         </div>
         <div class="nav-actions">
             <button class="nav-btn" onclick="toggleNotifications()">
@@ -1208,8 +1305,8 @@ function formatIndonesianDate($date) {
     <div class="container">
         <!-- Welcome Section -->
         <div class="welcome-section">
-            <h1 class="welcome-title">Halo, <?php echo htmlspecialchars(ucfirst($user_data['nama'])); ?>!</h1>
-            <p class="welcome-subtitle">Selamat datang kembali di dashboard Anda</p>
+            <h1 class="welcome-title"><?php echo $time_greeting; ?>, <?php echo htmlspecialchars(ucfirst($user_data['nama'])); ?>!</h1>
+            <p class="welcome-subtitle"><?php echo $daily_greeting; ?></p>
         </div>
 
         <!-- Balance Card -->
@@ -1258,102 +1355,101 @@ function formatIndonesianDate($date) {
         </div>
         <?php endif; ?>
 
-        <!-- Quick Actions -->
-        <div class="quick-actions">
-            <a href="cek_mutasi.php" class="action-btn">
-                <div class="action-icon"><i class="fas fa-list-alt"></i></div>
-                <div class="action-label">Cek Mutasi</div>
-                <div class="action-desc">Riwayat transaksi</div>
-            </a>
-            <a href="<?php echo $has_pin ? 'transfer_pribadi.php' : 'javascript:void(0)'; ?>" 
-               class="action-btn <?php echo !$has_pin ? 'disabled' : ''; ?>" 
-               <?php echo !$has_pin ? 'onclick="showPinAlert()"' : ''; ?>>
-                <div class="action-icon"><i class="fas fa-paper-plane"></i></div>
-                <div class="action-label">Transfer</div>
-                <div class="action-desc">Kirim uang</div>
-            </a>
+        <!-- Payment Section -->
+        <div class="payment-section">
+            <h2 class="section-title">Mau Bayar Apa?</h2>
+            <div class="infaq-feature <?php echo !$has_pin ? 'disabled' : ''; ?>"
+                 onclick="<?php echo $has_pin ? 'goToInfaq()' : 'showPinAlert()'; ?>">
+                <img src="<?php echo $base_url; ?>/assets/images/infaq.png" alt="Bayar Infaq Sekolah" class="infaq-icon">
+                <span class="infaq-label">Infaq</span>
+            </div>
         </div>
 
-        <!-- Transactions -->
-        <div class="section-header">
-            <h2 class="section-title">Transaksi Terakhir</h2>
-            <a href="cek_mutasi.php" class="section-link">
-                Lihat Semua <i class="fas fa-arrow-right"></i>
-            </a>
-        </div>
+        <!-- Recent Transactions -->
+        <div class="transaction-section">
+            <div class="transaction-header">
+                <h2 class="section-title">Transaksi Terakhir</h2>
+                <a href="cek_mutasi.php" class="view-all-link">
+                    Lihat Semua <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
 
-        <div class="transaction-list">
-            <?php if (count($recent_transactions) > 0): ?>
-                <?php foreach ($recent_transactions as $transaction): ?>
-                    <?php
-                    $is_incoming = ($transaction['jenis_transaksi'] == 'setor' || 
-                                    ($transaction['jenis_transaksi'] == 'transfer' && $transaction['rekening_tujuan'] == $no_rekening) ||
-                                    ($transaction['jenis_transaksi'] == 'transaksi_qr' && $transaction['rekening_tujuan'] == $no_rekening));
-                    
-                    $icon_class = $transaction['jenis_transaksi'] == 'transaksi_qr' ? 'qr' : ($is_incoming ? 'in' : 'out');
-                    $amount_class = $is_incoming ? 'in' : 'out';
-                    $amount_prefix = $is_incoming ? '+' : '-';
-                    
-                    $icon = $transaction['jenis_transaksi'] == 'transaksi_qr' ? 'fa-qrcode' : ($is_incoming ? 'fa-arrow-down' : 'fa-arrow-up');
-                    
-                    $description = match($transaction['jenis_transaksi']) {
-                        'setor' => 'Setoran Tunai',
-                        'tarik' => 'Penarikan Tunai',
-                        'transfer' => $transaction['rekening_asal'] == $no_rekening ? 
-                                      'Transfer ke ' . htmlspecialchars($transaction['nama_penerima'] ?? 'N/A') : 
-                                      'Transfer dari ' . htmlspecialchars($transaction['nama_pengirim'] ?? 'N/A'),
-                        'transaksi_qr' => $transaction['rekening_asal'] == $no_rekening ? 
-                                         'Pembayaran QR ke ' . htmlspecialchars($transaction['nama_penerima'] ?? 'N/A') : 
-                                         'Penerimaan QR dari ' . htmlspecialchars($transaction['nama_pengirim'] ?? 'N/A'),
-                        default => 'Transaksi'
-                    };
-                    ?>
-                    <div class="transaction-item">
-                        <div class="transaction-icon <?php echo $icon_class; ?>">
-                            <i class="fas <?php echo $icon; ?>"></i>
-                        </div>
-                        <div class="transaction-details">
-                            <div class="transaction-title"><?php echo $description; ?></div>
-                            <div class="transaction-time"><?php echo formatIndonesianDate($transaction['created_at']); ?></div>
-                        </div>
-                        <div style="text-align: right;">
-                            <div class="transaction-amount <?php echo $amount_class; ?>">
-                                <?php echo $amount_prefix; ?> Rp<?php echo number_format($transaction['jumlah'], 0, ',', '.'); ?>
+            <div class="transaction-list">
+                <?php if (count($recent_transactions) > 0): ?>
+                    <?php foreach ($recent_transactions as $transaction): ?>
+                        <?php
+                        $is_incoming = ($transaction['jenis_transaksi'] == 'setor' ||
+                                        ($transaction['jenis_transaksi'] == 'transfer' && $transaction['rekening_tujuan'] == $no_rekening) ||
+                                        ($transaction['jenis_transaksi'] == 'transaksi_qr' && $transaction['rekening_tujuan'] == $no_rekening) ||
+                                        ($transaction['jenis_transaksi'] == 'infaq' && $transaction['rekening_tujuan'] == $no_rekening));
+                        
+                        $icon_class = '';
+                        $icon = '';
+                        $amount_class = '';
+                        $amount_prefix = '';
+                        
+                        if ($transaction['jenis_transaksi'] == 'infaq') {
+                            $icon_class = 'infaq';
+                            $icon = 'fa-hand-holding-heart';
+                            $amount_class = 'infaq';
+                            $amount_prefix = $transaction['rekening_asal'] == $no_rekening ? '-' : '+';
+                        } elseif ($transaction['jenis_transaksi'] == 'transaksi_qr') {
+                            $icon_class = 'qr';
+                            $icon = 'fa-qrcode';
+                            $amount_class = $is_incoming ? 'in' : 'out';
+                            $amount_prefix = $is_incoming ? '+' : '-';
+                        } else {
+                            $icon_class = $is_incoming ? 'in' : 'out';
+                            $icon = $is_incoming ? 'fa-arrow-down' : 'fa-arrow-up';
+                            $amount_class = $is_incoming ? 'in' : 'out';
+                            $amount_prefix = $is_incoming ? '+' : '-';
+                        }
+                        
+                        $description = match($transaction['jenis_transaksi']) {
+                            'setor' => 'Setoran Tunai',
+                            'tarik' => 'Penarikan Tunai',
+                            'transfer' => $transaction['rekening_asal'] == $no_rekening ?
+                                        'Transfer ke ' . htmlspecialchars($transaction['nama_penerima'] ?? 'N/A') :
+                                        'Transfer dari ' . htmlspecialchars($transaction['nama_pengirim'] ?? 'N/A'),
+                            'transaksi_qr' => $transaction['rekening_asal'] == $no_rekening ?
+                                            'Pembayaran QR ke ' . htmlspecialchars($transaction['nama_penerima'] ?? 'N/A') :
+                                            'Penerimaan QR dari ' . htmlspecialchars($transaction['nama_pengirim'] ?? 'N/A'),
+                            'infaq' => $transaction['rekening_asal'] == $no_rekening ?
+                                     'Infaq ke ' . htmlspecialchars($transaction['nama_penerima'] ?? 'N/A') :
+                                     'Penerimaan Infaq dari ' . htmlspecialchars($transaction['nama_pengirim'] ?? 'N/A'),
+                            default => 'Transaksi'
+                        };
+                        ?>
+                        <div class="transaction-item">
+                            <div class="transaction-icon <?php echo $icon_class; ?>">
+                                <i class="fas <?php echo $icon; ?>"></i>
                             </div>
-                            <span class="transaction-status <?php echo strtolower($transaction['status']); ?>">
-                                <?php echo ucfirst($transaction['status']); ?>
-                            </span>
+                            <div class="transaction-details">
+                                <div class="transaction-title"><?php echo $description; ?></div>
+                                <div class="transaction-time"><?php echo formatIndonesianDate($transaction['created_at']); ?></div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="transaction-amount <?php echo $amount_class; ?>">
+                                    <?php echo $amount_prefix; ?> Rp<?php echo number_format($transaction['jumlah'], 0, ',', '.'); ?>
+                                </div>
+                                <span class="transaction-status <?php echo strtolower($transaction['status']); ?>">
+                                    <?php echo ucfirst($transaction['status']); ?>
+                                </span>
+                            </div>
                         </div>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <div>Belum ada transaksi</div>
                     </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="empty-state">
-                    <div class="empty-icon">📭</div>
-                    <div>Belum ada transaksi</div>
-                </div>
-            <?php endif; ?>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
-    <!-- Bottom Navigation -->
-    <div class="bottom-nav" id="bottomNav">
-        <a href="dashboard.php" class="nav-item active">
-            <i class="fas fa-home"></i>
-            <span>Beranda</span>
-        </a>
-        <a href="cek_mutasi.php" class="nav-item">
-            <i class="fas fa-list-alt"></i>
-            <span>Mutasi</span>
-        </a>
-        <a href="aktivitas.php" class="nav-item">
-            <i class="fas fa-history"></i>
-            <span>Aktivitas</span>
-        </a>
-        <a href="profil.php" class="nav-item">
-            <i class="fas fa-user"></i>
-            <span>Profil</span>
-        </a>
-    </div>
+    <!-- Bottom Navigation - Included from separate file -->
+    <?php include 'bottom_navbar.php'; ?>
 
     <!-- Notification Panel -->
     <div class="notification-dropdown">
@@ -1372,10 +1468,8 @@ function formatIndonesianDate($date) {
                     <?php
                     $notifications_result->data_seek(0);
                     while ($row = $notifications_result->fetch_assoc()):
-                        // Determine category based on message content
+                        // Notification logic
                         $message_lower = strtolower($row['message']);
-                        
-                        // Check for security-related keywords (USERNAME, PASSWORD, PIN, EMAIL, ALAMAT changes)
                         if (
                             stripos($message_lower, 'username') !== false ||
                             stripos($message_lower, 'password') !== false ||
@@ -1390,7 +1484,6 @@ function formatIndonesianDate($date) {
                         ) {
                             $category = 'keamanan';
                         }
-                        // Check if it's transaction related
                         elseif (
                             stripos($message_lower, 'setor') !== false ||
                             stripos($message_lower, 'tarik') !== false ||
@@ -1402,7 +1495,6 @@ function formatIndonesianDate($date) {
                         ) {
                             $category = 'transaksi';
                         }
-                        // Other categories
                         elseif (stripos($message_lower, 'info') !== false) {
                             $category = 'info';
                         } else {
@@ -1443,60 +1535,27 @@ function formatIndonesianDate($date) {
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
-        // Prevent pinch zoom
+        // Prevent double-tap zoom
         document.addEventListener('touchstart', (e) => {
             if (e.touches.length > 1) {
                 e.preventDefault();
             }
         }, { passive: false });
 
-        // Toggle Notifications
         function toggleNotifications() {
             const panel = document.getElementById('notificationPanel');
             panel.classList.toggle('show');
         }
 
-        // Close notification panel when clicking outside
         document.addEventListener('click', (e) => {
             const panel = document.getElementById('notificationPanel');
             const btn = e.target.closest('.nav-btn');
+            
             if (!panel.contains(e.target) && !btn) {
                 panel.classList.remove('show');
             }
         });
 
-        // Bottom Bar Auto Hide/Show on Scroll
-        let scrollTimer;
-        let lastScrollTop = 0;
-        const bottomNav = document.getElementById('bottomNav');
-        const notificationPanel = document.getElementById('notificationPanel');
-
-        window.addEventListener('scroll', () => {
-            // Close notification when scrolling
-            if (notificationPanel.classList.contains('show')) {
-                notificationPanel.classList.remove('show');
-            }
-
-            // Hide bottom nav while scrolling
-            const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
-            
-            if (currentScroll > lastScrollTop || currentScroll < lastScrollTop) {
-                // User is scrolling - hide bottom nav
-                bottomNav.classList.add('hidden');
-            }
-            
-            lastScrollTop = currentScroll <= 0 ? 0 : currentScroll;
-            
-            // Clear previous timer
-            clearTimeout(scrollTimer);
-
-            // Show bottom nav after scrolling stops (500ms delay)
-            scrollTimer = setTimeout(() => {
-                bottomNav.classList.remove('hidden');
-            }, 500);
-        }, { passive: true });
-
-        // Mark notification as read
         function markAsRead(notificationId) {
             fetch('mark_notification_as_read.php', {
                 method: 'POST',
@@ -1514,7 +1573,6 @@ function formatIndonesianDate($date) {
             .catch(error => console.error('Error:', error));
         }
 
-        // Confirm Logout
         function confirmLogout() {
             Swal.fire({
                 title: 'Logout?',
@@ -1527,23 +1585,25 @@ function formatIndonesianDate($date) {
                 cancelButtonText: 'Batal'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.location.href = '../../logout.php';
+                    window.location.href = '<?php echo $base_url; ?>/logout.php';
                 }
             });
         }
 
-        // Show PIN Alert
         function showPinAlert() {
             Swal.fire({
                 icon: 'warning',
                 title: 'PIN Diperlukan',
-                text: 'Harap atur PIN terlebih dahulu untuk menggunakan fitur Transfer.',
+                text: 'Harap atur PIN terlebih dahulu untuk menggunakan fitur Infaq.',
                 confirmButtonColor: '#2c3e50',
                 confirmButtonText: 'Mengerti'
             });
         }
 
-        // Balance Counter Animation
+        function goToInfaq() {
+            window.location.href = 'infaq.php';
+        }
+
         function animateBalance() {
             const balanceElement = document.getElementById('balanceAmount');
             const finalBalance = <?php echo $saldo; ?>;
@@ -1569,7 +1629,6 @@ function formatIndonesianDate($date) {
             updateBalance();
         }
 
-        // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             animateBalance();
         });

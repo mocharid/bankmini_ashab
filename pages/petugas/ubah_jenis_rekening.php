@@ -1,15 +1,88 @@
 <?php
-// ubah_jenis_rekening.php (UI)
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
+/**
+ * Ubah Jenis Rekening - Adaptive Path Version
+ * File: pages/petugas/ubah_jenis_rekening.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/ubah_jenis_rekening.php
+ * - Hosting: public_html/pages/petugas/ubah_jenis_rekening.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once INCLUDES_PATH . '/session_validator.php';
 
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin'])) {
     header('Location: ../login.php');
     exit();
 }
-
-date_default_timezone_set('Asia/Jakarta');
 
 // CSRF token
 if (!isset($_SESSION['form_token'])) {
@@ -27,12 +100,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'fetch_user' && isset($_GET['n
         exit;
     }
     
-    $query = "SELECT u.*, r.no_rekening, j.nama_jurusan, t.nama_tingkatan, k.nama_kelas 
+    $query = "SELECT u.*, r.no_rekening, j.nama_jurusan, tk.nama_tingkatan, k.nama_kelas 
               FROM users u 
               JOIN rekening r ON u.id = r.user_id 
-              LEFT JOIN jurusan j ON u.jurusan_id = j.id 
-              LEFT JOIN kelas k ON u.kelas_id = k.id 
-              LEFT JOIN tingkatan_kelas t ON k.tingkatan_kelas_id = t.id 
+              JOIN siswa_profiles sp ON u.id = sp.user_id 
+              LEFT JOIN jurusan j ON sp.jurusan_id = j.id 
+              LEFT JOIN kelas k ON sp.kelas_id = k.id 
+              LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id 
               WHERE r.no_rekening = ? AND u.role = 'siswa'";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("s", $no_rekening);
@@ -55,6 +129,21 @@ if (isset($_GET['action']) && $_GET['action'] === 'fetch_user' && isset($_GET['n
 
 $success = $_SESSION['success_message'] ?? '';
 unset($_SESSION['success_message']);
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
 
 <!DOCTYPE html>
@@ -62,7 +151,7 @@ unset($_SESSION['success_message']);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <meta name="format-detection" content="telephone=no">
     <title>Ubah Jenis Rekening | MY Schobank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
@@ -485,7 +574,7 @@ unset($_SESSION['success_message']);
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">

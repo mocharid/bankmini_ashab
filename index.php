@@ -1,29 +1,34 @@
 <?php
 session_start();
-require_once 'includes/auth.php'; // Memuat fungsi autentikasi
-require_once 'includes/config.php'; // Memuat BASE_URL
+require_once 'includes/auth.php';
+require_once 'includes/config.php';
 
-// Cek apakah pengguna sudah login
 if (isLoggedIn()) {
-    // Jika sudah login, cek peran dari sesi
     $role = isset($_SESSION['role']) ? $_SESSION['role'] : '';
 
     switch ($role) {
         case 'admin':
             redirect(BASE_URL . 'pages/admin/dashboard.php');
             break;
+
         case 'petugas':
             redirect(BASE_URL . 'pages/petugas/dashboard.php');
             break;
+
         case 'siswa':
             redirect(BASE_URL . 'pages/siswa/dashboard.php');
             break;
+
+        case 'bendahara':  
+            redirect(BASE_URL . 'pages/bendahara/dashboard.php');
+            break;
+
         default:
             redirect(BASE_URL . 'pages/login.php');
             break;
     }
+
 } else {
-    // Jika belum login, arahkan ke login.php
     redirect(BASE_URL . 'pages/login.php');
 }
 ?>

@@ -1,10 +1,83 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
-
-// Set timezone to Asia/Jakarta
+/**
+ * Proses Tutup Rekening - Adaptive Path Version
+ * File: pages/petugas/proses_tutup_rekening.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/proses_tutup_rekening.php
+ * - Hosting: public_html/pages/petugas/proses_tutup_rekening.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once INCLUDES_PATH . '/session_validator.php'; 
 
 // Validate session and role
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
@@ -58,15 +131,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
     // Fetch rekening and user details
     $stmt = $conn->prepare("
-        SELECT u.id AS user_id, u.nama, u.username, u.email, u.alamat_lengkap, u.nis_nisn, 
-               u.jenis_kelamin, u.tanggal_lahir, u.password, u.is_frozen,
+        SELECT u.id AS user_id, u.nama, u.username, u.email,
+               sp.nis_nisn, sp.alamat_lengkap, sp.jenis_kelamin, sp.tanggal_lahir,
                r.id AS rekening_id, r.no_rekening, r.saldo,
                j.nama_jurusan,
-               CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas
+               CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas,
+               us.is_frozen
         FROM rekening r
         JOIN users u ON r.user_id = u.id
-        LEFT JOIN jurusan j ON u.jurusan_id = j.id
-        LEFT JOIN kelas k ON u.kelas_id = k.id
+        JOIN siswa_profiles sp ON u.id = sp.user_id
+        JOIN user_security us ON u.id = us.user_id
+        LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+        LEFT JOIN kelas k ON sp.kelas_id = k.id
         LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
         WHERE r.no_rekening = ? AND u.role = 'siswa'
     ");
@@ -177,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             throw new Exception("Gagal menutup rekening. Password tidak sesuai.");
         }
         
-        $stmt = $conn->prepare("SELECT r.id AS rekening_id, r.saldo, u.is_frozen FROM users u JOIN rekening r ON u.id = r.user_id WHERE u.id = ?");
+        $stmt = $conn->prepare("SELECT r.id AS rekening_id, r.saldo, us.is_frozen FROM users u JOIN rekening r ON u.id = r.user_id JOIN user_security us ON u.id = us.user_id WHERE u.id = ?");
         $stmt->bind_param("i", $user_id);
         $stmt->execute();
         $data = $stmt->get_result()->fetch_assoc();
@@ -223,8 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             'log_aktivitas' => 'siswa_id',
             'notifications' => 'user_id',
             'reset_request_cooldown' => 'user_id',
-            'absensi' => 'user_id',
-            'password_reset' => 'user_id',
+            'password_reset' => 'user_id'
         ];
         
         foreach ($tables as $table => $column) {
@@ -236,6 +311,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             }
         }
         
+        $stmt = $conn->prepare("DELETE FROM user_security WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $stmt->close();
+
+        $stmt = $conn->prepare("DELETE FROM siswa_profiles WHERE user_id = ?");
+        $stmt->bind_param("i", $user_id);
+        $stmt->execute();
+        $stmt->close();
+
         $stmt = $conn->prepare("DELETE FROM users WHERE id = ?");
         $stmt->bind_param("i", $user_id);
         $stmt->execute();

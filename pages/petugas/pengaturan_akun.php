@@ -1,31 +1,102 @@
 <?php
-// pengaturan_akun.php (Petugas)
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
-
-// 1. Validasi Role Petugas
+/**
+ * Pengaturan Akun Petugas - Adaptive Path Version
+ * File: pages/petugas/pengaturan_akun.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/pengaturan_akun.php
+ * - Hosting: public_html/pages/petugas/pengaturan_akun.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/auth.php')) {
+    die('Error: File auth.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('Error: File db_connection.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
     header('Location: ../login.php');
     exit();
 }
-
-$user_id = $_SESSION['user_id'];
-date_default_timezone_set('Asia/Jakarta');
-
-// 2. CSRF Token
-if (!isset($_SESSION['form_token'])) {
-    $_SESSION['form_token'] = bin2hex(random_bytes(32));
+// Generate or validate CSRF token
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-$token = $_SESSION['form_token'];
-
-// 3. Ambil Data User Saat Ini
-$stmt_user = $conn->prepare("SELECT username, nama, email FROM users WHERE id = ?");
-$stmt_user->bind_param("i", $user_id);
-$stmt_user->execute();
-$current_user = $stmt_user->get_result()->fetch_assoc();
-$stmt_user->close();
-
+$token = $_SESSION['csrf_token'];
+// Fetch user data
+$query = "SELECT username, email, nama FROM users WHERE id = ?";
+$stmt = $conn->prepare($query);
+$stmt->bind_param("i", $_SESSION['user_id']);
+$stmt->execute();
+$result = $stmt->get_result();
+$current_user = $result->fetch_assoc();
+if (!$current_user) {
+    die("Data pengguna tidak ditemukan.");
+}
 // Function Masking Username
 function maskUsername($username) {
     if (strlen($username) <= 2) return $username;
@@ -34,101 +105,83 @@ function maskUsername($username) {
     $len = strlen($username) - 2;
     return $first . str_repeat('*', max(3, $len)) . $last;
 }
-
 $masked_username = maskUsername($current_user['username']);
-
-// 4. Handle AJAX Update Akun
+// Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_account') {
     header('Content-Type: application/json');
-    
-    if (!isset($_POST['token']) || $_POST['token'] !== $_SESSION['form_token']) {
-        echo json_encode(['status' => 'error', 'message' => 'Token keamanan tidak valid!']);
-        exit;
+   
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['status' => 'error', 'message' => 'Token CSRF tidak valid']);
+        exit();
     }
-
+   
     $new_username = trim($_POST['username'] ?? '');
     $new_email = trim($_POST['email'] ?? '');
     $password_lama = trim($_POST['password_lama'] ?? '');
     $password_baru = trim($_POST['password_baru'] ?? '');
     $konfirmasi_password = trim($_POST['konfirmasi_password'] ?? '');
-
     // Gunakan data lama jika input kosong
     if (empty($new_username)) $new_username = $current_user['username'];
     if (empty($new_email)) $new_email = $current_user['email'];
-
     // Validasi format email
     if (!empty($new_email) && !filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
         echo json_encode(['status' => 'error', 'message' => 'Format email tidak valid!']);
         exit;
     }
-
     if (empty($password_lama)) {
         echo json_encode(['status' => 'error', 'message' => 'Password Lama wajib diisi untuk konfirmasi!']);
         exit;
     }
-
     // Verifikasi Password Lama
-    $stmt_check = $conn->prepare("SELECT password FROM users WHERE id = ?");
-    $stmt_check->bind_param("i", $user_id);
+    $q_check = "SELECT password FROM users WHERE id = ?";
+    $stmt_check = $conn->prepare($q_check);
+    $stmt_check->bind_param("i", $_SESSION['user_id']);
     $stmt_check->execute();
-    $db_pass = $stmt_check->get_result()->fetch_assoc()['password'];
-    $stmt_check->close();
-
-    // Cek tipe hash (SHA256 manual atau BCRYPT default)
-    $is_sha256 = (strlen($db_pass) == 64 && ctype_xdigit($db_pass));
-    $verified = $is_sha256 ? (hash('sha256', $password_lama) === $db_pass) : password_verify($password_lama, $db_pass);
-
-    if (!$verified) {
+    $user_data = $stmt_check->get_result()->fetch_assoc();
+    $stored_pass = $user_data['password'];
+    if (!password_verify($password_lama, $stored_pass)) {
         echo json_encode(['status' => 'error', 'message' => 'Password saat ini salah!']);
         exit;
     }
-
     // Cek Unik Username & Email
-    $stmt_uniq = $conn->prepare("SELECT id FROM users WHERE (username = ? OR (email = ? AND email != '')) AND id != ?");
-    $stmt_uniq->bind_param("ssi", $new_username, $new_email, $user_id);
-    $stmt_uniq->execute();
-    if ($stmt_uniq->get_result()->num_rows > 0) {
-        echo json_encode(['status' => 'error', 'message' => 'Username atau Email sudah digunakan.']);
+    $check_query = "SELECT id FROM users WHERE (username = ? OR (email = ? AND email != '')) AND id != ?";
+    $check_stmt = $conn->prepare($check_query);
+    $check_stmt->bind_param("ssi", $new_username, $new_email, $_SESSION['user_id']);
+    $check_stmt->execute();
+    if ($check_stmt->get_result()->num_rows > 0) {
+        echo json_encode(['status' => 'error', 'message' => 'Username atau Email sudah digunakan!']);
         exit;
     }
-    $stmt_uniq->close();
-
     $conn->begin_transaction();
     try {
         $update_sql = "UPDATE users SET username = ?, email = ?";
         $types = "ss";
         $params = [$new_username, $new_email];
-
         // Update Password jika diisi
         if (!empty($password_baru)) {
             if (strlen($password_baru) < 8) throw new Exception("Password baru minimal 8 karakter.");
             if (!preg_match('/[A-Z]/', $password_baru)) throw new Exception("Password harus ada huruf kapital.");
             if (!preg_match('/[0-9]/', $password_baru)) throw new Exception("Password harus ada angka.");
             if ($password_baru !== $konfirmasi_password) throw new Exception("Konfirmasi password tidak cocok.");
-            
-            // Hashing password baru (SHA256 sesuai preferensi Anda)
-            $hashed_new = hash('sha256', $password_baru);
-            
+           
+            $new_hash = password_hash($password_baru, PASSWORD_BCRYPT);
+           
             $update_sql .= ", password = ?";
             $types .= "s";
-            $params[] = $hashed_new;
+            $params[] = $new_hash;
         }
-
         $update_sql .= " WHERE id = ?";
         $types .= "i";
-        $params[] = $user_id;
-
+        $params[] = $_SESSION['user_id'];
         $stmt_update = $conn->prepare($update_sql);
         $stmt_update->bind_param($types, ...$params);
-        
+       
         if (!$stmt_update->execute()) {
-            throw new Exception("Gagal mengupdate data akun.");
+            throw new Exception("Gagal mengupdate data.");
         }
-        $stmt_update->close();
-
         $conn->commit();
-        session_destroy(); // Logout otomatis
-
+        session_destroy();
+       
         echo json_encode(['status' => 'success', 'message' => 'Akun berhasil diperbarui! Silakan login kembali.']);
     } catch (Exception $e) {
         $conn->rollback();
@@ -136,14 +189,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     }
     exit;
 }
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <title>Pengaturan Akun | MY Schobank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -168,10 +235,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
         }
-        * { 
-            margin: 0; 
-            padding: 0; 
-            box-sizing: border-box; 
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
             -webkit-user-select: none;
             user-select: none;
@@ -181,31 +248,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             min-height: 100vh;
             overflow-x: hidden;
         }
-        body { 
-            background-color: var(--bg-light); 
-            color: var(--text-primary); 
-            display: flex; 
-            min-height: 100vh; 
+        body {
+            background-color: var(--bg-light);
+            color: var(--text-primary);
+            display: flex;
+            min-height: 100vh;
             font-size: 14px;
             touch-action: pan-y;
         }
-        
+       
         .main-content {
-            flex: 1; 
-            margin-left: 280px; 
+            flex: 1;
+            margin-left: 280px;
             padding: 30px;
-            max-width: calc(100% - 280px); 
+            max-width: calc(100% - 280px);
             transition: margin-left 0.3s ease;
             width: 100%;
             overflow-y: auto;
             min-height: 100vh;
         }
-        
+       
         body.sidebar-active .main-content {
             opacity: 0.3;
             pointer-events: none;
         }
-
         /* Welcome Banner - Updated to match previous syntax */
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
@@ -220,11 +286,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             align-items: center;
             gap: 15px;
         }
-        
+       
         .welcome-banner .content {
             flex: 1;
         }
-        
+       
         .welcome-banner h2 {
             margin-bottom: 10px;
             font-size: clamp(1.4rem, 3vw, 1.6rem);
@@ -233,14 +299,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             align-items: center;
             gap: 10px;
         }
-        
+       
         .welcome-banner p {
             font-size: clamp(0.85rem, 2vw, 0.9rem);
             font-weight: 400;
             opacity: 0.8;
             margin: 0;
         }
-        
+       
         .menu-toggle {
             font-size: 1.5rem;
             cursor: pointer;
@@ -249,111 +315,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             display: none;
             align-self: center;
         }
-
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
         }
-
         /* Form Container */
         .form-section {
-            background: var(--bg-table); 
+            background: var(--bg-table);
             border-radius: 5px;
-            padding: 35px; 
+            padding: 35px;
             box-shadow: var(--shadow-sm);
-            max-width: 1100px; 
             margin: 0 auto;
             width: 100%;
         }
-
         .section-header {
-            margin-bottom: 25px; 
+            margin-bottom: 25px;
             border-bottom: 2px solid var(--border-color);
             padding-bottom: 12px;
         }
-        .section-header h3 { 
-            color: var(--primary-color); 
-            font-size: 1.15rem; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
+        .section-header h3 {
+            color: var(--primary-color);
+            font-size: 1.15rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
             font-weight: 600;
         }
-
         /* Form Grid - 3 Kolom per Baris */
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr); 
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
             margin-bottom: 25px;
         }
-
-        .form-group { 
+        .form-group {
             display: flex;
             flex-direction: column;
         }
-        
+       
         label {
-            display: block; 
-            font-weight: 500; 
+            display: block;
+            font-weight: 500;
             color: var(--text-secondary);
-            margin-bottom: 8px; 
+            margin-bottom: 8px;
             font-size: 0.9rem;
         }
-        label i { 
-            color: var(--primary-color); 
-            width: 18px; 
-            text-align: center; 
-            margin-right: 6px; 
+        label i {
+            color: var(--primary-color);
+            width: 18px;
+            text-align: center;
+            margin-right: 6px;
         }
-
-        .input-wrapper { 
-            position: relative; 
-            width: 100%; 
+        .input-wrapper {
+            position: relative;
+            width: 100%;
         }
-        
-        input[type="text"], 
-        input[type="password"], 
+       
+        input[type="text"],
+        input[type="password"],
         input[type="email"] {
-            width: 100%; 
-            padding: 12px 45px 12px 15px; 
-            border: 1px solid var(--border-color); 
+            width: 100%;
+            padding: 12px 45px 12px 15px;
+            border: 1px solid var(--border-color);
             border-radius: 5px;
-            font-size: 0.95rem; 
+            font-size: 0.95rem;
             transition: border-color 0.3s, box-shadow 0.3s;
             height: 45px;
             box-sizing: border-box;
             -webkit-user-select: text;
             user-select: text;
         }
-        input:focus { 
-            border-color: var(--primary-color); 
-            outline: none; 
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1); 
+        input:focus {
+            border-color: var(--primary-color);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
         }
-        
+       
         .toggle-pass {
-            position: absolute; 
-            right: 0; 
-            top: 0; 
+            position: absolute;
+            right: 0;
+            top: 0;
             height: 100%;
             width: 45px;
             display: flex;
             align-items: center;
             justify-content: center;
-            cursor: pointer; 
+            cursor: pointer;
             color: var(--text-light);
             font-size: 1.05rem;
             transition: color 0.3s;
         }
         .toggle-pass:hover { color: var(--primary-color); }
-
         .username-edit-link {
             margin-top: 6px;
             text-align: right;
         }
         .username-edit-link a {
-            color: var(--primary-color); 
+            color: var(--primary-color);
             text-decoration: none;
             font-size: 0.85rem;
             transition: color 0.3s;
@@ -362,26 +420,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             color: var(--secondary-color);
             text-decoration: underline;
         }
-
-        .divider { 
-            height: 1px; 
-            background: var(--border-color); 
-            margin: 30px 0 25px 0; 
-            position: relative; 
+        .divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 30px 0 25px 0;
+            position: relative;
         }
         .divider span {
-            position: absolute; 
-            top: -10px; 
-            left: 50%; 
+            position: absolute;
+            top: -10px;
+            left: 50%;
             transform: translateX(-50%);
-            background: var(--bg-table); 
+            background: var(--bg-table);
             padding: 0 15px;
-            color: var(--text-light); 
+            color: var(--text-light);
             font-size: 0.85rem;
             white-space: nowrap;
             font-weight: 500;
         }
-
         /* Password Indicator */
         .password-indicator {
             margin-top: 8px;
@@ -400,23 +456,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         .indicator-item i { font-size: 0.7rem; }
         .indicator-item.valid { color: var(--success-color); }
         .indicator-item.invalid { color: var(--text-light); }
-
         /* Button Section - Centered */
         .btn-section {
             text-align: center;
             margin-top: 30px;
         }
-
         .btn {
-            padding: 0 40px; 
-            border: none; 
+            padding: 0 40px;
+            border: none;
             border-radius: 5px;
-            font-weight: 600; 
-            cursor: pointer; 
+            font-weight: 600;
+            cursor: pointer;
             transition: all 0.3s;
-            display: inline-flex; 
-            align-items: center; 
-            justify-content: center; 
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             gap: 10px;
             font-size: 1rem;
             height: 48px;
@@ -426,86 +480,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             background: linear-gradient(135deg, var(--primary-dark), var(--secondary-color));
             color: white;
         }
-        .btn-primary:hover { 
+        .btn-primary:hover {
             background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3); 
-            transform: translateY(-2px); 
+            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
+            transform: translateY(-2px);
         }
         .btn-primary:active {
             transform: translateY(0);
         }
-
         /* RESPONSIVE */
         @media (max-width: 992px) {
-            .main-content { 
-                margin-left: 0; 
-                padding: 20px; 
+            .main-content {
+                margin-left: 0;
+                padding: 20px;
                 max-width: 100%;
             }
-            
+           
             .form-section {
                 padding: 25px;
             }
         }
-
         @media (max-width: 768px) {
-            .menu-toggle { 
-                display: block; 
+            .menu-toggle {
+                display: block;
             }
-            
-            .main-content { 
+           
+            .main-content {
                 margin-left: 0;
-                padding: 15px; 
-                max-width: 100%; 
+                padding: 15px;
+                max-width: 100%;
             }
-            
+           
             .welcome-banner {
                 padding: 20px;
                 border-radius: 5px;
                 margin-bottom: 25px;
                 align-items: center;
             }
-            
-            .welcome-banner h2 { 
-                font-size: clamp(1.3rem, 3vw, 1.4rem); 
+           
+            .welcome-banner h2 {
+                font-size: clamp(1.3rem, 3vw, 1.4rem);
             }
-            
-            .welcome-banner p { 
-                font-size: clamp(0.8rem, 2vw, 0.85rem); 
+           
+            .welcome-banner p {
+                font-size: clamp(0.8rem, 2vw, 0.85rem);
             }
-
             .form-section {
                 padding: 20px 15px;
             }
-
             /* Mobile: 1 Kolom */
             .form-grid {
                 grid-template-columns: 1fr !important;
                 gap: 15px;
             }
-            
-            input[type="text"], 
-            input[type="password"], 
+           
+            input[type="text"],
+            input[type="password"],
             input[type="email"] {
                 font-size: 16px; /* Prevent iOS zoom */
             }
-
             .btn {
                 width: 100%;
                 min-width: unset;
             }
         }
-        
+       
         @media (max-width: 480px) {
             .welcome-banner {
                 padding: 15px;
                 border-radius: 5px;
             }
-            
+           
             .welcome-banner h2 {
                 font-size: clamp(1.2rem, 2.8vw, 1.3rem);
             }
-            
+           
             .welcome-banner p {
                 font-size: clamp(0.75rem, 1.8vw, 0.8rem);
             }
@@ -513,8 +562,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
-
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <span class="menu-toggle" id="menuToggle">
@@ -525,16 +573,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <p>Kelola informasi login dan keamanan akun Anda</p>
             </div>
         </div>
-
         <div class="form-section">
             <form id="accountForm">
                 <input type="hidden" name="action" value="update_account">
-                <input type="hidden" name="token" value="<?= $token ?>">
-
+                <input type="hidden" name="csrf_token" value="<?= $token ?>">
                 <div class="section-header">
                     <h3><i class="fas fa-id-card"></i> Informasi Profil</h3>
                 </div>
-
                 <!-- BARIS 1: Nama Lengkap | Email | Username -->
                 <div class="form-grid">
                     <div class="form-group">
@@ -543,14 +588,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <input type="text" value="<?= htmlspecialchars($current_user['nama']) ?>" disabled style="background-color: #f8fafc; color: #64748b; padding-right: 15px;">
                         </div>
                     </div>
-
                     <div class="form-group">
                         <label><i class="fas fa-envelope"></i> Email</label>
                         <div class="input-wrapper">
                             <input type="email" id="email" name="email" value="<?= htmlspecialchars($current_user['email'] ?? '') ?>" placeholder="Email (Opsional)">
                         </div>
                     </div>
-
                     <div class="form-group">
                         <label for="username"><i class="fas fa-user-tag"></i> Username</label>
                         <div class="input-wrapper">
@@ -562,9 +605,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         </div>
                     </div>
                 </div>
-
                 <div class="divider"><span>Keamanan Password</span></div>
-
                 <!-- BARIS 2: Password Baru | Ulangi Password | Password Lama -->
                 <div class="form-grid">
                     <div class="form-group">
@@ -581,7 +622,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <div class="indicator-item invalid" id="rule-capital"><i class="fas fa-circle"></i> Huruf Kapital</div>
                         </div>
                     </div>
-
                     <div class="form-group">
                         <label for="konfirmasi_password"><i class="fas fa-check-double"></i> Ulangi Password</label>
                         <div class="input-wrapper">
@@ -591,7 +631,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             </div>
                         </div>
                     </div>
-
                     <div class="form-group">
                         <label for="password_lama" style="color: var(--danger-color);"><i class="fas fa-lock" style="color: var(--danger-color);"></i> Password Lama <span style="color: var(--danger-color);">(Wajib)</span></label>
                         <div class="input-wrapper">
@@ -602,7 +641,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         </div>
                     </div>
                 </div>
-
                 <!-- TOMBOL SIMPAN - CENTER -->
                 <div class="btn-section">
                     <button type="submit" class="btn btn-primary" id="saveBtn">
@@ -612,7 +650,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             </form>
         </div>
     </div>
-
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const menuToggle = document.getElementById('menuToggle');
@@ -631,13 +668,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 });
             }
         });
-
         // Toggle Edit Username
         $('#editUsernameBtn').on('click', function(e) {
             e.preventDefault();
             const displayInput = $('#username_display');
             const realInput = $('#username_real');
-            
+           
             if (displayInput.prop('disabled')) {
                 displayInput.prop('disabled', false)
                     .val(realInput.val())
@@ -659,11 +695,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $(this).text('Ubah Username?');
             }
         });
-
         $('#username_display').on('input', function() {
             $('#username_real').val($(this).val());
         });
-
         function togglePassword(id) {
             const input = document.getElementById(id);
             const icon = input.nextElementSibling.querySelector('i');
@@ -677,14 +711,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 icon.classList.add('fa-eye');
             }
         }
-
         $('#password_baru').on('input', function() {
             const val = $(this).val();
             updateIndicator('rule-length', val.length >= 8);
             updateIndicator('rule-number', /[0-9]/.test(val));
             updateIndicator('rule-capital', /[A-Z]/.test(val));
         });
-
         function updateIndicator(id, isValid) {
             const el = $('#' + id);
             const icon = el.find('i');
@@ -696,43 +728,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 icon.removeClass('fa-check-circle').addClass('fa-circle');
             }
         }
-
         $('#accountForm').on('submit', function(e) {
             e.preventDefault();
-            
+           
             const passBaru = $('#password_baru').val();
             const passKonf = $('#konfirmasi_password').val();
-
             if (passBaru) {
                 if (passBaru.length < 8) {
                     Swal.fire({
-                        icon: 'warning', 
-                        title: 'Password Lemah', 
-                        text: 'Password minimal 8 karakter.', 
+                        icon: 'warning',
+                        title: 'Password Lemah',
+                        text: 'Password minimal 8 karakter.',
                         confirmButtonColor: '#1e3a8a'
                     });
                     return;
                 }
                 if (!/[0-9]/.test(passBaru) || !/[A-Z]/.test(passBaru)) {
                     Swal.fire({
-                        icon: 'warning', 
-                        title: 'Password Lemah', 
-                        text: 'Harus mengandung angka dan huruf kapital.', 
+                        icon: 'warning',
+                        title: 'Password Lemah',
+                        text: 'Harus mengandung angka dan huruf kapital.',
                         confirmButtonColor: '#1e3a8a'
                     });
                     return;
                 }
                 if (passBaru !== passKonf) {
                     Swal.fire({
-                        icon: 'error', 
-                        title: 'Tidak Cocok', 
-                        text: 'Konfirmasi password tidak sesuai.', 
+                        icon: 'error',
+                        title: 'Tidak Cocok',
+                        text: 'Konfirmasi password tidak sesuai.',
                         confirmButtonColor: '#dc2626'
                     });
                     return;
                 }
             }
-
             Swal.fire({
                 title: 'Simpan Perubahan?',
                 text: 'Anda akan otomatis logout setelah berhasil.',
@@ -745,11 +774,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             }).then((result) => {
                 if (result.isConfirmed) {
                     Swal.fire({
-                        title: 'Menyimpan...', 
-                        allowOutsideClick: false, 
+                        title: 'Menyimpan...',
+                        allowOutsideClick: false,
                         didOpen: () => Swal.showLoading()
                     });
-
                     $.ajax({
                         url: '',
                         type: 'POST',
@@ -758,9 +786,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         success: function(res) {
                             if (res.status === 'success') {
                                 Swal.fire({
-                                    icon: 'success', 
-                                    title: 'Berhasil!', 
-                                    text: res.message, 
+                                    icon: 'success',
+                                    title: 'Berhasil!',
+                                    text: res.message,
                                     confirmButtonColor: '#10b981',
                                     timer: 2000,
                                     showConfirmButton: false
@@ -769,9 +797,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 });
                             } else {
                                 Swal.fire({
-                                    icon: 'error', 
-                                    title: 'Gagal', 
-                                    text: res.message, 
+                                    icon: 'error',
+                                    title: 'Gagal',
+                                    text: res.message,
                                     confirmButtonColor: '#dc2626'
                                 });
                             }
@@ -779,9 +807,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                         error: function() {
                             Swal.close();
                             Swal.fire({
-                                icon: 'error', 
-                                title: 'Error', 
-                                text: 'Terjadi kesalahan server.', 
+                                icon: 'error',
+                                title: 'Error',
+                                text: 'Terjadi kesalahan server.',
                                 confirmButtonColor: '#dc2626'
                             });
                         }

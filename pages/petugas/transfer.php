@@ -1,25 +1,95 @@
 <?php
-session_start();
-require_once '../../includes/db_connection.php';
-require '../../vendor/autoload.php';
-require_once '../../includes/session_validator.php'; 
-
+/**
+ * Transfer - Adaptive Path Version
+ * File: pages/petugas/transfer.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/transfer.php
+ * - Hosting: public_html/pages/petugas/transfer.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
-
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/db_connection.php';
+require VENDOR_PATH . '/autoload.php';
+require_once INCLUDES_PATH . '/session_validator.php';
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
     header("Location: login.php");
     exit;
 }
-
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
-
 $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
 $stmt->close();
-
 $rekening = null;
 $rekening_display = '';
 if ($role == 'siswa') {
@@ -28,19 +98,34 @@ if ($role == 'siswa') {
     $stmt->execute();
     $rekening = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-    
+   
     // Format nomor rekening: 3 digit awal + *** + 2 digit akhir
     if ($rekening && isset($rekening['no_rekening'])) {
         $no_rek = $rekening['no_rekening'];
         $rekening_display = substr($no_rek, 0, 3) . '***' . substr($no_rek, -2);
     }
 }
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Transfer | MY Schobank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -63,7 +148,6 @@ if ($role == 'siswa') {
             --scrollbar-thumb: #3b82f6;
             --scrollbar-thumb-hover: #60a5fa;
         }
-
         * {
             margin: 0;
             padding: 0;
@@ -72,14 +156,12 @@ if ($role == 'siswa') {
             -webkit-user-select: none;
             user-select: none;
         }
-
         html {
             width: 100%;
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
         }
-
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
@@ -89,7 +171,6 @@ if ($role == 'siswa') {
             min-height: 100vh;
             touch-action: pan-y;
         }
-
         .main-content {
             flex: 1;
             margin-left: 280px;
@@ -99,12 +180,11 @@ if ($role == 'siswa') {
             overflow-y: auto;
             min-height: 100vh;
         }
-        
+       
         body.sidebar-active .main-content {
             opacity: 0.3;
             pointer-events: none;
         }
-
         /* Welcome Banner - Updated to match previous syntax */
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
@@ -119,11 +199,11 @@ if ($role == 'siswa') {
             align-items: center;
             gap: 15px;
         }
-        
+       
         .welcome-banner .content {
             flex: 1;
         }
-        
+       
         .welcome-banner h2 {
             margin-bottom: 10px;
             font-size: clamp(1.4rem, 3vw, 1.6rem);
@@ -132,13 +212,13 @@ if ($role == 'siswa') {
             align-items: center;
             gap: 10px;
         }
-        
+       
         .welcome-banner p {
             font-size: clamp(0.85rem, 2vw, 0.9rem);
             font-weight: 400;
             opacity: 0.8;
         }
-        
+       
         .menu-toggle {
             font-size: 1.5rem;
             cursor: pointer;
@@ -147,37 +227,31 @@ if ($role == 'siswa') {
             display: none;
             align-self: center;
         }
-
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
         }
-
         .form-section {
             background: white;
             border-radius: 5px;
             padding: 30px;
             box-shadow: var(--shadow-sm);
             margin-bottom: 30px;
-            max-width: 1000px;
             margin-left: auto;
             margin-right: auto;
         }
-
         .form-row {
             display: grid;
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 20px;
         }
-
         .form-group {
             display: flex;
             flex-direction: column;
             gap: 8px;
             position: relative;
         }
-
         label {
             font-weight: 500;
             color: var(--text-secondary);
@@ -186,22 +260,19 @@ if ($role == 'siswa') {
             align-items: center;
             gap: 6px;
         }
-        
+       
         label i {
             color: var(--primary-color);
             font-size: 0.95em;
         }
-
         .search-wrapper {
             position: relative;
         }
-
         .search-input-container {
             position: relative;
             display: flex;
             align-items: center;
         }
-
         input {
             width: 100%;
             padding: 12px 40px 12px 15px;
@@ -215,13 +286,11 @@ if ($role == 'siswa') {
             user-select: text;
             background-color: #fff;
         }
-
         input:focus {
             outline: none;
             border-color: var(--primary-color);
             box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
         }
-
         input[readonly] {
             background-color: #f8fafc;
             cursor: default;
@@ -229,7 +298,6 @@ if ($role == 'siswa') {
             letter-spacing: 1px;
             font-weight: 500;
         }
-
         .clear-btn {
             position: absolute;
             right: 12px;
@@ -245,15 +313,12 @@ if ($role == 'siswa') {
             transition: var(--transition);
             z-index: 10;
         }
-
         .clear-btn:hover {
             color: var(--danger-color);
         }
-
         .clear-btn.show {
             display: block;
         }
-
         .search-results {
             position: absolute;
             top: 100%;
@@ -269,52 +334,43 @@ if ($role == 'siswa') {
             z-index: 100;
             display: none;
         }
-
         .search-results.show {
             display: block;
         }
-
         .search-result-item {
             padding: 12px 15px;
             cursor: pointer;
             transition: background-color 0.2s;
             border-bottom: 1px solid #f3f4f6;
         }
-
         .search-result-item:last-child {
             border-bottom: none;
         }
-
         .search-result-item:hover {
             background-color: var(--bg-light);
         }
-
         .search-result-name {
             font-weight: 500;
             color: var(--text-primary);
             font-size: 0.95rem;
         }
-
         .search-result-account {
             font-size: 0.85rem;
             color: var(--text-secondary);
             margin-top: 2px;
             letter-spacing: 1px;
         }
-
         .no-results {
             padding: 12px 15px;
             color: var(--text-secondary);
             font-size: 0.9rem;
             text-align: center;
         }
-
         .btn-container {
             display: flex;
             justify-content: center;
             margin-top: 30px;
         }
-
         .btn {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
@@ -331,74 +387,66 @@ if ($role == 'siswa') {
             transition: var(--transition);
             min-width: 200px;
         }
-
         .btn:hover {
             background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
             box-shadow: var(--shadow-sm);
         }
-
         .btn:active {
             transform: scale(0.95);
         }
-
         @media (max-width: 768px) {
             .menu-toggle {
                 display: block;
             }
-
             .main-content {
                 margin-left: 0;
                 padding: 15px;
                 max-width: 100%;
             }
-
             .welcome-banner {
                 padding: 20px;
                 border-radius: 5px;
                 align-items: center;
             }
-            
+           
             .welcome-banner h2 {
                 font-size: clamp(1.3rem, 3vw, 1.4rem);
             }
-            
+           
             .welcome-banner p {
                 font-size: clamp(0.8rem, 2vw, 0.85rem);
             }
-
             .form-section {
                 padding: 20px 15px;
             }
-
             .form-row {
                 grid-template-columns: 1fr;
             }
-            
+           
             .btn {
                 width: 100%;
                 max-width: 300px;
             }
         }
-
         @media (max-width: 480px) {
             .welcome-banner {
                 padding: 15px;
                 border-radius: 5px;
             }
-            
+           
             .welcome-banner h2 {
                 font-size: clamp(1.2rem, 2.8vw, 1.3rem);
             }
-            
+           
             .welcome-banner p {
                 font-size: clamp(0.75rem, 1.8vw, 0.8rem);
             }
-            
+           
             .form-section {
                 padding: 15px;
             }
-            
+           
             .btn {
                 max-width: 100%;
             }
@@ -406,8 +454,7 @@ if ($role == 'siswa') {
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
-
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <span class="menu-toggle" id="menuToggle">
@@ -418,7 +465,6 @@ if ($role == 'siswa') {
                 <p>Kirim uang antar rekening Schobank Student Digital Banking</p>
             </div>
         </div>
-
         <div class="form-section">
             <form id="transferForm">
                 <div class="form-row">
@@ -440,9 +486,6 @@ if ($role == 'siswa') {
                             </div>
                         <?php endif; ?>
                     </div>
-                </div>
-                
-                <div class="form-row">
                     <div class="form-group">
                         <label for="rekening_tujuan"><i class="fas fa-user"></i> Rekening Tujuan</label>
                         <div class="search-wrapper">
@@ -457,21 +500,17 @@ if ($role == 'siswa') {
                         </div>
                     </div>
                 </div>
-
+               
                 <div class="form-row">
                     <div class="form-group">
                         <label for="jumlah"><i class="fas fa-money-bill-wave"></i> Nominal Transfer</label>
                         <input type="text" id="jumlah" name="jumlah" required inputmode="numeric" placeholder="Input nominal transfer....">
                     </div>
-                </div>
-
-                <div class="form-row">
                     <div class="form-group">
                         <label for="keterangan"><i class="fas fa-comment-alt"></i> Keterangan (Opsional)</label>
                         <input type="text" id="keterangan" name="keterangan" placeholder="Input keterangan transfer (opsional)">
                     </div>
                 </div>
-
                 <div class="btn-container">
                     <button type="button" class="btn" id="transferBtn">
                         <i class="fas fa-paper-plane"></i> Proses Transfer
@@ -480,46 +519,45 @@ if ($role == 'siswa') {
             </form>
         </div>
     </div>
-
     <script>
         let searchTimeout;
-        
+       
         // Function to format account number: 3 digits + *** + 2 digits
         function formatAccountNumber(accountNumber) {
             if (!accountNumber || accountNumber.length < 5) return accountNumber;
             return accountNumber.substring(0, 3) + '***' + accountNumber.substring(accountNumber.length - 2);
         }
-        
+       
         function initSearch(searchInputId, resultsId, hiddenInputId, clearBtnId) {
             const searchInput = document.getElementById(searchInputId);
             const resultsDiv = document.getElementById(resultsId);
             const hiddenInput = document.getElementById(hiddenInputId);
             const clearBtn = document.getElementById(clearBtnId);
-            
+           
             if (!searchInput || !resultsDiv || !hiddenInput || !clearBtn) return;
-            
+           
             searchInput.addEventListener('input', async function() {
                 const query = this.value.trim();
-                
+               
                 if (query.length < 2) {
                     resultsDiv.classList.remove('show');
                     clearBtn.classList.remove('show');
                     hiddenInput.value = '';
                     return;
                 }
-                
+               
                 clearBtn.classList.add('show');
                 clearTimeout(searchTimeout);
-                
+               
                 searchTimeout = setTimeout(async () => {
                     const formData = new FormData();
                     formData.append('ajax_action', 'search_account');
                     formData.append('search', query);
-                    
+                   
                     try {
                         const response = await fetch('proses_transfer.php', { method: 'POST', body: formData });
                         const result = await response.json();
-                        
+                       
                         if (result.success && result.accounts.length > 0) {
                             resultsDiv.innerHTML = '';
                             result.accounts.forEach(account => {
@@ -533,6 +571,11 @@ if ($role == 'siswa') {
                                 item.addEventListener('click', () => {
                                     searchInput.value = `${account.nama} - ${displayNumber}`;
                                     hiddenInput.value = account.no_rekening;
+                                    if (searchInputId === 'rekening_asal_search') {
+                                        accountAsal = { nama: account.nama, no_rekening: account.no_rekening };
+                                    } else {
+                                        accountTujuan = { nama: account.nama, no_rekening: account.no_rekening };
+                                    }
                                     resultsDiv.classList.remove('show');
                                     clearBtn.classList.add('show');
                                 });
@@ -548,22 +591,27 @@ if ($role == 'siswa') {
                     }
                 }, 300);
             });
-            
+           
             clearBtn.addEventListener('click', () => {
                 searchInput.value = '';
                 hiddenInput.value = '';
                 clearBtn.classList.remove('show');
                 resultsDiv.classList.remove('show');
                 searchInput.focus();
+                if (searchInputId === 'rekening_asal_search') {
+                    accountAsal = {};
+                } else {
+                    accountTujuan = {};
+                }
             });
-            
+           
             document.addEventListener('click', (e) => {
                 if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
                     resultsDiv.classList.remove('show');
                 }
             });
         }
-        
+       
         // Function to ask for PIN with retry logic
         async function askForPIN() {
             const { value: pin } = await Swal.fire({
@@ -587,14 +635,14 @@ if ($role == 'siswa') {
                     }
                 }
             });
-            
+           
             return pin;
         }
-        
+       
         document.addEventListener('DOMContentLoaded', function() {
             const menuToggle = document.getElementById('menuToggle');
             const sidebar = document.getElementById('sidebar');
-            
+           
             if (menuToggle && sidebar) {
                 menuToggle.addEventListener('click', function(e) {
                     e.stopPropagation();
@@ -602,20 +650,21 @@ if ($role == 'siswa') {
                     document.body.classList.toggle('sidebar-active');
                 });
             }
-
             document.addEventListener('click', function(e) {
                 if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
                     sidebar.classList.remove('active');
                     document.body.classList.remove('sidebar-active');
                 }
             });
-
+            let accountAsal = <?php if ($role == 'siswa' && $rekening): ?> { nama: '<?php echo addslashes($user['nama']); ?>', no_rekening: '<?php echo $rekening['no_rekening']; ?>' } <?php else: ?> {} <?php endif; ?>;
+            let accountTujuan = {};
+           
             <?php if ($role != 'siswa' || !$rekening): ?>
             initSearch('rekening_asal_search', 'results_asal', 'rekening_asal', 'clear_asal');
             <?php endif; ?>
-            
+           
             initSearch('rekening_tujuan_search', 'results_tujuan', 'rekening_tujuan', 'clear_tujuan');
-            
+           
             const amountInput = document.getElementById('jumlah');
             if (amountInput) {
                 amountInput.addEventListener('input', function(e) {
@@ -623,18 +672,16 @@ if ($role == 'siswa') {
                     this.value = value ? parseInt(value).toLocaleString('id-ID') : '';
                 });
             }
-
             // Clear only amount and description
             function clearAmountOnly() {
                 document.getElementById('jumlah').value = '';
                 document.getElementById('keterangan').value = '';
             }
-
             // Clear entire form including accounts
             function clearForm() {
                 document.getElementById('jumlah').value = '';
                 document.getElementById('keterangan').value = '';
-                
+               
                 const tujuanSearch = document.getElementById('rekening_tujuan_search');
                 const tujuanHidden = document.getElementById('rekening_tujuan');
                 const clearTujuan = document.getElementById('clear_tujuan');
@@ -642,8 +689,9 @@ if ($role == 'siswa') {
                     tujuanSearch.value = '';
                     tujuanHidden.value = '';
                     clearTujuan.classList.remove('show');
+                    accountTujuan = {};
                 }
-                
+               
                 <?php if ($role != 'siswa' || !$rekening): ?>
                 const asalSearch = document.getElementById('rekening_asal_search');
                 const asalHidden = document.getElementById('rekening_asal');
@@ -652,65 +700,64 @@ if ($role == 'siswa') {
                     asalSearch.value = '';
                     asalHidden.value = '';
                     clearAsal.classList.remove('show');
+                    accountAsal = {};
                 }
                 <?php endif; ?>
             }
-
             document.getElementById('transferBtn').addEventListener('click', async function() {
                 const rekeningAsal = document.querySelector('input[name="rekening_asal"]').value;
                 const rekeningTujuan = document.querySelector('input[name="rekening_tujuan"]').value;
                 const jumlah = document.getElementById('jumlah').value.replace(/[^0-9]/g, '');
                 const keterangan = document.getElementById('keterangan').value.trim();
-                
+               
                 if (!rekeningAsal || !rekeningTujuan || !jumlah) {
-                    Swal.fire({ 
-                        icon: 'error', 
-                        title: 'Error', 
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
                         text: 'Mohon lengkapi semua field yang wajib diisi',
                         confirmButtonColor: '#1e3a8a'
                     });
                     return;
                 }
-                
+               
                 if (rekeningAsal === rekeningTujuan) {
-                    Swal.fire({ 
-                        icon: 'error', 
-                        title: 'Error', 
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
                         text: 'Rekening tujuan tidak boleh sama dengan rekening asal',
                         confirmButtonColor: '#1e3a8a'
                     });
                     return;
                 }
-                
+               
                 if (parseInt(jumlah) < 1000) {
-                    Swal.fire({ 
-                        icon: 'error', 
-                        title: 'Error', 
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
                         text: 'Jumlah transfer minimal Rp 1.000',
                         confirmButtonColor: '#1e3a8a'
                     });
                     return;
                 }
-
-                Swal.fire({ 
-                    title: 'Memeriksa saldo...', 
-                    allowOutsideClick: false, 
-                    didOpen: () => { Swal.showLoading(); } 
+                Swal.fire({
+                    title: 'Memeriksa saldo...',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
                 });
-                
+               
                 try {
                     const balanceFormData = new FormData();
                     balanceFormData.append('ajax_action', 'check_balance');
                     balanceFormData.append('rekening_asal', rekeningAsal);
                     balanceFormData.append('jumlah', jumlah);
-                    
+                   
                     const balanceResponse = await fetch('proses_transfer.php', { method: 'POST', body: balanceFormData });
                     const balanceResult = await balanceResponse.json();
-                    
+                   
                     if (!balanceResult.success) {
-                        Swal.fire({ 
-                            icon: 'error', 
-                            title: 'Saldo Tidak Mencukupi', 
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Saldo Tidak Mencukupi',
                             text: balanceResult.message,
                             confirmButtonColor: '#1e3a8a'
                         });
@@ -718,58 +765,58 @@ if ($role == 'siswa') {
                         clearAmountOnly();
                         return;
                     }
-                    
+                   
                     // Close loading and ask for PIN
                     Swal.close();
-                    
+                   
                     // PIN verification loop
                     let pinVerified = false;
                     let attemptCount = 0;
                     const maxAttempts = 3;
-                    
+                   
                     while (!pinVerified && attemptCount < maxAttempts) {
                         const pin = await askForPIN();
-                        
+                       
                         if (!pin) {
                             // User cancelled - reset attempts to 3
                             attemptCount = 0;
                             return;
                         }
-                        
-                        Swal.fire({ 
-                            title: 'Memvalidasi PIN...', 
-                            allowOutsideClick: false, 
-                            didOpen: () => { Swal.showLoading(); } 
+                       
+                        Swal.fire({
+                            title: 'Memvalidasi PIN...',
+                            allowOutsideClick: false,
+                            didOpen: () => { Swal.showLoading(); }
                         });
-                        
+                       
                         const pinFormData = new FormData();
                         pinFormData.append('ajax_action', 'validate_pin');
                         pinFormData.append('rekening_asal', rekeningAsal);
                         pinFormData.append('pin', pin);
-                        
+                       
                         const pinResponse = await fetch('proses_transfer.php', { method: 'POST', body: pinFormData });
                         const pinResult = await pinResponse.json();
-                        
+                       
                         if (pinResult.success) {
                             pinVerified = true;
                             Swal.close();
                         } else {
                             attemptCount++;
                             Swal.close();
-                            
+                           
                             if (attemptCount >= maxAttempts) {
-                                await Swal.fire({ 
-                                    icon: 'error', 
-                                    title: 'PIN Salah', 
+                                await Swal.fire({
+                                    icon: 'error',
+                                    title: 'PIN Salah',
                                     text: 'Anda telah mencapai batas maksimal percobaan. Transaksi dibatalkan.',
                                     confirmButtonColor: '#1e3a8a'
                                 });
                                 clearForm();
                                 return;
                             } else {
-                                await Swal.fire({ 
-                                    icon: 'error', 
-                                    title: 'PIN Salah', 
+                                await Swal.fire({
+                                    icon: 'error',
+                                    title: 'PIN Salah',
                                     html: `${pinResult.message}<br><br>Sisa percobaan: <strong>${maxAttempts - attemptCount}</strong>`,
                                     confirmButtonText: 'Coba Lagi',
                                     confirmButtonColor: '#1e3a8a'
@@ -777,27 +824,94 @@ if ($role == 'siswa') {
                             }
                         }
                     }
-                    
+                   
                     if (!pinVerified) {
                         return;
                     }
-                    
-                    Swal.fire({ 
-                        title: 'Memproses transfer...', 
-                        allowOutsideClick: false, 
-                        didOpen: () => { Swal.showLoading(); } 
+
+                    // Fetch nama if not set (safety fallback)
+                    if (!accountAsal.nama) {
+                        try {
+                            const formData = new FormData();
+                            formData.append('ajax_action', 'search_account');
+                            formData.append('search', rekeningAsal);
+                            const response = await fetch('proses_transfer.php', { method: 'POST', body: formData });
+                            const result = await response.json();
+                            if (result.success && result.accounts && result.accounts.length > 0) {
+                                accountAsal.nama = result.accounts[0].nama;
+                            }
+                        } catch (e) {
+                            console.error('Error fetching nama asal:', e);
+                        }
+                    }
+                    if (!accountTujuan.nama) {
+                        try {
+                            const formData = new FormData();
+                            formData.append('ajax_action', 'search_account');
+                            formData.append('search', rekeningTujuan);
+                            const response = await fetch('proses_transfer.php', { method: 'POST', body: formData });
+                            const result = await response.json();
+                            if (result.success && result.accounts && result.accounts.length > 0) {
+                                accountTujuan.nama = result.accounts[0].nama;
+                            }
+                        } catch (e) {
+                            console.error('Error fetching nama tujuan:', e);
+                        }
+                    }
+                   
+                    // Show confirmation
+                    const confirmResult = await Swal.fire({
+                        title: 'Konfirmasi Transfer',
+                        html: `
+                            <div style="text-align:left; font-size:0.95rem; margin:15px 0;">
+                                <div style="background: #f8fafc; border-radius: 5px; padding: 15px; margin-bottom: 10px;">
+                                    <div style="display: table; width: 100%; border-collapse: collapse;">
+                                        <div style="display: table-row;">
+                                            <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Asal:</div>
+                                            <div style="display: table-cell; padding: 5px 0; text-align: right;"><strong>${formatAccountNumber(rekeningAsal)}</strong><br>${accountAsal.nama || 'Unknown'}</div>
+                                        </div>
+                                        <div style="display: table-row;">
+                                            <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Tujuan:</div>
+                                            <div style="display: table-cell; padding: 5px 0; text-align: right;"><strong>${formatAccountNumber(rekeningTujuan)}</strong><br>${accountTujuan.nama || 'Unknown'}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="text-align: center; margin-top: 20px; padding: 15px;">
+                                    <div style="font-weight: bold; font-size: 1.4rem; margin-bottom: 5px;">Jumlah Transfer</div>
+                                    <div style="font-weight: bold; font-size: 1.6rem;">Rp ${parseInt(jumlah).toLocaleString('id-ID')}</div>
+                                    <div style="margin-top: 10px; font-size: 0.9rem; color: #666;">Keterangan: ${keterangan || '-'}</div>
+                                </div>
+                            </div>
+                        `,
+                        icon: 'question',
+                        showCancelButton: true,
+                        confirmButtonText: 'Proses Sekarang',
+                        cancelButtonText: 'Batal',
+                        confirmButtonColor: '#1e3a8a',
+                        cancelButtonColor: '#e74c3c',
+                        width: window.innerWidth < 600 ? '95%' : '600px'
                     });
-                    
+                   
+                    if (!confirmResult.isConfirmed) {
+                        return;
+                    }
+                   
+                    Swal.fire({
+                        title: 'Memproses transfer...',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading(); }
+                    });
+                   
                     const transferFormData = new FormData();
                     transferFormData.append('ajax_action', 'process_transfer');
                     transferFormData.append('rekening_asal', rekeningAsal);
                     transferFormData.append('rekening_tujuan', rekeningTujuan);
                     transferFormData.append('jumlah', jumlah);
                     transferFormData.append('keterangan', keterangan);
-                    
+                   
                     const transferResponse = await fetch('proses_transfer.php', { method: 'POST', body: transferFormData });
                     const transferResult = await transferResponse.json();
-                    
+                   
                     if (transferResult.success) {
                         await Swal.fire({
                             icon: 'success',
@@ -808,19 +922,19 @@ if ($role == 'siswa') {
                         });
                         clearForm();
                     } else {
-                        Swal.fire({ 
-                            icon: 'error', 
-                            title: 'Gagal', 
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal',
                             text: transferResult.message,
                             confirmButtonColor: '#1e3a8a'
                         });
                         clearForm();
                     }
-                    
+                   
                 } catch (error) {
-                    Swal.fire({ 
-                        icon: 'error', 
-                        title: 'Error', 
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error',
                         text: 'Terjadi kesalahan sistem',
                         confirmButtonColor: '#1e3a8a'
                     });

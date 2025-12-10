@@ -1,60 +1,210 @@
 <?php
-// absensi.php (UI)
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
+/**
+ * Absensi Petugas - Adaptive Path Version (Normalized DB + IN/OUT)
+ * File: pages/petugas/absensi.php
+ */
 
-if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin'])) {
-    header('Location: ../login.php');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+if (basename(dirname($current_dir)) === 'pages') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+} else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+if (!$project_root) {
+    $project_root = dirname(dirname($current_dir));
+}
+
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once INCLUDES_PATH . '/session_validator.php';
+
+// ============================================
+// CHECK AUTHORIZATION
+// ============================================
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas','admin'])) {
+    header('Location: ' . PROJECT_ROOT . '/login.php');
     exit();
 }
 
 $username = $_SESSION['username'] ?? 'Petugas';
 date_default_timezone_set('Asia/Jakarta');
 
-// Get data from proses_absensi.php via session
-$page_data = $_SESSION['absensi_data'] ?? null;
+// ============================================
+// SESSION MESSAGES
+// ============================================
 $success_message = $_SESSION['success_message'] ?? '';
-$error_message = $_SESSION['error_message'] ?? '';
-
-// Clear session messages
+$error_message   = $_SESSION['error_message'] ?? '';
 unset($_SESSION['success_message'], $_SESSION['error_message']);
 
-// Function to convert date to Indonesian format
+// ============================================
+// HELPER: TANGGAL INDONESIA
+// ============================================
 function tanggal_indonesia($tanggal) {
-    $bulan = [1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',
-              7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'];
-    $hari = ['Sunday'=>'Minggu','Monday'=>'Senin','Tuesday'=>'Selasa','Wednesday'=>'Rabu',
-             'Thursday'=>'Kamis','Friday'=>'Jumat','Saturday'=>'Sabtu'];
-    $tanggal = strtotime($tanggal);
-    return $hari[date('l',$tanggal)].', '.date('d',$tanggal).' '.$bulan[(int)date('n',$tanggal)].' '.date('Y',$tanggal);
+    $bulan = [
+        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+        5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+        9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+    ];
+    $hari = [
+        'Sunday' => 'Minggu', 'Monday' => 'Senin', 'Tuesday' => 'Selasa',
+        'Wednesday' => 'Rabu', 'Thursday' => 'Kamis', 'Friday' => 'Jumat',
+        'Saturday' => 'Sabtu'
+    ];
+    $ts = strtotime($tanggal);
+    return $hari[date('l', $ts)] . ', ' . date('d', $ts) . ' ' .
+           $bulan[(int)date('n', $ts)] . ' ' . date('Y', $ts);
 }
 
-// If no data in session, fetch from database
-if (!$page_data) {
-    require_once 'proses_absensi.php';
-    $page_data = fetchAbsensiData($conn);
+// ============================================
+// BLOKIR (OPSIONAL) – DEFAULT FALSE
+// ============================================
+$is_blocked = false;
+
+// ============================================
+// FETCH SCHEDULE (petugas_shift + petugas_profiles)
+// ============================================
+$schedule      = null;
+$petugas1_nama = null;
+$petugas2_nama = null;
+
+try {
+    $query_schedule = "SELECT ps.*,
+                       COALESCE(pp1.petugas1_nama, pp1.petugas2_nama) AS petugas1_nama,
+                       COALESCE(pp2.petugas2_nama, pp2.petugas1_nama) AS petugas2_nama
+                       FROM petugas_shift ps
+                       LEFT JOIN petugas_profiles pp1 ON ps.petugas1_id = pp1.user_id
+                       LEFT JOIN petugas_profiles pp2 ON ps.petugas2_id = pp2.user_id
+                       WHERE ps.tanggal = CURDATE()";
+    $stmt_schedule = $conn->prepare($query_schedule);
+    $stmt_schedule->execute();
+    $result_schedule = $stmt_schedule->get_result();
+    $schedule = $result_schedule->fetch_assoc();
+    $stmt_schedule->close();
+
+    if ($schedule) {
+        $petugas1_nama = $schedule['petugas1_nama'] ?: null;
+        $petugas2_nama = $schedule['petugas2_nama'] ?: null;
+    }
+} catch (mysqli_sql_exception $e) {
+    error_log("Absensi Schedule Error: " . $e->getMessage());
 }
 
-$is_blocked = $page_data['is_blocked'] ?? 0;
-$schedule = $page_data['schedule'] ?? null;
-$petugas1_nama = $page_data['petugas1_nama'] ?? null;
-$petugas2_nama = $page_data['petugas2_nama'] ?? null;
-$attendance_petugas1 = $page_data['attendance_petugas1'] ?? null;
-$attendance_petugas2 = $page_data['attendance_petugas2'] ?? null;
-$attendance_complete = $page_data['attendance_complete'] ?? false;
+// ============================================
+// FETCH ATTENDANCE (petugas_status)
+// ============================================
+$attendance_petugas1  = null;
+$attendance_petugas2  = null;
+$attendance_complete  = false;
+
+if ($schedule) {
+    try {
+        // Petugas 1
+        if ($petugas1_nama) {
+            $query_attendance1 = "SELECT * FROM petugas_status
+                                  WHERE petugas_shift_id = ?
+                                  AND petugas_type = 'petugas1'";
+            $stmt_attendance1 = $conn->prepare($query_attendance1);
+            $stmt_attendance1->bind_param("i", $schedule['id']);
+            $stmt_attendance1->execute();
+            $attendance_petugas1 = $stmt_attendance1->get_result()->fetch_assoc();
+            $stmt_attendance1->close();
+        }
+
+        // Petugas 2
+        if ($petugas2_nama) {
+            $query_attendance2 = "SELECT * FROM petugas_status
+                                  WHERE petugas_shift_id = ?
+                                  AND petugas_type = 'petugas2'";
+            $stmt_attendance2 = $conn->prepare($query_attendance2);
+            $stmt_attendance2->bind_param("i", $schedule['id']);
+            $stmt_attendance2->execute();
+            $attendance_petugas2 = $stmt_attendance2->get_result()->fetch_assoc();
+            $stmt_attendance2->close();
+        }
+
+        // Lengkap jika:
+        // - Hadir & sudah punya waktu_keluar, atau
+        // - Status != hadir (alfa/sakit/izin), atau
+        // - Tidak ada nama petugas (null)
+        $petugas1_done = !$petugas1_nama || (
+            $attendance_petugas1 && (
+                ($attendance_petugas1['status'] === 'hadir' && $attendance_petugas1['waktu_keluar']) ||
+                $attendance_petugas1['status'] !== 'hadir'
+            )
+        );
+        $petugas2_done = !$petugas2_nama || (
+            $attendance_petugas2 && (
+                ($attendance_petugas2['status'] === 'hadir' && $attendance_petugas2['waktu_keluar']) ||
+                $attendance_petugas2['status'] !== 'hadir'
+            )
+        );
+        $attendance_complete = $petugas1_done && $petugas2_done;
+    } catch (mysqli_sql_exception $e) {
+        error_log("Absensi Attendance Error: " . $e->getMessage());
+    }
+}
+
+// ============================================
+// BASE URL
+// ============================================
+function getBaseUrl() {
+    $protocol  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host      = $_SERVER['HTTP_HOST'];
+    $script    = $_SERVER['SCRIPT_NAME'];
+    $base_path = dirname(dirname($script));
+    $base_path = preg_replace('#/pages(/[^/]+)?$#', '', $base_path);
+    if ($base_path !== '/' && !empty($base_path)) {
+        $base_path = '/' . ltrim($base_path, '/');
+    }
+    return $protocol . $host . $base_path;
+}
+if (!defined('BASE_URL')) {
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
+}
+define('ASSETS_URL', BASE_URL . '/assets');
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
     <meta name="format-detection" content="telephone=no">
     <title>Absensi | MY Schobank</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+          rel="stylesheet"/>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
@@ -108,7 +258,7 @@ $attendance_complete = $page_data['attendance_complete'] ?? false;
             pointer-events: none;
         }
 
-        /* Welcome Banner - Updated to match previous syntax */
+        /* Welcome Banner */
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
@@ -481,253 +631,332 @@ $attendance_complete = $page_data['attendance_complete'] ?? false;
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
+<?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
 
-    <div class="main-content" id="mainContent">
-        <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle">
-                <i class="fas fa-bars"></i>
-            </span>
-            <div class="content">
-                <h2><i class="fas fa-clipboard-check"></i> Absensi Petugas</h2>
-                <p><?= tanggal_indonesia(date('Y-m-d')) ?></p>
-            </div>
+<div class="main-content" id="mainContent">
+    <div class="welcome-banner">
+        <span class="menu-toggle" id="menuToggle">
+            <i class="fas fa-bars"></i>
+        </span>
+        <div class="content">
+            <h2><i class="fas fa-clipboard-check"></i> Absensi Petugas</h2>
+            <p><?= tanggal_indonesia(date('Y-m-d')) ?></p>
         </div>
-
-        <?php if ($is_blocked): ?>
-            <div class="alert-container blocked">
-                <i class="fas fa-ban alert-icon"></i>
-                <h2 class="alert-title">Absensi Dinonaktifkan</h2>
-                <p class="alert-message">Aktivitas absensi petugas sementara diblokir oleh administrator.</p>
-            </div>
-        <?php elseif (!$schedule): ?>
-            <div class="alert-container">
-                <i class="fas fa-exclamation-triangle alert-icon"></i>
-                <h2 class="alert-title">Belum Ada Jadwal</h2>
-                <p class="alert-message">Tidak ada penugasan petugas untuk hari ini.</p>
-            </div>
-        <?php elseif ($attendance_complete): ?>
-            <div class="alert-container">
-                <i class="fas fa-check-circle alert-icon"></i>
-                <h2 class="alert-title">Selesai!</h2>
-                <p class="alert-message">Terima kasih, semua absensi hari ini telah lengkap.</p>
-            </div>
-        <?php else: ?>
-            <div class="petugas-grid">
-                <!-- Petugas 1 Card -->
-                <?php if ($petugas1_nama): ?>
-                    <div class="petugas-card">
-                        <div class="petugas-header">
-                            <div class="petugas-title"><i class="fas fa-user-tie"></i> Petugas 1</div>
-                        </div>
-
-                        <div class="petugas-info-section">
-                            <div class="petugas-name-wrapper">
-                                <div class="petugas-avatar"><i class="fas fa-user-circle"></i></div>
-                                <div class="petugas-name-text">
-                                    <div class="petugas-name"><?= htmlspecialchars($petugas1_nama) ?></div>
-                                    <?php if (!$attendance_petugas1): ?>
-                                        <div class="petugas-status belum">Belum Absen</div>
-                                    <?php elseif ($attendance_petugas1['petugas1_status'] == 'hadir' && !$attendance_petugas1['waktu_keluar']): ?>
-                                        <div class="petugas-status hadir">Sedang Bertugas</div>
-                                    <?php else: 
-                                        $status = $attendance_petugas1['petugas1_status'];
-                                        $class = ($status == 'tidak_hadir') ? 'tidak-hadir' : (($status == 'sakit') ? 'sakit' : (($status == 'izin') ? 'izin' : 'pulang'));
-                                        $text = ucfirst(str_replace('_', ' ', $status));
-                                    ?>
-                                        <div class="petugas-status <?= $class ?>"><?= $text ?></div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                            <div class="time-info-grid">
-                                <div class="time-info-item">
-                                    <div class="time-label"><i class="fas fa-sign-in-alt"></i> Masuk</div>
-                                    <div class="time-value">
-                                        <?= $attendance_petugas1 && $attendance_petugas1['waktu_masuk'] ? date('H:i', strtotime($attendance_petugas1['waktu_masuk'])) : '--:--' ?>
-                                    </div>
-                                </div>
-                                <div class="time-info-item">
-                                    <div class="time-label"><i class="fas fa-sign-out-alt"></i> Keluar</div>
-                                    <div class="time-value">
-                                        <?= $attendance_petugas1 && $attendance_petugas1['waktu_keluar'] ? date('H:i', strtotime($attendance_petugas1['waktu_keluar'])) : '--:--' ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <?php if (!$attendance_petugas1): ?>
-                            <form method="POST" action="proses_absensi.php" onsubmit="return confirmSubmit(event, '<?= addslashes($petugas1_nama) ?>')">
-                                <input type="hidden" name="petugas_type" value="petugas1"/>
-                                <div class="radio-group">
-                                    <label class="radio-option"><input type="radio" name="action" value="hadir" required/><span class="radio-custom"></span><span class="radio-label">Hadir</span></label>
-                                    <label class="radio-option"><input type="radio" name="action" value="tidak_hadir"/><span class="radio-custom"></span><span class="radio-label">Alfa</span></label>
-                                    <label class="radio-option"><input type="radio" name="action" value="sakit"/><span class="radio-custom"></span><span class="radio-label">Sakit</span></label>
-                                    <label class="radio-option"><input type="radio" name="action" value="izin"/><span class="radio-custom"></span><span class="radio-label">Izin</span></label>
-                                </div>
-                                <button type="submit" class="btn-submit"><i class="fas fa-paper-plane"></i> Kirim Absensi</button>
-                            </form>
-                        <?php elseif ($attendance_petugas1['petugas1_status'] == 'hadir' && !$attendance_petugas1['waktu_keluar']): ?>
-                            <button type="button" class="btn-checkout" onclick="confirmCheckout('<?= addslashes($petugas1_nama) ?>', 'petugas1')"><i class="fas fa-sign-out-alt"></i> Absen Pulang</button>
-                        <?php else: ?>
-                            <button class="btn-disabled" disabled><i class="fas fa-check"></i> Selesai</button>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
-
-                <!-- Petugas 2 Card -->
-                <?php if ($petugas2_nama): ?>
-                    <div class="petugas-card">
-                        <div class="petugas-header">
-                            <div class="petugas-title"><i class="fas fa-user-tie"></i> Petugas 2</div>
-                        </div>
-                        <div class="petugas-info-section">
-                            <div class="petugas-name-wrapper">
-                                <div class="petugas-avatar"><i class="fas fa-user-circle"></i></div>
-                                <div class="petugas-name-text">
-                                    <div class="petugas-name"><?= htmlspecialchars($petugas2_nama) ?></div>
-                                    <?php if (!$attendance_petugas2): ?>
-                                        <div class="petugas-status belum">Belum Absen</div>
-                                    <?php elseif ($attendance_petugas2['petugas2_status'] == 'hadir' && !$attendance_petugas2['waktu_keluar']): ?>
-                                        <div class="petugas-status hadir">Sedang Bertugas</div>
-                                    <?php else: 
-                                        $status = $attendance_petugas2['petugas2_status'];
-                                        $class = ($status == 'tidak_hadir') ? 'tidak-hadir' : (($status == 'sakit') ? 'sakit' : (($status == 'izin') ? 'izin' : 'pulang'));
-                                        $text = ucfirst(str_replace('_', ' ', $status));
-                                    ?>
-                                        <div class="petugas-status <?= $class ?>"><?= $text ?></div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                            <div class="time-info-grid">
-                                <div class="time-info-item">
-                                    <div class="time-label"><i class="fas fa-sign-in-alt"></i> Masuk</div>
-                                    <div class="time-value">
-                                        <?= $attendance_petugas2 && $attendance_petugas2['waktu_masuk'] ? date('H:i', strtotime($attendance_petugas2['waktu_masuk'])) : '--:--' ?>
-                                    </div>
-                                </div>
-                                <div class="time-info-item">
-                                    <div class="time-label"><i class="fas fa-sign-out-alt"></i> Keluar</div>
-                                    <div class="time-value">
-                                        <?= $attendance_petugas2 && $attendance_petugas2['waktu_keluar'] ? date('H:i', strtotime($attendance_petugas2['waktu_keluar'])) : '--:--' ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <?php if (!$attendance_petugas2): ?>
-                            <form method="POST" action="proses_absensi.php" onsubmit="return confirmSubmit(event, '<?= addslashes($petugas2_nama) ?>')">
-                                <input type="hidden" name="petugas_type" value="petugas2"/>
-                                <div class="radio-group">
-                                <label class="radio-option"><input type="radio" name="action" value="hadir" required/><span class="radio-custom"></span><span class="radio-label">Hadir</span></label>
-                                    <label class="radio-option"><input type="radio" name="action" value="tidak_hadir"/><span class="radio-custom"></span><span class="radio-label">Alfa</span></label>
-                                    <label class="radio-option"><input type="radio" name="action" value="sakit"/><span class="radio-custom"></span><span class="radio-label">Sakit</span></label>
-                                    <label class="radio-option"><input type="radio" name="action" value="izin"/><span class="radio-custom"></span><span class="radio-label">Izin</span></label>
-                                </div>
-                                <button type="submit" class="btn-submit"><i class="fas fa-paper-plane"></i> Kirim Absensi</button>
-                            </form>
-                        <?php elseif ($attendance_petugas2['petugas2_status'] == 'hadir' && !$attendance_petugas2['waktu_keluar']): ?>
-                            <button type="button" class="btn-checkout" onclick="confirmCheckout('<?= addslashes($petugas2_nama) ?>', 'petugas2')"><i class="fas fa-sign-out-alt"></i> Absen Pulang</button>
-                        <?php else: ?>
-                            <button class="btn-disabled" disabled><i class="fas fa-check"></i> Selesai</button>
-                        <?php endif; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
-        <?php endif; ?>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            
-            if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
-                });
-            }
+    <?php if ($is_blocked): ?>
+        <div class="alert-container blocked">
+            <i class="fas fa-ban alert-icon"></i>
+            <h2 class="alert-title">Absensi Dinonaktifkan</h2>
+            <p class="alert-message">Aktivitas absensi petugas sementara diblokir oleh administrator.</p>
+        </div>
+    <?php elseif (!$schedule): ?>
+        <div class="alert-container">
+            <i class="fas fa-exclamation-triangle alert-icon"></i>
+            <h2 class="alert-title">Belum Ada Jadwal</h2>
+            <p class="alert-message">Tidak ada penugasan petugas untuk hari ini.</p>
+        </div>
+    <?php elseif ($attendance_complete): ?>
+        <div class="alert-container">
+            <i class="fas fa-check-circle alert-icon"></i>
+            <h2 class="alert-title">Selesai!</h2>
+            <p class="alert-message">Terima kasih, semua absensi hari ini telah lengkap.</p>
+        </div>
+    <?php else: ?>
+        <div class="petugas-grid">
+            <!-- PETUGAS 1 -->
+            <?php if ($petugas1_nama): ?>
+                <div class="petugas-card">
+                    <div class="petugas-header">
+                        <div class="petugas-title"><i class="fas fa-user-tie"></i> Petugas 1</div>
+                    </div>
 
-            document.addEventListener('click', (e) => {
-                if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                    sidebar.classList.remove('active');
-                    document.body.classList.remove('sidebar-active');
-                }
-            });
+                    <div class="petugas-info-section">
+                        <div class="petugas-name-wrapper">
+                            <div class="petugas-avatar"><i class="fas fa-user-circle"></i></div>
+                            <div class="petugas-name-text">
+                                <div class="petugas-name"><?= htmlspecialchars($petugas1_nama) ?></div>
+                                <?php
+                                if (!$attendance_petugas1) {
+                                    // Belum absen sama sekali
+                                    echo '<div class="petugas-status belum">Belum Absen</div>';
+                                } elseif ($attendance_petugas1['status'] === 'hadir' &&
+                                          !$attendance_petugas1['waktu_keluar']) {
+                                    // Sudah hadir, belum checkout
+                                    echo '<div class="petugas-status hadir">Sedang Bertugas</div>';
+                                } else {
+                                    // Status final (pulang / tidak_hadir / sakit / izin)
+                                    $status = $attendance_petugas1['status'];
+                                    $class  = ($status === 'tidak_hadir') ? 'tidak-hadir'
+                                             : (($status === 'sakit') ? 'sakit'
+                                             : (($status === 'izin') ? 'izin' : 'pulang'));
+                                    $text   = ucfirst(str_replace('_',' ',$status));
+                                    echo '<div class="petugas-status ' . $class . '">' . $text . '</div>';
+                                }
+                                ?>
+                            </div>
+                        </div>
 
-            <?php if ($success_message): ?>
-            Swal.fire({ 
-                icon: 'success', 
-                title: 'Berhasil', 
-                text: '<?= addslashes($success_message) ?>', 
-                confirmButtonColor: '#1e3a8a' 
-            });
+                        <div class="time-info-grid">
+                            <div class="time-info-item">
+                                <div class="time-label"><i class="fas fa-sign-in-alt"></i> Masuk</div>
+                                <div class="time-value">
+                                    <?= $attendance_petugas1 && $attendance_petugas1['waktu_masuk']
+                                        ? date('H:i', strtotime($attendance_petugas1['waktu_masuk']))
+                                        : '--:--' ?>
+                                </div>
+                            </div>
+                            <div class="time-info-item">
+                                <div class="time-label"><i class="fas fa-sign-out-alt"></i> Keluar</div>
+                                <div class="time-value">
+                                    <?= $attendance_petugas1 && $attendance_petugas1['waktu_keluar']
+                                        ? date('H:i', strtotime($attendance_petugas1['waktu_keluar']))
+                                        : '--:--' ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <?php if (!$attendance_petugas1): ?>
+                        <!-- Hanya tampil jika BELUM absen sama sekali -->
+                        <form method="POST"
+                              action="proses_absensi.php"
+                              onsubmit="return confirmSubmit(event, '<?= addslashes($petugas1_nama) ?>')">
+                            <input type="hidden" name="petugas_type" value="petugas1">
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="hadir" required>
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Hadir</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="tidak_hadir">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Alfa</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="sakit">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Sakit</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="izin">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Izin</span>
+                                </label>
+                            </div>
+                            <button type="submit" class="btn-submit">
+                                <i class="fas fa-paper-plane"></i> Kirim Absensi
+                            </button>
+                        </form>
+                    <?php elseif ($attendance_petugas1['status'] === 'hadir' &&
+                                  !$attendance_petugas1['waktu_keluar']): ?>
+                        <!-- Sudah hadir tapi belum checkout: hanya tombol pulang -->
+                        <button type="button"
+                                class="btn-checkout"
+                                onclick="confirmCheckout('<?= addslashes($petugas1_nama) ?>','petugas1')">
+                            <i class="fas fa-sign-out-alt"></i> Absen Pulang
+                        </button>
+                    <?php else: ?>
+                        <!-- Status akhir -->
+                        <button class="btn-disabled" disabled>
+                            <i class="fas fa-check"></i> Selesai
+                        </button>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
 
-            <?php if ($error_message): ?>
-            Swal.fire({ 
-                icon: 'error', 
-                title: 'Gagal', 
-                text: '<?= addslashes($error_message) ?>', 
-                confirmButtonColor: '#1e3a8a' 
-            });
+            <!-- PETUGAS 2 -->
+            <?php if ($petugas2_nama): ?>
+                <div class="petugas-card">
+                    <div class="petugas-header">
+                        <div class="petugas-title"><i class="fas fa-user-tie"></i> Petugas 2</div>
+                    </div>
+
+                    <div class="petugas-info-section">
+                        <div class="petugas-name-wrapper">
+                            <div class="petugas-avatar"><i class="fas fa-user-circle"></i></div>
+                            <div class="petugas-name-text">
+                                <div class="petugas-name"><?= htmlspecialchars($petugas2_nama) ?></div>
+                                <?php
+                                if (!$attendance_petugas2) {
+                                    echo '<div class="petugas-status belum">Belum Absen</div>';
+                                } elseif ($attendance_petugas2['status'] === 'hadir' &&
+                                          !$attendance_petugas2['waktu_keluar']) {
+                                    echo '<div class="petugas-status hadir">Sedang Bertugas</div>';
+                                } else {
+                                    $status = $attendance_petugas2['status'];
+                                    $class  = ($status === 'tidak_hadir') ? 'tidak-hadir'
+                                             : (($status === 'sakit') ? 'sakit'
+                                             : (($status === 'izin') ? 'izin' : 'pulang'));
+                                    $text   = ucfirst(str_replace('_',' ',$status));
+                                    echo '<div class="petugas-status ' . $class . '">' . $text . '</div>';
+                                }
+                                ?>
+                            </div>
+                        </div>
+
+                        <div class="time-info-grid">
+                            <div class="time-info-item">
+                                <div class="time-label"><i class="fas fa-sign-in-alt"></i> Masuk</div>
+                                <div class="time-value">
+                                    <?= $attendance_petugas2 && $attendance_petugas2['waktu_masuk']
+                                        ? date('H:i', strtotime($attendance_petugas2['waktu_masuk']))
+                                        : '--:--' ?>
+                                </div>
+                            </div>
+                            <div class="time-info-item">
+                                <div class="time-label"><i class="fas fa-sign-out-alt"></i> Keluar</div>
+                                <div class="time-value">
+                                    <?= $attendance_petugas2 && $attendance_petugas2['waktu_keluar']
+                                        ? date('H:i', strtotime($attendance_petugas2['waktu_keluar']))
+                                        : '--:--' ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <?php if (!$attendance_petugas2): ?>
+                        <form method="POST"
+                              action="proses_absensi.php"
+                              onsubmit="return confirmSubmit(event, '<?= addslashes($petugas2_nama) ?>')">
+                            <input type="hidden" name="petugas_type" value="petugas2">
+                            <div class="radio-group">
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="hadir" required>
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Hadir</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="tidak_hadir">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Alfa</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="sakit">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Sakit</span>
+                                </label>
+                                <label class="radio-option">
+                                    <input type="radio" name="action" value="izin">
+                                    <span class="radio-custom"></span>
+                                    <span class="radio-label">Izin</span>
+                                </label>
+                            </div>
+                            <button type="submit" class="btn-submit">
+                                <i class="fas fa-paper-plane"></i> Kirim Absensi
+                            </button>
+                        </form>
+                    <?php elseif ($attendance_petugas2['status'] === 'hadir' &&
+                                  !$attendance_petugas2['waktu_keluar']): ?>
+                        <button type="button"
+                                class="btn-checkout"
+                                onclick="confirmCheckout('<?= addslashes($petugas2_nama) ?>','petugas2')">
+                            <i class="fas fa-sign-out-alt"></i> Absen Pulang
+                        </button>
+                    <?php else: ?>
+                        <button class="btn-disabled" disabled>
+                            <i class="fas fa-check"></i> Selesai
+                        </button>
+                    <?php endif; ?>
+                </div>
             <?php endif; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebar    = document.getElementById('sidebar');
+
+    if (menuToggle && sidebar) {
+        menuToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sidebar.classList.toggle('active');
+            document.body.classList.toggle('sidebar-active');
         });
+    }
 
-        function confirmSubmit(event, petugasName) {
-            event.preventDefault();
-            const form = event.target;
-            const selectedOption = form.querySelector('input[name="action"]:checked');
-
-            if (!selectedOption) {
-                Swal.fire({ 
-                    icon: 'warning', 
-                    title: 'Pilih Status', 
-                    text: 'Anda harus memilih status absensi.', 
-                    confirmButtonColor: '#1e3a8a' 
-                });
-                return false;
-            }
-
-            let actionText = selectedOption.value.replace('_', ' ');
-
-            Swal.fire({
-                title: 'Konfirmasi Absensi',
-                html: `Apakah Anda yakin ingin menandai <strong>${petugasName}</strong> sebagai <strong>${actionText}</strong>?`,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Ya, Konfirmasi',
-                cancelButtonText: 'Batal',
-                confirmButtonColor: '#1e3a8a',
-                cancelButtonColor: '#6b7280'
-            }).then((result) => {
-                if (result.isConfirmed) form.submit();
-            });
-            return false;
+    document.addEventListener('click', (e) => {
+        if (sidebar && sidebar.classList.contains('active') &&
+            !sidebar.contains(e.target) &&
+            !menuToggle.contains(e.target)) {
+            sidebar.classList.remove('active');
+            document.body.classList.remove('sidebar-active');
         }
+    });
 
-        function confirmCheckout(petugasName, petugasType) {
-            Swal.fire({
-                title: 'Absen Pulang',
-                text: `Konfirmasi absen pulang untuk ${petugasName}?`,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Ya, Pulang',
-                cancelButtonText: 'Batal',
-                confirmButtonColor: '#1e3a8a',
-                cancelButtonColor: '#6b7280'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    const form = document.createElement('form');
-                    form.method = 'POST';
-                    form.action = 'proses_absensi.php';
-                    form.innerHTML = `<input type="hidden" name="action" value="check_out"><input type="hidden" name="petugas_type" value="${petugasType}">`;
-                    document.body.appendChild(form);
-                    form.submit();
-                }
-            });
+    <?php if ($success_message): ?>
+    Swal.fire({
+        icon: 'success',
+        title: 'Berhasil',
+        text: '<?= addslashes($success_message) ?>',
+        confirmButtonColor: '#1e3a8a'
+    });
+    <?php endif; ?>
+
+    <?php if ($error_message): ?>
+    Swal.fire({
+        icon: 'error',
+        title: 'Gagal',
+        text: '<?= addslashes($error_message) ?>',
+        confirmButtonColor: '#1e3a8a'
+    });
+    <?php endif; ?>
+});
+
+function confirmSubmit(event, petugasName) {
+    event.preventDefault();
+    const form = event.target;
+    const selected = form.querySelector('input[name="action"]:checked');
+    if (!selected) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Pilih Status',
+            text: 'Anda harus memilih status absensi.',
+            confirmButtonColor: '#1e3a8a'
+        });
+        return false;
+    }
+    const actionText = selected.value.replace('_',' ');
+    Swal.fire({
+        title: 'Konfirmasi Absensi',
+        html: `Apakah Anda yakin ingin menandai <strong>${petugasName}</strong> sebagai <strong>${actionText}</strong>?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, Konfirmasi',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#1e3a8a',
+        cancelButtonColor: '#6b7280'
+    }).then((result) => {
+        if (result.isConfirmed) form.submit();
+    });
+    return false;
+}
+
+function confirmCheckout(petugasName, petugasType) {
+    Swal.fire({
+        title: 'Absen Pulang',
+        text: `Konfirmasi absen pulang untuk ${petugasName}?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, Pulang',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#1e3a8a',
+        cancelButtonColor: '#6b7280'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = 'proses_absensi.php';
+            form.innerHTML = `<input type="hidden" name="action" value="check_out">
+                              <input type="hidden" name="petugas_type" value="${petugasType}">`;
+            document.body.appendChild(form);
+            form.submit();
         }
-    </script>
+    });
+}
+</script>
 </body>
 </html>

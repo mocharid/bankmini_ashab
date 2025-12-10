@@ -1,21 +1,76 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Rekapitulasi Absensi Petugas - Final Rapih Version (FIXED NAMA & JAM)
+ * File: pages/admin/rekap_absensi_petugas.php
+ */
 
+// ============================================
+// ADAPTIVE PATH & CONFIGURATION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+
+if (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+} elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+} elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+} else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+if (!$project_root) $project_root = $current_dir;
+
+if (!defined('PROJECT_ROOT')) define('PROJECT_ROOT', rtrim($project_root, '/'));
+if (!defined('INCLUDES_PATH')) define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+if (!defined('ASSETS_PATH')) define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    $base_path = dirname($script);
+    $base_path = str_replace('\\', '/', $base_path);
+    $base_path = preg_replace('#/pages.*$#', '', $base_path);
+    if ($base_path !== '/' && !empty($base_path)) $base_path = '/' . ltrim($base_path, '/');
+    return $protocol . $host . $base_path;
+}
+if (!defined('BASE_URL')) define('BASE_URL', rtrim(getBaseUrl(), '/'));
+define('ASSETS_URL', BASE_URL . '/assets');
+
+// ============================================
+// LOGIC & DATABASE
+// ============================================
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
+// Set timezone to WIB
 date_default_timezone_set('Asia/Jakarta');
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header('Location: ../login.php');
+// Start session if not active
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Restrict access to admin only
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+    header('Location: ' . BASE_URL . '/pages/login.php?error=' . urlencode('Silakan login sebagai admin terlebih dahulu!'));
     exit();
 }
 
+// CSRF token
 if (!isset($_SESSION['form_token'])) {
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
 }
 $token = $_SESSION['form_token'];
-
-$username = $_SESSION['username'] ?? 'Admin';
-$user_id = $_SESSION['user_id'] ?? 0;
 
 // Validate and sanitize date inputs
 $start_date = isset($_GET['start_date']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['start_date']) 
@@ -38,6 +93,16 @@ function formatDate($date) {
     return date('d/m/y', strtotime($date));
 }
 
+// Fungsi format tanggal Indonesia
+function tgl_indo($date) {
+    $bulan = [
+        1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    $split = explode('-', $date);
+    return (int)$split[2] . ' ' . $bulan[(int)$split[1]] . ' ' . $split[0];
+}
+
 // ========================================
 // HANDLE PDF EXPORT - HARUS DI AWAL SEBELUM OUTPUT APAPUN
 // ========================================
@@ -48,34 +113,37 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
     }
     ob_start();
     
-    // Build query untuk PDF (tanpa LIMIT) - PERBAIKAN: Tambah JOIN untuk pi2
-    $pdfQuery = "SELECT DISTINCT a.tanggal, 
-                  pi1.petugas1_nama, 
-                  pi2.petugas2_nama,
-                  MAX(CASE WHEN a.petugas_type = 'petugas1' THEN NULLIF(a.waktu_masuk, '23:59:00') ELSE NULL END) AS petugas1_masuk,
-                  MAX(CASE WHEN a.petugas_type = 'petugas1' THEN NULLIF(a.waktu_keluar, '23:59:00') ELSE NULL END) AS petugas1_keluar,
-                  MAX(CASE WHEN a.petugas_type = 'petugas2' THEN NULLIF(a.waktu_masuk, '23:59:00') ELSE NULL END) AS petugas2_masuk,
-                  MAX(CASE WHEN a.petugas_type = 'petugas2' THEN NULLIF(a.waktu_keluar, '23:59:00') ELSE NULL END) AS petugas2_keluar,
-                  MAX(CASE WHEN a.petugas_type = 'petugas1' THEN a.petugas1_status ELSE NULL END) AS petugas1_status,
-                  MAX(CASE WHEN a.petugas_type = 'petugas2' THEN a.petugas2_status ELSE NULL END) AS petugas2_status
-                  FROM absensi a 
-                  JOIN users u ON a.user_id = u.id 
-                  LEFT JOIN petugas_tugas pt ON a.tanggal = pt.tanggal
-                  LEFT JOIN petugas_info pi1 ON pt.petugas1_id = pi1.user_id
-                  LEFT JOIN petugas_info pi2 ON pt.petugas2_id = pi2.user_id";
+    // ✅ Build query untuk PDF (tanpa LIMIT) – gunakan petugas_profiles + petugas_status
+    $pdfQuery = "SELECT 
+                    ps.tanggal, 
+                    COALESCE(pp1.petugas1_nama, pp1.petugas2_nama) AS petugas1_nama,
+                    COALESCE(pp2.petugas2_nama, pp2.petugas1_nama) AS petugas2_nama,
+                    ps1.status AS petugas1_status,
+                    ps1.waktu_masuk AS petugas1_masuk,
+                    ps1.waktu_keluar AS petugas1_keluar,
+                    ps2.status AS petugas2_status,
+                    ps2.waktu_masuk AS petugas2_masuk,
+                    ps2.waktu_keluar AS petugas2_keluar
+                 FROM petugas_shift ps
+                 LEFT JOIN petugas_profiles pp1 ON ps.petugas1_id = pp1.user_id
+                 LEFT JOIN petugas_profiles pp2 ON ps.petugas2_id = pp2.user_id
+                 LEFT JOIN petugas_status ps1 
+                    ON ps.id = ps1.petugas_shift_id AND ps1.petugas_type = 'petugas1'
+                 LEFT JOIN petugas_status ps2 
+                    ON ps.id = ps2.petugas_shift_id AND ps2.petugas_type = 'petugas2'";
     
     $whereClause = [];
     $pdfParams = [];
     $pdfTypes = "";
     
     if (!empty($start_date)) {
-        $whereClause[] = "a.tanggal >= ?";
+        $whereClause[] = "ps.tanggal >= ?";
         $pdfParams[] = $start_date;
         $pdfTypes .= "s";
     }
     
     if (!empty($end_date)) {
-        $whereClause[] = "a.tanggal <= ?";
+        $whereClause[] = "ps.tanggal <= ?";
         $pdfParams[] = $end_date;
         $pdfTypes .= "s";
     }
@@ -84,7 +152,7 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         $pdfQuery .= " WHERE " . implode(" AND ", $whereClause);
     }
     
-    $pdfQuery .= " GROUP BY a.tanggal, pi1.petugas1_nama, pi2.petugas2_nama ORDER BY a.tanggal ASC";
+    $pdfQuery .= " ORDER BY ps.tanggal ASC";
     
     try {
         $pdfStmt = $conn->prepare($pdfQuery);
@@ -104,88 +172,118 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
         }
         $pdfStmt->close();
         
-        // Include TCPDF library
-        require_once '../../tcpdf/tcpdf.php';
+        if (empty($pdfData)) {
+            $_SESSION['error_message'] = 'Tidak ada data untuk diekspor!';
+            header('Location: ' . BASE_URL . '/pages/admin/rekapitulasi_absensi.php');
+            exit;
+        }
         
-        // Custom TCPDF class
+        // Include TCPDF library
+        if (!file_exists(PROJECT_ROOT . '/tcpdf/tcpdf.php')) {
+            error_log("DEBUG: TCPDF library not found at " . PROJECT_ROOT . "/tcpdf/tcpdf.php");
+            die('TCPDF library not found');
+        }
+        require_once PROJECT_ROOT . '/tcpdf/tcpdf.php';
+        
+        // Custom TCPDF class dengan header abu-abu elegan
         class MYPDF extends TCPDF {
             public function Header() {
+                $this->SetY(8);
+
+                // Logo pakai adaptive path ASSETS_PATH
+                $logo = ASSETS_PATH . '/images/logo.png';
+                if (file_exists($logo)) {
+                    $this->Image($logo, 15, 9, 24, 24, 'PNG');
+                }
+
+                // Kop Surat Abu-abu Elegan
                 $this->SetFont('helvetica', 'B', 16);
-                $this->Cell(0, 10, 'MY SCHOBANK', 0, false, 'C', 0);
-                $this->Ln(6);
-                $this->SetFont('helvetica', '', 10);
-                $this->Cell(0, 10, 'Sistem Bank Mini SMK Plus Ashabulyamin', 0, false, 'C', 0);
-                $this->Ln(6);
-                $this->SetFont('helvetica', '', 8);
-                $this->Cell(0, 10, 'Jl. K.H. Saleh No.57A, Sayang, Kec. Cianjur, Kabupaten Cianjur, Jawa Barat', 0, false, 'C', 0);
-                $this->Line(15, 35, $this->getPageWidth() - 15, 35);
+                $this->SetTextColor(70, 70, 70);
+                $this->Cell(0, 8, 'SMK PLUS ASHABULYAMIN', 0, 1, 'C');
+
+                $this->SetFont('helvetica', 'B', 12);
+                $this->SetTextColor(50, 50, 50);
+                $this->Cell(0, 7, 'SCHOBANK - BANK MINI SEKOLAH', 0, 1, 'C');
+
+                $this->SetFont('helvetica', '', 9.5);
+                $this->SetTextColor(100, 100, 100);
+                $this->Cell(0, 5, 'Jl. K.H. Saleh No.57A, Cianjur 43212, Jawa Barat', 0, 1, 'C');
+                $this->Cell(0, 5, 'Website: schobank.my.id | Email: myschobank@gmail.com', 0, 1, 'C');
+
+                // Garis abu-abu elegan
+                $this->SetDrawColor(120, 120, 120);
+                $this->SetLineWidth(1.2);
+                $this->Line(15, 40, 195, 40);
+                $this->SetDrawColor(200, 200, 200);
+                $this->SetLineWidth(0.3);
+                $this->Line(15, 41.5, 195, 41.5);
             }
             
             public function Footer() {
                 $this->SetY(-15);
                 $this->SetFont('helvetica', 'I', 8);
-                $this->Cell(90, 10, 'Dicetak pada: ' . date('d/m/y H:i'), 0, 0, 'L');
-                $this->Cell(0, 10, 'Halaman ' . $this->getAliasNumPage() . '/' . $this->getAliasNbPages(), 0, 0, 'R');
+                $this->SetTextColor(130, 130, 130);
+                $this->Cell(0, 10, 'Dicetak pada ' . date('d/m/Y H:i') . ' WIB • Halaman ' . $this->getAliasNumPage() . ' dari ' . $this->getAliasNbPages(), 0, 0, 'C');
             }
         }
         
         // Create PDF (Portrait orientation)
-        $pdf = new MYPDF('P', PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+        $pdf = new MYPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         
         // Set document information
-        $pdf->SetCreator('MY SCHOBANK');
-        $pdf->SetAuthor('Admin SCHOBANK');
+        $pdf->SetCreator('Schobank SMK Plus Ashabulyamin');
+        $pdf->SetAuthor('Admin');
         $pdf->SetTitle('Rekap Absensi Petugas');
         $pdf->SetSubject('Laporan Absensi');
         
         // Set margins
-        $pdf->SetMargins(15, 40, 15);
-        $pdf->SetHeaderMargin(5);
-        $pdf->SetFooterMargin(15);
-        
-        // Set auto page breaks
-        $pdf->SetAutoPageBreak(TRUE, 20);
+        $pdf->SetMargins(12, 48, 12);
+        $pdf->SetAutoPageBreak(true, 20);
         
         // Add a page
         $pdf->AddPage();
         
-        // Add spacing after header
-        $pdf->Ln(5);
-        
-        // Title
-        $pdf->SetFont('helvetica', 'B', 14);
-        $pdf->Cell(0, 7, 'REKAP ABSENSI PETUGAS', 0, 1, 'C');
+        // === JUDUL LAPORAN ===
+        $pdf->Ln(6);
+        $pdf->SetFont('helvetica', 'B', 13);
+        $pdf->SetTextColor(60, 60, 60);
+        $pdf->Cell(0, 8, 'REKAP ABSENSI PETUGAS', 0, 1, 'C');
         
         // Periode
         $periode_text = 'Semua Data';
         if (!empty($start_date) && !empty($end_date)) {
-            $periode_text = formatDate($start_date) . ' s/d ' . formatDate($end_date);
+            $periode_text = tgl_indo($start_date) . ' — ' . tgl_indo($end_date);
         } elseif (!empty($start_date)) {
-            $periode_text = 'Dari ' . formatDate($start_date);
+            $periode_text = 'Dari ' . tgl_indo($start_date);
         } elseif (!empty($end_date)) {
-            $periode_text = 'Sampai ' . formatDate($end_date);
+            $periode_text = 'Sampai ' . tgl_indo($end_date);
         }
         
         $pdf->SetFont('helvetica', '', 10);
+        $pdf->SetTextColor(90, 90, 90);
         $pdf->Cell(0, 7, 'Periode: ' . $periode_text, 0, 1, 'C');
-        $pdf->Ln(5);
+        $pdf->Ln(10);
         
         // Section Header
         $pdf->SetFont('helvetica', 'B', 10);
-        $pdf->SetFillColor(220, 220, 220);
-        $pdf->Cell(180, 7, 'DAFTAR ABSENSI', 1, 1, 'C', true);
+        $pdf->SetFillColor(110, 110, 110);
+        $pdf->SetTextColor(255, 255, 255);
+        $pdf->Cell(186, 8, 'DAFTAR ABSENSI', 0, 1, 'C', true);
         
         // Table Header
-        $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->Cell(10, 6, 'No', 1, 0, 'C');
-        $pdf->Cell(25, 6, 'Tanggal', 1, 0, 'C');
-        $pdf->Cell(50, 6, 'Nama Petugas', 1, 0, 'C');
-        $pdf->Cell(25, 6, 'Status', 1, 0, 'C');
-        $pdf->Cell(35, 6, 'Jam Masuk', 1, 0, 'C');
-        $pdf->Cell(35, 6, 'Jam Keluar', 1, 1, 'C');
+        $col = [8, 22, 52, 30, 37, 37]; // Total: 186mm
+        $pdf->SetFont('helvetica', 'B', 8.5);
+        $pdf->SetFillColor(230, 230, 230);
+        $pdf->SetTextColor(0, 0, 0);
+        $pdf->Cell($col[0], 7, 'No', 1, 0, 'C', true);
+        $pdf->Cell($col[1], 7, 'Tanggal', 1, 0, 'C', true);
+        $pdf->Cell($col[2], 7, 'Nama Petugas', 1, 0, 'C', true);
+        $pdf->Cell($col[3], 7, 'Status', 1, 0, 'C', true);
+        $pdf->Cell($col[4], 7, 'Jam Masuk', 1, 0, 'C', true);
+        $pdf->Cell($col[5], 7, 'Jam Keluar', 1, 1, 'C', true);
         
         // Table Body
-        $pdf->SetFont('helvetica', '', 8);
+        $pdf->SetFont('helvetica', '', 8.5);
         
         if (count($pdfData) > 0) {
             $status_map = [
@@ -197,41 +295,47 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
             
             $no = 1;
             foreach ($pdfData as $record) {
-                $petugas1_status = $record['petugas1_status'] ?? '-';
-                $petugas2_status = $record['petugas2_status'] ?? '-';
+                $tanggal_formatted = date('d/m/Y', strtotime($record['tanggal']));
                 
-                $petugas1_status_display = $status_map[$petugas1_status] ?? $petugas1_status;
-                $petugas2_status_display = $status_map[$petugas2_status] ?? $petugas2_status;
+                $p1_status = $record['petugas1_status'] ?? '-';
+                $p2_status = $record['petugas2_status'] ?? '-';
                 
-                $tanggal_formatted = formatDate($record['tanggal']);
+                $p1_status_display = $status_map[$p1_status] ?? $p1_status;
+                $p2_status_display = $status_map[$p2_status] ?? $p2_status;
+                
+                $p1_masuk  = ($p1_status === 'hadir' && $record['petugas1_masuk'])  ? date('H:i', strtotime($record['petugas1_masuk']))  : '-';
+                $p1_keluar = ($p1_status === 'hadir' && $record['petugas1_keluar']) ? date('H:i', strtotime($record['petugas1_keluar'])) : '-';
+                $p2_masuk  = ($p2_status === 'hadir' && $record['petugas2_masuk'])  ? date('H:i', strtotime($record['petugas2_masuk']))  : '-';
+                $p2_keluar = ($p2_status === 'hadir' && $record['petugas2_keluar']) ? date('H:i', strtotime($record['petugas2_keluar'])) : '-';
                 
                 // First row - Petugas 1
-                $pdf->Cell(10, 6, $no, 'LTR', 0, 'C');
-                $pdf->Cell(25, 6, $tanggal_formatted, 'LTR', 0, 'C');
-                $pdf->Cell(50, 6, $record['petugas1_nama'] ?? '-', 1, 0, 'L');
-                $pdf->Cell(25, 6, $petugas1_status_display, 1, 0, 'C');
-                $pdf->Cell(35, 6, ($petugas1_status === 'hadir' && $record['petugas1_masuk']) ? $record['petugas1_masuk'] : '-', 1, 0, 'C');
-                $pdf->Cell(35, 6, ($petugas1_status === 'hadir' && $record['petugas1_keluar']) ? $record['petugas1_keluar'] : '-', 1, 1, 'C');
+                $pdf->Cell($col[0], 6.5, $no, 'LTR', 0, 'C');
+                $pdf->Cell($col[1], 6.5, $tanggal_formatted, 'LTR', 0, 'C');
+                $pdf->Cell($col[2], 6.5, $record['petugas1_nama'] ?? '-', 1, 0, 'L');
+                $pdf->Cell($col[3], 6.5, $p1_status_display, 1, 0, 'C');
+                $pdf->Cell($col[4], 6.5, $p1_masuk, 1, 0, 'C');
+                $pdf->Cell($col[5], 6.5, $p1_keluar, 1, 1, 'C');
                 
                 // Second row - Petugas 2
-                $pdf->Cell(10, 6, '', 'LBR', 0, 'C');
-                $pdf->Cell(25, 6, '', 'LBR', 0, 'C');
-                $pdf->Cell(50, 6, $record['petugas2_nama'] ?? '-', 1, 0, 'L');
-                $pdf->Cell(25, 6, $petugas2_status_display, 1, 0, 'C');
-                $pdf->Cell(35, 6, ($petugas2_status === 'hadir' && $record['petugas2_masuk']) ? $record['petugas2_masuk'] : '-', 1, 0, 'C');
-                $pdf->Cell(35, 6, ($petugas2_status === 'hadir' && $record['petugas2_keluar']) ? $record['petugas2_keluar'] : '-', 1, 1, 'C');
+                $pdf->Cell($col[0], 6.5, '', 'LBR', 0, 'C');
+                $pdf->Cell($col[1], 6.5, '', 'LBR', 0, 'C');
+                $pdf->Cell($col[2], 6.5, $record['petugas2_nama'] ?? '-', 1, 0, 'L');
+                $pdf->Cell($col[3], 6.5, $p2_status_display, 1, 0, 'C');
+                $pdf->Cell($col[4], 6.5, $p2_masuk, 1, 0, 'C');
+                $pdf->Cell($col[5], 6.5, $p2_keluar, 1, 1, 'C');
                 
                 $no++;
             }
         } else {
-            $pdf->Cell(180, 6, 'Tidak ada data absensi', 1, 1, 'C');
+            $pdf->SetFont('helvetica', 'I', 9);
+            $pdf->Cell(array_sum($col), 10, 'Tidak ada data absensi pada periode ini.', 1, 1, 'C');
         }
         
         // Clean output buffer
         ob_end_clean();
         
         // Output PDF
-        $filename = 'rekap_absen.pdf';
+        $filename = 'Rekap_Absensi_Petugas_' . date('d-m-Y_His') . '.pdf';
         $pdf->Output($filename, 'D');
         
         exit();
@@ -249,31 +353,30 @@ if (isset($_GET['export']) && $_GET['export'] == 'pdf') {
 // PAGINATION & DATA UNTUK TAMPILAN NORMAL
 // ========================================
 $items_per_page = 15;
-$current_page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$current_page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
 $offset = ($current_page - 1) * $items_per_page;
 
-// Build query - PERBAIKAN: Tambah JOIN untuk pi2
-$baseQuery = "SELECT DISTINCT a.tanggal, 
-              pi1.petugas1_nama, 
-              pi2.petugas2_nama,
-              MAX(CASE WHEN a.petugas_type = 'petugas1' THEN NULLIF(a.waktu_masuk, '23:59:00') ELSE NULL END) AS petugas1_masuk,
-              MAX(CASE WHEN a.petugas_type = 'petugas1' THEN NULLIF(a.waktu_keluar, '23:59:00') ELSE NULL END) AS petugas1_keluar,
-              MAX(CASE WHEN a.petugas_type = 'petugas2' THEN NULLIF(a.waktu_masuk, '23:59:00') ELSE NULL END) AS petugas2_masuk,
-              MAX(CASE WHEN a.petugas_type = 'petugas2' THEN NULLIF(a.waktu_keluar, '23:59:00') ELSE NULL END) AS petugas2_keluar,
-              MAX(CASE WHEN a.petugas_type = 'petugas1' THEN a.petugas1_status ELSE NULL END) AS petugas1_status,
-              MAX(CASE WHEN a.petugas_type = 'petugas2' THEN a.petugas2_status ELSE NULL END) AS petugas2_status
-              FROM absensi a 
-              JOIN users u ON a.user_id = u.id 
-              LEFT JOIN petugas_tugas pt ON a.tanggal = pt.tanggal
-              LEFT JOIN petugas_info pi1 ON pt.petugas1_id = pi1.user_id
-              LEFT JOIN petugas_info pi2 ON pt.petugas2_id = pi2.user_id";
+// ✅ Build query utama – nama dari petugas_profiles, jam dari petugas_status
+$baseQuery = "SELECT 
+                ps.tanggal, 
+                COALESCE(pp1.petugas1_nama, pp1.petugas2_nama) AS petugas1_nama,
+                COALESCE(pp2.petugas2_nama, pp2.petugas1_nama) AS petugas2_nama,
+                ps1.status AS petugas1_status,
+                ps1.waktu_masuk AS petugas1_masuk,
+                ps1.waktu_keluar AS petugas1_keluar,
+                ps2.status AS petugas2_status,
+                ps2.waktu_masuk AS petugas2_masuk,
+                ps2.waktu_keluar AS petugas2_keluar
+             FROM petugas_shift ps
+             LEFT JOIN petugas_profiles pp1 ON ps.petugas1_id = pp1.user_id
+             LEFT JOIN petugas_profiles pp2 ON ps.petugas2_id = pp2.user_id
+             LEFT JOIN petugas_status ps1 
+                ON ps.id = ps1.petugas_shift_id AND ps1.petugas_type = 'petugas1'
+             LEFT JOIN petugas_status ps2 
+                ON ps.id = ps2.petugas_shift_id AND ps2.petugas_type = 'petugas2'";
 
-$countQuery = "SELECT COUNT(DISTINCT a.tanggal) as total 
-               FROM absensi a 
-               JOIN users u ON a.user_id = u.id 
-               LEFT JOIN petugas_tugas pt ON a.tanggal = pt.tanggal
-               LEFT JOIN petugas_info pi1 ON pt.petugas1_id = pi1.user_id
-               LEFT JOIN petugas_info pi2 ON pt.petugas2_id = pi2.user_id";
+$countQuery = "SELECT COUNT(*) as total 
+               FROM petugas_shift ps";
 
 // Add WHERE clauses
 $whereClause = [];
@@ -281,13 +384,13 @@ $params = [];
 $types = "";
 
 if (!empty($start_date)) {
-    $whereClause[] = "a.tanggal >= ?";
+    $whereClause[] = "ps.tanggal >= ?";
     $params[] = $start_date;
     $types .= "s";
 }
 
 if (!empty($end_date)) {
-    $whereClause[] = "a.tanggal <= ?";
+    $whereClause[] = "ps.tanggal <= ?";
     $params[] = $end_date;
     $types .= "s";
 }
@@ -297,8 +400,6 @@ if (!empty($whereClause)) {
     $baseQuery .= $whereString;
     $countQuery .= $whereString;
 }
-
-$baseQuery .= " GROUP BY a.tanggal, pi1.petugas1_nama, pi2.petugas2_nama";
 
 // Get total count
 try {
@@ -322,15 +423,10 @@ try {
 $total_pages = ceil($total_records / $items_per_page);
 
 // Add pagination
-$baseQuery .= " ORDER BY a.tanggal ASC LIMIT ? OFFSET ?";
+$baseQuery .= " ORDER BY ps.tanggal ASC LIMIT ? OFFSET ?";
 $params[] = $items_per_page;
 $params[] = $offset;
-
-if (empty($types)) {
-    $types = "ii";
-} else {
-    $types .= "ii";
-}
+$types .= "ii";
 
 // Execute main query
 try {
@@ -364,1133 +460,379 @@ if (!empty($start_date) && !empty($end_date)) {
 } elseif (!empty($end_date)) {
     $periode_display = 'Sampai ' . date('d/m/Y', strtotime($end_date));
 }
+
+// Map status untuk badge (dipakai di HTML)
+$status_map = [
+    'hadir' => 'Hadir',
+    'tidak_hadir' => 'Tidak Hadir',
+    'sakit' => 'Sakit',
+    'izin' => 'Izin',
+    '-' => '-'
+];
+
+$status_class_map = [
+    'hadir' => 'status-hadir',
+    'tidak_hadir' => 'status-tidak_hadir',
+    'sakit' => 'status-sakit',
+    'izin' => 'status-izin',
+    '' => '',
+    '-' => ''
+];
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
-    <meta name="format-detection" content="telephone=no">
-    <title>Rekapitulasi Absensi Petugas | MY Schobank</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
+    <title>Rekap Absensi Petugas | MY Schobank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
-            --accent-color: #f59e0b;
-            --danger-color: #e74c3c;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f0f5ff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-            --debit-bg: #d1fae5;
-            --kredit-bg: #fee2e2;
-            --pending-bg: #fef3c7;
-            --button-width: 140px;
-            --button-height: 44px;
+            --primary-color: #1e3a8a; --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6; --bg-light: #f0f5ff;
+            --text-primary: #333; --text-secondary: #666;
+            --shadow-sm: 0 2px 10px rgba(0,0,0,0.05);
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-            -webkit-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background-color: var(--bg-light); color: var(--text-primary); display: flex; min-height: 100vh; overflow-x: hidden; }
+        
+        /* SIDEBAR OVERLAY FIX */
+        body.sidebar-open { overflow: hidden; }
+        body.sidebar-open::before {
+            content: ''; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.5); z-index: 998; backdrop-filter: blur(5px);
         }
-
-        html, body {
-            width: 100%;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            -webkit-text-size-adjust: 100%;
+        
+        .main-content { flex: 1; margin-left: 280px; padding: 30px; max-width: calc(100% - 280px); position: relative; z-index: 1; }
+        
+        /* Banner */
+        .welcome-banner { 
+            background: linear-gradient(135deg, var(--primary-dark), var(--secondary-color)); 
+            color: white; 
+            padding: 30px; 
+            border-radius: 8px; 
+            margin-bottom: 30px; 
+            box-shadow: var(--shadow-sm); 
+            display: flex; 
+            align-items: center; 
+            gap: 20px; 
         }
-
-        body {
-            background-color: var(--bg-light);
-            color: var(--text-primary);
-            display: flex;
-            touch-action: pan-y;
-        }
-
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 30px;
-            max-width: calc(100% - 280px);
-        }
-
-        body.sidebar-active .main-content {
-            opacity: 0.3;
-            pointer-events: none;
-        }
-
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 5px;
-            margin-bottom: 35px;
-            box-shadow: var(--shadow-md);
-            animation: fadeIn 1s ease-in-out;
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .welcome-banner .content {
-            flex: 1;
-        }
-
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .welcome-banner p {
-            font-size: clamp(0.85rem, 2vw, 0.9rem);
-            font-weight: 400;
-            opacity: 0.8;
-        }
-
-        .menu-toggle {
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: white;
-            flex-shrink: 0;
-            display: none;
+        .welcome-banner h2 { font-size: 1.5rem; margin: 0; }
+        .welcome-banner p { margin: 0; opacity: 0.9; }
+        .menu-toggle { 
+            display: none; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
             align-self: center;
+            margin-right: auto;
         }
 
-        .filter-section, .summary-container {
-            background: white;
-            border-radius: 5px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 35px;
-            animation: slideIn 0.5s ease-in-out;
-        }
+        /* Form & Container */
+        .form-card, .jadwal-list { background: white; border-radius: 8px; padding: 25px; box-shadow: var(--shadow-sm); margin-bottom: 30px; }
+        .form-row { display: flex; gap: 20px; margin-bottom: 15px; }
+        .form-group { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        label { font-weight: 500; font-size: 0.9rem; color: var(--text-secondary); }
 
-        .filter-form {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            align-items: flex-end;
+        /* INPUT STYLING */
+        input[type="text"], input[type="date"], select {
+            width: 100%; padding: 12px 15px; border: 1px solid #e2e8f0; border-radius: 6px;
+            font-size: 0.95rem; transition: all 0.3s; background: #fff;
+            height: 48px;
         }
-
-        .form-group {
-            flex: 1;
-            min-width: 150px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            position: relative;
-        }
-
-        label {
-            font-weight: 500;
-            color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.9rem);
-        }
-
-        .date-input-wrapper {
-            position: relative;
-            width: 100%;
-        }
-
+        input:focus, select:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1); outline: none; }
+        
+        /* Date Picker Wrapper */
+        .date-input-wrapper { position: relative; width: 100%; }
+        
+        /* Input Date Specifics */
         input[type="date"] {
-            width: 100%;
-            padding: 12px 50px 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 16px;
-            line-height: 1.5;
-            min-height: 44px;
-            transition: var(--transition);
-            -webkit-user-select: text;
-            user-select: text;
-            background-color: #fff;
-            text-align: left;
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            color: var(--text-primary);
+            appearance: none; -webkit-appearance: none;
+            position: relative; padding-right: 40px;
         }
-
+        
+        /* HIDE Native Calendar Icon */
         input[type="date"]::-webkit-calendar-picker-indicator {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            opacity: 0;
-            z-index: 2;
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%;
+            opacity: 0; cursor: pointer; z-index: 2;
         }
-
-        input[type="date"]::before {
-            content: attr(data-placeholder);
-            color: #999;
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            pointer-events: none;
-        }
-
-        input[type="date"]:focus::before,
-        input[type="date"]:valid::before {
-            display: none;
-        }
-
+        
+        /* Custom Icon */
         .calendar-icon {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            pointer-events: none;
-            color: #666;
-            font-size: 18px;
-            z-index: 1;
+            position: absolute; right: 15px; top: 50%; transform: translateY(-50%);
+            color: var(--primary-color); font-size: 1.1rem; z-index: 1; pointer-events: none;
         }
 
-        input[type="date"]::-webkit-datetime-edit {
-            padding-right: 0;
-            text-align: left;
-            padding-left: 0;
-        }
+        /* Button */
+        .btn { background: var(--primary-color); color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; transition: 0.3s; text-decoration: none; }
+        .btn:hover { background: var(--primary-dark); transform: translateY(-2px); }
+        .btn-cancel { background: #e2e8f0; color: #475569; }
+        .btn-cancel:hover { background: #cbd5e1; }
+        
+        /* Table */
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #f1f5f9; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th { background: #f8fafc; padding: 15px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid #e2e8f0; }
+        td { padding: 15px; border-bottom: 1px solid #f1f5f9; color: var(--text-primary); }
 
-        input[type="date"]::-webkit-datetime-edit-fields-wrapper {
-            text-align: left;
-            padding: 0;
-        }
+        .status-hadir { background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        .status-tidak_hadir { background: #fee2e2; color: #991b1b; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        .status-sakit { background: #ffedd5; color: #9a3412; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        .status-izin { background: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
 
-        input[type="date"]::-webkit-datetime-edit-text {
-            padding: 0 3px;
-        }
-
-        input[type="date"]::-webkit-datetime-edit-month-field,
-        input[type="date"]::-webkit-datetime-edit-day-field,
-        input[type="date"]::-webkit-datetime-edit-year-field {
-            padding: 0 3px;
-        }
-
-        input[type="date"]:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-            transform: scale(1.02);
-        }
-
-        input[aria-invalid="true"] {
-            border-color: var(--danger-color);
-        }
-
-        .error-message {
-            color: var(--danger-color);
-            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
-            margin-top: 4px;
-            display: none;
-            text-align: left;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .filter-buttons {
-            display: flex;
-            gap: 15px;
-        }
-
-        .summary-title {
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
-            font-weight: 600;
-            color: var(--primary-dark);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .action-buttons {
-            display: flex;
-            justify-content: flex-end;
-            margin-bottom: 15px;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: var(--transition);
-            width: var(--button-width);
-            height: var(--button-height);
-            position: relative;
-        }
-
-        .btn:hover {
-            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .btn:focus {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
-
-        .btn:active {
-            transform: scale(0.95);
-        }
-
-        .btn-secondary {
-            background: #f0f0f0;
-            color: var(--text-secondary);
-        }
-
-        .btn-secondary:hover {
-            background: #e0e0e0;
-            transform: translateY(-2px);
-        }
-
-        .table-container {
-            width: 100%;
-            overflow-x: auto;
-            overflow-y: visible;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            box-shadow: var(--shadow-sm);
-            -webkit-overflow-scrolling: touch;
-            touch-action: pan-x pan-y;
-            position: relative;
-        }
-
-        .table-container::-webkit-scrollbar {
-            height: 8px;
-        }
-
-        .table-container::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 5px;
-        }
-
-        .table-container::-webkit-scrollbar-thumb {
-            background: var(--primary-color);
-            border-radius: 5px;
-        }
-
-        .table-container::-webkit-scrollbar-thumb:hover {
-            background: var(--primary-dark);
-        }
-
-        .absensi-table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: auto;
-            background: white;
-            min-width: 800px;
-        }
-
-        .absensi-table th, .absensi-table td {
-            padding: 12px 15px;
-            text-align: left;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            border-bottom: 1px solid #eee;
-            white-space: nowrap;
-        }
-
-        .absensi-table th {
-            background: var(--bg-light);
-            color: var(--text-secondary);
-            font-weight: 600;
-            text-transform: uppercase;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-
-        .absensi-table td {
-            background: white;
-        }
-
-        .absensi-table tr:hover {
-            background-color: rgba(59, 130, 246, 0.05);
-        }
-
-        .status-hadir {
-            background: var(--debit-bg);
-            color: #047857;
-            padding: 4px 8px;
-            border-radius: 5px;
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            font-weight: 500;
-            text-align: center;
-            display: inline-block;
-        }
-
-        .status-tidak-hadir {
-            background: var(--kredit-bg);
-            color: #b91c1c;
-            padding: 4px 8px;
-            border-radius: 5px;
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            font-weight: 500;
-            text-align: center;
-            display: inline-block;
-        }
-
-        .status-sakit, .status-izin {
-            background: #fef3c7;
-            color: #d97706;
-            padding: 4px 8px;
-            border-radius: 5px;
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            font-weight: 500;
-            text-align: center;
-            display: inline-block;
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 5px;
-            margin-top: 20px;
-            width: 100%;
-        }
-
-        .current-page {
-            font-weight: 600;
-            color: var(--primary-dark);
-            min-width: 50px;
-            text-align: center;
-            font-size: clamp(0.95rem, 2vw, 1.05rem);
-        }
-
-        .pagination-btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: clamp(1rem, 2.2vw, 1.1rem);
-            font-weight: 500;
-            transition: var(--transition);
-            width: auto;
-            height: var(--button-height);
-            padding: 0 16px;
-            min-width: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .pagination-btn:hover:not(:disabled) {
-            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .pagination-btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-            pointer-events: none;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 30px;
-            background: linear-gradient(135deg, rgba(30, 58, 138, 0.03) 0%, rgba(59, 130, 246, 0.03) 100%);
-            border-radius: 5px;
-            border: 2px dashed rgba(30, 58, 138, 0.2);
-            animation: fadeIn 0.6s ease-out;
-            margin: 20px 0;
-        }
-
-        .empty-state-icon {
-            font-size: clamp(3.5rem, 6vw, 4.5rem);
-            color: var(--primary-color);
-            margin-bottom: 25px;
-            opacity: 0.4;
-            display: block;
-        }
-
-        .empty-state-title {
-            color: var(--primary-dark);
-            font-size: clamp(1.3rem, 2.8vw, 1.6rem);
-            font-weight: 600;
-            margin-bottom: 15px;
-            letter-spacing: 0.5px;
-        }
-
-        .empty-state-message {
-            color: var(--text-secondary);
-            font-size: clamp(0.95rem, 2vw, 1.1rem);
-            font-weight: 400;
-            line-height: 1.6;
-            max-width: 600px;
-            margin: 0 auto 25px;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
+        /* Responsive */
         @media (max-width: 768px) {
-            .main-content {
-                margin-left: 0;
-                padding: 15px;
-                max-width: 100%;
+            .main-content { margin-left: 0; padding: 15px; max-width: 100%; }
+            .menu-toggle { display: block; }
+            .welcome-banner { 
+                flex-direction: row; 
+                align-items: center; 
+                gap: 15px; 
+                padding: 20px; 
             }
-
-            .menu-toggle {
-                display: block;
+            .welcome-banner h2 { 
+                font-size: 1.2rem;
+                margin: 0; 
             }
-
-            .welcome-banner {
-                padding: 20px;
-                border-radius: 5px;
-                align-items: center;
+            .welcome-banner p { 
+                font-size: 0.9rem;
+                margin: 0; 
+                opacity: 0.9; 
             }
-
-            .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.4rem);
-            }
-
-            .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.85rem);
-            }
-
-            .filter-section, .summary-container {
-                padding: 20px;
-                border-radius: 5px;
-            }
-
-            .filter-form {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .form-group {
-                min-width: 100%;
-            }
-
-            .filter-buttons {
-                flex-direction: row;
-                width: 100%;
-                gap: 10px;
-            }
-
-            .filter-buttons .btn {
-                flex: 1;
-                width: auto;
-                min-width: 0;
-            }
-
-            .action-buttons {
-                justify-content: center;
-            }
-
-            .action-buttons .btn {
-                width: 100%;
-            }
-
-            .table-container {
-                overflow-x: auto;
-                overflow-y: visible;
-                -webkit-overflow-scrolling: touch;
-                touch-action: pan-x pan-y;
-                max-height: none;
-                border-radius: 5px;
-            }
-
-            .absensi-table {
-                min-width: 900px;
-            }
-
-            .absensi-table th, .absensi-table td {
-                padding: 10px;
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            }
-
-            .pagination {
-                gap: 5px;
-            }
-
-            .pagination-btn {
-                padding: 8px 12px;
-                min-width: 40px;
-                font-size: clamp(1rem, 2.2vw, 1.1rem);
-                border-radius: 5px;
-            }
-
-            .current-page {
-                font-size: clamp(0.95rem, 2vw, 1rem);
-                min-width: 45px;
-            }
-
-            .empty-state {
-                padding: 40px 20px;
-                border-radius: 5px;
-            }
+            .form-row { flex-direction: column; gap: 15px; }
         }
 
-        @media (min-width: 769px) {
-            .menu-toggle {
-                display: none;
-            }
-
-            .filter-buttons {
-                flex-direction: row;
-                width: auto;
-            }
-
-            .filter-buttons .btn {
-                width: var(--button-width);
-                flex: 0 0 auto;
-                border-radius: 5px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .welcome-banner {
-                padding: 15px;
-                border-radius: 5px;
-            }
-
-            .welcome-banner h2 {
-                font-size: clamp(1.1rem, 2.8vw, 1.2rem);
-            }
-
-            .welcome-banner p {
-                font-size: clamp(0.75rem, 1.8vw, 0.8rem);
-            }
-
-            .filter-section, .summary-container {
-                padding: 15px;
-                border-radius: 5px;
-            }
-
-            .filter-buttons {
-                flex-direction: row;
-                gap: 8px;
-            }
-
-            .filter-buttons .btn {
-                font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-                padding: 10px 8px;
-                flex: 1;
-                border-radius: 5px;
-            }
-
-            .pagination-btn {
-                padding: 6px 10px;
-                min-width: 36px;
-                font-size: clamp(0.9rem, 2vw, 1rem);
-                border-radius: 5px;
-            }
-
-            .current-page {
-                font-size: clamp(0.9rem, 1.8vw, 1rem);
-                min-width: 40px;
-            }
-
-            .absensi-table {
-                min-width: 1000px;
-            }
-
-            .table-container {
-                touch-action: pan-x pan-y;
-                overflow-y: visible;
-                border-radius: 5px;
-            }
-
-            .empty-state {
-                padding: 35px 15px;
-                border-radius: 5px;
-            }
-        }
-
-        .swal2-input {
-            width: 100% !important;
-            max-width: 400px !important;
-            padding: 12px 16px !important;
-            border: 1px solid #ddd !important;
-            border-radius: 5px !important;
-            font-size: 1rem !important;
-            margin: 10px auto !important;
-            box-sizing: border-box !important;
-            text-align: left !important;
-        }
-
-        .swal2-input:focus {
-            border-color: var(--primary-color) !important;
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.15) !important;
-        }
-
-        .swal2-popup .swal2-title {
-            font-size: 1.5rem !important;
-            font-weight: 600 !important;
-        }
-
-        .swal2-html-container {
-            font-size: 1rem !important;
-            margin: 15px 0 !important;
-        }
+        /* SweetAlert Custom Fixes */
+        .swal2-input { height: 48px !important; margin: 10px auto !important; }
+        .swal-date-wrapper { position: relative; width: 80%; margin: 10px auto; }
+        .swal-date-wrapper input { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
+        .swal-date-wrapper i { right: 15px; }
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_admin.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_admin.php'; ?>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle">
-                <i class="fas fa-bars"></i>
-            </span>
-            <div class="content">
-                <h2>Rekap Absensi Petugas</h2>
-                <p>Periode: <?= htmlspecialchars($periode_display) ?></p>
+            <span class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></span>
+            <div>
+                <h2>Data Rekap Absensi Petugas</h2>
+                <p>Lihat dan kelola data rekap absensi petugas secara terpusat</p>
             </div>
         </div>
 
-        <div class="filter-section">
-            <form id="filterForm" class="filter-form" method="GET" action="" novalidate>
-                <input type="hidden" name="token" value="<?= htmlspecialchars($token); ?>">
-                <div class="form-group">
-                    <label for="start_date">Dari Tanggal</label>
-                    <div class="date-input-wrapper">
-                        <input type="date" id="start_date" name="start_date" value="<?= htmlspecialchars($start_date) ?>" aria-describedby="start_date-error" data-placeholder="Pilih tanggal">
-                        <i class="fas fa-calendar-alt calendar-icon"></i>
+        <!-- CARD FILTER -->
+        <div class="form-card">
+            <form method="GET" action="">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="start_date">Dari Tanggal</label>
+                        <div class="date-input-wrapper">
+                            <input type="date" id="start_date" name="start_date" value="<?= htmlspecialchars($start_date) ?>">
+                            <i class="fas fa-calendar-alt calendar-icon"></i>
+                        </div>
                     </div>
-                    <span class="error-message" id="start_date-error"></span>
-                </div>
-                <div class="form-group">
-                    <label for="end_date">Sampai Tanggal</label>
-                    <div class="date-input-wrapper">
-                        <input type="date" id="end_date" name="end_date" value="<?= htmlspecialchars($end_date) ?>" aria-describedby="end_date-error" data-placeholder="Pilih tanggal">
-                        <i class="fas fa-calendar-alt calendar-icon"></i>
+                    <div class="form-group">
+                        <label for="end_date">Sampai Tanggal</label>
+                        <div class="date-input-wrapper">
+                            <input type="date" id="end_date" name="end_date" value="<?= htmlspecialchars($end_date) ?>">
+                            <i class="fas fa-calendar-alt calendar-icon"></i>
+                        </div>
                     </div>
-                    <span class="error-message" id="end_date-error"></span>
                 </div>
-                <div class="filter-buttons">
-                    <button type="submit" id="filterButton" class="btn">
-                        <i class="fas fa-filter"></i> Filter
-                    </button>
-                    <button type="button" id="resetButton" class="btn btn-secondary">
-                        <i class="fas fa-undo"></i> Reset
-                    </button>
+                
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="submit" class="btn">Terapkan</button>
+                    <button type="button" id="resetBtn" class="btn btn-cancel">Reset</button>
                 </div>
             </form>
         </div>
-
-        <div class="summary-container">
-            <h3 class="summary-title"><i class="fas fa-list"></i> Daftar Absensi</h3>
-
-            <div class="action-buttons">
-                <button id="pdfButton" class="btn">
-                    <i class="fas fa-file-pdf"></i> Unduh PDF
-                </button>
+        
+        <!-- CARD TABEL -->
+        <div class="jadwal-list">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h3>Daftar Absensi Petugas</h3>
+                <a id="pdfLink" class="btn" style="padding: 8px 15px; font-size: 0.9rem;">
+                    Cetak PDF
+                </a>
             </div>
 
-            <?php if ($total_records > 0): ?>
-                <div class="table-container">
-                    <table class="absensi-table">
-                        <thead>
-                            <tr>
-                                <th>No</th>
-                                <th>Tanggal</th>
-                                <th>Nama Petugas</th>
-                                <th>Status</th>
-                                <th>Jam Masuk</th>
-                                <th>Jam Keluar</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php
-                            $status_map = ['hadir' => 'Hadir', 'tidak_hadir' => 'Tidak Hadir', 'sakit' => 'Sakit', 'izin' => 'Izin'];
-                            $status_class_map = ['hadir' => 'status-hadir', 'tidak_hadir' => 'status-tidak-hadir', 'sakit' => 'status-sakit', 'izin' => 'status-izin'];
-                            foreach ($absensi as $index => $record) {
-                                $petugas1_status = $record['petugas1_status'] ?? '-';
-                                $petugas2_status = $record['petugas2_status'] ?? '-';
-                                $petugas1_status_display = $status_map[$petugas1_status] ?? $petugas1_status;
-                                $petugas2_status_display = $status_map[$petugas2_status] ?? $petugas2_status;
-                                $petugas1_status_class = isset($status_class_map[$petugas1_status]) ? $status_class_map[$petugas1_status] : '';
-                                $petugas2_status_class = isset($status_class_map[$petugas2_status]) ? $status_class_map[$petugas2_status] : '';
-                                $noUrut = (($current_page - 1) * $items_per_page) + $index + 1;
-                            ?>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>No</th>
+                            <th>Tanggal</th>
+                            <th>Nama Petugas</th>
+                            <th>Status</th>
+                            <th>Jam Masuk</th>
+                            <th>Jam Keluar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($absensi)): ?>
+                            <tr><td colspan="6" style="text-align:center; padding:30px; color:#999;">Belum ada data absensi.</td></tr>
+                        <?php else: ?>
+                            <?php $no = $offset + 1; ?>
+                            <?php foreach ($absensi as $record): ?>
                                 <tr>
-                                    <td rowspan="2"><?= $noUrut ?></td>
+                                    <td rowspan="2"><?= $no++ ?></td>
                                     <td rowspan="2"><?= date('d/m/Y', strtotime($record['tanggal'])) ?></td>
                                     <td><?= htmlspecialchars($record['petugas1_nama'] ?? '-') ?></td>
-                                    <td><span class="<?= $petugas1_status_class ?>"><?= htmlspecialchars($petugas1_status_display) ?></span></td>
-                                    <td><?= $petugas1_status === 'hadir' && $record['petugas1_masuk'] ? htmlspecialchars($record['petugas1_masuk']) : '-' ?></td>
-                                    <td><?= $petugas1_status === 'hadir' && $record['petugas1_keluar'] ? htmlspecialchars($record['petugas1_keluar']) : '-' ?></td>
+                                    <td>
+                                        <?php 
+                                            $s1 = $record['petugas1_status'] ?? '-';
+                                            $s1_label = $status_map[$s1] ?? $s1;
+                                            $s1_class = $status_class_map[$s1] ?? '';
+                                        ?>
+                                        <span class="<?= $s1_class ?>"><?= htmlspecialchars($s1_label) ?></span>
+                                    </td>
+                                    <td>
+                                        <?= ($record['petugas1_status'] === 'hadir' && $record['petugas1_masuk']) 
+                                            ? htmlspecialchars(date('H:i', strtotime($record['petugas1_masuk']))) 
+                                            : '-' ?>
+                                    </td>
+                                    <td>
+                                        <?= ($record['petugas1_status'] === 'hadir' && $record['petugas1_keluar']) 
+                                            ? htmlspecialchars(date('H:i', strtotime($record['petugas1_keluar']))) 
+                                            : '-' ?>
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><?= htmlspecialchars($record['petugas2_nama'] ?? '-') ?></td>
-                                    <td><span class="<?= $petugas2_status_class ?>"><?= htmlspecialchars($petugas2_status_display) ?></span></td>
-                                    <td><?= $petugas2_status === 'hadir' && $record['petugas2_masuk'] ? htmlspecialchars($record['petugas2_masuk']) : '-' ?></td>
-                                    <td><?= $petugas2_status === 'hadir' && $record['petugas2_keluar'] ? htmlspecialchars($record['petugas2_keluar']) : '-' ?></td>
+                                    <td>
+                                        <?php 
+                                            $s2 = $record['petugas2_status'] ?? '-';
+                                            $s2_label = $status_map[$s2] ?? $s2;
+                                            $s2_class = $status_class_map[$s2] ?? '';
+                                        ?>
+                                        <span class="<?= $s2_class ?>"><?= htmlspecialchars($s2_label) ?></span>
+                                    </td>
+                                    <td>
+                                        <?= ($record['petugas2_status'] === 'hadir' && $record['petugas2_masuk']) 
+                                            ? htmlspecialchars(date('H:i', strtotime($record['petugas2_masuk']))) 
+                                            : '-' ?>
+                                    </td>
+                                    <td>
+                                        <?= ($record['petugas2_status'] === 'hadir' && $record['petugas2_keluar']) 
+                                            ? htmlspecialchars(date('H:i', strtotime($record['petugas2_keluar']))) 
+                                            : '-' ?>
+                                    </td>
                                 </tr>
-                            <?php } ?>
-                        </tbody>
-                    </table>
-                </div>
-
-                <?php if ($total_records > $items_per_page): ?>
-                    <div class="pagination">
-                        <button id="prev-page" class="pagination-btn" <?= $current_page <= 1 ? 'disabled' : '' ?>>&lt;</button>
-                        <span class="current-page"><?= $current_page ?></span>
-                        <button id="next-page" class="pagination-btn" <?= $current_page >= $total_pages ? 'disabled' : '' ?>>&gt;</button>
-                    </div>
-                <?php endif; ?>
-            <?php else: ?>
-                <div class="empty-state">
-                    <i class="fas fa-calendar-alt empty-state-icon"></i>
-                    <h3 class="empty-state-title">Tidak Ada Data Absensi</h3>
-                    <p class="empty-state-message">Tidak ditemukan data absensi dalam periode yang dipilih. Silakan periksa filter tanggal atau coba periode lain.</p>
-                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+            
+            <?php if ($total_pages > 1): ?>
+            <div style="margin-top:20px; display:flex; justify-content:center; gap:5px;">
+                <?php for($i=1; $i<=$total_pages; $i++): ?>
+                    <a href="?page=<?= $i ?><?= !empty($start_date) ? '&start_date='.urlencode($start_date) : '' ?><?= !empty($end_date) ? '&end_date='.urlencode($end_date) : '' ?>" class="btn" style="padding:8px 12px; <?= $i==$current_page ? 'background:var(--primary-dark);' : 'opacity:0.7;' ?>"><?= $i ?></a>
+                <?php endfor; ?>
+            </div>
             <?php endif; ?>
         </div>
-
-        <input type="hidden" id="totalRecords" value="<?= htmlspecialchars($total_records) ?>">
-
-        <?php if (isset($show_error_modal) && $show_error_modal): ?>
-            <script>
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Gagal',
-                    text: '<?= htmlspecialchars($error_message); ?>',
-                    confirmButtonColor: '#1e3a8a'
-                });
-            </script>
-        <?php endif; ?>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.addEventListener('touchstart', function(event) {
-                if (event.touches.length > 1) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
+        // ============================================
+        // FIXED SIDEBAR MOBILE BEHAVIOR
+        // ============================================
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebar = document.getElementById('sidebar');
+        const body = document.body;
+        const mainContent = document.getElementById('mainContent');
 
-            let lastTouchEnd = 0;
-            document.addEventListener('touchend', function(event) {
-                const now = (new Date()).getTime();
-                if (now - lastTouchEnd <= 300) {
-                    event.preventDefault();
-                }
-                lastTouchEnd = now;
-            }, { passive: false });
+        function openSidebar() {
+            body.classList.add('sidebar-open');
+            if (sidebar) sidebar.classList.add('active');
+        }
 
-            document.addEventListener('wheel', function(event) {
-                if (event.ctrlKey) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
+        function closeSidebar() {
+            body.classList.remove('sidebar-open');
+            if (sidebar) sidebar.classList.remove('active');
+        }
 
-            document.addEventListener('dblclick', function(event) {
-                event.preventDefault();
-            }, { passive: false });
-
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('mainContent');
-
-            if (menuToggle && sidebar && mainContent) {
-                menuToggle.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
-                });
-
-                document.addEventListener('click', function(e) {
-                    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                        sidebar.classList.remove('active');
-                        document.body.classList.remove('sidebar-active');
-                    }
-                });
-            }
-
-            function showAlert(title, message, type = 'error') {
-                Swal.fire({
-                    icon: type,
-                    title: title,
-                    text: message,
-                    confirmButtonColor: '#1e3a8a'
-                });
-            }
-
-            const filterForm = document.getElementById('filterForm');
-            const filterButton = document.getElementById('filterButton');
-            const startDateInput = document.getElementById('start_date');
-            const endDateInput = document.getElementById('end_date');
-            const startDateError = document.getElementById('start_date-error');
-            const endDateError = document.getElementById('end_date-error');
-
-            let isFilterProcessing = false;
-
-            if (filterForm && filterButton) {
-                filterForm.addEventListener('submit', function(e) {
-                    e.preventDefault();
-
-                    if (isFilterProcessing) return;
-
-                    const startDate = startDateInput.value;
-                    const endDate = endDateInput.value;
-
-                    startDateInput.setAttribute('aria-invalid', 'false');
-                    endDateInput.setAttribute('aria-invalid', 'false');
-                    startDateError.textContent = '';
-                    endDateError.textContent = '';
-                    startDateError.classList.remove('show');
-                    endDateError.classList.remove('show');
-
-                    if (!startDate && !endDate) {
-                        const url = new URL(window.location);
-                        url.searchParams.delete('start_date');
-                        url.searchParams.delete('end_date');
-                        url.searchParams.delete('page');
-                        window.location.href = url.toString();
-                        return;
-                    }
-
-                    if ((startDate && !endDate) || (!startDate && endDate)) {
-                        if (!startDate) {
-                            startDateInput.setAttribute('aria-invalid', 'true');
-                            startDateError.textContent = 'Silakan pilih tanggal awal';
-                            startDateError.classList.add('show');
-                        }
-                        if (!endDate) {
-                            endDateInput.setAttribute('aria-invalid', 'true');
-                            endDateError.textContent = 'Silakan pilih tanggal akhir';
-                            endDateError.classList.add('show');
-                        }
-                        showAlert('Error', 'Silakan lengkapi kedua tanggal');
-                        return;
-                    }
-
-                    if (new Date(startDate) > new Date(endDate)) {
-                        startDateInput.setAttribute('aria-invalid', 'true');
-                        endDateInput.setAttribute('aria-invalid', 'true');
-                        startDateError.textContent = 'Tanggal awal tidak boleh lebih dari tanggal akhir';
-                        endDateError.textContent = 'Tanggal awal tidak boleh lebih dari tanggal akhir';
-                        startDateError.classList.add('show');
-                        endDateError.classList.add('show');
-                        showAlert('Error', 'Tanggal awal tidak boleh lebih dari tanggal akhir');
-                        return;
-                    }
-
-                    isFilterProcessing = true;
-                    Swal.fire({
-                        title: 'Memproses Filter',
-                        html: 'Sedang memuat data absensi...',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
-                    });
-
-                    setTimeout(() => {
-                        const url = new URL(window.location);
-                        url.searchParams.set('start_date', startDate);
-                        url.searchParams.set('end_date', endDate);
-                        url.searchParams.delete('page');
-                        window.location.href = url.toString();
-                    }, 800);
-                });
-
-                filterForm.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter' && !e.target.matches('textarea')) {
-                        e.preventDefault();
-                        if (!isFilterProcessing) {
-                            filterButton.click();
-                        }
-                    }
-                });
-            }
-
-            const resetButton = document.getElementById('resetButton');
-            if (resetButton) {
-                resetButton.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const url = new URL(window.location);
-                    url.searchParams.delete('start_date');
-                    url.searchParams.delete('end_date');
-                    url.searchParams.delete('page');
-                    window.location.href = url.toString();
-                });
-            }
-
-            const pdfButton = document.getElementById('pdfButton');
-            const totalRecords = parseInt(document.getElementById('totalRecords').value);
-
-            if (pdfButton) {
-                pdfButton.addEventListener('click', function(e) {
-                    e.preventDefault();
-
-                    const startDate = startDateInput.value;
-                    const endDate = endDateInput.value;
-
-                    if (totalRecords === 0) {
-                        showAlert('Error', 'Tidak ada data absensi untuk diunduh');
-                        return;
-                    }
-
-                    if (startDate && endDate) {
-                        if (new Date(startDate) > new Date(endDate)) {
-                            showAlert('Error', 'Tanggal awal tidak boleh lebih dari tanggal akhir');
-                            return;
-                        }
-                    }
-
-                    let url = window.location.pathname + '?export=pdf';
-                    
-                    if (startDate && endDate) {
-                        url += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
-                    } else if (startDate) {
-                        url += `&start_date=${encodeURIComponent(startDate)}`;
-                    } else if (endDate) {
-                        url += `&end_date=${encodeURIComponent(endDate)}`;
-                    }
-
-                    Swal.fire({
-                        title: 'Membuat PDF',
-                        html: 'Mohon tunggu, sedang membuat file PDF...',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false,
-                        didOpen: () => {
-                            Swal.showLoading();
-                        }
-                    });
-
-                    setTimeout(() => {
-                        window.location.href = url;
-                        
-                        setTimeout(() => {
-                            Swal.close();
-                        }, 2000);
-                    }, 500);
-                });
-            }
-
-            const prevPageButton = document.getElementById('prev-page');
-            const nextPageButton = document.getElementById('next-page');
-            const currentPage = <?= $current_page ?>;
-            const totalPages = <?= $total_pages ?>;
-
-            if (prevPageButton) {
-                prevPageButton.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (currentPage > 1 && !prevPageButton.disabled) {
-                        const url = new URL(window.location);
-                        url.searchParams.set('page', currentPage - 1);
-                        window.location.href = url.toString();
-                    }
-                });
-            }
-
-            if (nextPageButton) {
-                nextPageButton.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    if (currentPage < totalPages && !nextPageButton.disabled) {
-                        const url = new URL(window.location);
-                        url.searchParams.set('page', currentPage + 1);
-                        window.location.href = url.toString();
-                    }
-                });
-            }
-
-            const tableContainer = document.querySelector('.table-container');
-            if (tableContainer) {
-                tableContainer.style.overflowX = 'auto';
-                tableContainer.style.overflowY = 'visible';
-
-                let startX = 0;
-                let startY = 0;
-                let isScrollingHorizontally = false;
-
-                tableContainer.addEventListener('touchstart', function(e) {
-                    startX = e.touches[0].clientX;
-                    startY = e.touches[0].clientY;
-                    isScrollingHorizontally = false;
-                }, { passive: true });
-
-                tableContainer.addEventListener('touchmove', function(e) {
-                    const currentX = e.touches[0].clientX;
-                    const currentY = e.touches[0].clientY;
-                    const diffX = Math.abs(currentX - startX);
-                    const diffY = Math.abs(currentY - startY);
-
-                    if (diffX > diffY && diffX > 10) {
-                        isScrollingHorizontally = true;
-                    } else if (diffY > diffX && diffY > 10) {
-                        isScrollingHorizontally = false;
-                    }
-                }, { passive: false });
-
-                tableContainer.addEventListener('touchend', function() {
-                    isScrollingHorizontally = false;
-                }, { passive: true });
-            }
-
-            let lastWindowWidth = window.innerWidth;
-            window.addEventListener('resize', () => {
-                if (window.innerWidth !== lastWindowWidth) {
-                    lastWindowWidth = window.innerWidth;
-                    if (window.innerWidth > 768 && sidebar && sidebar.classList.contains('active')) {
-                        sidebar.classList.remove('active');
-                        document.body.classList.remove('sidebar-active');
-                    }
-                    if (tableContainer) {
-                        tableContainer.style.overflowX = 'auto';
-                        tableContainer.style.overflowY = 'visible';
-                    }
+        // Toggle Sidebar
+        if (menuToggle) {
+            menuToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (body.classList.contains('sidebar-open')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
                 }
             });
+        }
 
-            document.addEventListener('mousedown', (e) => {
-                if (!e.target.matches('input, select, textarea')) {
-                    e.preventDefault();
-                }
-            });
+        // Close sidebar on outside click
+        document.addEventListener('click', function(e) {
+            if (body.classList.contains('sidebar-open') && 
+                !sidebar?.contains(e.target) && 
+                !menuToggle?.contains(e.target)) {
+                closeSidebar();
+            }
         });
+
+        // Close sidebar on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && body.classList.contains('sidebar-open')) {
+                closeSidebar();
+            }
+        });
+
+        // ============================================
+        // FORM FUNCTIONALITY
+        // ============================================
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            window.location.href = '<?= BASE_URL ?>/pages/admin/rekapitulasi_absensi.php';
+        });
+
+        const pdfLink = document.getElementById('pdfLink');
+        const totalRecords = <?= $total_records ?>;
+
+        pdfLink.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (totalRecords === 0) {
+                Swal.fire('Tidak ada data', 'Tidak ada absensi untuk diunduh', 'warning');
+                return;
+            }
+            
+            Swal.fire({
+                title: 'Sedang memproses...',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            setTimeout(() => {
+                Swal.close();
+
+                let url = '?export=pdf';
+                const startDate = document.getElementById('start_date').value;
+                const endDate = document.getElementById('end_date').value;
+                
+                if (startDate) {
+                    url += `&start_date=${encodeURIComponent(startDate)}`;
+                }
+                if (endDate) {
+                    url += `&end_date=${encodeURIComponent(endDate)}`;
+                }
+                
+                window.location.href = url;
+            }, 2000);
+        });
+
+        <?php if (isset($show_error_modal) && $show_error_modal): ?>
+            Swal.fire('Gagal', '<?= addslashes($error_message) ?>', 'error');
+        <?php endif; ?>
     </script>
 </body>
 </html>

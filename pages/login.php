@@ -1,9 +1,103 @@
 <?php
+/**
+ * Login Page - Adaptive Path Version (BCRYPT + Normalized DB)
+ * File: pages/login.php
+ * 
+ * Compatible with:
+ * - Local: localhost/schobank/pages/login.php
+ * - Hosting: domain.com/pages/login.php
+ */
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: Check if we're in 'pages' folder
+if (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: Check if includes/ exists in current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 3: Check if includes/ exists in parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 4: Search upward for includes/ folder (max 5 levels)
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: Use current directory
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// DEFINE WEB BASE URL (for browser access)
+// ============================================
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    
+    // Remove filename and get directory
+    $base_path = dirname($script);
+    
+    // Remove '/pages' if exists
+    $base_path = preg_replace('#/pages$#', '', $base_path);
+    
+    // Ensure base_path starts with /
+    if ($base_path !== '/' && !empty($base_path)) {
+        $base_path = '/' . ltrim($base_path, '/');
+    }
+    
+    return $protocol . $host . $base_path;
+}
+
+if (!defined('BASE_URL')) {
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
+}
+
+// Asset URLs for browser
+define('ASSETS_URL', BASE_URL . '/assets');
+
+// ============================================
+// START SESSION & LOAD DB
+// ============================================
 session_start();
-require_once '../includes/db_connection.php';
+require_once INCLUDES_PATH . '/db_connection.php';
 date_default_timezone_set('Asia/Jakarta');
 
-// Function to detect mobile browser
+// ============================================
+// MOBILE DETECTION FUNCTION
+// ============================================
 function isMobileDevice() {
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
     
@@ -29,7 +123,16 @@ function isMobileDevice() {
     return false;
 }
 
-// Handle AJAX request to check user role
+// ============================================
+// ANTI-CSRF TOKEN GENERATION
+// ============================================
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+// ============================================
+// AJAX HANDLER - CHECK ROLE
+// ============================================
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'check_role') {
     $username = $_POST['username'];
     $query = "SELECT role FROM users WHERE username = ?";
@@ -49,104 +152,137 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
     exit();
 }
 
+// ============================================
+// ✅ LOGIN HANDLER - BCRYPT + NORMALIZED DB + ANTI-CSRF
+// ============================================
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && !isset($_POST['action'])) {
+    // Validate CSRF token
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $_SESSION['errors'] = ['general' => 'Invalid request. Silakan coba lagi.'];
+        header("Location: login.php");
+        exit();
+    }
+
     $username = trim($_POST['username']);
     $password = $_POST['password'];
     $today = date('Y-m-d');
 
-    // Query user credentials
-    $query = "SELECT u.* FROM users u WHERE u.username = ? AND u.password = SHA2(?, 256)";
+    // ✅ Query user dulu, lalu verify dengan BCRYPT
+    $query = "SELECT u.id, u.username, u.password, u.role, u.nama, us.is_frozen, us.is_blocked 
+              FROM users u 
+              LEFT JOIN user_security us ON u.id = us.user_id
+              WHERE u.username = ?";
     $stmt = $conn->prepare($query);
-    $stmt->bind_param("ss", $username, $password);
+    $stmt->bind_param("s", $username);
     $stmt->execute();
     $result = $stmt->get_result();
 
     if ($result->num_rows > 0) {
         $user = $result->fetch_assoc();
 
-        // Check if user is siswa and trying to login from desktop
-        if ($user['role'] === 'siswa' && !isMobileDevice()) {
-            $_SESSION['errors'] = ['general' => 'Akun siswa hanya dapat login melalui perangkat mobile/HP. Silakan gunakan smartphone Anda.'];
+        // Check if account frozen or blocked
+        if ($user['is_frozen'] || $user['is_blocked']) {
+            $_SESSION['errors'] = ['general' => 'Akun Anda dibekukan atau diblokir. Hubungi administrator.'];
             $_SESSION['form_data'] = ['username' => $username, 'password' => ''];
             $stmt->close();
             header("Location: login.php");
             exit();
         }
 
-        // Check if user is petugas
-        if ($user['role'] === 'petugas') {
-            $check_tugas_query = "SELECT COUNT(*) as tugas_count
-                                 FROM petugas_tugas
-                                 WHERE (petugas1_id = ? OR petugas2_id = ?)
-                                 AND tanggal = ?";
-            $check_tugas_stmt = $conn->prepare($check_tugas_query);
-            $check_tugas_stmt->bind_param("iis", $user['id'], $user['id'], $today);
-            $check_tugas_stmt->execute();
-            $tugas_result = $check_tugas_stmt->get_result();
-            $tugas_data = $tugas_result->fetch_assoc();
-
-            if ($tugas_data['tugas_count'] == 0) {
-                $_SESSION['errors'] = ['general' => 'Anda tidak bertugas hari ini. Silakan hubungi administrator.'];
+        // ✅ BCRYPT VERIFICATION
+        if (password_verify($password, $user['password'])) {
+            
+            // Check if user is siswa and trying to login from desktop
+            if ($user['role'] === 'siswa' && !isMobileDevice()) {
+                $_SESSION['errors'] = ['general' => 'Akun siswa hanya dapat login melalui perangkat mobile/HP. Silakan gunakan smartphone Anda.'];
                 $_SESSION['form_data'] = ['username' => $username, 'password' => ''];
-                $check_tugas_stmt->close();
                 $stmt->close();
                 header("Location: login.php");
                 exit();
             }
-            $check_tugas_stmt->close();
-        }
 
-        // Set session variables
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['role'] = $user['role'];
-        $_SESSION['nama'] = $user['nama'];
-        $_SESSION['username'] = $user['username'];
+            // ✅ Check if user is petugas - pakai petugas_shift
+            if ($user['role'] === 'petugas') {
+                $check_tugas_query = "SELECT COUNT(*) as tugas_count
+                                     FROM petugas_shift
+                                     WHERE (petugas1_id = ? OR petugas2_id = ?)
+                                     AND tanggal = ?";
+                $check_tugas_stmt = $conn->prepare($check_tugas_query);
+                $check_tugas_stmt->bind_param("iis", $user['id'], $user['id'], $today);
+                $check_tugas_stmt->execute();
+                $tugas_result = $check_tugas_stmt->get_result();
+                $tugas_data = $tugas_result->fetch_assoc();
 
-        // For petugas, store schedule
-        if ($user['role'] === 'petugas') {
-            $schedule_query = "SELECT * FROM petugas_tugas
-                              WHERE (petugas1_id = ? OR petugas2_id = ?)
-                              AND tanggal = ?";
-            $schedule_stmt = $conn->prepare($schedule_query);
-            $schedule_stmt->bind_param("iis", $user['id'], $user['id'], $today);
-            $schedule_stmt->execute();
-            $schedule_result = $schedule_stmt->get_result();
-
-            if ($schedule_result->num_rows > 0) {
-                $schedule = $schedule_result->fetch_assoc();
-                $_SESSION['jadwal_id'] = $schedule['id'];
-                $_SESSION['petugas1_nama'] = $schedule['petugas1_nama'];
-                $_SESSION['petugas2_nama'] = $schedule['petugas2_nama'];
+                if ($tugas_data['tugas_count'] == 0) {
+                    $_SESSION['errors'] = ['general' => 'Anda tidak bertugas hari ini. Silakan hubungi administrator.'];
+                    $_SESSION['form_data'] = ['username' => $username, 'password' => ''];
+                    $check_tugas_stmt->close();
+                    $stmt->close();
+                    header("Location: login.php");
+                    exit();
+                }
+                $check_tugas_stmt->close();
             }
-            $schedule_stmt->close();
-        }
 
-        $stmt->close();
-        header("Location: ../index.php");
-        exit();
-    } else {
-        // Check if username exists
-        $query_role = "SELECT role FROM users WHERE username = ?";
-        $stmt_role = $conn->prepare($query_role);
-        $stmt_role->bind_param("s", $username);
-        $stmt_role->execute();
-        $result_role = $stmt_role->get_result();
+            // Set session variables
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['role'] = $user['role'];
+            $_SESSION['nama'] = $user['nama'];
+            $_SESSION['username'] = $user['username'];
 
-        if ($result_role->num_rows > 0) {
+            // ✅ For petugas, store schedule - pakai petugas_shift
+            if ($user['role'] === 'petugas') {
+                $schedule_query = "SELECT * FROM petugas_shift
+                                  WHERE (petugas1_id = ? OR petugas2_id = ?)
+                                  AND tanggal = ?";
+                $schedule_stmt = $conn->prepare($schedule_query);
+                $schedule_stmt->bind_param("iis", $user['id'], $user['id'], $today);
+                $schedule_stmt->execute();
+                $schedule_result = $schedule_stmt->get_result();
+
+                if ($schedule_result->num_rows > 0) {
+                    $schedule = $schedule_result->fetch_assoc();
+                    $_SESSION['jadwal_id'] = $schedule['id'];
+                }
+                $schedule_stmt->close();
+            }
+
+            // Regenerate CSRF token after successful login
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+            $stmt->close();
+            
+            // ✅ Redirect berdasarkan role
+            $redirect_url = match($user['role']) {
+                'admin' => BASE_URL . '/pages/admin/dashboard.php',
+                'petugas' => BASE_URL . '/pages/petugas/dashboard.php',
+                'siswa' => BASE_URL . '/pages/siswa/dashboard.php',
+                default => BASE_URL . '/index.php'
+            };
+            
+            header("Location: " . $redirect_url);
+            exit();
+            
+        } else {
+            // Password salah (BCRYPT verify gagal)
             $_SESSION['errors'] = ['password' => 'Kata sandi salah'];
             $_SESSION['form_data'] = ['username' => $username, 'password' => ''];
-        } else {
-            $_SESSION['errors'] = ['username' => 'Username tidak ditemukan'];
-            $_SESSION['form_data'] = ['username' => '', 'password' => ''];
+            // Optional: Log failed attempt or increment failed attempts in user_security
         }
-        $stmt_role->close();
-        header("Location: login.php");
-        exit();
+    } else {
+        // Username tidak ditemukan
+        $_SESSION['errors'] = ['username' => 'Username tidak ditemukan'];
+        $_SESSION['form_data'] = ['username' => '', 'password' => ''];
     }
+    
     $stmt->close();
+    header("Location: login.php");
+    exit();
 }
 
-// Retrieve session data
+// ============================================
+// RETRIEVE SESSION DATA
+// ============================================
 $errors = isset($_SESSION['errors']) ? $_SESSION['errors'] : [];
 $form_data = isset($_SESSION['form_data']) ? $_SESSION['form_data'] : ['username' => '', 'password' => ''];
 unset($_SESSION['errors'], $_SESSION['form_data']);
@@ -155,8 +291,8 @@ unset($_SESSION['errors'], $_SESSION['form_data']);
 <html lang="id">
 <head>
     <title>Masuk | My Schobank</title>
-    <!-- Favicon sama dengan logo utama -->
-    <link rel="icon" type="image/jpeg" href="/schobank/assets/images/tab.png">
+    <!-- ADAPTIVE FAVICON PATH -->
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -169,7 +305,7 @@ unset($_SESSION['errors'], $_SESSION['form_data']);
             --secondary-color: #00B4D8;
             --danger-color: #dc2626;
             --success-color: #16a34a;
-            --text-primary: #000000; /* Semua teks hitam */
+            --text-primary: #000000;
             --text-secondary: #000000;
             --bg-white: #ffffff;
             --border-light: #e2e8f0;
@@ -335,8 +471,8 @@ unset($_SESSION['errors'], $_SESSION['form_data']);
             transition: var(--transition);
         }
         .forgot-link .link-here {
-            color: #2563eb; /* Biru link */
-            text-decoration: none; /* Tanpa underline */
+            color: #2563eb;
+            text-decoration: none;
         }
         .forgot-link:hover .link-here {
             color: #1d4ed8;
@@ -404,7 +540,8 @@ unset($_SESSION['errors'], $_SESSION['form_data']);
         <!-- Header -->
         <div class="header-section">
             <div class="logo-container">
-                <img src="/schobank/assets/images/header.png" alt="My Schobank Logo" class="logo">
+                <!-- ADAPTIVE LOGO PATH -->
+                <img src="<?= ASSETS_URL ?>/images/header.png" alt="My Schobank Logo" class="logo">
             </div>
             <p class="subtitle">Silahkan masuk ke akun kamu!</p>
         </div>
@@ -419,6 +556,7 @@ unset($_SESSION['errors'], $_SESSION['form_data']);
 
         <!-- Form -->
         <form method="POST" id="login-form">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
             <div class="form-section">
                 <!-- Username -->
                 <div class="input-group">
@@ -461,7 +599,7 @@ unset($_SESSION['errors'], $_SESSION['form_data']);
             </div>
 
             <div class="forgot-password">
-                <a href="forgot_password.php" class="forgot-link">
+                <a href="<?= BASE_URL ?>/pages/forgot_password.php" class="forgot-link">
                     Lupa Password? Klik <span class="link-here">disini</span>
                 </a>
             </div>

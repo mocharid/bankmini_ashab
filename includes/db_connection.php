@@ -1,6 +1,6 @@
 <?php
 $host = 'localhost';
-$db = 'mini_bank_sekolah';
+$db = 'schobank';
 $user = 'root';
 $pass = '';
 

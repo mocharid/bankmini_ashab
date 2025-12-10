@@ -1,7 +1,81 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
+/**
+ * Tarik Tunai - Adaptive Path Version
+ * File: pages/petugas/tarik.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/tarik.php
+ * - Hosting: public_html/pages/petugas/tarik.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once INCLUDES_PATH . '/session_validator.php'; 
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'petugas') {
     header('Location: ../login.php');
@@ -9,17 +83,35 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'petugas') {
 }
 
 $username = $_SESSION['username'] ?? 'Petugas';
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
 
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <title>Tarik | MY Schobank</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
@@ -37,9 +129,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             --transition: all 0.3s ease;
             --button-width: 140px;
             --button-height: 44px;
-            --scrollbar-track: #1e1b4b;
-            --scrollbar-thumb: #3b82f6;
-            --scrollbar-thumb-hover: #60a5fa;
         }
 
         * {
@@ -47,44 +136,33 @@ $username = $_SESSION['username'] ?? 'Petugas';
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
-            -webkit-text-size-adjust: none;
             -webkit-user-select: none;
             user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: pan-y;
         }
 
-        html {
+        html, body {
             width: 100%;
             min-height: 100vh;
             overflow-x: hidden;
             overflow-y: auto;
+            -webkit-text-size-adjust: 100%;
         }
 
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
             display: flex;
-            transition: background-color 0.3s ease;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            min-height: 100vh;
-            touch-action: pan-y;
         }
 
         .main-content {
             flex: 1;
             margin-left: 280px;
             padding: 30px;
-            transition: margin-left 0.3s ease;
             max-width: calc(100% - 280px);
-            overflow-y: auto;
-            min-height: 100vh;
         }
-        
-        body.sidebar-active .main-content {
-            opacity: 0.3;
-            pointer-events: none;
-        }
-        
-        /* Welcome Banner - Updated to match previous syntax */
+
         .welcome-banner {
             background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
             color: white;
@@ -98,26 +176,23 @@ $username = $_SESSION['username'] ?? 'Petugas';
             align-items: center;
             gap: 15px;
         }
-        
+
         .welcome-banner .content {
             flex: 1;
         }
-        
+
         .welcome-banner h2 {
             margin-bottom: 10px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
+            font-size: 1.6rem;
             font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
-        
+
         .welcome-banner p {
-            font-size: clamp(0.85rem, 2vw, 0.9rem);
+            font-size: 0.9rem;
             font-weight: 400;
             opacity: 0.8;
         }
-        
+
         .menu-toggle {
             font-size: 1.5rem;
             cursor: pointer;
@@ -127,17 +202,12 @@ $username = $_SESSION['username'] ?? 'Petugas';
             align-self: center;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
         .combined-container {
             background: white;
             border-radius: 5px;
             padding: 25px;
-            box-shadow: var(--shadow-md);
-            margin-bottom: 30px;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 35px;
             animation: slideIn 0.5s ease-out;
             display: flex;
             flex-direction: column;
@@ -150,22 +220,15 @@ $username = $_SESSION['username'] ?? 'Petugas';
         .steps-section {
             display: flex;
             justify-content: center;
-            gap: 15px;
+            gap: 80px;
             position: relative;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
         }
 
         .step-item {
             display: flex;
             flex-direction: column;
             align-items: center;
-            flex: 0 0 auto;
+            flex: none;
             position: relative;
             z-index: 1;
             padding: 10px;
@@ -194,11 +257,6 @@ $username = $_SESSION['username'] ?? 'Petugas';
             text-align: center;
             line-height: 1.2;
             transition: var(--transition);
-            white-space: nowrap;
-        }
-
-        .step-item:not(:last-child)::after {
-            display: none;
         }
 
         .step-item.active .step-number {
@@ -242,6 +300,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
             animation: slideIn 0.5s ease-out;
         }
 
+        @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
         .deposit-form {
             display: flex;
             flex-direction: column;
@@ -259,89 +322,110 @@ $username = $_SESSION['username'] ?? 'Petugas';
             position: relative;
         }
 
+        .form-group.error {
+            animation: shake 0.4s ease;
+        }
+
         label {
             font-weight: 500;
             color: var(--text-secondary);
             font-size: clamp(0.85rem, 1.8vw, 0.95rem);
             text-align: center;
+            display: block;
+            width: 100%;
+        }
+
+        /* INPUT FIELD - BOTTOM BORDER ONLY */
+        .single-rek-input, .single-pin-input {
+            width: 100%;
+            padding: 12px 8px;
+            border: none;
+            border-bottom: 2px solid #ddd;
+            background: transparent;
+            font-size: clamp(1rem, 2vw, 1.1rem);
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+            font-weight: 700;
+            -webkit-appearance: none;
+            transition: var(--transition);
+        }
+
+        .single-rek-input:focus, .single-pin-input:focus {
+            outline: none;
+            border-bottom-color: var(--primary-color);
+        }
+
+        .single-rek-input[aria-invalid="true"], .single-pin-input[aria-invalid="true"] {
+            border-bottom-color: var(--danger-color);
         }
 
         .currency-input {
             position: relative;
         }
 
-        .currency-prefix {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-            pointer-events: none;
-            font-size: clamp(0.9rem, 1.8vw, 1rem);
-        }
-
-        input[type="text"],
-        input[type="password"],
+        /* INPUT JUMLAH - BOTTOM BORDER ONLY */
         input.currency {
             width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            padding: 12px 8px;
+            border: none;
+            border-bottom: 2px solid #ddd;
+            background: transparent;
+            font-size: clamp(1rem, 2vw, 1.1rem);
             line-height: 1.5;
             min-height: 44px;
             transition: var(--transition);
             -webkit-user-select: text;
             user-select: text;
-            background-color: #fff;
             text-align: center;
+            font-weight: 700;
         }
 
-        input.currency {
-            padding-left: 40px;
-        }
-
-        input[type="text"]:focus,
-        input[type="password"]:focus,
         input.currency:focus {
             outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-            transform: scale(1.02);
+            border-bottom-color: var(--primary-color);
         }
 
-        .pin-container {
+        input[aria-invalid="true"] {
+            border-bottom-color: var(--danger-color);
+        }
+
+        /* QUICK AMOUNT BUTTONS */
+        .quick-amounts {
             display: flex;
             justify-content: center;
-            align-items: center;
             gap: 10px;
-            flex-wrap: nowrap;
-            max-width: 400px;
-            margin: 0 auto;
+            flex-wrap: wrap;
+            margin-top: 10px;
         }
 
-        .pin-input {
-            width: 48px;
-            height: 48px;
-            text-align: center;
-            font-size: clamp(1rem, 2vw, 1.3rem);
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            background: #fff;
+        .quick-amount-btn {
+            background: #f0f5ff;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
             transition: var(--transition);
-            line-height: 48px;
-            font-family: 'Courier New', Courier, monospace;
         }
 
-        .pin-input:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-            transform: scale(1.05);
+        .quick-amount-btn:hover {
+            background: var(--primary-color);
+            color: white;
         }
 
-        .pin-input.filled {
-            border-color: var(--secondary-color);
-            background: rgba(59, 130, 246, 0.05);
+        .error-message {
+            color: var(--danger-color);
+            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
+            margin-top: 4px;
+            display: none;
+            text-align: center;
+        }
+
+        .error-message.show {
+            display: block;
         }
 
         .btn {
@@ -359,13 +443,17 @@ $username = $_SESSION['username'] ?? 'Petugas';
             width: var(--button-width);
             height: var(--button-height);
             margin: 0;
-            position: relative;
         }
 
         .btn:hover {
             background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
             transform: translateY(-2px);
             box-shadow: var(--shadow-sm);
+        }
+
+        .btn:focus {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
         }
 
         .btn:active {
@@ -381,11 +469,27 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .btn-cancel {
-            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
+            background: #f0f0f0;
+            color: var(--text-secondary);
         }
 
         .btn-cancel:hover {
-            background: linear-gradient(135deg, #d32f2f 0%, var(--danger-color) 100%);
+            background: #e0e0e0;
+            transform: translateY(-2px);
+        }
+
+        .btn.loading {
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading .btn-content {
+            visibility: hidden;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .detail-row {
@@ -412,7 +516,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
         }
 
         .detail-value {
-            font-weight: 600;
+            font-weight: 700;
             color: var(--text-primary);
         }
 
@@ -438,16 +542,31 @@ $username = $_SESSION['username'] ?? 'Petugas';
             gap: 10px;
         }
 
-        /* Responsive Design for Tablets */
-        @media (max-width: 768px) {
-            .menu-toggle {
-                display: block;
-            }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
 
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+
+        @media (max-width: 768px) {
             .main-content {
                 margin-left: 0;
                 padding: 15px;
                 max-width: 100%;
+            }
+
+            body.sidebar-active .main-content {
+                opacity: 0.3;
+                pointer-events: none;
+            }
+
+            .menu-toggle {
+                display: block;
             }
 
             .welcome-banner {
@@ -455,114 +574,134 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 border-radius: 5px;
                 align-items: center;
             }
-            
+
             .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.4rem);
+                font-size: 1.4rem;
             }
-            
+
             .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.85rem);
+                font-size: 0.85rem;
             }
 
             .combined-container {
                 padding: 15px;
-                max-width: 100%;
-            }
-
-            .deposit-card, .account-details {
-                padding: 15px;
+                border-radius: 5px;
                 max-width: 100%;
             }
 
             .steps-section {
-                gap: 10px;
-                max-width: 100%;
-                justify-content: center;
-                padding: 0 10px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
             }
 
             .step-item {
-                flex-direction: column;
+                flex-direction: row;
                 align-items: center;
-                padding: 5px;
+                width: 100%;
+                margin-bottom: 16px;
+                padding: 5px 0;
             }
 
             .step-number {
-                width: 40px;
-                height: 40px;
-                margin-bottom: 8px;
+                width: 36px;
+                height: 36px;
+                margin-right: 10px;
+                margin-bottom: 0;
                 font-size: clamp(0.9rem, 1.8vw, 1rem);
+                border-radius: 50%;
             }
 
             .step-text {
-                font-size: clamp(0.7rem, 1.5vw, 0.8rem);
-                white-space: nowrap;
+                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+                text-align: left;
+                max-width: none;
+                margin-bottom: 0;
             }
 
-            .pin-input {
-                width: 40px;
-                height: 40px;
+            .deposit-card, .account-details {
+                padding: 15px;
+                border-radius: 5px;
+                max-width: 100%;
+            }
+
+            .form-group {
+                max-width: 100%;
+            }
+
+            .btn {
+                width: var(--button-width);
+                height: var(--button-height);
+                font-size: clamp(0.8rem, 1.7vw, 0.9rem);
+                border-radius: 5px;
+            }
+
+            .confirm-buttons {
+                gap: 8px;
+                max-width: 100%;
+            }
+
+            .quick-amounts {
+                gap: 8px;
+            }
+
+            .quick-amount-btn {
+                padding: 6px 12px;
+                font-size: 0.8rem;
             }
         }
 
-        /* Responsive Design for Small Phones */
         @media (max-width: 480px) {
-            .main-content {
-                padding: 10px;
+            body {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
             .welcome-banner {
                 padding: 15px;
                 border-radius: 5px;
             }
-            
+
             .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.8vw, 1.3rem);
+                font-size: clamp(1.2rem, 2.5vw, 1.3rem);
             }
-            
+
             .welcome-banner p {
                 font-size: clamp(0.75rem, 1.8vw, 0.8rem);
             }
 
-            .steps-section {
-                gap: 8px;
-                padding: 0 5px;
+            .section-title {
+                font-size: clamp(1rem, 2.5vw, 1.2rem);
             }
 
-            .step-item {
-                padding: 3px;
+            .detail-row {
+                font-size: clamp(0.85rem, 2vw, 0.95rem);
             }
 
-            .step-number {
-                width: 36px;
-                height: 36px;
-                margin-bottom: 6px;
-                font-size: 0.85rem;
+            .btn {
+                width: var(--button-width);
+                height: var(--button-height);
+                font-size: clamp(0.75rem, 1.6vw, 0.85rem);
+                border-radius: 5px;
             }
 
-            .step-text {
-                font-size: 0.7rem;
-            }
-
-            .pin-input {
-                width: 36px;
-                height: 36px;
-                gap: 8px;
+            .confirm-buttons {
+                gap: 6px;
+                max-width: 100%;
             }
         }
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
-
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
+    
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <span class="menu-toggle" id="menuToggle">
                 <i class="fas fa-bars"></i>
             </span>
             <div class="content">
-                <h2><i class="fas fa-money-bill-wave"></i> Tarik Tunai</h2>
-                <p>Layanan untuk nasabah melakukan penarikan saldo</p>
+                <h2>Tarik Saldo Siswa</h2>
+                <p>Layanan penarikan saldo untuk siswa secara cepat dan aman</p>
             </div>
         </div>
 
@@ -586,188 +725,135 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 </div>
             </div>
 
-            <div class="deposit-card" id="checkAccountStep">
-                <h3 class="section-title">Masukkan Nomor Rekening</h3>
-                <form id="cekRekening" class="deposit-form" novalidate>
-                    <div class="form-group">
-                        <label for="no_rekening">No Rekening (8 Digit):</label>
-                        <input type="text" id="no_rekening" name="no_rekening" placeholder="Input nomor rekening" maxlength="8" inputmode="numeric" pattern="[0-9]*" required>
-                    </div>
-                    <button type="submit" id="cekButton" class="btn">
-                        <span class="btn-content">Cek Rekening</span>
-                    </button>
-                </form>
-            </div>
-
-            <div class="account-details" id="amountDetails">
-                <h3 class="section-title">Detail Rekening</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nomor Rekening:</div>
-                    <div class="detail-value" id="displayNoRek">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Pemilik:</div>
-                    <div class="detail-value" id="displayNama">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan:</div>
-                    <div class="detail-value" id="displayJurusan">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas:</div>
-                    <div class="detail-value" id="displayKelas">-</div>
-                </div>
-                <form id="formPenarikan" class="deposit-form">
-                    <div class="form-group currency-input">
-                        <label for="jumlah">Jumlah Penarikan (Rp):</label>
-                        <span class="currency-prefix">Rp</span>
-                        <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="Input nominal Tarik...." inputmode="numeric" pattern="[0-9]*" required>
-                    </div>
-                    <div class="confirm-buttons">
-                        <button type="button" id="confirmAmount" class="btn btn-confirm">
-                            <span class="btn-content">Lanjutkan</span>
-                        </button>
-                        <button type="button" id="cancelAmount" class="btn btn-cancel">
-                            <span class="btn-content">Batal</span>
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="account-details" id="pinDetails">
-                <h3 class="section-title">Verifikasi PIN</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nomor Rekening:</div>
-                    <div class="detail-value" id="pinNoRek">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Pemilik:</div>
-                    <div class="detail-value" id="pinNama">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan:</div>
-                    <div class="detail-value" id="pinJurusan">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas:</div>
-                    <div class="detail-value" id="pinKelas">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jumlah Penarikan:</div>
-                    <div class="detail-value" id="pinJumlah">-</div>
-                </div>
-                <form id="formPin" class="deposit-form">
-                    <div class="form-group">
-                        <label for="pin">Masukkan PIN (6 Digit):</label>
-                        <div class="pin-container">
-                            <input type="password" class="pin-input" maxlength="1" data-index="0" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="1" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="2" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="3" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="4" inputmode="numeric" pattern="[0-9]*">
-                            <input type="password" class="pin-input" maxlength="1" data-index="5" inputmode="numeric" pattern="[0-9]*">
+            <div class="transaction-container">
+                <!-- Step 1: Check Account -->
+                <div class="deposit-card" id="checkAccountStep">
+                    <h3 class="section-title">Masukkan Nomor Rekening</h3>
+                    <form id="cekRekening" class="deposit-form" novalidate>
+                        <div class="form-group">
+                            <label for="no_rekening">Nomor Rekening:</label>
+                            <input type="text" id="no_rekening" class="single-rek-input" maxlength="8" inputmode="numeric" pattern="[0-9]*" placeholder="00000000" required aria-describedby="rek-error">
+                            <span class="error-message" id="rek-error"></span>
                         </div>
-                        <input type="hidden" id="pin" name="pin">
+                        <button type="submit" id="cekButton" class="btn btn-confirm">
+                            <span class="btn-content">Cek Rekening</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Step 2: Input Amount -->
+                <div class="account-details" id="amountDetails">
+                    <h3 class="section-title">Detail Rekening</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">Nomor Rekening:</div>
+                        <div class="detail-value" id="displayNoRek">12345678</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Pemilik:</div>
+                        <div class="detail-value" id="displayNama">Ahmad Fauzi</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan:</div>
+                        <div class="detail-value" id="displayJurusan">Rekayasa Perangkat Lunak</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas:</div>
+                        <div class="detail-value" id="displayKelas">XII RPL 1</div>
+                    </div>
+                    <form id="formPenyetoran" class="deposit-form" novalidate>
+                        <div class="form-group currency-input">
+                            <label for="jumlah">Nominal:</label>
+                            <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="0" inputmode="numeric" required aria-describedby="jumlah-error">
+                            <span class="error-message" id="jumlah-error"></span>
+                            <div class="quick-amounts">
+                                <button type="button" class="quick-amount-btn" data-amount="1000">Rp 1.000</button>
+                                <button type="button" class="quick-amount-btn" data-amount="5000">Rp 5.000</button>
+                                <button type="button" class="quick-amount-btn" data-amount="10000">Rp 10.000</button>
+                            </div>
+                        </div>
+                        <div class="confirm-buttons">
+                            <button type="button" id="confirmAmount" class="btn btn-confirm">
+                                <span class="btn-content">Lanjutkan</span>
+                            </button>
+                            <button type="button" id="cancelAmount" class="btn btn-cancel">
+                                <span class="btn-content">Batal</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Step 3: PIN Verification -->
+                <div class="account-details" id="pinDetails">
+                    <h3 class="section-title">Verifikasi PIN</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">Nomor Rekening:</div>
+                        <div class="detail-value" id="pinNoRek">12345678</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Pemilik:</div>
+                        <div class="detail-value" id="pinNama">Ahmad Fauzi</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jumlah Penarikan:</div>
+                        <div class="detail-value" id="pinJumlah">Rp 50.000</div>
+                    </div>
+                    <form id="formPin" class="deposit-form" novalidate>
+                        <div class="form-group">
+                            <label for="pin">Masukkan PIN:</label>
+                            <input type="password" id="pin" class="single-pin-input" maxlength="6" inputmode="numeric" pattern="[0-9]*" placeholder="••••••" required aria-describedby="pin-error">
+                            <span class="error-message" id="pin-error"></span>
+                        </div>
+                        <div class="confirm-buttons">
+                            <button type="button" id="verifyPin" class="btn btn-confirm">
+                                <span class="btn-content">Verifikasi</span>
+                            </button>
+                            <button type="button" id="backToAmount" class="btn btn-cancel">
+                                <span class="btn-content">Kembali</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Step 4: Confirmation -->
+                <div class="account-details" id="confirmationDetails">
+                    <h3 class="section-title">Konfirmasi Penarikan</h3>
+                    <div class="detail-row">
+                        <div class="detail-label">Nomor Rekening:</div>
+                        <div class="detail-value" id="confirmNoRek">12345678</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Pemilik:</div>
+                        <div class="detail-value" id="confirmNama">Ahmad Fauzi</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan:</div>
+                        <div class="detail-value" id="confirmJurusan">Rekayasa Perangkat Lunak</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas:</div>
+                        <div class="detail-value" id="confirmKelas">XII RPL 1</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jumlah Penarikan:</div>
+                        <div class="detail-value" id="confirmJumlah">Rp 50.000</div>
                     </div>
                     <div class="confirm-buttons">
-                        <button type="button" id="verifyPin" class="btn btn-confirm">
-                            <span class="btn-content">Verifikasi</span>
+                        <button type="button" id="processDeposit" class="btn btn-confirm">
+                            <span class="btn-content">Proses</span>
                         </button>
-                        <button type="button" id="backToAmount" class="btn btn-cancel">
+                        <button type="button" id="backToPin" class="btn btn-cancel">
                             <span class="btn-content">Kembali</span>
                         </button>
                     </div>
-                </form>
-            </div>
-
-            <div class="account-details" id="confirmationDetails">
-                <h3 class="section-title">Konfirmasi Penarikan</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nomor Rekening:</div>
-                    <div class="detail-value" id="confirmNoRek">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Pemilik:</div>
-                    <div class="detail-value" id="confirmNama">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan:</div>
-                    <div class="detail-value" id="confirmJurusan">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas:</div>
-                    <div class="detail-value" id="confirmKelas">-</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jumlah Penarikan:</div>
-                    <div class="detail-value" id="confirmJumlah">-</div>
-                </div>
-                <div class="confirm-buttons">
-                    <button type="button" id="processWithdrawal" class="btn btn-confirm">
-                        <span class="btn-content">Proses Penarikan</span>
-                    </button>
-                    <button type="button" id="backToPin" class="btn btn-cancel">
-                        <span class="btn-content">Kembali</span>
-                    </button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
-        // Prevention scripts
-        document.addEventListener('touchstart', function(event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        let lastTouchEnd = 0;
-        document.addEventListener('touchend', function(event) {
-            const now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                event.preventDefault();
-            }
-            lastTouchEnd = now;
-        }, { passive: false });
-
-        document.addEventListener('wheel', function(event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        }, { passive: false });
-
-        document.addEventListener('dblclick', function(event) {
-            event.preventDefault();
-        }, { passive: false });
-
-        document.addEventListener('keydown', function(e) {
-            if (e.ctrlKey && (e.key === '+' || e.key === '-' || e.key === '=')) {
-                e.preventDefault();
-            }
-        });
-
         document.addEventListener('DOMContentLoaded', function() {
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            
-            if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
-                });
-            }
-
-            document.addEventListener('click', function(e) {
-                if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                    sidebar.classList.remove('active');
-                    document.body.classList.remove('sidebar-active');
-                }
-            });
-
             const cekForm = document.getElementById('cekRekening');
-            const penarikanForm = document.getElementById('formPenarikan');
+            const penyetoranForm = document.getElementById('formPenyetoran');
             const pinForm = document.getElementById('formPin');
             const checkAccountStep = document.getElementById('checkAccountStep');
             const amountDetails = document.getElementById('amountDetails');
@@ -779,124 +865,44 @@ $username = $_SESSION['username'] ?? 'Petugas';
             const step3Indicator = document.getElementById('step3-indicator');
             const step4Indicator = document.getElementById('step4-indicator');
 
-            const inputNoRek = document.getElementById('no_rekening');
+            const inputRekening = document.getElementById('no_rekening');
+            const rekError = document.getElementById('rek-error');
             const inputJumlah = document.getElementById('jumlah');
-            const pinInputs = document.querySelectorAll('.pin-input');
-            const hiddenPin = document.getElementById('pin');
+            const jumlahError = document.getElementById('jumlah-error');
+            const inputPin = document.getElementById('pin');
+            const pinError = document.getElementById('pin-error');
 
             const cekButton = document.getElementById('cekButton');
             const confirmAmount = document.getElementById('confirmAmount');
             const cancelAmount = document.getElementById('cancelAmount');
             const verifyPin = document.getElementById('verifyPin');
             const backToAmount = document.getElementById('backToAmount');
-            const processWithdrawal = document.getElementById('processWithdrawal');
+            const processDeposit = document.getElementById('processDeposit');
             const backToPin = document.getElementById('backToPin');
+            const menuToggle = document.getElementById('menuToggle');
+            const sidebar = document.getElementById('sidebar');
+            const mainContent = document.getElementById('mainContent');
 
             let accountData = {};
+            let depositAmount = 0;
+            let pinAttempts = 0;
+            let isPinLocked = false;
+            const MAX_ATTEMPTS = 3;
 
-            inputNoRek.addEventListener('input', function(e) {
-                let value = this.value.replace(/[^0-9]/g, '');
-                if (value.length > 8) {
-                    value = value.slice(0, 8);
-                }
-                this.value = value;
-            });
-
-            inputNoRek.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    cekButton.click();
-                }
-            });
-
-            inputJumlah.addEventListener('input', function(e) {
-                let value = this.value.replace(/[^0-9]/g, '');
-                if (value.length > 8) {
-                    value = value.slice(0, 8);
-                }
-                if (value === '') {
-                    this.value = '';
-                    return;
-                }
-                this.value = formatRupiahInput(value);
-            });
-
-            inputJumlah.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    confirmAmount.click();
-                }
-            });
-
-            pinInputs.forEach((input, index) => {
-                input.addEventListener('input', function(e) {
-                    let value = this.value.replace(/[^0-9]/g, '');
-                    if (value.length === 1) {
-                        this.classList.add('filled');
-                        this.dataset.originalValue = value;
-                        this.value = '*';
-                        updateHiddenPin();
-                        if (index < 5) {
-                            pinInputs[index + 1].focus();
-                        } else if (getHiddenPinValue().length === 6) {
-                            verifyPin.click();
-                        }
-                    } else {
-                        this.classList.remove('filled');
-                        this.dataset.originalValue = '';
-                        this.value = '';
-                        updateHiddenPin();
-                    }
+            // Sidebar toggle
+            if (menuToggle && sidebar && mainContent) {
+                menuToggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    sidebar.classList.toggle('active');
+                    document.body.classList.toggle('sidebar-active');
                 });
 
-                input.addEventListener('keydown', function(e) {
-                    if (e.key === 'Backspace' && !this.dataset.originalValue && index > 0) {
-                        pinInputs[index - 1].focus();
-                        pinInputs[index - 1].classList.remove('filled');
-                        pinInputs[index - 1].dataset.originalValue = '';
-                        pinInputs[index - 1].value = '';
-                        updateHiddenPin();
-                    }
-                    if (e.key === 'Enter' && getHiddenPinValue().length === 6) {
-                        e.preventDefault();
-                        verifyPin.click();
+                document.addEventListener('click', function(e) {
+                    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
+                        sidebar.classList.remove('active');
+                        document.body.classList.remove('sidebar-active');
                     }
                 });
-
-                input.addEventListener('paste', function(e) {
-                    e.preventDefault();
-                    let pastedData = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '').slice(0, 6);
-                    clearPinForm();
-                    for (let i = 0; i < pastedData.length && i < 6; i++) {
-                        pinInputs[i].value = '*';
-                        pinInputs[i].dataset.originalValue = pastedData[i];
-                        pinInputs[i].classList.add('filled');
-                    }
-                    updateHiddenPin();
-                    if (pastedData.length > 0) {
-                        pinInputs[Math.min(pastedData.length - 1, 5)].focus();
-                    }
-                    if (getHiddenPinValue().length === 6) {
-                        verifyPin.click();
-                    }
-                });
-            });
-
-            function clearPinForm() {
-                pinInputs.forEach(input => {
-                    input.value = '';
-                    input.classList.remove('filled');
-                    input.dataset.originalValue = '';
-                });
-                hiddenPin.value = '';
-            }
-
-            function updateHiddenPin() {
-                hiddenPin.value = Array.from(pinInputs).map(i => i.dataset.originalValue || '').join('');
-            }
-
-            function getHiddenPinValue() {
-                return Array.from(pinInputs).map(i => i.dataset.originalValue || '').join('');
             }
 
             function formatRupiahInput(value) {
@@ -909,15 +915,11 @@ $username = $_SESSION['username'] ?? 'Petugas';
             }
 
             function updateStepIndicators(activeStep) {
-                step1Indicator.className = 'step-item';
-                step2Indicator.className = 'step-item';
-                step3Indicator.className = 'step-item';
-                step4Indicator.className = 'step-item';
-
-                if (activeStep >= 1) step1Indicator.className = activeStep > 1 ? 'step-item completed' : 'step-item active';
-                if (activeStep >= 2) step2Indicator.className = activeStep > 2 ? 'step-item completed' : 'step-item active';
-                if (activeStep >= 3) step3Indicator.className = activeStep > 3 ? 'step-item completed' : 'step-item active';
-                if (activeStep === 4) step4Indicator.className = 'step-item active';
+                [step1Indicator, step2Indicator, step3Indicator, step4Indicator].forEach((el, i) => {
+                    el.className = 'step-item';
+                    if (i + 1 < activeStep) el.classList.add('completed');
+                    if (i + 1 === activeStep) el.classList.add('active');
+                });
             }
 
             function showStep(step) {
@@ -926,347 +928,402 @@ $username = $_SESSION['username'] ?? 'Petugas';
                 pinDetails.className = `account-details ${step === 3 ? 'visible' : ''}`;
                 confirmationDetails.className = `account-details ${step === 4 ? 'visible' : ''}`;
                 updateStepIndicators(step);
+
+                if (step === 3 && !isPinLocked) {
+                    const remaining = MAX_ATTEMPTS - pinAttempts;
+                    pinError.textContent = remaining < MAX_ATTEMPTS ? `Sisa ${remaining} kesempatan.` : '';
+                    pinError.classList.toggle('show', remaining < MAX_ATTEMPTS);
+                }
             }
 
             function resetForm() {
                 cekForm.reset();
-                penarikanForm.reset();
+                penyetoranForm.reset();
                 pinForm.reset();
-                inputNoRek.value = '';
+                inputRekening.value = '';
                 inputJumlah.value = '';
-                clearPinForm();
-                showStep(1);
+                inputPin.value = '';
+                rekError.classList.remove('show');
+                jumlahError.classList.remove('show');
+                pinError.classList.remove('show');
+                inputRekening.removeAttribute('aria-invalid');
+                inputJumlah.removeAttribute('aria-invalid');
+                inputPin.removeAttribute('aria-invalid');
                 accountData = {};
+                depositAmount = 0;
+                pinAttempts = 0;
+                isPinLocked = false;
+                document.querySelectorAll('.detail-value').forEach(el => el.textContent = '-');
+                showStep(1);
+                inputRekening.focus();
             }
 
+            // === PERBAIKAN: Hapus error saat input di-focus atau diisi ===
+            function clearErrorOnInput(input, errorElement) {
+                input.addEventListener('focus', function() {
+                    this.removeAttribute('aria-invalid');
+                    errorElement.classList.remove('show');
+                    errorElement.textContent = '';
+                });
+                input.addEventListener('input', function() {
+                    this.removeAttribute('aria-invalid');
+                    errorElement.classList.remove('show');
+                    errorElement.textContent = '';
+                });
+            }
+
+            clearErrorOnInput(inputRekening, rekError);
+            clearErrorOnInput(inputJumlah, jumlahError);
+            clearErrorOnInput(inputPin, pinError);
+
+            // Input hanya angka
+            inputRekening.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 8);
+            });
+
+            inputPin.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+            });
+
+            // === PERBAIKAN: Handle Enter key untuk input nominal (jumlah) ===
+            inputJumlah.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    confirmAmount.click();
+                }
+            });
+
+            // === PERBAIKAN: Handle Enter key untuk input PIN ===
+            inputPin.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    verifyPin.click();
+                }
+            });
+
+            // Quick amount buttons
+            document.querySelectorAll('.quick-amount-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const amount = parseInt(this.getAttribute('data-amount'));
+                    inputJumlah.value = formatRupiahInput(amount);
+                    inputJumlah.setAttribute('aria-invalid', 'false');
+                    jumlahError.classList.remove('show');
+                });
+            });
+
+            // Step 1: Cek Rekening
             cekForm.addEventListener('submit', function(e) {
                 e.preventDefault();
-                const rekening = inputNoRek.value.trim();
-                
-                if (!rekening || rekening.length !== 8 || !/^[0-9]{8}$/.test(rekening)) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Nomor Rekening Tidak Valid',
-                        text: 'Nomor rekening harus terdiri dari 8 digit angka',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    inputNoRek.focus();
+                const noRek = inputRekening.value.trim();
+                if (noRek.length !== 8) {
+                    inputRekening.setAttribute('aria-invalid', 'true');
+                    rekError.textContent = 'Nomor rekening harus 8 digit.';
+                    rekError.classList.add('show');
                     return;
                 }
-
+                
                 Swal.fire({
-                    title: 'Memproses...',
-                    html: 'Sedang memeriksa nomor rekening',
+                    title: 'Mengecek rekening...',
                     allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
                 });
-
-                fetch('proses_tarik.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=cek_rekening&no_rekening=${encodeURIComponent(rekening)}`
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    setTimeout(() => {
-                        Swal.close();
-                        if (data.status === 'error') {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Gagal',
-                                text: data.message,
-                                confirmButtonColor: '#1e3a8a'
-                            });
-                            inputNoRek.value = '';
-                            inputNoRek.focus();
-                            return;
-                        }
-                        accountData = data;
-                        document.getElementById('displayNoRek').textContent = data.no_rekening;
-                        document.getElementById('displayNama').textContent = data.nama;
-                        document.getElementById('displayJurusan').textContent = data.jurusan;
-                        document.getElementById('displayKelas').textContent = data.kelas;
-                        showStep(2);
-                        inputJumlah.focus();
-                    }, 3000);
-                })
-                .catch(error => {
-                    setTimeout(() => {
-                        Swal.close();
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Kesalahan Sistem',
-                            text: 'Terjadi kesalahan: ' + error.message,
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                        inputNoRek.value = '';
-                        inputNoRek.focus();
-                    }, 3000);
-                });
-            });
-
-            confirmAmount.addEventListener('click', function() {
-                let jumlah = inputJumlah.value.replace(/[^0-9]/g, '');
-                jumlah = parseFloat(jumlah);
                 
-                if (isNaN(jumlah) || jumlah < 1) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Jumlah Tidak Valid',
-                        text: 'Jumlah penarikan minimal Rp 1',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    inputJumlah.focus();
-                    return;
-                }
-                
-                if (jumlah > 99999999) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Jumlah Terlalu Besar',
-                        text: 'Jumlah penarikan maksimal Rp 99.999.999',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    inputJumlah.focus();
-                    return;
-                }
-
-                Swal.fire({
-                    title: 'Memproses...',
-                    html: 'Sedang memeriksa saldo',
-                    allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
-                });
-
-                fetch('proses_tarik.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=check_balance&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${jumlah}`
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    setTimeout(() => {
+                setTimeout(() => {
+                    fetch('proses_tarik.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `action=cek_rekening&no_rekening=${encodeURIComponent(noRek)}`
+                    })
+                    .then(res => res.json())
+                    .then(data => {
                         Swal.close();
-                        if (data.status === 'error') {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Saldo Tidak Cukup',
-                                text: data.message,
-                                confirmButtonColor: '#1e3a8a'
-                            });
+                        if (data.status === 'success') {
+                            accountData = data;
+                            pinAttempts = 0;
+                            isPinLocked = false;
+                            document.getElementById('displayNoRek').textContent = noRek;
+                            document.getElementById('displayNama').textContent = accountData.nama;
+                            document.getElementById('displayJurusan').textContent = accountData.jurusan;
+                            document.getElementById('displayKelas').textContent = accountData.kelas;
+                            showStep(2);
                             inputJumlah.focus();
-                            return;
+                        } else {
+                            inputRekening.value = '';
+                            inputRekening.focus();
+                            Swal.fire({ 
+                                icon: 'error', 
+                                title: 'Tidak Ditemukan', 
+                                text: data.message || 'Rekening tidak ditemukan.' 
+                            });
                         }
-                        accountData.jumlah = jumlah;
-                        document.getElementById('pinNoRek').textContent = accountData.no_rekening;
-                        document.getElementById('pinNama').textContent = accountData.nama;
-                        document.getElementById('pinJurusan').textContent = accountData.jurusan;
-                        document.getElementById('pinKelas').textContent = accountData.kelas;
-                        document.getElementById('pinJumlah').textContent = formatRupiah(jumlah);
-                        showStep(3);
-                        clearPinForm();
-                        pinInputs[0].focus();
-                    }, 3000);
-                })
-                .catch(error => {
-                    setTimeout(() => {
+                    })
+                    .catch(() => {
                         Swal.close();
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Kesalahan',
-                            text: 'Terjadi kesalahan: ' + error.message,
-                            confirmButtonColor: '#1e3a8a'
+                        Swal.fire({ 
+                            icon: 'error', 
+                            title: 'Error', 
+                            text: 'Kesalahan jaringan.' 
                         });
-                        inputJumlah.focus();
-                    }, 3000);
-                });
-            });
-
-            cancelAmount.addEventListener('click', function() {
-                Swal.fire({
-                    title: 'Batalkan Transaksi?',
-                    text: 'Anda yakin ingin membatalkan transaksi ini?',
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Ya, Batalkan',
-                    cancelButtonText: 'Tidak',
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#1e3a8a',
-                    reverseButtons: true
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        resetForm();
-                    }
-                });
-            });
-
-            verifyPin.addEventListener('click', function() {
-                const pin = getHiddenPinValue();
-                if (pin.length !== 6) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'PIN Tidak Valid',
-                        text: 'PIN harus 6 digit',
-                        confirmButtonColor: '#1e3a8a'
                     });
-                    clearPinForm();
-                    pinInputs[0].focus();
+                }, 3000);
+            });
+
+            // Format Rupiah
+            inputJumlah.addEventListener('input', function(e) {
+                let value = this.value.replace(/[^0-9]/g, '');
+                if (value.length > 8) value = value.slice(0, 8);
+                this.value = value === '' ? '' : formatRupiahInput(value);
+            });
+
+            // Step 2: Lanjutkan
+            confirmAmount.addEventListener('click', function() {
+                const btn = this;
+                const amount = parseInt(inputJumlah.value.replace(/[^0-9]/g, '')) || 0;
+                
+                if (amount < 1 || amount > 99999999) {
+                    inputJumlah.setAttribute('aria-invalid', 'true');
+                    jumlahError.textContent = amount < 1 ? 'Minimal Rp 1.' : 'Maksimal Rp 99.999.999.';
+                    jumlahError.classList.add('show');
                     return;
                 }
 
+                btn.classList.add('loading');
+                btn.disabled = true;
+
                 Swal.fire({
-                    title: 'Memverifikasi PIN...',
-                    html: 'Mohon tunggu',
+                    title: 'Mengecek saldo...',
                     allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
                 });
 
-                fetch('proses_tarik.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=verify_pin&user_id=${accountData.user_id}&pin=${pin}`
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    setTimeout(() => {
+                setTimeout(() => {
+                    fetch('proses_tarik.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `action=check_balance&no_rekening=${inputRekening.value}&jumlah=${amount}`
+                    })
+                    .then(res => res.json())
+                    .then(data => {
                         Swal.close();
-                        if (data.status === 'error') {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'PIN Salah',
-                                text: data.message,
-                                confirmButtonColor: '#1e3a8a'
+                        btn.classList.remove('loading');
+                        btn.disabled = false;
+
+                        if (data.status === 'success') {
+                            depositAmount = amount;
+                            document.getElementById('pinNoRek').textContent = inputRekening.value;
+                            document.getElementById('pinNama').textContent = accountData.nama;
+                            document.getElementById('pinJumlah').textContent = formatRupiah(amount);
+                            showStep(3);
+                            inputPin.focus();
+                        } else {
+                            Swal.fire({ 
+                                icon: 'error', 
+                                title: 'Saldo Tidak Cukup', 
+                                text: data.message 
                             });
-                            clearPinForm();
-                            pinInputs[0].focus();
-                            return;
                         }
-                        document.getElementById('confirmNoRek').textContent = accountData.no_rekening;
-                        document.getElementById('confirmNama').textContent = accountData.nama;
-                        document.getElementById('confirmJurusan').textContent = accountData.jurusan;
-                        document.getElementById('confirmKelas').textContent = accountData.kelas;
-                        document.getElementById('confirmJumlah').textContent = formatRupiah(accountData.jumlah);
-                        showStep(4);
-                    }, 3000);
-                })
-                .catch(error => {
-                    setTimeout(() => {
+                    })
+                    .catch(() => {
                         Swal.close();
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Kesalahan',
-                            text: 'Terjadi kesalahan: ' + error.message,
-                            confirmButtonColor: '#1e3a8a'
+                        btn.classList.remove('loading');
+                        btn.disabled = false;
+                        Swal.fire({ 
+                            icon: 'error', 
+                            title: 'Error', 
+                            text: 'Gagal memeriksa saldo.' 
                         });
-                        clearPinForm();
-                        pinInputs[0].focus();
-                    }, 3000);
-                });
+                    });
+                }, 3000);
             });
 
-            backToAmount.addEventListener('click', function() {
-                showStep(2);
-                inputJumlah.focus();
-            });
+            cancelAmount.addEventListener('click', resetForm);
 
-            processWithdrawal.addEventListener('click', function() {
+            // Step 3: Verifikasi PIN
+            verifyPin.addEventListener('click', function() {
+                if (isPinLocked) {
+                    Swal.fire({ 
+                        icon: 'error', 
+                        title: 'Akun Terkunci', 
+                        text: 'Akun terkunci karena terlalu banyak percobaan salah.' 
+                    });
+                    return;
+                }
+
+                const pin = inputPin.value;
+                if (pin.length !== 6) {
+                    inputPin.setAttribute('aria-invalid', 'true');
+                    pinError.textContent = 'PIN harus 6 digit.';
+                    pinError.classList.add('show');
+                    return;
+                }
+
+                // === PERBAIKAN: Tambahkan loading spinner SweetAlert2 untuk verifikasi PIN dengan delay 3 detik ===
                 Swal.fire({
-                    title: 'Memproses Transaksi...',
-                    html: 'Mohon tunggu, sedang memproses penarikan',
+                    title: 'Verifikasi PIN...',
                     allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    didOpen: () => {
-                        Swal.showLoading();
-                    }
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
                 });
 
-                fetch('proses_tarik.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: `action=tarik_tunai&no_rekening=${encodeURIComponent(accountData.no_rekening)}&jumlah=${accountData.jumlah}&petugas_id=${encodeURIComponent(<?php echo $_SESSION['user_id']; ?>)}`
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Network response was not ok');
+                setTimeout(() => {
+                    fetch('proses_tarik.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `action=verify_pin&user_id=${accountData.user_id}&pin=${pin}`
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        Swal.close();
+                        if (data.status === 'success') {
+                            document.getElementById('confirmNoRek').textContent = inputRekening.value;
+                            document.getElementById('confirmNama').textContent = accountData.nama;
+                            document.getElementById('confirmJurusan').textContent = accountData.jurusan;
+                            document.getElementById('confirmKelas').textContent = accountData.kelas;
+                            document.getElementById('confirmJumlah').textContent = formatRupiah(depositAmount);
+                            showStep(4);
+                        } else {
+                            pinAttempts++;
+                            const remaining = MAX_ATTEMPTS - pinAttempts;
+                            inputPin.value = '';
+                            inputPin.focus();
+                            
+                            if (remaining <= 0) {
+                                isPinLocked = true;
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Akun Terkunci',
+                                    text: 'PIN salah 3 kali. Transaksi dibatalkan.'
+                                }).then(resetForm);
+                            } else {
+                                pinError.textContent = `PIN salah. Sisa ${remaining} kesempatan.`;
+                                pinError.classList.add('show');
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'PIN Salah',
+                                    text: `Sisa ${remaining} kesempatan.`,
+                                    timer: 2000,
+                                    showConfirmButton: false
+                                });
+                            }
+                        }
+                    })
+                    .catch(() => {
+                        Swal.close();
+                        Swal.fire({ 
+                            icon: 'error', 
+                            title: 'Error', 
+                            text: 'Gagal memverifikasi PIN.' 
+                        });
+                    });
+                }, 3000);
+            });
+
+            backToAmount.addEventListener('click', () => { 
+                showStep(2); 
+                inputJumlah.focus(); 
+            });
+
+            // Step 4: Proses Penarikan
+            processDeposit.addEventListener('click', function() {
+                const noRek = inputRekening.value;
+                const nama = accountData.nama;
+                const jurusan = accountData.jurusan;
+                const kelas = accountData.kelas;
+                const jumlah = formatRupiah(depositAmount);
+
+                Swal.fire({
+                    title: 'Konfirmasi Penarikan',
+                    html: `
+                        <div style="text-align:left; font-size:0.95rem; margin:15px 0;">
+                            <div style="background: #f8fafc; border-radius: 5px; padding: 15px; margin-bottom: 10px;">
+                                <div style="display: table; width: 100%; border-collapse: collapse;">
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">No Rekening:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;"><strong>${noRek}</strong></div>
+                                    </div>
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Nama:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${nama}</div>
+                                    </div>
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Jurusan:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${jurusan}</div>
+                                    </div>
+                                    <div style="display: table-row;">
+                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Kelas:</div>
+                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${kelas}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="text-align: center; margin-top: 20px; padding: 15px;">
+                                <div style="font-weight: bold; font-size: 1.4rem; margin-bottom: 5px;">Jumlah Penarikan</div>
+                                <div style="font-weight: bold; font-size: 1.6rem;">${jumlah}</div>
+                            </div>
+                        </div>
+                    `,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Proses Sekarang',
+                    cancelButtonText: 'Batal',
+                    confirmButtonColor: '#1e3a8a',
+                    cancelButtonColor: '#e74c3c',
+                    width: window.innerWidth < 600 ? '95%' : '600px'
+                }).then(result => {
+                    if (result.isConfirmed) {
+                        Swal.fire({ 
+                            title: 'Memproses...', 
+                            allowOutsideClick: false, 
+                            showConfirmButton: false, 
+                            didOpen: () => Swal.showLoading() 
+                        });
+                        
+                        fetch('proses_tarik.php', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: `action=tarik_tunai&no_rekening=${noRek}&jumlah=${depositAmount}&petugas_id=<?php echo $_SESSION['user_id']; ?>`
+                        })
+                        .then(res => res.json())
+                        .then(data => {
+                            Swal.close();
+                            if (data.status === 'success') {
+                                Swal.fire({ 
+                                    icon: 'success', 
+                                    title: 'Sukses!', 
+                                    text: 'Penarikan berhasil diproses.', 
+                                    confirmButtonColor: '#1e3a8a',
+                                    timer: 3000,
+                                    timerProgressBar: true
+                                }).then(resetForm);
+                            } else {
+                                Swal.fire({ 
+                                    icon: 'error', 
+                                    title: 'Gagal!', 
+                                    text: data.message || 'Gagal memproses penarikan.', 
+                                    confirmButtonColor: '#1e3a8a' 
+                                });
+                            }
+                        })
+                        .catch(() => {
+                            Swal.close();
+                            Swal.fire({ 
+                                icon: 'error', 
+                                title: 'Error', 
+                                text: 'Terjadi kesalahan saat memproses penarikan.', 
+                                confirmButtonColor: '#1e3a8a' 
+                            });
+                        });
                     }
-                    return response.json();
-                })
-                .then(data => {
-                    setTimeout(() => {
-                        Swal.close();
-                        if (data.status === 'error') {
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Transaksi Gagal',
-                                text: data.message,
-                                confirmButtonColor: '#1e3a8a'
-                            });
-                            return;
-                        }
-                        if (data.email_status === 'failed') {
-                            Swal.fire({
-                                icon: 'warning',
-                                title: 'Transaksi Berhasil',
-                                text: 'Transaksi berhasil, tetapi gagal mengirim bukti transaksi ke email',
-                                confirmButtonColor: '#1e3a8a'
-                            }).then(() => {
-                                resetForm();
-                            });
-                            return;
-                        }
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Berhasil!',
-                            text: data.message,
-                            confirmButtonColor: '#1e3a8a',
-                            timer: 2000
-                        }).then(() => {
-                            resetForm();
-                        });
-                    }, 3000);
-                })
-                .catch(error => {
-                    setTimeout(() => {
-                        Swal.close();
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Kesalahan',
-                            text: 'Gagal memproses transaksi: ' + error.message,
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                    }, 3000);
                 });
             });
 
-            backToPin.addEventListener('click', function() {
-                showStep(3);
-                clearPinForm();
-                pinInputs[0].focus();
+            backToPin.addEventListener('click', () => { 
+                showStep(3); 
+                inputPin.focus(); 
             });
+
+            inputRekening.focus();
         });
     </script>
 </body>

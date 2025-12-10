@@ -1,21 +1,112 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php'; 
+/**
+ * Cek Mutasi - Adaptive Path Version
+ * File: pages/petugas/cek_mutasi.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/cek_mutasi.php
+ * - Hosting: public_html/pages/petugas/cek_mutasi.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('VENDOR_PATH')) {
+    define('VENDOR_PATH', PROJECT_ROOT . '/vendor');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once INCLUDES_PATH . '/session_validator.php';
 
 if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin'])) {
     header('Location: ../login.php');
     exit();
 }
 
-$username = $_SESSION['username'] ?? 'Petugas';
+// ============================================
+// DETECT BASE URL FOR ASSETS
+// ============================================
+$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'];
+$script_name = $_SERVER['SCRIPT_NAME'];
+$path_parts = explode('/', trim(dirname($script_name), '/'));
+// Deteksi base path (schobank atau public_html)
+$base_path = '';
+if (in_array('schobank', $path_parts)) {
+    $base_path = '/schobank';
+} elseif (in_array('public_html', $path_parts)) {
+    $base_path = '';
+}
+$base_url = $protocol . '://' . $host . $base_path;
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <meta name="format-detection" content="telephone=no">
     <title>Cek Mutasi | MY Schobank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
@@ -250,7 +341,7 @@ $username = $_SESSION['username'] ?? 'Petugas';
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
 
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
@@ -440,31 +531,52 @@ $username = $_SESSION['username'] ?? 'Petugas';
     function loadMutasi(noRekening, page = 1, startDate = '', endDate = '') {
         Swal.fire({ title: 'Memuat data mutasi...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         
-        $.ajax({
-            url: 'proses_cek_mutasi.php',
-            type: 'POST',
-            data: { action: 'load_mutasi', no_rekening: noRekening, page: page, start_date: startDate, end_date: endDate },
-            dataType: 'json',
-            success: function(response) {
-                Swal.close();
-                if (response.success) {
-                    $('#filter_no_rekening').val(noRekening);
-                    $('#filterSection').addClass('show');
-                    $('#results').html(response.html);
-                    currentPage = page;
-                    Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Data mutasi berhasil dimuat', confirmButtonColor: '#1e3a8a', timer: 1500, showConfirmButton: false });
-                } else {
-                    $('#filterSection').removeClass('show');
-                    $('#results').html('');
+        setTimeout(() => {
+            $.ajax({
+                url: 'proses_cek_mutasi.php',
+                type: 'POST',
+                data: { action: 'load_mutasi', no_rekening: noRekening, page: page, start_date: startDate, end_date: endDate },
+                dataType: 'json',
+                success: function(response) {
+                    Swal.close();
+                    if (response.success) {
+                        $('#filter_no_rekening').val(noRekening);
+                        $('#filterSection').addClass('show');
+                        $('#results').html(response.html);
+                        currentPage = page;
+                    } else {
+                        $('#filterSection').removeClass('show');
+                        $('#results').html('');
+                        Swal.fire({ 
+                            icon: 'error', 
+                            title: 'Gagal!', 
+                            text: response.message, 
+                            confirmButtonColor: '#1e3a8a' 
+                        }).then(() => {
+                            // Clear input setelah alert ditutup
+                            $('#no_rekening').val('');
+                            $('#clearBtn').removeClass('show');
+                            $('#start_date').val('');
+                            $('#end_date').val('');
+                            currentNoRekening = '';
+                            currentPage = 1;
+                            $('#no_rekening').focus();
+                        });
+                    }
+                },
+                error: function() {
+                    Swal.close();
                     Swal.fire({ 
                         icon: 'error', 
-                        title: 'Gagal!', 
-                        text: response.message, 
+                        title: 'Kesalahan Server', 
+                        text: 'Terjadi kesalahan saat memuat data', 
                         confirmButtonColor: '#1e3a8a' 
                     }).then(() => {
                         // Clear input setelah alert ditutup
                         $('#no_rekening').val('');
                         $('#clearBtn').removeClass('show');
+                        $('#results').html('');
+                        $('#filterSection').removeClass('show');
                         $('#start_date').val('');
                         $('#end_date').val('');
                         currentNoRekening = '';
@@ -472,28 +584,8 @@ $username = $_SESSION['username'] ?? 'Petugas';
                         $('#no_rekening').focus();
                     });
                 }
-            },
-            error: function() {
-                Swal.close();
-                Swal.fire({ 
-                    icon: 'error', 
-                    title: 'Kesalahan Server', 
-                    text: 'Terjadi kesalahan saat memuat data', 
-                    confirmButtonColor: '#1e3a8a' 
-                }).then(() => {
-                    // Clear input setelah alert ditutup
-                    $('#no_rekening').val('');
-                    $('#clearBtn').removeClass('show');
-                    $('#results').html('');
-                    $('#filterSection').removeClass('show');
-                    $('#start_date').val('');
-                    $('#end_date').val('');
-                    currentNoRekening = '';
-                    currentPage = 1;
-                    $('#no_rekening').focus();
-                });
-            }
-        });
+            });
+        }, 3000);
     }
     </script>
 </body>

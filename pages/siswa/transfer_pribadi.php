@@ -1,17 +1,103 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../vendor/autoload.php';
+/**
+ * Transfer Pribadi Page - Adaptive Path Version (BCRYPT PIN + Normalized DB)
+ * File: pages/siswa/transfer_pribadi.php
+ *
+ * Compatible with:
+ * - Local: localhost/schobank/pages/siswa/transfer_pribadi.php
+ * - Hosting: domain.com/pages/siswa/transfer_pribadi.php
+ */
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: Check if we're in 'pages/siswa' folder
+if (basename(dirname($current_dir)) === 'pages' && basename($current_dir) === 'siswa') {
+    $project_root = dirname(dirname($current_dir));
+}
+// Strategy 2: Check if includes/ exists in current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 3: Check if includes/ exists in parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 4: Search upward for includes/ folder (max 5 levels)
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: Use current directory
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+// ============================================
+// DEFINE WEB BASE URL (for browser access)
+// ============================================
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    // Remove filename and get directory
+    $base_path = dirname($script);
+    // Remove '/pages/siswa' if exists
+    $base_path = preg_replace('#/pages/siswa$#', '', $base_path);
+    // Ensure base_path starts with /
+    if ($base_path !== '/' && !empty($base_path)) {
+        $base_path = '/' . ltrim($base_path, '/');
+    }
+    return $protocol . $host . $base_path;
+}
+if (!defined('BASE_URL')) {
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
+}
+// Asset URLs for browser
+define('ASSETS_URL', BASE_URL . '/assets');
+// ============================================
+// START SESSION & LOAD REQUIREMENTS
+// ============================================
+session_start();
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once PROJECT_ROOT . '/vendor/autoload.php';
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 date_default_timezone_set('Asia/Jakarta');
+// ============================================
+// CHECK SESSION & REDIRECT IF NOT LOGGED IN
+// ============================================
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../../login.php");
+    header("Location: " . BASE_URL . "/pages/login.php");
     exit();
 }
 $user_id = $_SESSION['user_id'];
-// Check if account is frozen or blocked due to PIN attempts
-$query = "SELECT is_frozen, failed_pin_attempts, pin_block_until FROM users WHERE id = ?";
+// ============================================
+// CHECK ACCOUNT STATUS FROM user_security
+// ============================================
+$query = "SELECT us.is_frozen, us.failed_pin_attempts, us.pin_block_until, us.pin
+          FROM user_security us
+          WHERE us.user_id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
@@ -20,6 +106,7 @@ $user_data = $result->fetch_assoc();
 $stmt->close();
 if ($user_data['is_frozen']) {
     $error = "Akun Anda sedang dinonaktifkan. Anda tidak dapat melakukan transfer. Silakan hubungi admin untuk bantuan!";
+    // Render error page
     ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -28,7 +115,7 @@ if ($user_data['is_frozen']) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="format-detection" content="telephone=no">
     <title>Transfer - SCHOBANK</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/lbank.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -77,7 +164,11 @@ if ($user_data['is_frozen']) {
             -moz-osx-font-smoothing: grayscale;
             padding-top: 70px;
             padding-bottom: 80px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
+        /* Top Navigation */
         .top-nav {
             position: fixed;
             top: 0;
@@ -125,20 +216,25 @@ if ($user_data['is_frozen']) {
             position: relative;
             flex-shrink: 0;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-            text-decoration: none;
         }
         .nav-btn:hover {
             background: var(--white);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
             transform: scale(1.05);
         }
+        .nav-btn:active {
+            transform: scale(0.95);
+        }
+        /* Container */
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            flex: 1;
         }
+        /* Page Header */
         .page-header {
-            margin-bottom: 24px;
+            margin-bottom: 32px;
         }
         .page-title {
             font-size: 24px;
@@ -152,36 +248,36 @@ if ($user_data['is_frozen']) {
             color: var(--gray-500);
             font-weight: 400;
         }
+        /* Error Card */
         .error-card {
-            background: var(--white);
-            border-radius: var(--radius-lg);
-            padding: 40px;
-            margin: 20px auto;
-            max-width: 500px;
+            background: transparent;
+            border-radius: 0;
+            padding: 32px 20px;
+            margin-bottom: 24px;
+            box-shadow: none;
             text-align: center;
-            box-shadow: var(--shadow-md);
         }
         .error-icon {
-            font-size: 64px;
+            font-size: 48px;
             color: var(--danger);
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
         .error-title {
             font-size: 20px;
             font-weight: 700;
             color: var(--gray-900);
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
         .error-text {
-            font-size: 14px;
+            font-size: 16px;
             color: var(--gray-600);
             margin-bottom: 24px;
-            line-height: 1.8;
         }
+        /* Buttons */
         .btn {
             padding: 12px 24px;
             border-radius: var(--radius);
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 600;
             border: none;
             cursor: pointer;
@@ -190,7 +286,6 @@ if ($user_data['is_frozen']) {
             align-items: center;
             justify-content: center;
             gap: 8px;
-            text-decoration: none;
         }
         .btn-primary {
             background: var(--elegant-dark);
@@ -202,32 +297,41 @@ if ($user_data['is_frozen']) {
             box-shadow: var(--shadow-md);
         }
         .btn-secondary {
-            background: var(--gray-200);
-            color: var(--gray-700);
+            background: var(--danger);
+            color: var(--white);
         }
         .btn-secondary:hover {
-            background: var(--gray-300);
+            background: #e32e24;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
+        /* Button Actions */
         .btn-actions {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
+            margin-top: 24px;
         }
+        /* Responsive */
         @media (max-width: 768px) {
             .container {
                 padding: 16px;
             }
+            .page-title {
+                font-size: 22px;
+            }
             .error-card {
-                padding: 24px;
-                margin: 10px;
+                padding: 24px 16px;
             }
-            .error-icon {
-                font-size: 48px;
-            }
+        }
+        @media (max-width: 480px) {
             .nav-logo {
-                height: 38px;
-                max-width: 140px;
+                height: 32px;
+                max-width: 120px;
+            }
+            .nav-btn {
+                width: 36px;
+                height: 36px;
             }
         }
     </style>
@@ -235,7 +339,7 @@ if ($user_data['is_frozen']) {
 <body>
     <nav class="top-nav">
         <div class="nav-brand">
-            <img src="/schobank/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
+            <img src="<?= ASSETS_URL ?>/images/header.png" alt="SCHOBANK" class="nav-logo">
         </div>
     </nav>
     <div class="container">
@@ -248,7 +352,7 @@ if ($user_data['is_frozen']) {
                 <i class="fas fa-lock"></i>
             </div>
             <h2 class="error-title">Akun Dinonaktifkan</h2>
-            <p class="error-text"><?php echo htmlspecialchars($error); ?></p>
+            <p class="error-text"><?= htmlspecialchars($error); ?></p>
             <div class="btn-actions">
                 <button class="btn btn-primary" onclick="Swal.fire({title: 'Hubungi Admin', text: 'Silakan hubungi administrator melalui email, telepon, atau datang langsung ke kantor untuk mendapatkan bantuan mengaktifkan kembali akun Anda.', icon: 'info', confirmButtonText: 'OK'})">
                     <i class="fas fa-headset"></i> Hubungi Admin
@@ -268,6 +372,7 @@ $current_time = date('Y-m-d H:i:s');
 if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $current_time) {
     $block_until = date('d/m/Y H:i:s', strtotime($user_data['pin_block_until']));
     $error = "Akun Anda diblokir karena terlalu banyak PIN salah. Coba lagi setelah $block_until.";
+    // Render block error page
     ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -276,7 +381,7 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="format-detection" content="telephone=no">
     <title>Transfer - SCHOBANK</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/lbank.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -325,7 +430,11 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
             -moz-osx-font-smoothing: grayscale;
             padding-top: 70px;
             padding-bottom: 80px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
+        /* Top Navigation */
         .top-nav {
             position: fixed;
             top: 0;
@@ -373,20 +482,25 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
             position: relative;
             flex-shrink: 0;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-            text-decoration: none;
         }
         .nav-btn:hover {
             background: var(--white);
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
             transform: scale(1.05);
         }
+        .nav-btn:active {
+            transform: scale(0.95);
+        }
+        /* Container */
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            flex: 1;
         }
+        /* Page Header */
         .page-header {
-            margin-bottom: 24px;
+            margin-bottom: 32px;
         }
         .page-title {
             font-size: 24px;
@@ -400,36 +514,36 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
             color: var(--gray-500);
             font-weight: 400;
         }
+        /* Error Card */
         .error-card {
-            background: var(--white);
-            border-radius: var(--radius-lg);
-            padding: 40px;
-            margin: 20px auto;
-            max-width: 500px;
+            background: transparent;
+            border-radius: 0;
+            padding: 32px 20px;
+            margin-bottom: 24px;
+            box-shadow: none;
             text-align: center;
-            box-shadow: var(--shadow-md);
         }
         .error-icon {
-            font-size: 64px;
+            font-size: 48px;
             color: var(--danger);
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
         .error-title {
             font-size: 20px;
             font-weight: 700;
             color: var(--gray-900);
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
         .error-text {
-            font-size: 14px;
+            font-size: 16px;
             color: var(--gray-600);
             margin-bottom: 24px;
-            line-height: 1.8;
         }
+        /* Buttons */
         .btn {
             padding: 12px 24px;
             border-radius: var(--radius);
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 600;
             border: none;
             cursor: pointer;
@@ -438,29 +552,36 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
             align-items: center;
             justify-content: center;
             gap: 8px;
-            text-decoration: none;
         }
         .btn-secondary {
-            background: var(--gray-200);
-            color: var(--gray-700);
+            background: var(--danger);
+            color: var(--white);
         }
         .btn-secondary:hover {
-            background: var(--gray-300);
+            background: #e32e24;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
+        /* Responsive */
         @media (max-width: 768px) {
             .container {
                 padding: 16px;
             }
+            .page-title {
+                font-size: 22px;
+            }
             .error-card {
-                padding: 24px;
-                margin: 10px;
+                padding: 24px 16px;
             }
-            .error-icon {
-                font-size: 48px;
-            }
+        }
+        @media (max-width: 480px) {
             .nav-logo {
-                height: 38px;
-                max-width: 140px;
+                height: 32px;
+                max-width: 120px;
+            }
+            .nav-btn {
+                width: 36px;
+                height: 36px;
             }
         }
     </style>
@@ -468,7 +589,7 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
 <body>
     <nav class="top-nav">
         <div class="nav-brand">
-            <img src="/schobank/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
+            <img src="<?= ASSETS_URL ?>/images/header.png" alt="SCHOBANK" class="nav-logo">
         </div>
     </nav>
     <div class="container">
@@ -481,7 +602,7 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
                 <i class="fas fa-lock"></i>
             </div>
             <h2 class="error-title">Akunmu Diblokir Sementara</h2>
-            <p class="error-text"><?php echo htmlspecialchars($error); ?></p>
+            <p class="error-text"><?= htmlspecialchars($error); ?></p>
             <a href="dashboard.php" class="btn btn-secondary">Kembali ke Dashboard</a>
         </div>
     </div>
@@ -493,7 +614,7 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] > $c
 }
 // Reset failed attempts if block has expired
 if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] <= $current_time) {
-    $query = "UPDATE users SET failed_pin_attempts = 0, pin_block_until = NULL WHERE id = ?";
+    $query = "UPDATE user_security SET failed_pin_attempts = 0, pin_block_until = NULL WHERE user_id = ?";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
@@ -501,7 +622,9 @@ if ($user_data['pin_block_until'] !== null && $user_data['pin_block_until'] <= $
     $user_data['failed_pin_attempts'] = 0;
     $user_data['pin_block_until'] = null;
 }
-// Function to format date with Indonesian month names
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 function getIndonesianMonth($date) {
     $months = [
         1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
@@ -513,7 +636,7 @@ function getIndonesianMonth($date) {
     $year = $dateObj->format('Y');
     return "$day $month $year";
 }
-// Function to send email with modern template
+// Function to send email with style similar to proses_setor
 function sendTransferEmail($mail, $email, $nama, $no_rekening, $id_transaksi, $no_transaksi, $jumlah, $data_pihak_lain, $keterangan, $is_sender = true) {
     if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         return false;
@@ -522,7 +645,7 @@ function sendTransferEmail($mail, $email, $nama, $no_rekening, $id_transaksi, $n
         $mail->clearAllRecipients();
         $mail->clearAttachments();
         $mail->clearReplyTos();
-       
+  
         $mail->isSMTP();
         $mail->Host = 'smtp.gmail.com';
         $mail->SMTPAuth = true;
@@ -531,29 +654,25 @@ function sendTransferEmail($mail, $email, $nama, $no_rekening, $id_transaksi, $n
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port = 587;
         $mail->CharSet = 'UTF-8';
-       
+  
         $mail->setFrom('myschobank@gmail.com', 'Schobank Student Digital Banking');
         $mail->addAddress($email, $nama);
         $mail->addReplyTo('no-reply@myschobank.com', 'No Reply');
-       
+  
         $unique_id = uniqid('myschobank_', true) . '@myschobank.com';
         $mail->MessageID = '<' . $unique_id . '>';
-       
+  
         $mail->addCustomHeader('X-Transaction-ID', $id_transaksi);
         $mail->addCustomHeader('X-Reference-Number', $no_transaksi);
-       
-        $header_path = $_SERVER['DOCUMENT_ROOT'] . '/schobank/assets/images/header.png';
-        if (file_exists($header_path)) {
-            $mail->addEmbeddedImage($header_path, 'header_img', 'header.png');
-        }
+  
         $bulan = [
             'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
             'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
             'Sep' => 'September', 'Oct' => 'Oktober', 'Nov' => 'November', 'Dec' => 'Desember'
         ];
-        $tanggal_transaksi = date('d M Y H:i:s');
-        foreach ($bulan as $en => $id) {
-            $tanggal_transaksi = str_replace($en, $id, $tanggal_transaksi);
+        $tanggal_transaksi = date('d M Y, H:i');
+        foreach ($bulan as $en => $id_bulan) {
+            $tanggal_transaksi = str_replace($en, $id_bulan, $tanggal_transaksi);
         }
         $jurusan = $data_pihak_lain['jurusan'] ?? '-';
         $kelas = $data_pihak_lain['kelas'] ?? '-';
@@ -562,145 +681,122 @@ function sendTransferEmail($mail, $email, $nama, $no_rekening, $id_transaksi, $n
         if ($is_sender) {
             $subject = "Bukti Transfer {$no_transaksi}";
             $greeting_text = "Kami informasikan bahwa transaksi transfer dari rekening Anda telah berhasil diproses. Berikut rincian transaksi:";
-           
-            $keterangan_row = !empty($keterangan) ? "
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Keterangan</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>" . htmlspecialchars($keterangan) . "</td>
-                </tr>" : "";
+            $keterangan_text = !empty($keterangan) ? "
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>" . htmlspecialchars($keterangan) . "</p>
+            </div>" : "";
             $transaction_details = "
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>ID Transaksi</td>
-                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #333333; border-bottom: 1px solid #e2e8f0;'>{$id_transaksi}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Nomor Referensi</td>
-                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #333333; border-bottom: 1px solid #e2e8f0;'>{$no_transaksi}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Rekening Pengirim</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$no_rekening}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Nama Pengirim</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$nama}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Rekening Tujuan</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$no_rek_pihak_lain}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Nama Penerima</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$nama_pihak_lain}</td>
-                </tr>
-                {$keterangan_row}
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Jumlah Transfer</td>
-                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #333333; border-bottom: 1px solid #e2e8f0;'>Rp " . number_format($jumlah, 0, ',', '.') . "</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500;'>Tanggal Transaksi</td>
-                    <td style='padding: 8px 0; text-align: right;'>{$tanggal_transaksi} WIB</td>
-                </tr>";
-           
-            $info_text = "Terima kasih telah menggunakan layanan Schobank Student Digital Banking. Untuk informasi lebih lanjut, silakan kunjungi halaman akun Anda atau hubungi petugas kami.";
-           
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
+                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
+                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Pengirim</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$no_rekening}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nama Pengirim</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$no_rek_pihak_lain}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nama Penerima</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_pihak_lain}</p>
+            </div>
+            {$keterangan_text}
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Jumlah Transfer</p>
+                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal Transaksi</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
+            </div>";
+      
         } else {
             $subject = "Pemberitahuan Transfer Masuk {$no_transaksi}";
             $greeting_text = "Kami informasikan bahwa rekening Anda telah menerima transfer dana. Berikut rincian transaksi:";
-           
-            $keterangan_row = !empty($keterangan) ? "
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Keterangan</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>" . htmlspecialchars($keterangan) . "</td>
-                </tr>" : "";
+      
+            $keterangan_text = !empty($keterangan) ? "
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Keterangan</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>" . htmlspecialchars($keterangan) . "</p>
+            </div>" : "";
             $transaction_details = "
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>ID Transaksi</td>
-                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #333333; border-bottom: 1px solid #e2e8f0;'>{$id_transaksi}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Nomor Referensi</td>
-                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #333333; border-bottom: 1px solid #e2e8f0;'>{$no_transaksi}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Rekening Pengirim</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$no_rek_pihak_lain}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Nama Pengirim</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$nama_pihak_lain}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Rekening Penerima</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$no_rekening}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Nama Penerima</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$nama}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Jurusan</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$jurusan}</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Kelas</td>
-                    <td style='padding: 8px 0; text-align: right; border-bottom: 1px solid #e2e8f0;'>{$kelas}</td>
-                </tr>
-                {$keterangan_row}
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500; border-bottom: 1px solid #e2e8f0;'>Jumlah Diterima</td>
-                    <td style='padding: 8px 0; text-align: right; font-weight: 700; color: #333333; border-bottom: 1px solid #e2e8f0;'>Rp " . number_format($jumlah, 0, ',', '.') . "</td>
-                </tr>
-                <tr>
-                    <td style='padding: 8px 0; font-weight: 500;'>Tanggal Transaksi</td>
-                    <td style='padding: 8px 0; text-align: right;'>{$tanggal_transaksi} WIB</td>
-                </tr>";
-           
-            $info_text = "Terima kasih telah menggunakan layanan Schobank Student Digital Banking. Untuk informasi lebih lanjut, silakan kunjungi halaman akun Anda atau hubungi petugas kami.";
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>ID Transaksi</p>
+                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$id_transaksi}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nomor Referensi</p>
+                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>{$no_transaksi}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Pengirim</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$no_rek_pihak_lain}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nama Pengirim</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_pihak_lain}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Penerima</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$no_rekening}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Nama Penerima</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Jurusan</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$jurusan}</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Kelas</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$kelas}</p>
+            </div>
+            {$keterangan_text}
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Jumlah Diterima</p>
+                <p style='margin:0; font-size:17px; font-weight:700; color:#1a1a1a;'>Rp " . number_format($jumlah, 0, ',', '.') . "</p>
+            </div>
+            <div style='margin-bottom: 18px;'>
+                <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Tanggal Transaksi</p>
+                <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$tanggal_transaksi} WIB</p>
+            </div>";
         }
         $message_email = "
-        <div style='font-family: Poppins, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);'>
-            <div style='background: #ffffff; padding: 30px 20px; text-align: center; position: relative;'>
-                <div style='position: relative; display: inline-block;'>
-                    <img src='cid:header_img' alt='Schobank Student Digital Banking' style='max-width: 450px; width: 100%; height: auto; display: block; margin: 0 auto;' />
-                </div>
-            </div>
-           
-            <div style='background: #ffffff; padding: 30px;'>
-                <h3 style='color: #1e3a8a; font-size: 20px; font-weight: 600; margin-bottom: 20px;'>Halo, {$nama}</h3>
-                <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px; text-align: justify;'>{$greeting_text}</p>
-               
-                <div style='background: #f8fafc; border-radius: 8px; padding: 20px; margin-bottom: 20px;'>
-                    <table style='width: 100%; font-size: 15px; color: #333333; border-collapse: collapse;'>
-                        {$transaction_details}
-                    </table>
-                </div>
-               
-                <p style='color: #333333; font-size: 16px; line-height: 1.6; margin-bottom: 20px; text-align: justify;'>{$info_text}</p>
-               
-                <div style='text-align: center; margin: 30px 0;'>
-                    <a href='mailto:myschobank@gmail.com' style='display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1e3a8a 100%); color: #ffffff; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 15px; font-weight: 500;'>Hubungi Kami</a>
-                </div>
-            </div>
-           
-            <div style='background: #f0f5ff; padding: 20px; text-align: center; font-size: 12px; color: #666666; border-top: 1px solid #e2e8f0;'>
-                <p style='margin: 0 0 5px;'>© " . date('Y') . " Schobank Student Digital Banking. Semua hak dilindungi.</p>
-                <p style='margin: 0 0 5px;'>Email ini dikirim secara otomatis. Mohon tidak membalas email ini.</p>
-                <p style='margin: 0; color: #999999;'>ID Transaksi: {$id_transaksi} | Ref: {$no_transaksi}</p>
-            </div>
+        <div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
+            <h2 style='color: #1e3a8a; margin-bottom: 20px; font-size: 24px;'>{$subject}</h2>
+            <p>Halo <strong>{$nama}</strong>,</p>
+            <p>{$greeting_text}</p>
+            <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
+            {$transaction_details}
+            <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
+            <p style='font-size: 12px; color: #999;'>
+                Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+                Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
+            </p>
         </div>";
         $mail->isHTML(true);
         $mail->Subject = $subject;
         $mail->Body = $message_email;
-        $mail->AltBody = strip_tags(str_replace(['<br>', '</tr>', '</td>'], ["\n", "\n", " "], $message_email));
+        $mail->AltBody = strip_tags(str_replace(['<br>', '</div>', '</p>'], ["\n", "\n", "\n"], $message_email));
         if ($mail->send()) {
             $mail->smtpClose();
             return true;
         } else {
             throw new Exception('Email gagal dikirim: ' . $mail->ErrorInfo);
         }
-       
+  
     } catch (Exception $e) {
         error_log("Mail error for transaction {$id_transaksi}: " . $e->getMessage());
         return false;
@@ -740,6 +836,25 @@ $daily_transfer_total = $transfer_data['total_transfer'] ?? 0;
 $daily_limit = 500000;
 $remaining_limit = $daily_limit - $daily_transfer_total;
 // Initialize session variables
+// Reset transfer-related session variables on GET requests (page load/refresh/return)
+function resetTransferSession() {
+    unset($_SESSION['current_step']);
+    unset($_SESSION['sub_step']);
+    unset($_SESSION['tujuan_data']);
+    unset($_SESSION['transfer_amount']);
+    unset($_SESSION['keterangan']);
+    unset($_SESSION['keterangan_temp']);
+    unset($_SESSION['no_transaksi']);
+    unset($_SESSION['transfer_rekening']);
+    unset($_SESSION['transfer_name']);
+    unset($_SESSION['show_popup']);
+    unset($_SESSION['transfer_amount_temp']);
+}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    resetTransferSession();
+    // Regenerate form token on page load
+    $_SESSION['form_token'] = bin2hex(random_bytes(32));
+}
 $current_step = isset($_SESSION['current_step']) ? $_SESSION['current_step'] : 1;
 $sub_step = isset($_SESSION['sub_step']) ? $_SESSION['sub_step'] : 1;
 $tujuan_data = isset($_SESSION['tujuan_data']) ? $_SESSION['tujuan_data'] : null;
@@ -751,7 +866,7 @@ $transfer_name = null;
 $no_transaksi = null;
 $error = null;
 $success = null;
-// Initialize session token
+// Initialize session token if not set
 if (!isset($_SESSION['form_token'])) {
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
 }
@@ -765,33 +880,22 @@ if (!isset($_SESSION['show_popup']) || $_SESSION['show_popup'] === false) {
     }
 }
 function resetSessionAndPinAttempts($conn, $user_id) {
-    $query = "UPDATE users SET failed_pin_attempts = 0, pin_block_until = NULL WHERE id = ?";
+    $query = "UPDATE user_security SET failed_pin_attempts = 0, pin_block_until = NULL WHERE user_id = ?";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $stmt->close();
-   
-    unset($_SESSION['current_step']);
-    unset($_SESSION['sub_step']);
-    unset($_SESSION['tujuan_data']);
-    unset($_SESSION['transfer_amount']);
-    unset($_SESSION['keterangan']);
-    unset($_SESSION['keterangan_temp']);
-    unset($_SESSION['no_transaksi']);
-    unset($_SESSION['transfer_rekening']);
-    unset($_SESSION['transfer_name']);
-    unset($_SESSION['show_popup']);
+    resetTransferSession();
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
 }
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_POST['form_token']) && $_POST['form_token'] === $_SESSION['form_token']) {
     $action = $_POST['action'];
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
-   
     switch ($action) {
         case 'verify_account':
             $rekening_tujuan = trim($_POST['rekening_tujuan']);
-           
+      
             if (empty($rekening_tujuan)) {
                 $error = "Nomor rekening tujuan harus diisi!";
             } elseif ($rekening_tujuan == $no_rekening) {
@@ -799,12 +903,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
             } elseif (!preg_match('/^[0-9]{8}$/', $rekening_tujuan)) {
                 $error = "Nomor rekening harus berupa 8 digit angka!";
             } else {
-                $query = "SELECT r.id, r.user_id, r.no_rekening, u.nama, u.email, u.is_frozen, u.jurusan_id, u.kelas_id,
+                $query = "SELECT r.id, r.user_id, r.no_rekening, u.nama, u.email, us.is_frozen, sp.jurusan_id, sp.kelas_id,
                           j.nama_jurusan, k.nama_kelas, tk.nama_tingkatan
                           FROM rekening r
                           JOIN users u ON r.user_id = u.id
-                          LEFT JOIN jurusan j ON u.jurusan_id = j.id
-                          LEFT JOIN kelas k ON u.kelas_id = k.id
+                          JOIN user_security us ON u.id = us.user_id
+                          JOIN siswa_profiles sp ON u.id = sp.user_id
+                          LEFT JOIN jurusan j ON sp.jurusan_id = j.id
+                          LEFT JOIN kelas k ON sp.kelas_id = k.id
                           LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                           WHERE r.no_rekening = ?";
                 $stmt = $conn->prepare($query);
@@ -812,7 +918,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $stmt->execute();
                 $result = $stmt->get_result();
                 $tujuan_data = $result->fetch_assoc();
-               
+          
                 if (!$tujuan_data) {
                     $error = "Nomor rekening tujuan tidak ditemukan!";
                 } elseif ($tujuan_data['is_frozen']) {
@@ -825,7 +931,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 }
             }
             break;
-           
+      
         case 'input_amount':
             if (!isset($_SESSION['tujuan_data']) || empty($_SESSION['tujuan_data'])) {
                 $error = "Data rekening tujuan hilang. Silakan mulai ulang transaksi.";
@@ -839,7 +945,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
             $sub_step = 1;
             $_SESSION['sub_step'] = 1;
             break;
-           
+      
         case 'check_amount':
             if (!isset($_SESSION['tujuan_data']) || empty($_SESSION['tujuan_data'])) {
                 $error = "Data rekening tujuan hilang. Silakan mulai ulang transaksi.";
@@ -848,11 +954,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $current_step = 1;
                 break;
             }
-           
+      
             $jumlah = floatval(str_replace(',', '.', str_replace('.', '', $_POST['jumlah'])));
             $input_jumlah = $_POST['jumlah'];
             $input_keterangan = trim($_POST['keterangan'] ?? '');
-           
+      
             if ($jumlah <= 0) {
                 $error = "Jumlah transfer harus lebih dari 0!";
                 $_SESSION['sub_step'] = 1;
@@ -880,7 +986,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $sub_step = 2;
             }
             break;
-           
+      
         case 'confirm_pin':
             if (!isset($_SESSION['tujuan_data']) || empty($_SESSION['tujuan_data']) || !isset($_SESSION['transfer_amount_temp'])) {
                 $error = "Data transaksi tidak lengkap. Silakan mulai ulang transaksi.";
@@ -889,7 +995,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $current_step = 1;
                 break;
             }
-           
+      
             $pin = trim($_POST['pin']);
             if (empty($pin)) {
                 $error = "PIN harus diisi!";
@@ -897,15 +1003,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $sub_step = 2;
                 break;
             }
-           
-            $query = "SELECT pin, email, nama, failed_pin_attempts, pin_block_until
-                      FROM users WHERE id = ?";
+      
+            $query = "SELECT u.email, u.nama, us.pin, us.failed_pin_attempts, us.pin_block_until
+                      FROM users u
+                      JOIN user_security us ON u.id = us.user_id
+                      WHERE u.id = ?";
             $stmt = $conn->prepare($query);
             $stmt->bind_param("i", $user_id);
             $stmt->execute();
             $result = $stmt->get_result();
             $user_data_pin = $result->fetch_assoc();
-           
+      
             if (!$user_data_pin) {
                 $error = "Pengguna tidak ditemukan!";
                 resetSessionAndPinAttempts($conn, $user_id);
@@ -913,7 +1021,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $current_step = 1;
                 break;
             }
-           
+      
             if ($user_data_pin['pin_block_until'] !== null && $user_data_pin['pin_block_until'] > date('Y-m-d H:i:s')) {
                 $block_until = date('d/m/Y H:i:s', strtotime($user_data_pin['pin_block_until']));
                 $error = "Akun Anda diblokir karena terlalu banyak PIN salah. Coba lagi setelah $block_until.";
@@ -921,19 +1029,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $sub_step = 2;
                 break;
             }
-           
-            $hashed_pin = hash('sha256', $pin);
-            if ($user_data_pin['pin'] !== $hashed_pin) {
+      
+            if (!password_verify($pin, $user_data_pin['pin'])) {
                 $new_attempts = $user_data_pin['failed_pin_attempts'] + 1;
                 if ($new_attempts >= 3) {
                     $block_until = date('Y-m-d H:i:s', strtotime('+1 hour'));
-                    $query = "UPDATE users SET failed_pin_attempts = ?, pin_block_until = ? WHERE id = ?";
+                    $query = "UPDATE user_security SET failed_pin_attempts = ?, pin_block_until = ? WHERE user_id = ?";
                     $stmt = $conn->prepare($query);
                     $stmt->bind_param("isi", $new_attempts, $block_until, $user_id);
                     $stmt->execute();
                     $error = "PIN salah! Akun Anda diblokir selama 1 jam karena 3 kali PIN salah.";
                 } else {
-                    $query = "UPDATE users SET failed_pin_attempts = ? WHERE id = ?";
+                    $query = "UPDATE user_security SET failed_pin_attempts = ? WHERE user_id = ?";
                     $stmt = $conn->prepare($query);
                     $stmt->bind_param("ii", $new_attempts, $user_id);
                     $stmt->execute();
@@ -943,12 +1050,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $sub_step = 2;
                 break;
             }
-           
-            $query = "UPDATE users SET failed_pin_attempts = 0, pin_block_until = NULL WHERE id = ?";
+      
+            $query = "UPDATE user_security SET failed_pin_attempts = 0, pin_block_until = NULL WHERE user_id = ?";
             $stmt = $conn->prepare($query);
             $stmt->bind_param("i", $user_id);
             $stmt->execute();
-           
+      
             $_SESSION['transfer_amount'] = $_SESSION['transfer_amount_temp'];
             $_SESSION['keterangan'] = $_SESSION['keterangan_temp'] ?? '';
             unset($_SESSION['transfer_amount_temp'], $_SESSION['keterangan_temp']);
@@ -956,7 +1063,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
             $current_step = 4;
             $_SESSION['sub_step'] = 1;
             break;
-           
+      
         case 'process_transfer':
             if (!isset($_SESSION['tujuan_data']) || empty($_SESSION['tujuan_data']) || !isset($_SESSION['transfer_amount'])) {
                 $error = "Data transaksi tidak lengkap. Silakan mulai ulang transaksi.";
@@ -965,7 +1072,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $current_step = 1;
                 break;
             }
-           
+      
             $query = "SELECT email, nama FROM users WHERE id = ?";
             $stmt = $conn->prepare($query);
             $stmt->bind_param("i", $user_id);
@@ -973,7 +1080,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
             $result = $stmt->get_result();
             $user_data = $result->fetch_assoc();
             $stmt->close();
-           
+      
             if (!$user_data) {
                 $error = "Data pengguna tidak ditemukan!";
                 resetSessionAndPinAttempts($conn, $user_id);
@@ -981,7 +1088,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $current_step = 1;
                 break;
             }
-           
+      
             $tujuan_data = $_SESSION['tujuan_data'];
             $rekening_tujuan_id = $tujuan_data['id'];
             $rekening_tujuan = $tujuan_data['no_rekening'];
@@ -990,7 +1097,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
             $rekening_tujuan_email = $tujuan_data['email'] ?? '';
             $jumlah = floatval($_SESSION['transfer_amount']);
             $keterangan_transfer = $_SESSION['keterangan'] ?? '';
-           
+      
             if (empty($rekening_tujuan_user_id)) {
                 $error = "ID pengguna tujuan tidak valid!";
                 resetSessionAndPinAttempts($conn, $user_id);
@@ -998,7 +1105,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $current_step = 1;
                 break;
             }
-           
+      
             $query_saldo_tujuan = "SELECT saldo FROM rekening WHERE id = ?";
             $stmt_saldo_tujuan = $conn->prepare($query_saldo_tujuan);
             $stmt_saldo_tujuan->bind_param("i", $rekening_tujuan_id);
@@ -1007,18 +1114,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
             $saldo_tujuan_data = $result_saldo_tujuan->fetch_assoc();
             $saldo_tujuan_awal = $saldo_tujuan_data['saldo'] ?? 0;
             $stmt_saldo_tujuan->close();
-           
+      
             $saldo_akhir_penerima = $saldo_tujuan_awal + $jumlah;
             $saldo_akhir_pengirim = $saldo - $jumlah;
-           
+      
             try {
                 $conn->begin_transaction();
-               
+          
                 do {
                     $date_prefix = date('ymd');
                     $random_8digit = sprintf('%08d', mt_rand(10000000, 99999999));
                     $id_transaksi = $date_prefix . $random_8digit;
-                   
+              
                     $check_id_query = "SELECT id FROM transaksi WHERE id_transaksi = ?";
                     $check_id_stmt = $conn->prepare($check_id_query);
                     $check_id_stmt->bind_param('s', $id_transaksi);
@@ -1027,12 +1134,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                     $id_exists = $check_id_result->num_rows > 0;
                     $check_id_stmt->close();
                 } while ($id_exists);
-               
+          
                 do {
                     $date_prefix = date('ymd');
                     $random_6digit = sprintf('%06d', mt_rand(100000, 999999));
                     $no_transaksi = 'TRXTFM' . $date_prefix . $random_6digit;
-                   
+              
                     $check_query = "SELECT id FROM transaksi WHERE no_transaksi = ?";
                     $check_stmt = $conn->prepare($check_query);
                     $check_stmt->bind_param('s', $no_transaksi);
@@ -1041,7 +1148,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                     $exists = $check_result->num_rows > 0;
                     $check_stmt->close();
                 } while ($exists);
-               
+          
                 $query = "INSERT INTO transaksi (id_transaksi, no_transaksi, rekening_id, jenis_transaksi, jumlah, rekening_tujuan_id, keterangan, status, created_at)
                           VALUES (?, ?, ?, 'transfer', ?, ?, ?, 'approved', NOW())";
                 $stmt = $conn->prepare($query);
@@ -1049,7 +1156,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $stmt->execute();
                 $transaksi_id = $stmt->insert_id;
                 $stmt->close();
-               
+          
                 $query = "UPDATE rekening SET saldo = saldo - ? WHERE id = ? AND saldo >= ?";
                 $stmt = $conn->prepare($query);
                 $stmt->bind_param("did", $jumlah, $rekening_id, $jumlah);
@@ -1058,7 +1165,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                     throw new Exception("Saldo tidak mencukupi atau rekening tidak valid!");
                 }
                 $stmt->close();
-               
+          
                 $query = "UPDATE rekening SET saldo = saldo + ? WHERE id = ?";
                 $stmt = $conn->prepare($query);
                 $stmt->bind_param("di", $jumlah, $rekening_tujuan_id);
@@ -1067,78 +1174,78 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                     throw new Exception("Gagal memperbarui saldo penerima!");
                 }
                 $stmt->close();
-               
+          
                 $query_mutasi_pengirim = "INSERT INTO mutasi (rekening_id, transaksi_id, jumlah, saldo_akhir, created_at) VALUES (?, ?, ?, ?, NOW())";
                 $stmt_mutasi_pengirim = $conn->prepare($query_mutasi_pengirim);
                 $stmt_mutasi_pengirim->bind_param("iidd", $rekening_id, $transaksi_id, $jumlah, $saldo_akhir_pengirim);
                 $stmt_mutasi_pengirim->execute();
                 $stmt_mutasi_pengirim->close();
-               
+          
                 $query_mutasi_penerima = "INSERT INTO mutasi (rekening_id, transaksi_id, jumlah, saldo_akhir, created_at) VALUES (?, ?, ?, ?, NOW())";
                 $stmt_mutasi_penerima = $conn->prepare($query_mutasi_penerima);
                 $stmt_mutasi_penerima->bind_param("iidd", $rekening_tujuan_id, $transaksi_id, $jumlah, $saldo_akhir_penerima);
                 $stmt_mutasi_penerima->execute();
                 $stmt_mutasi_penerima->close();
-               
+          
                 $message_pengirim = "Yey, kamu berhasil transfer Rp " . number_format($jumlah, 0, '.', '.') . " ke $rekening_tujuan_nama! Cek riwayat transaksimu sekarang!";
                 $query_notifikasi_pengirim = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
                 $stmt_notifikasi_pengirim = $conn->prepare($query_notifikasi_pengirim);
                 $stmt_notifikasi_pengirim->bind_param("is", $user_id, $message_pengirim);
                 $stmt_notifikasi_pengirim->execute();
                 $stmt_notifikasi_pengirim->close();
-               
+          
                 $message_penerima = "Yey, kamu menerima transfer Rp " . number_format($jumlah, 0, '.', '.') . " dari $user_data[nama]! Cek saldo mu sekarang!";
                 $query_notifikasi_penerima = "INSERT INTO notifications (user_id, message, created_at) VALUES (?, ?, NOW())";
                 $stmt_notifikasi_penerima = $conn->prepare($query_notifikasi_penerima);
                 $stmt_notifikasi_penerima->bind_param("is", $rekening_tujuan_user_id, $message_penerima);
                 $stmt_notifikasi_penerima->execute();
                 $stmt_notifikasi_penerima->close();
-               
+          
                 $conn->commit();
-               
+          
                 $mail = new PHPMailer(true);
-               
+          
                 $jurusan_tujuan = $tujuan_data['nama_jurusan'] ?? '-';
                 $kelas_tujuan = ($tujuan_data['nama_tingkatan'] ?? '') . ' ' . ($tujuan_data['nama_kelas'] ?? '');
-               
+          
                 $data_penerima = [
                     'nama' => $rekening_tujuan_nama,
                     'no_rekening' => $rekening_tujuan,
                     'jurusan' => $jurusan_tujuan,
                     'kelas' => trim($kelas_tujuan)
                 ];
-               
+          
                 $data_pengirim = [
                     'nama' => $user_data['nama'],
                     'no_rekening' => $no_rekening,
                     'jurusan' => '-',
                     'kelas' => '-'
                 ];
-               
+          
                 try {
                     sendTransferEmail($mail, $user_data['email'] ?? '', $user_data['nama'], $no_rekening, $id_transaksi, $no_transaksi, $jumlah, $data_penerima, $keterangan_transfer, true);
                 } catch (Exception $e) {
                     error_log("Failed to send email to sender: " . $e->getMessage());
                 }
-               
+          
                 try {
                     sendTransferEmail($mail, $rekening_tujuan_email, $rekening_tujuan_nama, $rekening_tujuan, $id_transaksi, $no_transaksi, $jumlah, $data_pengirim, $keterangan_transfer, false);
                 } catch (Exception $e) {
                     error_log("Failed to send email to recipient: " . $e->getMessage());
                 }
-               
+          
                 $_SESSION['no_transaksi'] = $no_transaksi;
                 $_SESSION['transfer_amount'] = $jumlah;
                 $_SESSION['transfer_rekening'] = $rekening_tujuan;
                 $_SESSION['transfer_name'] = $rekening_tujuan_nama;
                 $_SESSION['show_popup'] = true;
-               
+          
                 unset($_SESSION['tujuan_data']);
                 unset($_SESSION['keterangan']);
-               
+          
                 $_SESSION['current_step'] = 1;
                 $_SESSION['sub_step'] = 1;
-               
+          
             } catch (Exception $e) {
                 $conn->rollback();
                 $error = "Gagal memproses transfer: " . $e->getMessage();
@@ -1146,12 +1253,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && isset($_P
                 $current_step = 4;
             }
             break;
-           
+      
         case 'cancel':
             resetSessionAndPinAttempts($conn, $user_id);
             header("Location: transfer_pribadi.php");
             exit();
-           
+      
         case 'cancel_to_dashboard':
             resetSessionAndPinAttempts($conn, $user_id);
             header("Location: dashboard.php");
@@ -1169,7 +1276,7 @@ function formatRupiah($amount) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="format-detection" content="telephone=no">
     <title>Transfer - SCHOBANK</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/lbank.png">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/lbank.png">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -1583,10 +1690,6 @@ function formatRupiah($amount) {
                 height: 32px;
                 max-width: 120px;
             }
-            .nav-btn {
-                width: 36px;
-                height: 36px;
-            }
             .pin-input {
                 width: 40px;
                 height: 40px;
@@ -1608,7 +1711,7 @@ function formatRupiah($amount) {
     <!-- Top Navigation -->
     <nav class="top-nav">
         <div class="nav-brand">
-            <img src="/schobank/assets/images/header.png" alt="SCHOBANK" class="nav-logo">
+            <img src="<?= ASSETS_URL ?>/images/header.png" alt="SCHOBANK" class="nav-logo">
         </div>
     </nav>
     <!-- Main Container -->
@@ -1865,30 +1968,12 @@ function formatRupiah($amount) {
         </div>
         <?php endif; ?>
     </div>
-    <!-- Bottom Navigation -->
-    <div class="bottom-nav" id="bottomNav">
-        <a href="dashboard.php" class="nav-item">
-            <i class="fas fa-home"></i>
-            <span>Beranda</span>
-        </a>
-        <a href="transfer_pribadi.php" class="nav-item active">
-            <i class="fas fa-paper-plane"></i>
-            <span>Transfer</span>
-        </a>
-        <a href="cek_mutasi.php" class="nav-item">
-            <i class="fas fa-list-alt"></i>
-            <span>Mutasi</span>
-        </a>
-        <a href="profil.php" class="nav-item">
-            <i class="fas fa-user"></i>
-            <span>Profil</span>
-        </a>
-    </div>
     <!-- Global Cancel Form -->
     <form id="globalCancelForm" method="POST" action="" style="display: none;">
         <input type="hidden" name="action" value="cancel_to_dashboard">
         <input type="hidden" name="form_token" value="<?php echo htmlspecialchars($_SESSION['form_token']); ?>">
     </form>
+    <?php include 'bottom_navbar.php'; ?>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const rekeningInput = document.getElementById('rekening_tujuan');
@@ -1902,11 +1987,11 @@ function formatRupiah($amount) {
             // Bottom nav auto hide/show
             window.addEventListener('scroll', () => {
                 const currentScroll = window.pageYOffset || document.documentElement.scrollTop;
-               
+          
                 if (currentScroll > lastScrollTop || currentScroll < lastScrollTop) {
                     bottomNav.classList.add('hidden');
                 }
-               
+          
                 lastScrollTop = currentScroll <= 0 ? 0 : currentScroll;
                 clearTimeout(scrollTimer);
                 scrollTimer = setTimeout(() => {

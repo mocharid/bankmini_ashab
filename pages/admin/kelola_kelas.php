@@ -1,1168 +1,547 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+/**
+ * Kelola Kelas - Final Version (Sesuai DB Baru + Konfirmasi Tambah + Dipisah Jurusan)
+ * File: pages/admin/kelola_kelas.php
+ */
 
-// Restrict access to non-siswa users
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] === 'siswa') {
-    header("Location: login.php");
-    exit;
+// ============================================
+// ADAPTIVE PATH & CONFIGURATION
+// ============================================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+if (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+} elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+} elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+} else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+if (!$project_root) $project_root = $current_dir;
+
+if (!defined('PROJECT_ROOT')) define('PROJECT_ROOT', rtrim($project_root, '/'));
+if (!defined('INCLUDES_PATH')) define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+if (!defined('ASSETS_PATH'))   define('ASSETS_PATH',   PROJECT_ROOT . '/assets');
+
+function getBaseUrl() {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    $base_path = dirname($script);
+    $base_path = str_replace('\\', '/', $base_path);
+    $base_path = preg_replace('#/pages.*$#', '', $base_path);
+    if ($base_path !== '/' && !empty($base_path)) $base_path = '/' . ltrim($base_path, '/');
+    return $protocol . $host . $base_path;
+}
+if (!defined('BASE_URL')) define('BASE_URL', rtrim(getBaseUrl(), '/'));
+define('ASSETS_URL', BASE_URL . '/assets');
+
+// ============================================
+// LOGIC & DATABASE
+// ============================================
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+
+date_default_timezone_set('Asia/Jakarta');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-$username = $_SESSION['username'] ?? 'Petugas';
-$error_message = '';
-$success = '';
-$nama_kelas = '';
-$jurusan_id = '';
-$tingkatan_kelas_id = '';
-$id = null;
-$show_error_modal = false;
-$post_handled = false;
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['admin', 'petugas'])) {
+    header('Location: ' . BASE_URL . '/pages/login.php');
+    exit();
+}
 
-// CSRF token
+// CSRF Token
 if (!isset($_SESSION['form_token'])) {
     $_SESSION['form_token'] = bin2hex(random_bytes(32));
 }
 $token = $_SESSION['form_token'];
 
-// Pagination settings
-$items_per_page = 10;
-$page = isset($_GET['page']) && is_numeric($_GET['page']) ? intval($_GET['page']) : 1;
+// Flash Messages
+function setFlash($type, $msg) {
+    $_SESSION['flash'][$type] = $msg;
+}
+function getFlash($type) {
+    if (isset($_SESSION['flash'][$type])) {
+        $msg = $_SESSION['flash'][$type];
+        unset($_SESSION['flash'][$type]);
+        return $msg;
+    }
+    return null;
+}
+
+// Variabel form
+$edit_id = null;
+$nama_kelas = '';
+$jurusan_id = '';
+$tingkatan_kelas_id = '';
+
+// Pagination
+$items_per_page = 15;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $items_per_page;
 
-// Get total number of kelas for pagination
-$total_query = "SELECT COUNT(*) as total FROM kelas";
-$total_result = $conn->query($total_query);
-$total_rows = $total_result->fetch_assoc()['total'];
+// Total kelas
+$total_res = $conn->query("SELECT COUNT(*) as total FROM kelas");
+$total_rows = $total_res->fetch_assoc()['total'];
 $total_pages = ceil($total_rows / $items_per_page);
 
-// Handle POST requests
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['token']) && $_POST['token'] === $_SESSION['form_token']) {
-    $post_handled = true;
-    
-    if (isset($_POST['delete_id'])) {
-        // Handle Delete Request
-        $delete_id = intval($_POST['delete_id']);
-        
-        $check_query = "SELECT COUNT(*) as count FROM users WHERE kelas_id = ?";
-        $check_stmt = $conn->prepare($check_query);
-        $check_stmt->bind_param("i", $delete_id);
-        $check_stmt->execute();
-        $check_result = $check_stmt->get_result()->fetch_assoc();
-        
-        if ($check_result['count'] > 0) {
-            $error_message = "Tidak dapat menghapus kelas karena masih memiliki siswa!";
-            $show_error_modal = true;
+// ======================================== HANDLE POST ========================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['token']) && $_POST['token'] === $token) {
+
+    // HAPUS (dari SweetAlert)
+    if (isset($_POST['hapus_id'])) {
+        $id = (int)$_POST['hapus_id'];
+
+        // PERBAIKAN: Cek di siswa_profiles.kelas_id
+        $cek = $conn->query("SELECT 1 FROM siswa_profiles WHERE kelas_id = $id LIMIT 1")->num_rows;
+
+        if ($cek > 0) {
+            setFlash('error', 'Tidak dapat menghapus kelas yang masih memiliki siswa!');
         } else {
-            $conn->begin_transaction();
-            try {
-                $delete_query = "DELETE FROM kelas WHERE id = ?";
-                $delete_stmt = $conn->prepare($delete_query);
-                $delete_stmt->bind_param("i", $delete_id);
-                $delete_stmt->execute();
-                
-                $conn->commit();
-                $_SESSION['form_token'] = bin2hex(random_bytes(32));
-                header('Location: kelola_kelas.php?delete_success=1');
-                exit;
-            } catch (Exception $e) {
-                $conn->rollback();
-                $error_message = "Gagal menghapus kelas: " . $e->getMessage();
-                $show_error_modal = true;
-            }
+            $conn->query("DELETE FROM kelas WHERE id = $id");
+            setFlash('success', 'Kelas berhasil dihapus!');
         }
-    } elseif (isset($_POST['edit_confirm'])) {
-        // Handle Edit Submission
-        $id = intval($_POST['edit_id']);
-        $nama = trim($_POST['edit_nama']);
-        $jurusan_id = intval($_POST['edit_jurusan']);
-        $tingkatan_kelas_id = intval($_POST['edit_tingkatan']);
-        
-        if (empty($nama)) {
-            $error_message = "Nama kelas tidak boleh kosong!";
-            $show_error_modal = true;
-        } elseif (strlen($nama) < 3) {
-            $error_message = "Nama kelas harus minimal 3 karakter!";
-            $show_error_modal = true;
-        } elseif (empty($jurusan_id)) {
-            $error_message = "Silakan pilih jurusan!";
-            $show_error_modal = true;
-        } elseif (empty($tingkatan_kelas_id)) {
-            $error_message = "Silakan pilih tingkatan kelas!";
-            $show_error_modal = true;
-        } else {
-            $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ? AND tingkatan_kelas_id = ? AND id != ?";
-            $check_stmt = $conn->prepare($check_query);
-            $check_stmt->bind_param("siii", $nama, $jurusan_id, $tingkatan_kelas_id, $id);
-            $check_stmt->execute();
-            $result = $check_stmt->get_result();
-            
-            if ($result->num_rows > 0) {
-                $error_message = "Kelas dengan nama tersebut sudah ada di jurusan dan tingkatan ini!";
-                $show_error_modal = true;
-            } else {
-                $conn->begin_transaction();
-                try {
-                    $update_query = "UPDATE kelas SET nama_kelas = ?, jurusan_id = ?, tingkatan_kelas_id = ? WHERE id = ?";
-                    $update_stmt = $conn->prepare($update_query);
-                    $update_stmt->bind_param("siii", $nama, $jurusan_id, $tingkatan_kelas_id, $id);
-                    $update_stmt->execute();
-                    
-                    $conn->commit();
-                    $_SESSION['form_token'] = bin2hex(random_bytes(32));
-                    header('Location: kelola_kelas.php?edit_success=1');
-                    exit;
-                } catch (Exception $e) {
-                    $conn->rollback();
-                    $error_message = "Gagal mengupdate kelas: " . $e->getMessage();
-                    $show_error_modal = true;
-                }
-            }
-        }
-        if ($show_error_modal) {
-            $nama_kelas = $nama;
-            $jurusan_id = $_POST['edit_jurusan'];
-            $tingkatan_kelas_id = $_POST['edit_tingkatan'];
-        }
+        $_SESSION['form_token'] = bin2hex(random_bytes(32));
+        $token = $_SESSION['form_token'];
+        header('Location: ' . $_SERVER['PHP_SELF'] . (isset($_GET['page']) ? '?page=' . $page : ''));
+        exit;
+    }
+
+    // TAMBAH / EDIT
+    $nama = trim($_POST['nama_kelas']);
+    $jurusan = (int)$_POST['jurusan_id'];
+    $tingkatan = (int)$_POST['tingkatan_id'];
+
+    if (empty($nama) || strlen($nama) < 3) {
+        setFlash('error', 'Nama kelas minimal 3 karakter!');
+    } elseif (!$jurusan || !$tingkatan) {
+        setFlash('error', 'Pilih jurusan dan tingkatan kelas!');
     } else {
-        // Handle Form Submission (Add)
-        $form_id = isset($_POST['id']) ? (int)$_POST['id'] : null;
-        $nama_kelas_input = trim($_POST['nama_kelas']);
-        $jurusan_id_input = intval($_POST['jurusan_id']);
-        $tingkatan_kelas_id_input = intval($_POST['tingkatan_id']);
-        
-        if (isset($_POST['confirm'])) {
-            if (empty($nama_kelas_input)) {
-                $error_message = "Nama kelas tidak boleh kosong!";
-                $show_error_modal = true;
-            } elseif (strlen($nama_kelas_input) < 3) {
-                $error_message = "Nama kelas harus minimal 3 karakter!";
-                $show_error_modal = true;
-            } elseif (empty($jurusan_id_input)) {
-                $error_message = "Silakan pilih jurusan!";
-                $show_error_modal = true;
-            } elseif (empty($tingkatan_kelas_id_input)) {
-                $error_message = "Silakan pilih tingkatan kelas!";
-                $show_error_modal = true;
+        if (isset($_POST['edit_id']) && !empty($_POST['edit_id'])) {
+            $id = (int)$_POST['edit_id'];
+
+            $old = $conn->prepare("SELECT nama_kelas, jurusan_id, tingkatan_kelas_id FROM kelas WHERE id = ?");
+            $old->bind_param("i", $id);
+            $old->execute();
+            $old_row = $old->get_result()->fetch_assoc();
+
+            if ($nama === $old_row['nama_kelas'] && $jurusan == $old_row['jurusan_id'] && $tingkatan == $old_row['tingkatan_kelas_id']) {
+                setFlash('info', 'Tidak ada perubahan yang disimpan.');
             } else {
-                $conn->begin_transaction();
-                try {
-                    if ($form_id) {
-                        $error_message = "Operasi tidak valid!";
-                        $show_error_modal = true;
-                    } else {
-                        $check_query = "SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ? AND tingkatan_kelas_id = ?";
-                        $check_stmt = $conn->prepare($check_query);
-                        $check_stmt->bind_param("sii", $nama_kelas_input, $jurusan_id_input, $tingkatan_kelas_id_input);
-                        $check_stmt->execute();
-                        $result_check = $check_stmt->get_result();
-                        
-                        if ($result_check->num_rows > 0) {
-                            $error_message = "Kelas sudah ada di jurusan dan tingkatan ini!";
-                            $show_error_modal = true;
-                            throw new Exception($error_message);
-                        }
-                        
-                        $query = "INSERT INTO kelas (nama_kelas, jurusan_id, tingkatan_kelas_id) VALUES (?, ?, ?)";
-                        $stmt = $conn->prepare($query);
-                        $stmt->bind_param("sii", $nama_kelas_input, $jurusan_id_input, $tingkatan_kelas_id_input);
-                        $stmt->execute();
-                        
-                        $conn->commit();
-                        $_SESSION['form_token'] = bin2hex(random_bytes(32));
-                        header('Location: kelola_kelas.php?success=1');
-                        exit;
-                    }
-                } catch (Exception $e) {
-                    $conn->rollback();
-                    if (!$show_error_modal) {
-                        $error_message = $e->getMessage();
-                        $show_error_modal = true;
-                    }
+                $cek = $conn->prepare("SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ? AND tingkatan_kelas_id = ? AND id != ?");
+                $cek->bind_param("siii", $nama, $jurusan, $tingkatan, $id);
+                $cek->execute();
+                if ($cek->get_result()->num_rows > 0) {
+                    setFlash('error', 'Kelas sudah ada di jurusan dan tingkatan ini!');
+                } else {
+                    $upd = $conn->prepare("UPDATE kelas SET nama_kelas = ?, jurusan_id = ?, tingkatan_kelas_id = ? WHERE id = ?");
+                    $upd->bind_param("siii", $nama, $jurusan, $tingkatan, $id);
+                    $upd->execute();
+                    setFlash('success', 'Kelas berhasil diperbarui!');
                 }
-            }
-            if ($show_error_modal) {
-                $nama_kelas = $nama_kelas_input;
-                $jurusan_id = $jurusan_id_input;
-                $tingkatan_kelas_id = $tingkatan_kelas_id_input;
             }
         } else {
-            if (empty($nama_kelas_input)) {
-                $error_message = "Nama kelas tidak boleh kosong!";
-                $show_error_modal = true;
-            } elseif (strlen($nama_kelas_input) < 3) {
-                $error_message = "Nama kelas harus minimal 3 karakter!";
-                $show_error_modal = true;
-            } elseif (empty($jurusan_id_input)) {
-                $error_message = "Silakan pilih jurusan!";
-                $show_error_modal = true;
-            } elseif (empty($tingkatan_kelas_id_input)) {
-                $error_message = "Silakan pilih tingkatan kelas!";
-                $show_error_modal = true;
+            $cek = $conn->prepare("SELECT id FROM kelas WHERE nama_kelas = ? AND jurusan_id = ? AND tingkatan_kelas_id = ?");
+            $cek->bind_param("sii", $nama, $jurusan, $tingkatan);
+            $cek->execute();
+            if ($cek->get_result()->num_rows > 0) {
+                setFlash('error', 'Kelas sudah ada di jurusan dan tingkatan ini!');
             } else {
-                if (!$show_error_modal) {
-                    header('Location: kelola_kelas.php?confirm=1&nama=' . urlencode($nama_kelas_input) . '&jurusan_id=' . $jurusan_id_input . '&tingkatan_id=' . $tingkatan_kelas_id_input);
-                    exit;
-                }
-            }
-            if ($show_error_modal) {
-                $nama_kelas = $nama_kelas_input;
-                $jurusan_id = $jurusan_id_input;
-                $tingkatan_kelas_id = $tingkatan_kelas_id_input;
+                $ins = $conn->prepare("INSERT INTO kelas (nama_kelas, jurusan_id, tingkatan_kelas_id) VALUES (?, ?, ?)");
+                $ins->bind_param("sii", $nama, $jurusan, $tingkatan);
+                $ins->execute();
+                setFlash('success', 'Kelas berhasil ditambahkan!');
             }
         }
     }
+
+    $_SESSION['form_token'] = bin2hex(random_bytes(32));
+    $token = $_SESSION['form_token'];
+
+    header('Location: ' . $_SERVER['PHP_SELF'] . (isset($_GET['page']) ? '?page=' . $page : ''));
+    exit;
 }
 
-// Handle Edit Request (only if no POST handled)
-if (!$post_handled && isset($_GET['edit'])) {
-    $id = (int)$_GET['edit'];
-    $query = "SELECT * FROM kelas WHERE id = ?";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows > 0) {
-        $row = $result->fetch_assoc();
+// ======================================== HANDLE EDIT (GET) ========================================
+if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
+    $edit_id = (int)$_GET['edit'];
+    $res = $conn->prepare("SELECT nama_kelas, jurusan_id, tingkatan_kelas_id FROM kelas WHERE id = ?");
+    $res->bind_param("i", $edit_id);
+    $res->execute();
+    $row = $res->get_result()->fetch_assoc();
+    if ($row) {
         $nama_kelas = $row['nama_kelas'];
         $jurusan_id = $row['jurusan_id'];
         $tingkatan_kelas_id = $row['tingkatan_kelas_id'];
     } else {
-        $error_message = "Kelas tidak ditemukan!";
-        $show_error_modal = true;
+        setFlash('error', 'Kelas tidak ditemukan!');
+        header('Location: ' . $_SERVER['PHP_SELF']);
+        exit;
     }
 }
 
-// Fetch jurusan and tingkatan kelas for dropdowns
-$query_jurusan = "SELECT * FROM jurusan ORDER BY nama_jurusan ASC";
-$result_jurusan = $conn->query($query_jurusan);
+// ======================================== AMBIL DATA UNTUK DROPDOWN & TABEL (dipisah per jurusan) ========================================
+$jurusan_res = $conn->query("SELECT id, nama_jurusan FROM jurusan ORDER BY nama_jurusan ASC");
+$tingkatan_res = $conn->query("SELECT id, nama_tingkatan FROM tingkatan_kelas ORDER BY nama_tingkatan ASC");
 
-$query_tingkatan = "SELECT * FROM tingkatan_kelas ORDER BY nama_tingkatan ASC";
-$result_tingkatan = $conn->query($query_tingkatan);
+$all_kelas = $conn->query("
+    SELECT k.id, k.nama_kelas, j.nama_jurusan, t.nama_tingkatan 
+    FROM kelas k 
+    LEFT JOIN jurusan j ON k.jurusan_id = j.id 
+    LEFT JOIN tingkatan_kelas t ON k.tingkatan_kelas_id = t.id 
+    ORDER BY j.nama_jurusan ASC, t.nama_tingkatan ASC, k.nama_kelas ASC
+");
 
-// Fetch existing kelas with jurusan and tingkatan info
-$query_list = "SELECT j.nama_jurusan, tk.nama_tingkatan, k.id as kelas_id, k.nama_kelas, k.jurusan_id, k.tingkatan_kelas_id
-               FROM kelas k
-               LEFT JOIN jurusan j ON k.jurusan_id = j.id
-               LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
-               ORDER BY j.nama_jurusan ASC, tk.nama_tingkatan ASC, k.nama_kelas ASC
-               LIMIT ? OFFSET ?";
-$stmt = $conn->prepare($query_list);
-$stmt->bind_param("ii", $items_per_page, $offset);
-$stmt->execute();
-$result = $stmt->get_result();
-
-// Organize data by jurusan
 $kelas_by_jurusan = [];
-if ($result && $result->num_rows > 0) {
-    while ($row = $result->fetch_assoc()) {
-        $jurusan = $row['nama_jurusan'];
-        if (!isset($kelas_by_jurusan[$jurusan])) {
-            $kelas_by_jurusan[$jurusan] = [];
-        }
-        $kelas_by_jurusan[$jurusan][] = $row;
+while ($row = $all_kelas->fetch_assoc()) {
+    $jurusan = $row['nama_jurusan'] ?: 'Tidak Ada Jurusan';
+    if (!isset($kelas_by_jurusan[$jurusan])) {
+        $kelas_by_jurusan[$jurusan] = [];
     }
+    $kelas_by_jurusan[$jurusan][] = $row;
 }
-
-// === PREPARE MAPS FOR JAVASCRIPT ===
-$jurusan_map = [];
-$result_jurusan->data_seek(0);
-while ($row = $result_jurusan->fetch_assoc()) {
-    $jurusan_map[$row['id']] = $row['nama_jurusan'];
-}
-
-$tingkatan_map = [];
-$result_tingkatan->data_seek(0);
-while ($row = $result_tingkatan->fetch_assoc()) {
-    $tingkatan_map[$row['id']] = $row['nama_tingkatan'];
-}
-
-date_default_timezone_set('Asia/Jakarta');
 ?>
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
-    <title>Kelola Data Kelas | MY Schobank</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
+    <title>Kelola Kelas | MY Schobank</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- SweetAlert2 CDN -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
-            --accent-color: #f59e0b;
-            --danger-color: #e74c3c;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f0f5ff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
+            --primary-color: #1e3a8a; --primary-dark: #1e1b4b;
+            --secondary-color: #3b82f6; --bg-light: #f0f5ff;
+            --text-primary: #333; --text-secondary: #666;
+            --shadow-sm: 0 2px 10px rgba(0,0,0,0.05);
         }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
+        body { background-color: var(--bg-light); color: var(--text-primary); display: flex; min-height: 100vh; overflow-x: hidden; }
+        
+        /* SIDEBAR OVERLAY FIX */
+        body.sidebar-open { overflow: hidden; }
+        body.sidebar-open::before {
+            content: ''; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.5); z-index: 998; backdrop-filter: blur(5px);
+        }
+        
+        .main-content { flex: 1; margin-left: 280px; padding: 30px; max-width: calc(100% - 280px); position: relative; z-index: 1; }
+        
+        .welcome-banner { 
+            background: linear-gradient(135deg, var(--primary-dark), var(--secondary-color)); 
+            color: white; padding: 30px; border-radius: 8px; margin-bottom: 30px; 
+            box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 20px; 
+        }
+        .welcome-banner h2 { font-size: 1.5rem; margin: 0; }
+        .welcome-banner p { margin: 0; opacity: 0.9; }
+        .menu-toggle { display: none; font-size: 1.5rem; cursor: pointer; align-self: center; margin-right: auto; }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
-            -webkit-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-        }
+        .form-card, .jadwal-list { background: white; border-radius: 8px; padding: 25px; box-shadow: var(--shadow-sm); margin-bottom: 30px; }
+        .form-row { display: flex; gap: 20px; margin-bottom: 15px; }
+        .form-group { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+        label { font-weight: 500; font-size: 0.9rem; color: var(--text-secondary); }
 
-        html, body {
-            width: 100%;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            -webkit-text-size-adjust: 100%;
+        input[type="text"], select {
+            width: 100%; padding: 12px 15px; border: 1px solid #e2e8f0; border-radius: 6px;
+            font-size: 0.95rem; height: 48px; background: #fff;
         }
+        input:focus, select:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(30,58,138,0.1); outline: none; }
 
-        body {
-            background-color: var(--bg-light);
-            color: var(--text-primary);
-            display: flex;
+        .btn { 
+            background: var(--primary-color); color: white; border: none; padding: 12px 25px; border-radius: 6px; 
+            cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; 
+            transition: 0.3s; text-decoration: none !important;
         }
+        .btn:hover { background: var(--primary-dark); transform: translateY(-2px); }
+        .btn-cancel { background: #e2e8f0; color: #475569; text-decoration: none !important; }
+        .btn-cancel:hover { background: #cbd5e1; }
 
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 30px;
-            max-width: calc(100% - 280px);
-            overflow-x: hidden;
-        }
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #f1f5f9; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th { background: #f8fafc; padding: 15px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid #e2e8f0; }
+        td { padding: 15px; border-bottom: 1px solid #f1f5f9; }
 
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 5px;
-            margin-bottom: 35px;
-            box-shadow: var(--shadow-md);
-            animation: fadeIn 1s ease-in-out;
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        .action-icon {
+            font-size: 1.1rem; cursor: pointer; padding: 8px; border-radius: 6px; transition: 0.2s;
+            width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+            text-decoration: none !important;
         }
-
-        .welcome-banner .content {
-            flex: 1;
-        }
-
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: 1.6rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .welcome-banner p {
-            font-size: 0.9rem;
-            font-weight: 400;
-            opacity: 0.8;
-        }
-
-        .menu-toggle {
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: white;
-            flex-shrink: 0;
-            display: none;
-            align-self: center;
-        }
-
-        .form-card, .kelas-list {
-            background: white;
-            border-radius: 5px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 35px;
-            animation: slideIn 0.5s ease-in-out;
-        }
-
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .form-row {
-            display: flex;
-            gap: 20px;
-            flex: 1;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex: 1;
-        }
-
-        label {
-            font-weight: 500;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        input[type="text"],
-        select {
-            width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 0.9rem;
-            user-select: text;
-            -webkit-user-select: text;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-            background: white;
-        }
-
-        select {
-            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            background-size: 16px;
-            cursor: pointer;
-        }
-
-        input[type="text"]:focus,
-        select:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(12, 77, 162, 0.1);
-        }
-
-        .btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 200px;
-            margin: 0 auto;
-        }
-
-        .btn:hover {
-            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-        }
-
-        .btn-edit, .btn-delete, .btn-confirm, .btn-cancel {
-            width: auto;
-            min-width: 70px;
-            padding: 8px 12px;
-            font-size: 0.8rem;
-        }
-
-        .btn-edit {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-        }
-
-        .btn-delete {
-            background: linear-gradient(135deg, var(--danger-color) 0%, #d32f2f 100%);
-        }
-
-        .btn-cancel {
-            background: #f0f0f0;
-            color: var(--text-secondary);
-        }
-
-        .btn-confirm {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-        }
-
-        .kelas-list h3 {
-            font-size: 1.2rem;
-            font-weight: 600;
-            color: var(--primary-dark);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+        .action-icon.edit { background: var(--secondary-color); color: #fff; }
+        .action-icon.delete { background: #ef4444; color: #fff; }
+        .action-icon:hover { opacity: 0.9; transform: scale(1.1); }
 
         .jurusan-title {
-            margin: 15px 0 12px;
-            color: var(--primary-dark);
-            font-size: 1.15rem;
-            font-weight: 600;
+            font-size: 1.2rem; font-weight: 600; color: var(--primary-dark); margin: 25px 0 10px 0; padding-bottom: 8px; border-bottom: 2px solid var(--primary-color);
         }
 
-        /* Table Wrapper - KUNCI UNTUK SCROLL HORIZONTAL */
-        .table-wrapper {
-            width: 100%;
-            overflow-x: auto;
-            overflow-y: visible;
-            -webkit-overflow-scrolling: touch;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            border: 1px solid #eee;
-        }
+        a, a:hover, a:visited, a:active { text-decoration: none !important; }
 
-        table {
-            width: 100%;
-            min-width: 700px;
-            border-collapse: collapse;
-            background: white;
-        }
-
-        th, td {
-            padding: 12px 15px;
-            text-align: left;
-            font-size: 0.9rem;
-            border-bottom: 1px solid #eee;
-            white-space: nowrap;
-        }
-
-        th {
-            background: var(--bg-light);
-            color: var(--text-secondary);
-            font-weight: 600;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-
-        tr:hover {
-            background-color: var(--bg-light);
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 5px;
-            justify-content: flex-start;
-        }
-
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin-top: 25px;
-        }
-
-        .pagination a {
-            text-decoration: none;
-            padding: 8px 12px;
-            border-radius: 5px;
-            transition: var(--transition);
-            font-size: 1rem;
-            min-width: 35px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-        }
-
-        .pagination a:not(.disabled) {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        .pagination a:hover:not(.disabled) {
-            background-color: var(--primary-dark);
-        }
-
-        .pagination .current-page {
-            font-weight: 500;
-            font-size: 1rem;
-            min-width: 35px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .pagination a.disabled {
-            color: var(--text-secondary);
-            background-color: #e0e0e0;
-            cursor: not-allowed;
-            pointer-events: none;
-        }
-
-        .no-data {
-            text-align: center;
-            padding: 20px;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            background: #f8fafc;
-            border-radius: 5px;
-            border: 1px solid #e2e8f0;
-        }
-
-        .no-data i {
-            font-size: 2rem;
-            color: #d1d5db;
-            margin-bottom: 15px;
-        }
-
-        /* Scroll Hint untuk Mobile */
-        .scroll-hint {
-            display: none;
-            text-align: center;
-            padding: 8px;
-            background: #fff3cd;
-            color: #856404;
-            border-radius: 5px 5px 0 0;
-            font-size: 0.85rem;
-            border: 1px solid #ffeeba;
-            border-bottom: none;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
+        /* SweetAlert Custom Fixes */
+        .swal2-input { height: 48px !important; margin: 10px auto !important; }
+        .swal-date-wrapper { position: relative; width: 80%; margin: 10px auto; }
+        .swal-date-wrapper input { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
+        .swal-date-wrapper i { right: 15px; }
 
         @media (max-width: 768px) {
-            .main-content {
-                margin-left: 0;
-                max-width: 100%;
-                padding: 15px;
-            }
-
+            .main-content { margin-left: 0; padding: 15px; max-width: 100%; }
             .menu-toggle { display: block; }
-
-            .welcome-banner {
-                padding: 20px;
-                border-radius: 5px;
+            .form-row { flex-direction: column; }
+            .welcome-banner { 
+                flex-direction: row; 
+                align-items: center; 
+                gap: 15px; 
+                padding: 20px; 
             }
-
-            .welcome-banner h2 { font-size: 1.4rem; }
-            .welcome-banner p { font-size: 0.85rem; }
-
-            .form-card, .kelas-list { padding: 20px; }
-
-            .form-row {
-                flex-direction: column;
-                gap: 15px;
+            .welcome-banner h2 { 
+                font-size: 1.2rem;
+                margin: 0; 
             }
-
-            .btn { width: 100%; max-width: 300px; }
-
-            .btn-edit, .btn-delete { 
-                padding: 10px 20px; 
-                min-width: 100px; 
-                font-size: 0.9rem; 
-                width: auto;
+            .welcome-banner p { 
+                font-size: 0.9rem;
+                margin: 0; 
+                opacity: 0.9; 
             }
-
-            /* Tampilkan scroll hint di mobile */
-            .scroll-hint {
-                display: block;
-            }
-
-            /* Pastikan table wrapper bisa di scroll */
-            .table-wrapper {
-                overflow-x: auto !important;
-                -webkit-overflow-scrolling: touch !important;
-                display: block;
-                border: 1px solid #ddd;
-                border-radius: 5px;
-            }
-
-            table {
-                min-width: 750px;
-                display: table;
-            }
-
-            th, td { 
-                padding: 10px 12px; 
-                font-size: 0.85rem; 
-            }
-
-            /* iOS specific fixes for inputs */
-            input[type="text"], select {
-                padding: 12px 15px !important;
-                font-size: 16px; /* Prevents zoom on iOS */
-                -webkit-appearance: none !important;
-                appearance: none !important;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .welcome-banner { padding: 15px; }
-            .form-card, .kelas-list { padding: 15px; }
-
-            .btn-edit, .btn-delete { 
-                padding: 8px 15px; 
-                min-width: 80px; 
-                font-size: 0.8rem; 
-            }
-
-            table {
-                min-width: 800px;
-            }
-
-            th, td {
-                padding: 8px 10px;
-                font-size: 0.8rem;
-            }
-
-            input[type="text"], select {
-                padding: 10px 12px !important;
-                font-size: 16px !important;
-            }
-        }
-
-        /* Custom SweetAlert Input Styling */
-        .swal2-input, .swal2-select {
-            width: 100% !important;
-            max-width: 400px !important;
-            padding: 12px 16px !important;
-            border: 1px solid #ddd !important;
-            border-radius: 5px !important;
-            font-size: 16px !important;
-            margin: 10px auto !important;
-            box-sizing: border-box !important;
-            text-align: left !important;
-            -webkit-appearance: none !important;
-            appearance: none !important;
-        }
-
-        .swal2-input:focus, .swal2-select:focus {
-            border-color: var(--primary-color) !important;
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.15) !important;
-        }
-
-        .swal2-popup .swal2-title {
-            font-size: 1.5rem !important;
-            font-weight: 600 !important;
-        }
-
-        .swal2-html-container {
-            font-size: 1rem !important;
-            margin: 15px 0 !important;
+            .form-row { flex-direction: column; gap: 15px; }
         }
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_admin.php'; ?>
-    
+    <?php include INCLUDES_PATH . '/sidebar_admin.php'; ?>
+
     <div class="main-content" id="mainContent">
-        <!-- Welcome Banner -->
         <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle">
-                <i class="fas fa-bars"></i>
-            </span>
-            <div class="content">
-                <h2> Kelola Data Kelas</h2>
-                <p>Kelola data kelas yang tersedia</p>
+            <span class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></span>
+            <div>
+                <h2>Kelola Kelas</h2>
+                <p>Tambah, edit, atau hapus data kelas sekolah</p>
             </div>
         </div>
 
-        <!-- Form Section -->
+        <!-- FORM TAMBAH / EDIT -->
         <div class="form-card">
-            <form action="" method="POST" id="kelas-form">
-                <input type="hidden" name="token" value="<?php echo $token; ?>">
-                <input type="hidden" name="id" value="<?php echo $id; ?>">
-                
+            <form method="POST" id="kelasForm">
+                <input type="hidden" name="token" value="<?= $token ?>">
+                <?php if ($edit_id): ?>
+                    <input type="hidden" name="edit_id" value="<?= $edit_id ?>">
+                <?php endif; ?>
+
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="tingkatan_id">Tingkatan Kelas</label>
-                        <select id="tingkatan_id" name="tingkatan_id" required>
+                        <label>Tingkatan Kelas</label>
+                        <select name="tingkatan_id" id="tingkatanSelect" required>
                             <option value="">Pilih Tingkatan</option>
-                            <?php
-                            $result_tingkatan->data_seek(0);
-                            while ($row = $result_tingkatan->fetch_assoc()):
-                            ?>
-                                <option value="<?php echo $row['id']; ?>" <?php echo $tingkatan_kelas_id == $row['id'] ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($row['nama_tingkatan']); ?>
+                            <?php while ($row = $tingkatan_res->fetch_assoc()): ?>
+                                <option value="<?= $row['id'] ?>" <?= $tingkatan_kelas_id == $row['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($row['nama_tingkatan']) ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php endwhile; $tingkatan_res->data_seek(0); ?>
                         </select>
                     </div>
-                    
                     <div class="form-group">
-                        <label for="jurusan_id">Jurusan</label>
-                        <select id="jurusan_id" name="jurusan_id" required>
+                        <label>Jurusan</label>
+                        <select name="jurusan_id" required>
                             <option value="">Pilih Jurusan</option>
-                            <?php
-                            $result_jurusan->data_seek(0);
-                            while ($row = $result_jurusan->fetch_assoc()):
-                            ?>
-                                <option value="<?php echo $row['id']; ?>" <?php echo $jurusan_id == $row['id'] ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($row['nama_jurusan']); ?>
+                            <?php while ($row = $jurusan_res->fetch_assoc()): ?>
+                                <option value="<?= $row['id'] ?>" <?= $jurusan_id == $row['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($row['nama_jurusan']) ?>
                                 </option>
-                            <?php endwhile; ?>
+                            <?php endwhile; $jurusan_res->data_seek(0); ?>
                         </select>
                     </div>
-
                     <div class="form-group">
-                        <label for="nama_kelas">Nama Kelas</label>
-                        <input type="text" id="nama_kelas" name="nama_kelas" value="<?php echo htmlspecialchars($nama_kelas); ?>" required
-                               placeholder="Contoh: RPL-1" maxlength="50">
+                        <label>Nama Kelas</label>
+                        <input type="text" name="nama_kelas" id="namaKelasInput" value="<?= htmlspecialchars($nama_kelas) ?>" placeholder="Contoh: RPL-1" required maxlength="50">
                     </div>
                 </div>
-                
-                <div style="display: flex; gap: 10px; justify-content: center;">
-                    <button type="submit" class="btn" id="submit-btn">
-                        <span class="btn-content"><i class="fas fa-plus-circle"></i> <?php echo $id ? 'Update Kelas' : 'Tambah'; ?></span>
+
+                <div style="display:flex; gap:12px; margin-top:10px;">
+                    <button type="button" id="submitBtn" class="btn">
+                        <?= $edit_id ? 'Update Kelas' : 'Tambah Kelas' ?>
                     </button>
-                    <?php if ($id): ?>
-                        <button type="button" class="btn btn-cancel" onclick="window.location.href='kelola_kelas.php'">
-                            <span class="btn-content"><i class="fas fa-times"></i> Batal</span>
-                        </button>
+                    <?php if ($edit_id): ?>
+                        <a href="kelola_kelas.php" class="btn btn-cancel">Batal</a>
                     <?php endif; ?>
                 </div>
             </form>
         </div>
 
-        <!-- Kelas List -->
-        <div class="kelas-list">
-            <h3><i class="fas fa-list"></i> Daftar Kelas</h3>
-            
-            <?php if (!empty($kelas_by_jurusan)): ?>
-                <?php foreach ($kelas_by_jurusan as $jurusan => $kelas): ?>
-                    <h4 class="jurusan-title"><?php echo htmlspecialchars($jurusan); ?></h4>
-                    
-                    <?php if (!empty($kelas)): ?>
-                        <!-- Scroll Hint untuk Mobile -->
-                        <div class="scroll-hint">
-                            <i class="fas fa-hand-pointer"></i> Geser tabel ke kanan untuk melihat lebih banyak
-                        </div>
-                        
-                        <!-- Table Wrapper - PENTING untuk scroll horizontal -->
-                        <div class="table-wrapper">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width: 10%;">No</th>
-                                        <th style="width: 20%;">Tingkatan</th>
-                                        <th style="width: 50%;">Nama Kelas</th>
-                                        <th style="width: 20%;">Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <?php
-                                    $no = ($page - 1) * $items_per_page + 1;
-                                    foreach ($kelas as $row):
-                                    ?>
-                                        <tr id="row-<?php echo $row['kelas_id']; ?>">
-                                            <td><?php echo $no++; ?></td>
-                                            <td><?php echo htmlspecialchars($row['nama_tingkatan']); ?></td>
-                                            <td><strong><?php echo htmlspecialchars($row['nama_kelas']); ?></strong></td>
-                                            <td>
-                                                <div class="action-buttons">
-                                                    <button class="btn btn-edit"
-                                                            onclick="editKelas(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars(addslashes($row['nama_kelas']), ENT_QUOTES); ?>', <?php echo $row['jurusan_id']; ?>, <?php echo $row['tingkatan_kelas_id']; ?>)">
-                                                        <i class="fas fa-edit"></i> Edit
-                                                    </button>
-                                                    <button class="btn btn-delete"
-                                                            onclick="deleteKelas(<?php echo $row['kelas_id']; ?>, '<?php echo htmlspecialchars(addslashes($row['nama_kelas']), ENT_QUOTES); ?>')">
-                                                        <i class="fas fa-trash"></i> Hapus
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                    <?php else: ?>
-                        <div class="no-data">
-                            <p>Tidak ada kelas untuk jurusan ini</p>
-                        </div>
-                    <?php endif; ?>
-                <?php endforeach; ?>
+        <!-- DAFTAR KELAS (Dipisah per Jurusan) -->
+        <div class="jadwal-list">
+            <h3>Daftar Kelas</h3>
 
-                <?php if ($total_pages > 1): ?>
-                <div class="pagination">
-                    <?php if ($page > 1): ?>
-                        <a href="?page=<?php echo $page - 1; ?>">&lt;</a>
-                    <?php else: ?>
-                        <a class="disabled">&lt;</a>
-                    <?php endif; ?>
-                    
-                    <span class="current-page"><?php echo $page; ?></span>
-                    
-                    <?php if ($page < $total_pages): ?>
-                        <a href="?page=<?php echo $page + 1; ?>">&gt;</a>
-                    <?php else: ?>
-                        <a class="disabled">&gt;</a>
-                    <?php endif; ?>
+            <?php if (empty($kelas_by_jurusan)): ?>
+                <div style="text-align:center; padding:40px; color:#999;">
+                    Belum ada data kelas
                 </div>
-                <?php endif; ?>
             <?php else: ?>
-                <div class="no-data">
-                    <i class="fas fa-info-circle"></i>
-                    <p>Belum ada data kelas</p>
-                </div>
+                <?php foreach ($kelas_by_jurusan as $jurusan => $kelas): ?>
+                    <div class="jurusan-title"><?= htmlspecialchars($jurusan) ?></div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>No</th>
+                                    <th>Tingkatan</th>
+                                    <th>Nama Kelas</th>
+                                    <th style="width:120px; text-align:center;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($kelas as $i => $k): ?>
+                                    <tr>
+                                        <td><?= $i + 1 ?></td>
+                                        <td><?= htmlspecialchars($k['nama_tingkatan']) ?></td>
+                                        <td><strong><?= htmlspecialchars($k['nama_kelas']) ?></strong></td>
+                                        <td style="text-align:center;">
+                                            <a href="?edit=<?= $k['id'] ?>" class="action-icon edit" title="Edit">
+                                                <i class="fas fa-pencil-alt"></i>
+                                            </a>
+                                            <span class="action-icon delete" onclick="hapusKelas(<?= $k['id'] ?>, '<?= htmlspecialchars(addslashes($k['nama_kelas']), ENT_QUOTES) ?>')" title="Hapus">
+                                                <i class="fas fa-trash-alt"></i>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endforeach; ?>
             <?php endif; ?>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            
-            if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', e => {
-                    e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
-                });
-                
-                document.addEventListener('click', e => {
-                    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                        sidebar.classList.remove('active');
-                        document.body.classList.remove('sidebar-active');
-                    }
-                });
+        // ============================================
+        // FIXED SIDEBAR MOBILE BEHAVIOR
+        // ============================================
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebar = document.getElementById('sidebar');
+        const body = document.body;
+        const mainContent = document.getElementById('mainContent');
+
+        function openSidebar() {
+            body.classList.add('sidebar-open');
+            if (sidebar) sidebar.classList.add('active');
+        }
+
+        function closeSidebar() {
+            body.classList.remove('sidebar-open');
+            if (sidebar) sidebar.classList.remove('active');
+        }
+
+        // Toggle Sidebar
+        if (menuToggle) {
+            menuToggle.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (body.classList.contains('sidebar-open')) {
+                    closeSidebar();
+                } else {
+                    openSidebar();
+                }
+            });
+        }
+
+        // Close sidebar on outside click
+        document.addEventListener('click', function(e) {
+            if (body.classList.contains('sidebar-open') && 
+                !sidebar?.contains(e.target) && 
+                !menuToggle?.contains(e.target)) {
+                closeSidebar();
+            }
+        });
+
+        // Close sidebar on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && body.classList.contains('sidebar-open')) {
+                closeSidebar();
+            }
+        });
+
+        // Tambah / Update dengan Konfirmasi (Tampilkan Tingkatan + Nama Kelas)
+        document.getElementById('submitBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            const tingkatanSelect = document.getElementById('tingkatanSelect');
+            const namaInput = document.getElementById('namaKelasInput');
+            const tingkatanText = tingkatanSelect.options[tingkatanSelect.selectedIndex]?.text || '';
+            const nama = namaInput.value.trim();
+
+            if (!tingkatanText) {
+                Swal.fire('Gagal', 'Pilih tingkatan kelas!', 'error');
+                return;
+            }
+            if (!nama || nama.length < 3) {
+                Swal.fire('Gagal', 'Nama kelas minimal 3 karakter!', 'error');
+                return;
             }
 
-            // === MAPS FROM PHP ===
-            const jurusanMap = <?php echo json_encode($jurusan_map); ?>;
-            const tingkatanMap = <?php echo json_encode($tingkatan_map); ?>;
-
-            // === Edit Kelas (Dengan SweetAlert Rapih) ===
-            window.editKelas = function(id, nama, jurusanId, tingkatanId) {
-                Swal.fire({
-                    title: '<i class="fas fa-edit" style="color:#1e3a8a;"></i> Edit Kelas',
-                    html: `
-                        <div style="text-align:center; margin-bottom:15px; padding: 0 20px;">
-                            <div style="margin-bottom:15px; max-width: 400px; margin-left: auto; margin-right: auto;">
-                                <label style="font-weight:500; color:#555; font-size:0.95rem; display:block; margin-bottom:5px; text-align: left;">Tingkatan Kelas</label>
-                                <select id="swal-tingkatan" class="swal2-select" style="width:100% !important; max-width:none !important; margin:10px 0 !important;">
-                                    ${Object.entries(tingkatanMap).map(([key, value]) => `<option value="${key}" ${key == tingkatanId ? 'selected' : ''}>${value}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div style="margin-bottom:15px; max-width: 400px; margin-left: auto; margin-right: auto;">
-                                <label style="font-weight:500; color:#555; font-size:0.95rem; display:block; margin-bottom:5px; text-align: left;">Jurusan</label>
-                                <select id="swal-jurusan" class="swal2-select" style="width:100% !important; max-width:none !important; margin:10px 0 !important;">
-                                    ${Object.entries(jurusanMap).map(([key, value]) => `<option value="${key}" ${key == jurusanId ? 'selected' : ''}>${value}</option>`).join('')}
-                                </select>
-                            </div>
-                            <div style="margin-bottom:15px; max-width: 400px; margin-left: auto; margin-right: auto;">
-                                <label style="font-weight:500; color:#555; font-size:0.95rem; display:block; margin-bottom:5px; text-align: left;">Nama Kelas</label>
-                                <input id="swal-nama" class="swal2-input" value="${nama}" placeholder="Contoh: RPL-1" maxlength="50" style="width:100% !important; max-width:none !important; margin:10px 0 !important;">
-                            </div>
-                        </div>
-                    `,
-                    focusConfirm: false,
-                    showCancelButton: true,
-                    confirmButtonText: '<i class="fas fa-save"></i> Simpan',
-                    cancelButtonText: '<i class="fas fa-times"></i> Batal',
-                    confirmButtonColor: '#1e3a8a',
-                    cancelButtonColor: '#e74c3c',
-                    width: '500px',
-                    customClass: {
-                        popup: 'animated fadeIn faster'
-                    },
-                    didOpen: () => {
-                        const input = document.getElementById('swal-nama');
-                        input.focus();
-                        input.setSelectionRange(nama.length, nama.length);
-                    },
-                    preConfirm: () => {
-                        const namaInput = document.getElementById('swal-nama');
-                        const jurusanSelect = document.getElementById('swal-jurusan');
-                        const tingkatanSelect = document.getElementById('swal-tingkatan');
-                        
-                        const valueNama = namaInput.value.trim();
-                        const valueJurusan = jurusanSelect.value;
-                        const valueTingkatan = tingkatanSelect.value;
-
-                        if (!valueNama) {
-                            Swal.showValidationMessage('Nama kelas tidak boleh kosong!');
-                            return false;
-                        }
-                        if (valueNama.length < 3) {
-                            Swal.showValidationMessage('Nama kelas minimal 3 karakter!');
-                            return false;
-                        }
-                        if (!valueJurusan) {
-                            Swal.showValidationMessage('Pilih jurusan!');
-                            return false;
-                        }
-                        if (!valueTingkatan) {
-                            Swal.showValidationMessage('Pilih tingkatan!');
-                            return false;
-                        }
-                        
-                        return { nama: valueNama, jurusan: valueJurusan, tingkatan: valueTingkatan };
-                    }
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        const { nama, jurusan, tingkatan } = result.value;
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '';
-                        form.innerHTML = `
-                            <input type="hidden" name="token" value="<?php echo $token; ?>">
-                            <input type="hidden" name="edit_id" value="${id}">
-                            <input type="hidden" name="edit_nama" value="${nama}">
-                            <input type="hidden" name="edit_jurusan" value="${jurusan}">
-                            <input type="hidden" name="edit_tingkatan" value="${tingkatan}">
-                            <input type="hidden" name="edit_confirm" value="1">
-                        `;
-                        document.body.appendChild(form);
-                        form.submit();
-                    }
-                });
-            };
-
-            // === Hapus Kelas ===
-            window.deleteKelas = function(id, nama) {
-                Swal.fire({
-                    title: 'Hapus Kelas?',
-                    html: `Apakah Anda yakin ingin menghapus kelas <strong>"${nama}"</strong>?`,
-                    icon: 'warning',
-                    showCancelButton: true,
-                    confirmButtonText: 'Ya, Hapus',
-                    cancelButtonText: 'Batal',
-                    confirmButtonColor: '#e74c3c',
-                    cancelButtonColor: '#1e3a8a',
-                    reverseButtons: true
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = '';
-                        form.innerHTML = `
-                            <input type="hidden" name="token" value="<?php echo $token; ?>">
-                            <input type="hidden" name="delete_id" value="${id}">
-                        `;
-                        document.body.appendChild(form);
-                        form.submit();
-                    }
-                });
-            };
-
-            // === Form Tambah Kelas ===
-            const kelasForm = document.getElementById('kelas-form');
-            if (kelasForm) {
-                kelasForm.addEventListener('submit', function(e) {
-                    const nama = document.getElementById('nama_kelas').value.trim();
-                    const jurusan = document.getElementById('jurusan_id').value;
-                    const tingkatan = document.getElementById('tingkatan_id').value;
-
-                    if (!nama || nama.length < 3) {
-                        e.preventDefault();
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Gagal',
-                            text: 'Nama kelas harus diisi dan minimal 3 karakter!',
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                    } else if (!jurusan || !tingkatan) {
-                        e.preventDefault();
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Gagal',
-                            text: 'Silakan pilih jurusan dan tingkatan kelas!',
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                    }
-                });
-            }
-
-            // === SweetAlert2 Auto Show dari URL ===
-            <?php if (isset($_GET['confirm']) && isset($_GET['nama']) && isset($_GET['jurusan_id']) && isset($_GET['tingkatan_id']) && !$show_error_modal): ?>
-            const namaKelasConfirm = '<?php echo htmlspecialchars(urldecode($_GET['nama'])); ?>';
-            const jurusanIdConfirm = <?php echo intval($_GET['jurusan_id']); ?>;
-            const tingkatanIdConfirm = <?php echo intval($_GET['tingkatan_id']); ?>;
-            const tingkatanNameConfirm = tingkatanMap[tingkatanIdConfirm] || '';
-            
             Swal.fire({
-                title: 'KONFIRMASI KELAS BARU',
-                html: `<div style="font-size: 1.8rem; text-align: center; margin-top: 10px; font-weight: bold;">${tingkatanNameConfirm} ${namaKelasConfirm}</div>`,
+                title: <?= $edit_id ? "'Update Kelas?'" : "'Tambah Kelas Baru?'" ?>,
+                html: `<strong style="font-size:1.4rem;">${tingkatanText} ${nama}</strong><br><small>Akan <?= $edit_id ? 'diperbarui' : 'ditambahkan' ?></small>`,
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Konfirmasi',
+                confirmButtonText: 'Ya, <?= $edit_id ? 'Update' : 'Tambah' ?>',
                 cancelButtonText: 'Batal',
-                confirmButtonColor: '#1e3a8a',
-                cancelButtonColor: '#e74c3c'
+                confirmButtonColor: '#1e3a8a'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    document.getElementById('kelasForm').submit();
+                }
+            });
+        });
+
+        // Hapus Kelas
+        function hapusKelas(id, nama) {
+            Swal.fire({
+                title: 'Hapus Kelas?',
+                text: `"${nama}" akan dihapus permanen`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Ya, Hapus',
+                cancelButtonText: 'Batal'
             }).then((result) => {
                 if (result.isConfirmed) {
                     const form = document.createElement('form');
                     form.method = 'POST';
-                    form.action = '';
                     form.innerHTML = `
-                        <input type="hidden" name="token" value="<?php echo $token; ?>">
-                        <input type="hidden" name="nama_kelas" value="${namaKelasConfirm}">
-                        <input type="hidden" name="jurusan_id" value="${jurusanIdConfirm}">
-                        <input type="hidden" name="tingkatan_id" value="${tingkatanIdConfirm}">
-                        <input type="hidden" name="confirm" value="1">
+                        <input type="hidden" name="token" value="<?= $token ?>">
+                        <input type="hidden" name="hapus_id" value="${id}">
                     `;
                     document.body.appendChild(form);
                     form.submit();
-                } else {
-                    window.location.href = 'kelola_kelas.php';
                 }
             });
-            <?php endif; ?>
+        }
 
-            <?php if (isset($_GET['success'])): ?>
-            Swal.fire({
-                icon: 'success',
-                title: 'Berhasil!',
-                text: 'Kelas berhasil ditambahkan!',
-                confirmButtonColor: '#1e3a8a'
-            });
-            <?php endif; ?>
-
-            <?php if (isset($_GET['edit_success'])): ?>
-            Swal.fire({
-                icon: 'success',
-                title: 'Berhasil!',
-                text: 'Kelas berhasil diupdate!',
-                confirmButtonColor: '#1e3a8a'
-            });
-            <?php endif; ?>
-
-            <?php if (isset($_GET['delete_success'])): ?>
-            Swal.fire({
-                icon: 'success',
-                title: 'Berhasil!',
-                text: 'Kelas berhasil dihapus!',
-                confirmButtonColor: '#1e3a8a'
-            });
-            <?php endif; ?>
-
-            <?php if ($show_error_modal): ?>
-            Swal.fire({
-                icon: 'error',
-                title: 'Gagal',
-                text: '<?php echo addslashes($error_message); ?>',
-                confirmButtonColor: '#1e3a8a'
-            });
-            <?php endif; ?>
-
-            // Input hanya huruf, angka, spasi, dan tanda minus
-            document.querySelectorAll('#nama_kelas').forEach(input => {
-                input.addEventListener('input', function() {
-                    this.value = this.value.replace(/[^A-Za-z0-9\s-]/g, '');
-                    if (this.value.length > 50) this.value = this.value.substring(0, 50);
-                });
-            });
-        });
+        // Flash Messages
+        <?php if ($msg = getFlash('success')): ?>
+            Swal.fire('Berhasil', '<?= addslashes($msg) ?>', 'success');
+        <?php endif; ?>
+        <?php if ($msg = getFlash('error')): ?>
+            Swal.fire('Gagal', '<?= addslashes($msg) ?>', 'error');
+        <?php endif; ?>
+        <?php if ($msg = getFlash('info')): ?>
+            Swal.fire('Info', '<?= addslashes($msg) ?>', 'info');
+        <?php endif; ?>
     </script>
 </body>
 </html>

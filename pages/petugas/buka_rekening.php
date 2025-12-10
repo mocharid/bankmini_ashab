@@ -1,7 +1,54 @@
 <?php
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
-require_once '../../includes/session_validator.php';
+// ================= PATH ADAPTIF =================
+$current_file = __FILE__;
+$current_dir  = dirname($current_file);
+$project_root = null;
+
+// Strategy 1: Check if we're in 'pages/petugas' folder
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+}
+// Strategy 2: Check if includes/ exists in current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 3: Check if includes/ exists in parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 4: Search upward for includes/ folder (max 5 levels)
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+// Fallback: Use current directory
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ================= INCLUDE ASLI =================
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+require_once INCLUDES_PATH . '/session_validator.php';
 
 // Start session if not active
 if (session_status() === PHP_SESSION_NONE) {
@@ -10,7 +57,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 // Restrict access to petugas only
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role']) || $_SESSION['role'] !== 'petugas') {
-    header('Location: ../../pages/login.php?error=' . urlencode('Silakan login sebagai petugas terlebih dahulu!'));
+    header('Location: ' . PROJECT_ROOT . '/pages/login.php?error=' . urlencode('Silakan login sebagai petugas terlebih dahulu!'));
     exit();
 }
 
@@ -48,7 +95,7 @@ if (isset($_GET['error'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Buka Rekening | MY Schobank</title>
-    <link rel="icon" type="image/png" href="/schobank/assets/images/tab.png">
+    <link rel="icon" type="image/png" href="<?= ASSETS_PATH ?>/images/tab.png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -444,7 +491,7 @@ if (isset($_GET['error'])) {
     </style>
 </head>
 <body>
-    <?php include '../../includes/sidebar_petugas.php'; ?>
+    <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
     <div class="main-content" id="mainContent">
         <div class="welcome-banner">
             <span class="menu-toggle" id="menuToggle">
@@ -610,7 +657,7 @@ if (isset($_GET['error'])) {
                                placeholder="Konfirmasi PIN 6 digit"
                                aria-invalid="<?php echo isset($errors['confirm_pin']) ? 'true' : 'false'; ?>">
                         <span id="pin-match-indicator" class="pin-match-indicator"></span>
-                        <span class="error-message <?php echo isset($errors['confirm_pin']) ? 'show' : ''; ?>'" id="confirm-pin-error">
+                        <span class="error-message <?php echo isset($errors['confirm_pin']) ? 'show' : ''; ?>" id="confirm-pin-error">
                             <?php echo htmlspecialchars($errors['confirm_pin'] ?? ''); ?>
                         </span>
                     </div>
@@ -811,21 +858,12 @@ if (isset($_GET['error'])) {
             const namaInput = document.getElementById('nama');
             if (namaInput) {
                 namaInput.addEventListener('input', function(e) {
-                    // Get cursor position before transformation
                     const cursorPosition = this.selectionStart;
-                    
-                    // Allow letters and spaces only
                     let cleanedValue = this.value.replace(/[^a-zA-Z\s]/g, '');
-                    
-                    // Limit to 100 characters
                     if (cleanedValue.length > 100) {
                         cleanedValue = cleanedValue.substring(0, 100);
                     }
-                    
-                    // Convert to Title Case in real-time
                     this.value = toTitleCase(cleanedValue);
-                    
-                    // Restore cursor position (adjust for any character changes)
                     this.setSelectionRange(cursorPosition, cursorPosition);
                 });
             }
@@ -1043,7 +1081,6 @@ if (isset($_GET['error'])) {
                     </div>
                 `;
                 
-                // Build info section and account number section
                 let infoSection = '';
                 let accountNumberSection = '';
                 
@@ -1055,7 +1092,6 @@ if (isset($_GET['error'])) {
                         </div>
                     `;
                     
-                    // NEW: Improved layout for digital account info
                     infoSection = `
                         <div style="text-align: center; margin: 25px 0; padding: 20px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 8px; border: 2px solid #93c5fd;">
                             <div style="margin-bottom: 12px;">
@@ -1073,7 +1109,6 @@ if (isset($_GET['error'])) {
                         </div>
                     `;
                 } else {
-                    // Fisik: show account number and PIN note
                     accountNumberSection = `
                         <div style="text-align: center; margin: 20px 0; padding: 15px; background: linear-gradient(135deg, #f0f5ff 0%, #e0e7ff 100%); border-radius: 8px; border: 2px solid #c7d2fe;">
                             <p style="margin: 0 0 8px 0; font-size: 0.85rem; color: #666; font-weight: 500;">Nomor Rekening</p>

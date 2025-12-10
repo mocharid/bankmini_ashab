@@ -1,13 +1,81 @@
 <?php
-// proses_laporan_transaksi_harian.php (Logic)
+/**
+ * Proses Laporan Transaksi Harian - Adaptive Path Version
+ * File: pages/petugas/proses_laporan_transaksi_harian.php
+ *
+ * Compatible with:
+ * - Local: schobank/pages/petugas/proses_laporan_transaksi_harian.php
+ * - Hosting: public_html/pages/petugas/proses_laporan_transaksi_harian.php
+ */
+// ============================================
+// ERROR HANDLING & TIMEZONE
+// ============================================
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
-
-require_once '../../includes/auth.php';
-require_once '../../includes/db_connection.php';
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+// Strategy 1: jika di folder 'pages' atau 'petugas'
+if (basename($current_dir) === 'petugas') {
+    $project_root = dirname(dirname($current_dir));
+} elseif (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+}
+// Strategy 2: cek includes/ di parent
+elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+}
+// Strategy 3: cek includes/ di current dir
+elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+}
+// Strategy 4: naik max 5 level cari includes/
+else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+// Fallback: pakai current dir
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+// ============================================
+// SESSION
+// ============================================
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+// ============================================
+// LOAD REQUIRED FILES
+// ============================================
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('File db_connection.php tidak ditemukan.');
+}
+require_once INCLUDES_PATH . '/auth.php';
+require_once INCLUDES_PATH . '/db_connection.php';
 
 // Validate session
 if (!isset($_SESSION['user_id'])) {
-    header('Location: ../../login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -83,7 +151,8 @@ function getTransactions($conn, $today, $limit, $offset) {
             FROM transaksi t 
             JOIN rekening r ON t.rekening_id = r.id 
             JOIN users u ON r.user_id = u.id 
-            LEFT JOIN kelas k ON u.kelas_id = k.id 
+            JOIN siswa_profiles sp ON u.id = sp.user_id
+            LEFT JOIN kelas k ON sp.kelas_id = k.id 
             LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
             WHERE DATE(t.created_at) = ? 
             AND t.jenis_transaksi != 'transfer' 
