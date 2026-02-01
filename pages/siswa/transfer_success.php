@@ -60,7 +60,7 @@ if (!$no_transaksi || !$transfer_rekening || !$transfer_name) {
         $_SESSION['transfer_name'] = $transfer_name;
     } else {
         // Redirect if no valid transaction is found
-        header("Location: transfer_pribadi.php");
+        header("Location: transfer.php");
         exit();
     }
 }
@@ -68,18 +68,30 @@ if (!$no_transaksi || !$transfer_rekening || !$transfer_name) {
 // Ensure no_rekening is set
 $no_rekening = isset($user_data['no_rekening']) && !empty($user_data['no_rekening']) ? $user_data['no_rekening'] : 'Unknown';
 
-function formatRupiah($amount) {
+function formatRupiah($amount)
+{
     return 'Rp ' . number_format($amount, 0, '.', '.');
 }
 
-function formatIndonesianDate($date) {
+function formatIndonesianDate($date)
+{
     $months = [
-        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
-        7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        1 => 'Januari',
+        2 => 'Februari',
+        3 => 'Maret',
+        4 => 'April',
+        5 => 'Mei',
+        6 => 'Juni',
+        7 => 'Juli',
+        8 => 'Agustus',
+        9 => 'September',
+        10 => 'Oktober',
+        11 => 'November',
+        12 => 'Desember'
     ];
     $dateObj = new DateTime($date);
     $day = $dateObj->format('d');
-    $month = $months[(int)$dateObj->format('m')];
+    $month = $months[(int) $dateObj->format('m')];
     $year = $dateObj->format('Y');
     $time = $dateObj->format('H:i:s');
     return "$day $month $year $time";
@@ -88,13 +100,17 @@ function formatIndonesianDate($date) {
 
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
-    <title>Transfer Berhasil - SchoBank</title>
+    <title>Transfer Berhasil - KASDIG</title>
     <meta charset="UTF-8">
     <link rel="icon" type="image/png" href="/bankmini/assets/images/lbank.png">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+        integrity="sha512-iecdLmaskl7CVkqkXNQ/ZH/XLlvWZOJyj7Yy7tcenmpD1ypASozpmT/E0iPtmFIB46ZmdtAc9eNBvH0H/ZpiBw=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
@@ -148,8 +164,15 @@ function formatIndonesianDate($date) {
         }
 
         @keyframes slideIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .success-icon {
@@ -160,8 +183,15 @@ function formatIndonesianDate($date) {
         }
 
         @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.08); }
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.08);
+            }
         }
 
         .success-title {
@@ -179,7 +209,8 @@ function formatIndonesianDate($date) {
 
         .receipt-card {
             background: #ffffff !important;
-            width: 300px; /* 80mm at ~96 DPI */
+            width: 300px;
+            /* 80mm at ~96 DPI */
             margin: 15px auto;
             padding: 0;
             box-shadow: var(--shadow-md);
@@ -197,13 +228,11 @@ function formatIndonesianDate($date) {
             left: 0;
             right: 0;
             height: 5px;
-            background: repeating-linear-gradient(
-                to right,
-                #ddd 0px,
-                #ddd 6px,
-                transparent 6px,
-                transparent 12px
-            );
+            background: repeating-linear-gradient(to right,
+                    #ddd 0px,
+                    #ddd 6px,
+                    transparent 6px,
+                    transparent 12px);
         }
 
         .receipt-card::before {
@@ -228,7 +257,8 @@ function formatIndonesianDate($date) {
         .receipt-header {
             text-align: center;
             border-bottom: 1px dashed #888;
-            padding: 15px 0 10px; /* Increased top padding for spacing */
+            padding: 15px 0 10px;
+            /* Increased top padding for spacing */
             margin-bottom: 10px;
         }
 
@@ -418,8 +448,13 @@ function formatIndonesianDate($date) {
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         @media (max-width: 768px) {
@@ -501,6 +536,7 @@ function formatIndonesianDate($date) {
         }
     </style>
 </head>
+
 <body>
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loading-spinner">
@@ -513,17 +549,19 @@ function formatIndonesianDate($date) {
         <div class="success-container">
             <i class="fas fa-check-circle success-icon"></i>
             <h2 class="success-title">Transfer Berhasil!</h2>
-            <p class="success-message">Yey, kamu berhasil transfer <?= formatRupiah($transfer_amount) ?> ke <?= htmlspecialchars($transfer_name) ?>!</p>
-            
+            <p class="success-message">Yey, kamu berhasil transfer <?= formatRupiah($transfer_amount) ?> ke
+                <?= htmlspecialchars($transfer_name) ?>!
+            </p>
+
             <div class="receipt-card" id="receipt">
                 <div class="receipt-content">
                     <div class="receipt-header">
-                        <div class="bank-name">SCHOBANK</div>
+                        <div class="bank-name">KASDIG</div>
                         <div class="address">
                             <div>Jl. K.H. Saleh No.57A</div>
                             <div>Sayang, Kec. Cianjur, Kabupaten Cianjur</div>
                         </div>
-                        <div class="email">schobanksystem@gmail.com</div>
+                        <div class="email">info@kasdig.web.id</div>
                     </div>
 
                     <div class="receipt-section">
@@ -538,7 +576,7 @@ function formatIndonesianDate($date) {
                         </div>
                         <div class="receipt-row">
                             <div class="receipt-label">Jenis Transaksi</div>
-                            <div class="receipt-value">Transfer Antar Schobank</div>
+                            <div class="receipt-value">Transfer Antar KASDIG</div>
                         </div>
                     </div>
 
@@ -588,16 +626,17 @@ function formatIndonesianDate($date) {
                     <div class="receipt-footer">
                         <div class="qr-code-container" id="qrcode"></div>
                         <div class="status">TRANSAKSI BERHASIL</div>
-                        <div class="disclaimer">Struk ini merupakan bukti transaksi yang sah yang dikeluarkan oleh SCHOBANK SYSTEM</div>
+                        <div class="disclaimer">Struk ini merupakan bukti transaksi yang sah yang dikeluarkan oleh
+                            KASDIG SYSTEM</div>
                     </div>
                 </div>
             </div>
-            
+
             <div class="button-container">
                 <button onclick="downloadReceipt()" class="btn-download">
                     <i class="fas fa-download"></i> Download Struk
                 </button>
-                <button onclick="window.location.href='transfer_pribadi.php'" class="btn-primary">
+                <button onclick="window.location.href='transfer.php'" class="btn-primary">
                     <i class="fas fa-home"></i> Kembali
                 </button>
             </div>
@@ -676,8 +715,8 @@ function formatIndonesianDate($date) {
                     scrollY: 0,
                     windowWidth: 300,
                     windowHeight: tempContainer.offsetHeight
-                }).then(function(canvas) {
-                    canvas.toBlob(function(blob) {
+                }).then(function (canvas) {
+                    canvas.toBlob(function (blob) {
                         const url = URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         link.href = url;
@@ -690,7 +729,7 @@ function formatIndonesianDate($date) {
                         loadingOverlay.style.display = 'none';
                         generateQRCode('qrcode');
                     }, 'image/jpeg', 0.95);
-                }).catch(function(error) {
+                }).catch(function (error) {
                     console.error('Error capturing receipt:', error);
                     alert('Gagal mengunduh struk. Silakan coba lagi.');
                     document.body.removeChild(tempContainer);
@@ -701,7 +740,7 @@ function formatIndonesianDate($date) {
         }
 
         // Initialize page
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             setTimeout(() => generateQRCode('qrcode'), 100);
         });
 
@@ -733,6 +772,7 @@ function formatIndonesianDate($date) {
         }
     </script>
 </body>
+
 </html>
 
 <?php

@@ -82,21 +82,31 @@ if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin
     exit();
 }
 // Function to convert month number to Indonesian month name
-function getIndonesianMonth($monthNum) {
+function getIndonesianMonth($monthNum)
+{
     $months = [
-        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei',
-        6 => 'Juni', 7 => 'Juli', 8 => 'Agustus', 9 => 'September',
-        10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+        1 => 'Januari',
+        2 => 'Februari',
+        3 => 'Maret',
+        4 => 'April',
+        5 => 'Mei',
+        6 => 'Juni',
+        7 => 'Juli',
+        8 => 'Agustus',
+        9 => 'September',
+        10 => 'Oktober',
+        11 => 'November',
+        12 => 'Desember'
     ];
     return $months[$monthNum] ?? $monthNum;
 }
 // Handle AJAX request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
-   
+
     if ($action === 'check_balance') {
         $no_rekening = isset($_POST['no_rekening']) ? trim($_POST['no_rekening']) : '';
-       
+
         // Validate input
         if (empty($no_rekening)) {
             echo json_encode([
@@ -105,7 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             ]);
             exit();
         }
-       
+
         if (!preg_match('/^[0-9]{8}$/', $no_rekening)) {
             echo json_encode([
                 'success' => false,
@@ -113,10 +123,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             ]);
             exit();
         }
-       
+
         // Sanitize input
         $no_rekening = $conn->real_escape_string($no_rekening);
-       
+
         // Query to fetch account details (adjusted for new DB structure)
         $query = "SELECT u.nama, r.no_rekening, r.saldo, r.created_at,
                          CONCAT(tk.nama_tingkatan, ' ', k.nama_kelas) AS nama_kelas,
@@ -128,9 +138,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                   LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
                   LEFT JOIN jurusan j ON sp.jurusan_id = j.id
                   WHERE r.no_rekening = ?";
-       
+
         $stmt = $conn->prepare($query);
-       
+
         if (!$stmt) {
             error_log("Prepare failed: " . $conn->error);
             echo json_encode([
@@ -139,52 +149,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             ]);
             exit();
         }
-       
+
         $stmt->bind_param("s", $no_rekening);
         $stmt->execute();
         $result = $stmt->get_result();
-       
+
         if ($result && $result->num_rows > 0) {
             $data = $result->fetch_assoc();
-           
+
             // Format dates
             $created_at = new DateTime($data['created_at']);
             $formatted_date = $created_at->format('d') . ' ' . getIndonesianMonth($created_at->format('n')) . ' ' . $created_at->format('Y');
-           
+
             $current_time = new DateTime('now', new DateTimeZone('Asia/Jakarta'));
             $formatted_current_time = $current_time->format('d') . ' ' . getIndonesianMonth($current_time->format('n')) . ' ' . $current_time->format('Y H:i') . ' WIB';
-           
+
+            // Generate HTML
             // Generate HTML
             $html = '
-            <div class="results-card">
-                <h3 class="section-title"><i class="fas fa-user-circle"></i> Detail Rekening</h3>
-                <div class="detail-row">
-                    <div class="detail-label">Nama Nasabah</div>
-                    <div class="detail-value">' . htmlspecialchars($data['nama']) . '</div>
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-header-icon">
+                        <i class="fas fa-wallet"></i>
+                    </div>
+                    <div class="card-header-text">
+                        <h3>Detail Rekening</h3>
+                        <p>Informasi lengkap rekening nasabah</p>
+                    </div>
                 </div>
-                <div class="detail-row">
-                    <div class="detail-label">No. Rekening</div>
-                    <div class="detail-value">' . htmlspecialchars($data['no_rekening']) . '</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Kelas</div>
-                    <div class="detail-value">' . htmlspecialchars($data['nama_kelas'] ?? 'N/A') . '</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Jurusan</div>
-                    <div class="detail-value">' . htmlspecialchars($data['nama_jurusan'] ?? 'N/A') . '</div>
-                </div>
-                <div class="detail-row">
-                    <div class="detail-label">Tanggal Pembukaan</div>
-                    <div class="detail-value">' . $formatted_date . '</div>
-                </div>
-                <div class="balance-display">
-                    <div class="balance-label">Saldo Rekening Saat Ini</div>
-                    <div class="balance-amount">Rp ' . number_format($data['saldo'], 0, ',', '.') . '</div>
-                    <div class="balance-info"><i class="fas fa-info-circle"></i> Saldo diperbarui per ' . $formatted_current_time . '</div>
+                <div class="card-body">
+                    <div class="detail-row">
+                        <div class="detail-label">Nama Nasabah</div>
+                        <div class="detail-value">' . htmlspecialchars($data['nama']) . '</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">No. Rekening</div>
+                        <div class="detail-value" style="font-family:monospace; letter-spacing:1px;">' . htmlspecialchars($data['no_rekening']) . '</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Kelas</div>
+                        <div class="detail-value">' . htmlspecialchars($data['nama_kelas'] ?? 'N/A') . '</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Jurusan</div>
+                        <div class="detail-value">' . htmlspecialchars($data['nama_jurusan'] ?? 'N/A') . '</div>
+                    </div>
+                    <div class="detail-row">
+                        <div class="detail-label">Tanggal Pembukaan</div>
+                        <div class="detail-value">' . $formatted_date . '</div>
+                    </div>
+                    
+                    <div class="balance-display">
+                        <div class="balance-label">Saldo Saat Ini</div>
+                        <div class="balance-amount">Rp ' . number_format($data['saldo'], 0, ',', '.') . '</div>
+                        <div class="balance-info"><i class="fas fa-clock"></i> Diperbarui: ' . $formatted_current_time . '</div>
+                    </div>
                 </div>
             </div>';
-           
+
             echo json_encode([
                 'success' => true,
                 'html' => $html
@@ -196,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 'message' => 'Rekening tidak ditemukan. Silakan periksa kembali nomor rekening.'
             ]);
         }
-       
+
         $stmt->close();
     } else {
         echo json_encode([

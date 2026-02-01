@@ -91,7 +91,7 @@ $action = $_POST['action'] ?? '';
 
 if ($action === 'load_transaction') {
     $no_transaksi = trim($_POST['no_transaksi'] ?? '');
-    
+
     if (empty($no_transaksi) || strlen($no_transaksi) > 20) {
         echo json_encode(['success' => false, 'message' => 'No Transaksi tidak valid. Maksimum 20 karakter.']);
         exit;
@@ -183,24 +183,36 @@ if ($action === 'load_transaction') {
     $row = $result->fetch_assoc();
 
     // Fungsi helper
-    function formatTanggalLengkap($date) {
-        if (empty($date)) return '-';
-        
+    function formatTanggalLengkap($date)
+    {
+        if (empty($date))
+            return '-';
+
         $bulan = [
-            1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 
-            5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus', 
-            9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+            1 => 'Januari',
+            2 => 'Februari',
+            3 => 'Maret',
+            4 => 'April',
+            5 => 'Mei',
+            6 => 'Juni',
+            7 => 'Juli',
+            8 => 'Agustus',
+            9 => 'September',
+            10 => 'Oktober',
+            11 => 'November',
+            12 => 'Desember'
         ];
-        
+
         try {
             $datetime = new DateTime($date);
-            return $datetime->format('d') . ' ' . $bulan[(int)$datetime->format('m')] . ' ' . $datetime->format('Y H:i') . ' WIB';
+            return $datetime->format('d') . ' ' . $bulan[(int) $datetime->format('m')] . ' ' . $datetime->format('Y H:i') . ' WIB';
         } catch (Exception $e) {
             return '-';
         }
     }
 
-    function clean($data) {
+    function clean($data)
+    {
         return htmlspecialchars($data ?? '', ENT_QUOTES, 'UTF-8');
     }
 
@@ -208,7 +220,7 @@ if ($action === 'load_transaction') {
     $badgeClass = '';
     $transactionIcon = '';
     $transactionDisplay = '';
-    
+
     switch ($row['jenis_transaksi']) {
         case 'setor':
             $badgeClass = 'badge-setor';
@@ -235,15 +247,15 @@ if ($action === 'load_transaction') {
             $transactionIcon = '<i class="fas fa-receipt" style="color: #3b82f6;"></i>';
             $transactionDisplay = strtoupper($row['jenis_transaksi']);
     }
-    
+
     $statusBadgeClass = '';
     $status_display = '';
     $statusClass = '';
-    
+
     switch ($row['status']) {
         case 'approved':
             $statusBadgeClass = 'badge-approved';
-            $status_display = 'DISETUJUI';
+            $status_display = 'BERHASIL';
             $statusClass = 'status-approved';
             break;
         case 'pending':
@@ -261,10 +273,10 @@ if ($action === 'load_transaction') {
             $status_display = strtoupper($row['status']);
             $statusClass = 'status-pending';
     }
-    
+
     $show_petugas = !in_array($row['jenis_transaksi'], ['transfer', 'transaksi_qr']);
     $petugas_display = '';
-    
+
     if ($show_petugas) {
         if (!empty($row['petugas_nama'])) {
             $petugas_display = clean($row['petugas_nama']);
@@ -272,69 +284,70 @@ if ($action === 'load_transaction') {
             $petugas_display = '-';
         }
     }
-    
-    $kelas_asal_display = ($row['tingkatan_asal'] && $row['kelas_asal']) 
-        ? clean($row['tingkatan_asal'] . ' ' . $row['kelas_asal']) 
+
+    $kelas_asal_display = ($row['tingkatan_asal'] && $row['kelas_asal'])
+        ? clean($row['tingkatan_asal'] . ' ' . $row['kelas_asal'])
         : '-';
-    $kelas_tujuan_display = ($row['tingkatan_tujuan'] && $row['kelas_tujuan']) 
-        ? clean($row['tingkatan_tujuan'] . ' ' . $row['kelas_tujuan']) 
+    $kelas_tujuan_display = ($row['tingkatan_tujuan'] && $row['kelas_tujuan'])
+        ? clean($row['tingkatan_tujuan'] . ' ' . $row['kelas_tujuan'])
         : '-';
 
     // Format ID Transaksi untuk display
     $id_transaksi_display = !empty($row['id_transaksi']) ? clean($row['id_transaksi']) : 'TRX-' . str_pad($row['id'], 8, '0', STR_PAD_LEFT);
 
     // Bangun HTML hasil
-    $html = '<div class="results-card ' . $statusClass . '" id="transactionResult">
-                <div class="section-title">
-                    ' . $transactionIcon . ' Rincian Transaksi
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">ID Transaksi</div>
-                    <div class="detail-value" style="font-weight: 700; color: #1e3a8a;">' . $id_transaksi_display . '</div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">No Transaksi</div>
-                    <div class="detail-value">' . clean($row['no_transaksi']) . '</div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Tipe Transaksi</div>
-                    <div class="detail-value">
-                        <span class="badge ' . $badgeClass . '">' . $transactionDisplay . '</span>
+    $html = '<div class="card" id="transactionResult">
+                <div class="card-header">
+                    <div class="card-header-icon">' . $transactionIcon . '</div>
+                    <div class="card-header-text">
+                        <h3>Rincian Transaksi</h3>
+                        <p>Detail lengkap transaksi nasabah</p>
                     </div>
                 </div>
                 
-                <div class="detail-row">
-                    <div class="detail-label">Nominal</div>
-                    <div class="detail-value amount-positive">Rp ' . number_format($row['jumlah'], 0, ',', '.') . '</div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Waktu Transaksi</div>
-                    <div class="detail-value">' . formatTanggalLengkap($row['created_at']) . '</div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Keterangan</div>
-                    <div class="detail-value">' . clean($row['keterangan'] ?: '-') . '</div>
-                </div>';
-    
+                <div class="card-body">
+                    <div class="detail-row">
+                        <div class="detail-label">ID Transaksi</div>
+                        <div class="detail-value" style="font-weight: 700; color: #1e3a8a;">' . $id_transaksi_display . '</div>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">No Transaksi</div>
+                        <div class="detail-value">' . clean($row['no_transaksi']) . '</div>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">Tipe Transaksi</div>
+                        <div class="detail-value">' . $transactionDisplay . '</div>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">Nominal</div>
+                        <div class="detail-value amount-positive">Rp ' . number_format($row['jumlah'], 0, ',', '.') . '</div>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">Waktu Transaksi</div>
+                        <div class="detail-value">' . formatTanggalLengkap($row['created_at']) . '</div>
+                    </div>
+                    
+                    <div class="detail-row">
+                        <div class="detail-label">Keterangan</div>
+                        <div class="detail-value">' . clean($row['keterangan'] ?: '-') . '</div>
+                    </div>';
+
     if ($show_petugas) {
         $html .= '<div class="detail-row">
                     <div class="detail-label">Petugas</div>
                     <div class="detail-value">' . $petugas_display . '</div>
                   </div>';
     }
-    
+
     $html .= '<div class="detail-row">
                 <div class="detail-label">Status</div>
-                <div class="detail-value">
-                    <span class="badge ' . $statusBadgeClass . '">' . $status_display . '</span>
-                </div>
+                <div class="detail-value">' . $status_display . '</div>
               </div>';
-    
+
     // Tampilkan pending reason jika ada
     if ($row['status'] === 'pending' && !empty($row['pending_reason'])) {
         $html .= '<div class="detail-row">
@@ -342,61 +355,80 @@ if ($action === 'load_transaction') {
                     <div class="detail-value">' . clean($row['pending_reason']) . '</div>
                   </div>';
     }
-    
-    $html .= '<div class="detail-divider"></div>
-              
-              <div class="detail-subheading">
-                  <i class="fas fa-wallet"></i> Rekening Sumber
-              </div>
-              
-              <div class="detail-row">
-                  <div class="detail-label">No Rekening</div>
-                  <div class="detail-value">' . clean($row['rekening_asal']) . '</div>
-              </div>
-              
-              <div class="detail-row">
-                  <div class="detail-label">Nama Nasabah</div>
-                  <div class="detail-value">' . clean($row['nama_nasabah']) . '</div>
-              </div>
-              
-              <div class="detail-row">
-                  <div class="detail-label">Jurusan</div>
-                  <div class="detail-value">' . clean($row['jurusan_asal'] ?: '-') . '</div>
-              </div>
-              
-              <div class="detail-row">
-                  <div class="detail-label">Kelas</div>
-                  <div class="detail-value">' . $kelas_asal_display . '</div>
-              </div>';
-    
-    if (in_array($row['jenis_transaksi'], ['transfer', 'transaksi_qr']) && !empty($row['rekening_tujuan_id'])) {
-        $html .= '<div class="detail-divider"></div>
+
+    // $html .= '<div class="detail-divider"></div>';
+
+    // Cek apakah ada rekening tujuan (untuk transfer/QR)
+    $has_destination = in_array($row['jenis_transaksi'], ['transfer', 'transaksi_qr']) && !empty($row['rekening_tujuan_id']);
+
+    if ($has_destination) {
+        // Layout dua kolom untuk Rekening Sumber dan Tujuan
+        $html .= '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-200);">';
+        $html .= '<div>
+                      <div class="detail-subheading">
+                          <i class="fas fa-wallet"></i> Rekening Sumber
+                      </div>
+                      
+                      <div class="detail-row" style="grid-template-columns: 1fr; border:none; padding: 4px 0;">
+                          <div class="detail-value">' . clean($row['rekening_asal']) . '</div>
+                      </div>
+                      
+                      <div class="detail-row" style="grid-template-columns: 1fr; border:none; padding: 4px 0;">
+                          <div class="detail-value">' . clean($row['nama_nasabah']) . '</div>
+                      </div>
+                      
+                      <div class="detail-row" style="grid-template-columns: 1fr; border:none; padding: 4px 0;">
+                          <div class="detail-value" style="font-size: 0.85rem; color: #6b7280;">' . clean($row['jurusan_asal'] ?: '-') . ' - ' . $kelas_asal_display . '</div>
+                      </div>
+                  </div>
                   
-                  <div class="detail-subheading">
-                      <i class="fas fa-arrow-right"></i> Rekening Tujuan
+                  <div>
+                      <div class="detail-subheading">
+                          <i class="fas fa-arrow-right"></i> Rekening Tujuan
+                      </div>
+                      
+                      <div class="detail-row" style="grid-template-columns: 1fr; border:none; padding: 4px 0;">
+                          <div class="detail-value">' . clean($row['rekening_tujuan'] ?: '-') . '</div>
+                      </div>
+                      
+                      <div class="detail-row" style="grid-template-columns: 1fr; border:none; padding: 4px 0;">
+                          <div class="detail-value">' . clean($row['nama_penerima'] ?: '-') . '</div>
+                      </div>
+                      
+                      <div class="detail-row" style="grid-template-columns: 1fr; border:none; padding: 4px 0;">
+                          <div class="detail-value" style="font-size: 0.85rem; color: #6b7280;">' . clean($row['jurusan_tujuan'] ?: '-') . ' - ' . $kelas_tujuan_display . '</div>
+                      </div>
+                  </div>
+              </div>';
+    } else {
+        // Layout satu kolom untuk transaksi tanpa rekening tujuan
+        $html .= '<div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-200);">';
+        $html .= '<div class="detail-subheading">
+                      <i class="fas fa-wallet"></i> Rekening Nasabah
                   </div>
                   
                   <div class="detail-row">
                       <div class="detail-label">No Rekening</div>
-                      <div class="detail-value">' . clean($row['rekening_tujuan'] ?: '-') . '</div>
+                      <div class="detail-value">' . clean($row['rekening_asal']) . '</div>
                   </div>
                   
                   <div class="detail-row">
-                      <div class="detail-label">Nama Penerima</div>
-                      <div class="detail-value">' . clean($row['nama_penerima'] ?: '-') . '</div>
+                      <div class="detail-label">Nama Nasabah</div>
+                      <div class="detail-value">' . clean($row['nama_nasabah']) . '</div>
                   </div>
                   
                   <div class="detail-row">
                       <div class="detail-label">Jurusan</div>
-                      <div class="detail-value">' . clean($row['jurusan_tujuan'] ?: '-') . '</div>
+                      <div class="detail-value">' . clean($row['jurusan_asal'] ?: '-') . '</div>
                   </div>
                   
                   <div class="detail-row">
                       <div class="detail-label">Kelas</div>
-                      <div class="detail-value">' . $kelas_tujuan_display . '</div>
-                  </div>';
+                      <div class="detail-value">' . $kelas_asal_display . '</div>
+                  </div>
+              </div>';
     }
-    
+
     if ($row['status'] === 'approved') {
         $html .= '<div class="info-box">
                     <i class="fas fa-check-circle"></i>
@@ -413,7 +445,7 @@ if ($action === 'load_transaction') {
                     <span>Transaksi menunggu verifikasi dari petugas. ID Transaksi: ' . $id_transaksi_display . '</span>
                   </div>';
     }
-    
+
     // Tombol aksi hanya untuk admin dan transaksi yang belum approved
     if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin' && $row['status'] !== 'approved') {
         $html .= '<div class="action-buttons">
@@ -425,8 +457,8 @@ if ($action === 'load_transaction') {
                     </button>
                   </div>';
     }
-    
-    $html .= '</div>';
+
+    $html .= '</div></div>'; // Close card-body and card
 
     echo json_encode(['success' => true, 'html' => $html]);
     $stmt->close();

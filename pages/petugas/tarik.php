@@ -1,12 +1,9 @@
 <?php
 /**
- * Tarik Tunai - Adaptive Path Version
+ * Tarik Tunai - Petugas
  * File: pages/petugas/tarik.php
- *
- * Compatible with:
- * - Local: schobank/pages/petugas/tarik.php
- * - Hosting: public_html/pages/petugas/tarik.php
  */
+
 // ============================================
 // ERROR HANDLING & TIMEZONE
 // ============================================
@@ -14,12 +11,14 @@ error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
+
 // ============================================
 // ADAPTIVE PATH DETECTION
 // ============================================
 $current_file = __FILE__;
 $current_dir = dirname($current_file);
 $project_root = null;
+
 // Strategy 1: jika di folder 'pages' atau 'petugas'
 if (basename($current_dir) === 'petugas') {
     $project_root = dirname(dirname($current_dir));
@@ -45,10 +44,12 @@ else {
         }
     }
 }
+
 // Fallback: pakai current dir
 if (!$project_root) {
     $project_root = $current_dir;
 }
+
 // ============================================
 // DEFINE PATH CONSTANTS
 // ============================================
@@ -61,28 +62,30 @@ if (!defined('INCLUDES_PATH')) {
 if (!defined('ASSETS_PATH')) {
     define('ASSETS_PATH', PROJECT_ROOT . '/assets');
 }
-// ============================================
-// SESSION
-// ============================================
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+
 // ============================================
 // LOAD REQUIRED FILES
 // ============================================
-if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
-    die('File db_connection.php tidak ditemukan.');
+if (!file_exists(INCLUDES_PATH . '/auth.php')) {
+    die('Error: File auth.php tidak ditemukan di ' . INCLUDES_PATH);
 }
+if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
+    die('Error: File db_connection.php tidak ditemukan di ' . INCLUDES_PATH);
+}
+
 require_once INCLUDES_PATH . '/auth.php';
 require_once INCLUDES_PATH . '/db_connection.php';
-require_once INCLUDES_PATH . '/session_validator.php'; 
 
+// ============================================
+// AUTHORIZATION CHECK
+// ============================================
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'petugas') {
     header('Location: ../login.php');
     exit();
 }
 
 $username = $_SESSION['username'] ?? 'Petugas';
+
 // ============================================
 // DETECT BASE URL FOR ASSETS
 // ============================================
@@ -104,406 +107,365 @@ $base_url = $protocol . '://' . $host . $base_path;
 
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
-    <title>Tarik | MY Schobank</title>
+    <title>Tarik | KASDIG</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
-            --accent-color: #f59e0b;
-            --danger-color: #e74c3c;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f0f5ff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-            --button-width: 140px;
-            --button-height: 44px;
+            --gray-50: #f9fafb;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --primary-color: var(--gray-800);
+            --primary-dark: var(--gray-900);
+            --secondary-color: var(--gray-600);
+
+            --bg-light: #f8fafc;
+            --text-primary: var(--gray-800);
+            --text-secondary: var(--gray-500);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 0.5rem;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        /* Base Styles */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
-            -webkit-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-            touch-action: pan-y;
-        }
-
-        html, body {
-            width: 100%;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-            -webkit-text-size-adjust: 100%;
+            -webkit-font-smoothing: antialiased;
         }
 
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
             display: flex;
         }
 
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 30px;
-            max-width: calc(100% - 280px);
+        /* Sidebar State */
+        body.sidebar-open {
+            overflow: hidden;
         }
 
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 5px;
-            margin-bottom: 35px;
-            box-shadow: var(--shadow-md);
-            animation: fadeIn 1s ease-in-out;
-            position: relative;
+        /* Mobile Overlay for Sidebar */
+        body.sidebar-active::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            transition: opacity 0.3s ease;
+            opacity: 1;
+        }
+
+        body:not(.sidebar-active):not(.sidebar-open)::before {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Layout */
+        .main-content {
+            margin-left: 280px;
+            padding: 2rem;
+            flex: 1;
+            min-height: 100vh;
+            transition: margin-left 0.3s ease;
+            width: calc(100% - 280px);
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+        }
+
+        /* Page Title */
+        .page-title-section {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+            padding: 1.5rem 2rem;
+            margin: -2rem -2rem 1.5rem -2rem;
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 1rem;
+            border-bottom: 1px solid var(--gray-200);
         }
 
-        .welcome-banner .content {
-            flex: 1;
-        }
-
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: 1.6rem;
-            font-weight: 600;
-        }
-
-        .welcome-banner p {
-            font-size: 0.9rem;
-            font-weight: 400;
-            opacity: 0.8;
-        }
-
-        .menu-toggle {
+        .page-title-content h1 {
             font-size: 1.5rem;
-            cursor: pointer;
-            color: white;
-            flex-shrink: 0;
-            display: none;
-            align-self: center;
+            font-weight: 700;
+            color: var(--gray-800);
+            margin: 0;
         }
 
-        .combined-container {
+        .page-subtitle {
+            color: var(--gray-500);
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        .page-hamburger {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--gray-700);
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .page-hamburger:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--gray-800);
+        }
+
+        /* Cards */
+        .card {
             background: white;
-            border-radius: 5px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 35px;
-            animation: slideIn 0.5s ease-out;
-            display: flex;
-            flex-direction: column;
-            gap: 30px;
-            max-width: 1200px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border: 1px solid var(--gray-100);
+            max-width: 900px;
             margin-left: auto;
             margin-right: auto;
         }
 
+        .card-header {
+            background: var(--gray-100);
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .card-header-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--gray-600) 0%, var(--gray-500) 100%);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .card-header-text h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .card-header-text p {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Steps Section */
         .steps-section {
             display: flex;
             justify-content: center;
-            gap: 80px;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px dashed var(--gray-200);
             position: relative;
         }
 
         .step-item {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            flex: none;
-            position: relative;
-            z-index: 1;
-            padding: 10px;
+            gap: 0.75rem;
+            opacity: 0.5;
+            padding: 0.5rem 1rem;
+            border-radius: 99px;
             transition: var(--transition);
         }
 
+        .step-item.active {
+            opacity: 1;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+        }
+
+        .step-item.completed {
+            opacity: 1;
+            color: var(--primary-color);
+        }
+
         .step-number {
-            width: 48px;
-            height: 48px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            background-color: #e0e0e0;
-            color: var(--text-secondary);
+            background-color: var(--gray-200);
+            color: var(--gray-600);
             display: flex;
             justify-content: center;
             align-items: center;
             font-weight: 600;
-            margin-bottom: 10px;
-            font-size: clamp(1rem, 2vw, 1.1rem);
-            transition: var(--transition);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .step-text {
-            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
-            color: var(--text-secondary);
-            text-align: center;
-            line-height: 1.2;
+            font-size: 0.85rem;
             transition: var(--transition);
         }
 
         .step-item.active .step-number {
             background-color: var(--primary-color);
             color: white;
-            transform: scale(1.15);
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(30, 58, 138, 0.4); }
-            70% { box-shadow: 0 0 0 10px rgba(30, 58, 138, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(30, 58, 138, 0); }
-        }
-
-        .step-item.active .step-text {
-            color: var(--primary-color);
-            font-weight: 500;
         }
 
         .step-item.completed .step-number {
-            background-color: var(--secondary-color);
+            background-color: var(--primary-color);
             color: white;
         }
 
-        .deposit-card, .account-details {
-            border-radius: 5px;
-            padding: 25px;
-            width: 100%;
-            max-width: 600px;
-            margin: 0 auto;
-            transition: var(--transition);
+        .step-text {
+            font-size: 0.9rem;
+            font-weight: 500;
         }
 
-        .account-details {
-            display: none;
-        }
-
-        .account-details.visible {
-            display: block;
-            animation: slideIn 0.5s ease-out;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        .deposit-form {
-            display: flex;
-            flex-direction: column;
-            gap: 25px;
-            align-items: center;
-            justify-content: center;
-        }
-
+        /* Forms */
         .form-group {
-            width: 100%;
-            max-width: 400px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            position: relative;
+            margin-bottom: 1.25rem;
         }
 
-        .form-group.error {
-            animation: shake 0.4s ease;
-        }
-
-        label {
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
             font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            text-align: center;
-            display: block;
-            width: 100%;
         }
 
-        /* INPUT FIELD - BOTTOM BORDER ONLY */
-        .single-rek-input, .single-pin-input {
+        input[type="text"],
+        input[type="number"],
+        input[type="password"] {
             width: 100%;
-            padding: 12px 8px;
-            border: none;
-            border-bottom: 2px solid #ddd;
-            background: transparent;
-            font-size: clamp(1rem, 2vw, 1.1rem);
-            text-align: center;
-            font-family: 'Courier New', monospace;
-            letter-spacing: 2px;
-            font-weight: 700;
-            -webkit-appearance: none;
-            transition: var(--transition);
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            background: #fff;
+            height: 48px;
+            color: var(--gray-800);
         }
 
-        .single-rek-input:focus, .single-pin-input:focus {
+        input:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.1);
             outline: none;
-            border-bottom-color: var(--primary-color);
         }
 
-        .single-rek-input[aria-invalid="true"], .single-pin-input[aria-invalid="true"] {
-            border-bottom-color: var(--danger-color);
+        input.error-input {
+            border-color: #ef4444;
+            animation: shake 0.5s;
         }
 
-        .currency-input {
-            position: relative;
-        }
-
-        /* INPUT JUMLAH - BOTTOM BORDER ONLY */
-        input.currency {
-            width: 100%;
-            padding: 12px 8px;
+        .btn {
+            background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-600) 100%);
+            color: white;
             border: none;
-            border-bottom: 2px solid #ddd;
-            background: transparent;
-            font-size: clamp(1rem, 2vw, 1.1rem);
-            line-height: 1.5;
-            min-height: 44px;
-            transition: var(--transition);
-            -webkit-user-select: text;
-            user-select: text;
-            text-align: center;
-            font-weight: 700;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            text-decoration: none;
+            font-size: 0.95rem;
+            width: auto;
+            min-width: 130px;
+            box-shadow: var(--shadow-sm);
         }
 
-        input.currency:focus {
-            outline: none;
-            border-bottom-color: var(--primary-color);
+        .btn:hover {
+            background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-700) 100%);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
 
-        input[aria-invalid="true"] {
-            border-bottom-color: var(--danger-color);
+        .btn-cancel {
+            background: var(--gray-100);
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
         }
 
-        /* QUICK AMOUNT BUTTONS */
+        .btn-cancel:hover {
+            background: var(--gray-200);
+            color: var(--gray-800);
+            transform: translateY(-1px);
+        }
+
         .quick-amounts {
             display: flex;
-            justify-content: center;
-            gap: 10px;
+            gap: 0.5rem;
             flex-wrap: wrap;
-            margin-top: 10px;
+            margin-top: 0.75rem;
         }
 
         .quick-amount-btn {
-            background: #f0f5ff;
-            border: 1px solid var(--primary-color);
-            color: var(--primary-color);
-            padding: 8px 16px;
-            border-radius: 20px;
+            background: white;
+            border: 1px solid var(--gray-300);
+            color: var(--gray-600);
+            padding: 0.5rem 1rem;
+            border-radius: 99px;
+            font-size: 0.8rem;
             cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 500;
             transition: var(--transition);
         }
 
         .quick-amount-btn:hover {
-            background: var(--primary-color);
-            color: white;
-        }
-
-        .error-message {
-            color: var(--danger-color);
-            font-size: clamp(0.8rem, 1.5vw, 0.85rem);
-            margin-top: 4px;
-            display: none;
-            text-align: center;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: var(--transition);
-            width: var(--button-width);
-            height: var(--button-height);
-            margin: 0;
-        }
-
-        .btn:hover {
-            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
-        }
-
-        .btn:focus {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
-
-        .btn:active {
-            transform: scale(0.95);
-        }
-
-        .btn-confirm {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-        }
-
-        .btn-confirm:hover {
-            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-        }
-
-        .btn-cancel {
-            background: #f0f0f0;
-            color: var(--text-secondary);
-        }
-
-        .btn-cancel:hover {
-            background: #e0e0e0;
-            transform: translateY(-2px);
-        }
-
-        .btn.loading {
-            pointer-events: none;
-            opacity: 0.7;
-        }
-
-        .btn.loading .btn-content {
-            visibility: hidden;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            border-color: var(--gray-600);
+            color: var(--gray-800);
         }
 
         .detail-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            transition: var(--transition);
-        }
-
-        .detail-row:hover {
-            background: rgba(59, 130, 246, 0.05);
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 0.95rem;
         }
 
         .detail-row:last-child {
@@ -511,339 +473,393 @@ $base_url = $protocol . '://' . $host . $base_path;
         }
 
         .detail-label {
+            color: var(--gray-500);
             font-weight: 500;
-            color: var(--text-secondary);
         }
 
         .detail-value {
-            font-weight: 700;
-            color: var(--text-primary);
+            color: var(--gray-800);
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .account-details,
+        .deposit-card {
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .account-details[style*="display: none"] {
+            display: none !important;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(10px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            10%,
+            30%,
+            50%,
+            70%,
+            90% {
+                transform: translateX(-5px);
+            }
+
+            20%,
+            40%,
+            60%,
+            80% {
+                transform: translateX(5px);
+            }
+        }
+
+        .error-message {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 4px;
+            display: none;
+        }
+
+        /* Input with clear button */
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-wrapper input {
+            padding-right: 40px;
+        }
+
+        .clear-btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 24px;
+            height: 24px;
+            border: none;
+            background: var(--gray-300);
+            color: var(--gray-600);
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .clear-btn:hover {
+            background: var(--gray-400);
+            color: white;
+        }
+
+        .clear-btn.visible {
+            display: flex;
         }
 
         .confirm-buttons {
             display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
-            margin: 25px auto 0;
-            width: 100%;
-            max-width: 310px;
-            box-sizing: border-box;
+            justify-content: flex-start;
+            gap: 1rem;
+            margin-top: 2rem;
         }
 
-        .section-title {
-            margin-bottom: 15px;
-            color: var(--primary-dark);
-            font-size: clamp(1.2rem, 2.5vw, 1.4rem);
+        /* PIN Input Boxes */
+        .pin-input-container {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .pin-digit {
+            width: 42px;
+            height: 48px;
+            text-align: center;
+            font-size: 1.25rem;
             font-weight: 600;
+            border: 2px solid var(--gray-300);
+            border-radius: var(--radius);
+            background: white;
+            color: var(--gray-800);
+            transition: all 0.2s;
+        }
+
+        .pin-digit:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.15);
+            outline: none;
+        }
+
+        .pin-digit.filled {
+            border-color: var(--gray-500);
+            background: var(--gray-50);
+        }
+
+        .confirmation-icon {
+            width: 60px;
+            height: 60px;
+            background: #dbeafe;
+            color: #1e40af;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            margin: 0 auto 1rem auto;
+            font-size: 1.5rem;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
 
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            20%, 60% { transform: translateX(-5px); }
-            40%, 80% { transform: translateX(5px); }
-        }
 
-        @media (max-width: 768px) {
-            .main-content {
-                margin-left: 0;
-                padding: 15px;
-                max-width: 100%;
-            }
-
-            body.sidebar-active .main-content {
-                opacity: 0.3;
-                pointer-events: none;
-            }
-
-            .menu-toggle {
+        @media (max-width: 1024px) {
+            .page-hamburger {
                 display: block;
             }
 
-            .welcome-banner {
-                padding: 20px;
-                border-radius: 5px;
-                align-items: center;
-            }
-
-            .welcome-banner h2 {
-                font-size: 1.4rem;
-            }
-
-            .welcome-banner p {
-                font-size: 0.85rem;
-            }
-
-            .combined-container {
-                padding: 15px;
-                border-radius: 5px;
-                max-width: 100%;
-            }
-
-            .steps-section {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 15px;
-            }
-
-            .step-item {
-                flex-direction: row;
-                align-items: center;
-                width: 100%;
-                margin-bottom: 16px;
-                padding: 5px 0;
-            }
-
-            .step-number {
-                width: 36px;
-                height: 36px;
-                margin-right: 10px;
-                margin-bottom: 0;
-                font-size: clamp(0.9rem, 1.8vw, 1rem);
-                border-radius: 50%;
-            }
-
-            .step-text {
-                font-size: clamp(0.75rem, 1.5vw, 0.85rem);
-                text-align: left;
-                max-width: none;
-                margin-bottom: 0;
-            }
-
-            .deposit-card, .account-details {
-                padding: 15px;
-                border-radius: 5px;
-                max-width: 100%;
-            }
-
-            .form-group {
-                max-width: 100%;
-            }
-
-            .btn {
-                width: var(--button-width);
-                height: var(--button-height);
-                font-size: clamp(0.8rem, 1.7vw, 0.9rem);
-                border-radius: 5px;
-            }
-
-            .confirm-buttons {
-                gap: 8px;
-                max-width: 100%;
-            }
-
-            .quick-amounts {
-                gap: 8px;
-            }
-
-            .quick-amount-btn {
-                padding: 6px 12px;
-                font-size: 0.8rem;
+            .page-title-section {
+                padding: 1rem 1.5rem;
+                margin: -1rem -1rem 1.5rem -1rem;
             }
         }
 
-        @media (max-width: 480px) {
-            body {
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
+        @media (max-width: 640px) {
+            .steps-section {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+                padding-left: 1rem;
             }
 
-            .welcome-banner {
-                padding: 15px;
-                border-radius: 5px;
-            }
-
-            .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.5vw, 1.3rem);
-            }
-
-            .welcome-banner p {
-                font-size: clamp(0.75rem, 1.8vw, 0.8rem);
-            }
-
-            .section-title {
-                font-size: clamp(1rem, 2.5vw, 1.2rem);
-            }
-
-            .detail-row {
-                font-size: clamp(0.85rem, 2vw, 0.95rem);
-            }
-
-            .btn {
-                width: var(--button-width);
-                height: var(--button-height);
-                font-size: clamp(0.75rem, 1.6vw, 0.85rem);
-                border-radius: 5px;
+            .step-text {
+                display: inline-block;
             }
 
             .confirm-buttons {
-                gap: 6px;
-                max-width: 100%;
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .btn {
+                width: 100%;
             }
         }
     </style>
 </head>
+
 <body>
     <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
-    
+
     <div class="main-content" id="mainContent">
-        <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle">
+        <!-- Page Title -->
+        <div class="page-title-section">
+            <button class="page-hamburger" id="menuToggle">
                 <i class="fas fa-bars"></i>
-            </span>
-            <div class="content">
-                <h2>Tarik Saldo Siswa</h2>
-                <p>Layanan penarikan saldo untuk siswa secara cepat dan aman</p>
+            </button>
+            <div class="page-title-content">
+                <h1>Tarik Saldo</h1>
+                <p class="page-subtitle">Layanan penarikan saldo untuk siswa secara cepat dan aman</p>
             </div>
         </div>
 
-        <div class="combined-container">
-            <div class="steps-section">
-                <div class="step-item active" id="step1-indicator">
-                    <div class="step-number">1</div>
-                    <div class="step-text">Cek Rekening</div>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-header-icon">
+                    <i class="fas fa-money-bill-wave"></i>
                 </div>
-                <div class="step-item" id="step2-indicator">
-                    <div class="step-number">2</div>
-                    <div class="step-text">Input Nominal</div>
-                </div>
-                <div class="step-item" id="step3-indicator">
-                    <div class="step-number">3</div>
-                    <div class="step-text">Verifikasi PIN</div>
-                </div>
-                <div class="step-item" id="step4-indicator">
-                    <div class="step-number">4</div>
-                    <div class="step-text">Konfirmasi</div>
+                <div class="card-header-text">
+                    <h3>Form Penarikan</h3>
+                    <p>Ikuti langkah-langkah di bawah ini</p>
                 </div>
             </div>
 
-            <div class="transaction-container">
-                <!-- Step 1: Check Account -->
-                <div class="deposit-card" id="checkAccountStep">
-                    <h3 class="section-title">Masukkan Nomor Rekening</h3>
-                    <form id="cekRekening" class="deposit-form" novalidate>
-                        <div class="form-group">
-                            <label for="no_rekening">Nomor Rekening:</label>
-                            <input type="text" id="no_rekening" class="single-rek-input" maxlength="8" inputmode="numeric" pattern="[0-9]*" placeholder="00000000" required aria-describedby="rek-error">
-                            <span class="error-message" id="rek-error"></span>
-                        </div>
-                        <button type="submit" id="cekButton" class="btn btn-confirm">
-                            <span class="btn-content">Cek Rekening</span>
-                        </button>
-                    </form>
+            <div class="card-body">
+                <!-- Steps Indicator -->
+                <div class="steps-section">
+                    <div class="step-item active" id="step1-indicator">
+                        <div class="step-number">1</div>
+                        <div class="step-text">Cek Rekening</div>
+                    </div>
+                    <div class="step-item" id="step2-indicator">
+                        <div class="step-number">2</div>
+                        <div class="step-text">Input Nominal</div>
+                    </div>
+                    <div class="step-item" id="step3-indicator">
+                        <div class="step-number">3</div>
+                        <div class="step-text">Verifikasi PIN</div>
+                    </div>
+                    <div class="step-item" id="step4-indicator">
+                        <div class="step-number">4</div>
+                        <div class="step-text">Konfirmasi</div>
+                    </div>
                 </div>
 
-                <!-- Step 2: Input Amount -->
-                <div class="account-details" id="amountDetails">
-                    <h3 class="section-title">Detail Rekening</h3>
-                    <div class="detail-row">
-                        <div class="detail-label">Nomor Rekening:</div>
-                        <div class="detail-value" id="displayNoRek">12345678</div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Nama Pemilik:</div>
-                        <div class="detail-value" id="displayNama">Ahmad Fauzi</div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Jurusan:</div>
-                        <div class="detail-value" id="displayJurusan">Rekayasa Perangkat Lunak</div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Kelas:</div>
-                        <div class="detail-value" id="displayKelas">XII RPL 1</div>
-                    </div>
-                    <form id="formPenyetoran" class="deposit-form" novalidate>
-                        <div class="form-group currency-input">
-                            <label for="jumlah">Nominal:</label>
-                            <input type="text" id="jumlah" name="jumlah" class="currency" placeholder="0" inputmode="numeric" required aria-describedby="jumlah-error">
-                            <span class="error-message" id="jumlah-error"></span>
-                            <div class="quick-amounts">
-                                <button type="button" class="quick-amount-btn" data-amount="1000">Rp 1.000</button>
-                                <button type="button" class="quick-amount-btn" data-amount="5000">Rp 5.000</button>
-                                <button type="button" class="quick-amount-btn" data-amount="10000">Rp 10.000</button>
+                <!-- Hidden inputs to store state -->
+                <input type="hidden" id="hidden_user_id">
+                <input type="hidden" id="hidden_saldo">
+                <input type="hidden" id="hidden_no_rekening">
+
+                <div class="transaction-container">
+                    <!-- Step 1: Check Account -->
+                    <div class="deposit-card" id="checkAccountStep">
+                        <form id="cekRekening" novalidate>
+                            <div class="form-group">
+                                <label class="form-label" for="no_rekening">Nomor Rekening</label>
+                                <div class="input-wrapper">
+                                    <input type="text" id="no_rekening" class="form-control" maxlength="8"
+                                        inputmode="numeric" pattern="[0-9]*"
+                                        placeholder="Masukkan 8 digit nomor rekening" required>
+                                    <button type="button" class="clear-btn" id="clearNoRek" title="Hapus">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <span class="error-message" id="rek-error"></span>
                             </div>
-                        </div>
-                        <div class="confirm-buttons">
-                            <button type="button" id="confirmAmount" class="btn btn-confirm">
-                                <span class="btn-content">Lanjutkan</span>
+                            <button type="submit" id="cekButton" class="btn">
+                                Cek Rekening
                             </button>
-                            <button type="button" id="cancelAmount" class="btn btn-cancel">
-                                <span class="btn-content">Batal</span>
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                        </form>
+                    </div>
 
-                <!-- Step 3: PIN Verification -->
-                <div class="account-details" id="pinDetails">
-                    <h3 class="section-title">Verifikasi PIN</h3>
-                    <div class="detail-row">
-                        <div class="detail-label">Nomor Rekening:</div>
-                        <div class="detail-value" id="pinNoRek">12345678</div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Nama Pemilik:</div>
-                        <div class="detail-value" id="pinNama">Ahmad Fauzi</div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Jumlah Penarikan:</div>
-                        <div class="detail-value" id="pinJumlah">Rp 50.000</div>
-                    </div>
-                    <form id="formPin" class="deposit-form" novalidate>
-                        <div class="form-group">
-                            <label for="pin">Masukkan PIN:</label>
-                            <input type="password" id="pin" class="single-pin-input" maxlength="6" inputmode="numeric" pattern="[0-9]*" placeholder="••••••" required aria-describedby="pin-error">
-                            <span class="error-message" id="pin-error"></span>
+                    <!-- Step 2: Input Amount -->
+                    <div class="account-details" id="amountDetails" style="display: none;">
+                        <h4 style="margin-bottom: 1rem; color: var(--gray-800); font-weight:600;">Detail Rekening</h4>
+                        <div class="detail-row">
+                            <div class="detail-label">Nama Pemilik</div>
+                            <div class="detail-value" id="displayNama">-</div>
                         </div>
-                        <div class="confirm-buttons">
-                            <button type="button" id="verifyPin" class="btn btn-confirm">
-                                <span class="btn-content">Verifikasi</span>
-                            </button>
-                            <button type="button" id="backToAmount" class="btn btn-cancel">
-                                <span class="btn-content">Kembali</span>
-                            </button>
+                        <div class="detail-row">
+                            <div class="detail-label">Jurusan</div>
+                            <div class="detail-value" id="displayJurusan">-</div>
                         </div>
-                    </form>
-                </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Kelas</div>
+                            <div class="detail-value" id="displayKelas">-</div>
+                        </div>
 
-                <!-- Step 4: Confirmation -->
-                <div class="account-details" id="confirmationDetails">
-                    <h3 class="section-title">Konfirmasi Penarikan</h3>
-                    <div class="detail-row">
-                        <div class="detail-label">Nomor Rekening:</div>
-                        <div class="detail-value" id="confirmNoRek">12345678</div>
+                        <div style="margin-top: 2rem;"></div>
+
+                        <form id="formPenarikan" novalidate>
+                            <div class="form-group">
+                                <label class="form-label" for="jumlah">Nominal Penarikan (Rp)</label>
+                                <input type="text" id="jumlah" name="jumlah" class="form-control" placeholder="0"
+                                    inputmode="numeric" required>
+                                <div class="quick-amounts">
+                                    <button type="button" class="quick-amount-btn" data-amount="50000">Rp
+                                        50.000</button>
+                                    <button type="button" class="quick-amount-btn" data-amount="100000">Rp
+                                        100.000</button>
+                                    <button type="button" class="quick-amount-btn" data-amount="200000">Rp
+                                        200.000</button>
+                                    <button type="button" class="quick-amount-btn" data-amount="500000">Rp
+                                        500.000</button>
+                                </div>
+                                <span class="error-message" id="jumlah-error"></span>
+                            </div>
+                            <div class="confirm-buttons">
+                                <button type="button" id="cancelAmount" class="btn btn-cancel">
+                                    Batal
+                                </button>
+                                <button type="button" id="confirmAmount" class="btn">
+                                    Lanjutkan
+                                </button>
+                            </div>
+                        </form>
                     </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Nama Pemilik:</div>
-                        <div class="detail-value" id="confirmNama">Ahmad Fauzi</div>
+
+                    <!-- Step 3: Verify PIN -->
+                    <div class="account-details" id="pinStep" style="display: none;">
+                        <div style="text-align: center; margin-bottom: 2rem;">
+                            <h3 style="color: var(--gray-800); font-weight: 600;">Verifikasi Keamanan</h3>
+                            <p style="color: var(--gray-500); font-size: 0.9rem;">Masukkan PIN nasabah untuk melanjutkan
+                            </p>
+                        </div>
+
+                        <form id="formPin" novalidate>
+                            <div class="form-group">
+                                <label class="form-label" style="text-align: center; display: block;">Masukkan PIN 6
+                                    Digit</label>
+                                <div class="pin-input-container">
+                                    <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                        data-index="0">
+                                    <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                        data-index="1">
+                                    <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                        data-index="2">
+                                    <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                        data-index="3">
+                                    <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                        data-index="4">
+                                    <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                        data-index="5">
+                                </div>
+                                <input type="hidden" id="pin" name="pin">
+                                <span class="error-message" id="pin-error"></span>
+                            </div>
+                            <div class="confirm-buttons" style="justify-content: center;">
+                                <button type="button" id="cancelPin" class="btn btn-cancel">
+                                    Kembali
+                                </button>
+                                <button type="submit" id="submitPin" class="btn">
+                                    Verifikasi PIN
+                                </button>
+                            </div>
+                        </form>
                     </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Jurusan:</div>
-                        <div class="detail-value" id="confirmJurusan">Rekayasa Perangkat Lunak</div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Kelas:</div>
-                        <div class="detail-value" id="confirmKelas">XII RPL 1</div>
-                    </div>
-                    <div class="detail-row">
-                        <div class="detail-label">Jumlah Penarikan:</div>
-                        <div class="detail-value" id="confirmJumlah">Rp 50.000</div>
-                    </div>
-                    <div class="confirm-buttons">
-                        <button type="button" id="processDeposit" class="btn btn-confirm">
-                            <span class="btn-content">Proses</span>
-                        </button>
-                        <button type="button" id="backToPin" class="btn btn-cancel">
-                            <span class="btn-content">Kembali</span>
-                        </button>
+
+                    <!-- Step 4: Confirmation -->
+                    <div class="account-details" id="confirmationDetails" style="display: none;">
+                        <div style="text-align: center; margin-bottom: 2rem;">
+                            <div class="confirmation-icon">
+                                <i class="fas fa-check"></i>
+                            </div>
+                            <h3 style="color: var(--gray-800); font-weight: 600;">Konfirmasi Penarikan</h3>
+                            <p style="color: var(--gray-500); font-size: 0.9rem;">Pastikan data di bawah ini benar
+                                sebelum memproses</p>
+                        </div>
+
+                        <div class="detail-row">
+                            <div class="detail-label">Nomor Rekening</div>
+                            <div class="detail-value" id="confirmNoRek">-</div>
+                        </div>
+                        <div class="detail-row">
+                            <div class="detail-label">Nama Pemilik</div>
+                            <div class="detail-value" id="confirmNama">-</div>
+                        </div>
+                        <div class="detail-row"
+                            style="background: var(--gray-50); margin-top: 1rem; padding: 1rem; border-radius: var(--radius); border: 1px solid var(--gray-200);">
+                            <div class="detail-label" style="font-weight: 600; color: var(--gray-800);">Total Penarikan
+                            </div>
+                            <div class="detail-value" id="confirmJumlah"
+                                style="font-size: 1.1rem; color: var(--primary-color);">-</div>
+                        </div>
+
+                        <div class="confirm-buttons">
+                            <button type="button" id="backToPin" class="btn btn-cancel">
+                                Kembali
+                            </button>
+                            <button type="button" id="processWithdraw" class="btn">
+                                Proses Tarik Tunai
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -851,480 +867,397 @@ $base_url = $protocol . '://' . $host . $base_path;
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const cekForm = document.getElementById('cekRekening');
-            const penyetoranForm = document.getElementById('formPenyetoran');
-            const pinForm = document.getElementById('formPin');
-            const checkAccountStep = document.getElementById('checkAccountStep');
-            const amountDetails = document.getElementById('amountDetails');
-            const pinDetails = document.getElementById('pinDetails');
-            const confirmationDetails = document.getElementById('confirmationDetails');
+        $(document).ready(function () {
+            // Sidebar Toggle Logic
+            const menuToggle = $('#menuToggle');
+            const sidebar = $('#sidebar');
 
-            const step1Indicator = document.getElementById('step1-indicator');
-            const step2Indicator = document.getElementById('step2-indicator');
-            const step3Indicator = document.getElementById('step3-indicator');
-            const step4Indicator = document.getElementById('step4-indicator');
-
-            const inputRekening = document.getElementById('no_rekening');
-            const rekError = document.getElementById('rek-error');
-            const inputJumlah = document.getElementById('jumlah');
-            const jumlahError = document.getElementById('jumlah-error');
-            const inputPin = document.getElementById('pin');
-            const pinError = document.getElementById('pin-error');
-
-            const cekButton = document.getElementById('cekButton');
-            const confirmAmount = document.getElementById('confirmAmount');
-            const cancelAmount = document.getElementById('cancelAmount');
-            const verifyPin = document.getElementById('verifyPin');
-            const backToAmount = document.getElementById('backToAmount');
-            const processDeposit = document.getElementById('processDeposit');
-            const backToPin = document.getElementById('backToPin');
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            const mainContent = document.getElementById('mainContent');
-
-            let accountData = {};
-            let depositAmount = 0;
-            let pinAttempts = 0;
-            let isPinLocked = false;
-            const MAX_ATTEMPTS = 3;
-
-            // Sidebar toggle
-            if (menuToggle && sidebar && mainContent) {
-                menuToggle.addEventListener('click', function(e) {
+            if (menuToggle.length) {
+                menuToggle.on('click', function (e) {
                     e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
+                    $('#sidebar').toggleClass('active');
+                    $('body').toggleClass('sidebar-active');
+                });
+            }
+
+            $(document).on('click', function (e) {
+                if (sidebar.hasClass('active') && !sidebar.is(e.target) && sidebar.has(e.target).length === 0 && !menuToggle.is(e.target)) {
+                    sidebar.removeClass('active');
+                    $('body').removeClass('sidebar-active');
+                }
+            });
+
+            // Clear button functionality
+            $('#no_rekening').on('input', function () {
+                if ($(this).val().length > 0) {
+                    $('#clearNoRek').addClass('visible');
+                } else {
+                    $('#clearNoRek').removeClass('visible');
+                }
+            });
+
+            $('#clearNoRek').on('click', function () {
+                $('#no_rekening').val('').focus();
+                $(this).removeClass('visible');
+                $('#no_rekening').removeClass('error-input');
+                $('#rek-error').hide();
+            });
+
+            // Format Currency
+            function formatRupiah(angka) {
+                var number_string = angka.replace(/[^,\d]/g, '').toString(),
+                    split = number_string.split(','),
+                    sisa = split[0].length % 3,
+                    rupiah = split[0].substr(0, sisa),
+                    ribuan = split[0].substr(sisa).match(/\d{3}/gi);
+
+                if (ribuan) {
+                    separator = sisa ? '.' : '';
+                    rupiah += separator + ribuan.join('.');
+                }
+
+                return split[1] != undefined ? rupiah + ',' + split[1] : rupiah;
+            }
+
+            // Input Validation
+            $('#no_rekening, #jumlah, #pin').on('input', function () {
+                let val = this.value.replace(/[^0-9]/g, '');
+
+                if (this.id === 'jumlah') {
+                    if (val !== '') {
+                        this.value = formatRupiah(val);
+                    } else {
+                        this.value = '';
+                    }
+                } else {
+                    this.value = val;
+                }
+
+                $(this).removeClass('error-input');
+                $(this).next('.error-message').hide();
+                $(this).closest('.form-group').find('.error-message').hide();
+            });
+
+            // Quick Amount Buttons
+            $('.quick-amount-btn').on('click', function () {
+                let amount = $(this).data('amount');
+                $('#jumlah').val(formatRupiah(amount.toString()));
+                $('#jumlah').removeClass('error-input');
+                $('#jumlah-error').hide();
+            });
+
+            // PIN Digit Input Handler
+            const pinDigits = document.querySelectorAll('.pin-digit');
+
+            pinDigits.forEach((input, index) => {
+                // Handle input
+                input.addEventListener('input', function (e) {
+                    // Only allow numbers
+                    this.value = this.value.replace(/[^0-9]/g, '');
+
+                    if (this.value.length === 1) {
+                        this.classList.add('filled');
+                        // Move to next input
+                        if (index < 5) {
+                            pinDigits[index + 1].focus();
+                        }
+                    }
+
+                    // Update hidden PIN field
+                    updatePinValue();
                 });
 
-                document.addEventListener('click', function(e) {
-                    if (sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                        sidebar.classList.remove('active');
-                        document.body.classList.remove('sidebar-active');
+                // Handle backspace
+                input.addEventListener('keydown', function (e) {
+                    if (e.key === 'Backspace' && this.value === '' && index > 0) {
+                        pinDigits[index - 1].focus();
+                        pinDigits[index - 1].value = '';
+                        pinDigits[index - 1].classList.remove('filled');
                     }
                 });
-            }
 
-            function formatRupiahInput(value) {
-                value = parseInt(value) || 0;
-                return value.toLocaleString('id-ID', { minimumFractionDigits: 0 });
-            }
-
-            function formatRupiah(value) {
-                return 'Rp ' + value.toLocaleString('id-ID', { minimumFractionDigits: 0 });
-            }
-
-            function updateStepIndicators(activeStep) {
-                [step1Indicator, step2Indicator, step3Indicator, step4Indicator].forEach((el, i) => {
-                    el.className = 'step-item';
-                    if (i + 1 < activeStep) el.classList.add('completed');
-                    if (i + 1 === activeStep) el.classList.add('active');
-                });
-            }
-
-            function showStep(step) {
-                checkAccountStep.style.display = step === 1 ? 'block' : 'none';
-                amountDetails.className = `account-details ${step === 2 ? 'visible' : ''}`;
-                pinDetails.className = `account-details ${step === 3 ? 'visible' : ''}`;
-                confirmationDetails.className = `account-details ${step === 4 ? 'visible' : ''}`;
-                updateStepIndicators(step);
-
-                if (step === 3 && !isPinLocked) {
-                    const remaining = MAX_ATTEMPTS - pinAttempts;
-                    pinError.textContent = remaining < MAX_ATTEMPTS ? `Sisa ${remaining} kesempatan.` : '';
-                    pinError.classList.toggle('show', remaining < MAX_ATTEMPTS);
-                }
-            }
-
-            function resetForm() {
-                cekForm.reset();
-                penyetoranForm.reset();
-                pinForm.reset();
-                inputRekening.value = '';
-                inputJumlah.value = '';
-                inputPin.value = '';
-                rekError.classList.remove('show');
-                jumlahError.classList.remove('show');
-                pinError.classList.remove('show');
-                inputRekening.removeAttribute('aria-invalid');
-                inputJumlah.removeAttribute('aria-invalid');
-                inputPin.removeAttribute('aria-invalid');
-                accountData = {};
-                depositAmount = 0;
-                pinAttempts = 0;
-                isPinLocked = false;
-                document.querySelectorAll('.detail-value').forEach(el => el.textContent = '-');
-                showStep(1);
-                inputRekening.focus();
-            }
-
-            // === PERBAIKAN: Hapus error saat input di-focus atau diisi ===
-            function clearErrorOnInput(input, errorElement) {
-                input.addEventListener('focus', function() {
-                    this.removeAttribute('aria-invalid');
-                    errorElement.classList.remove('show');
-                    errorElement.textContent = '';
-                });
-                input.addEventListener('input', function() {
-                    this.removeAttribute('aria-invalid');
-                    errorElement.classList.remove('show');
-                    errorElement.textContent = '';
-                });
-            }
-
-            clearErrorOnInput(inputRekening, rekError);
-            clearErrorOnInput(inputJumlah, jumlahError);
-            clearErrorOnInput(inputPin, pinError);
-
-            // Input hanya angka
-            inputRekening.addEventListener('input', function(e) {
-                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 8);
-            });
-
-            inputPin.addEventListener('input', function(e) {
-                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
-            });
-
-            // === PERBAIKAN: Handle Enter key untuk input nominal (jumlah) ===
-            inputJumlah.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
+                // Handle paste
+                input.addEventListener('paste', function (e) {
                     e.preventDefault();
-                    confirmAmount.click();
-                }
-            });
+                    const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
 
-            // === PERBAIKAN: Handle Enter key untuk input PIN ===
-            inputPin.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    verifyPin.click();
-                }
-            });
+                    for (let i = 0; i < pastedData.length && i < 6; i++) {
+                        pinDigits[i].value = pastedData[i];
+                        pinDigits[i].classList.add('filled');
+                    }
 
-            // Quick amount buttons
-            document.querySelectorAll('.quick-amount-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const amount = parseInt(this.getAttribute('data-amount'));
-                    inputJumlah.value = formatRupiahInput(amount);
-                    inputJumlah.setAttribute('aria-invalid', 'false');
-                    jumlahError.classList.remove('show');
+                    // Focus on next empty or last
+                    const nextEmpty = Array.from(pinDigits).findIndex(d => d.value === '');
+                    if (nextEmpty !== -1) {
+                        pinDigits[nextEmpty].focus();
+                    } else {
+                        pinDigits[5].focus();
+                    }
+
+                    updatePinValue();
+                });
+
+                // Clear filled class when empty
+                input.addEventListener('blur', function () {
+                    if (this.value === '') {
+                        this.classList.remove('filled');
+                    }
                 });
             });
 
-            // Step 1: Cek Rekening
-            cekForm.addEventListener('submit', function(e) {
+            // Function to update hidden PIN value
+            function updatePinValue() {
+                let pin = '';
+                pinDigits.forEach(input => {
+                    pin += input.value;
+                });
+                $('#pin').val(pin);
+            }
+
+            // Function to clear PIN inputs
+            function clearPinInputs() {
+                pinDigits.forEach(input => {
+                    input.value = '';
+                    input.classList.remove('filled');
+                });
+                $('#pin').val('');
+                if (pinDigits.length > 0) {
+                    pinDigits[0].focus();
+                }
+            }
+
+            // --- STEP 1: CHECK REKENING ---
+            $('#cekRekening').on('submit', function (e) {
                 e.preventDefault();
-                const noRek = inputRekening.value.trim();
-                if (noRek.length !== 8) {
-                    inputRekening.setAttribute('aria-invalid', 'true');
-                    rekError.textContent = 'Nomor rekening harus 8 digit.';
-                    rekError.classList.add('show');
-                    return;
-                }
-                
-                Swal.fire({
-                    title: 'Mengecek rekening...',
-                    allowOutsideClick: false,
-                    showConfirmButton: false,
-                    didOpen: () => Swal.showLoading()
-                });
-                
-                setTimeout(() => {
-                    fetch('proses_tarik.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `action=cek_rekening&no_rekening=${encodeURIComponent(noRek)}`
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        Swal.close();
-                        if (data.status === 'success') {
-                            accountData = data;
-                            pinAttempts = 0;
-                            isPinLocked = false;
-                            document.getElementById('displayNoRek').textContent = noRek;
-                            document.getElementById('displayNama').textContent = accountData.nama;
-                            document.getElementById('displayJurusan').textContent = accountData.jurusan;
-                            document.getElementById('displayKelas').textContent = accountData.kelas;
-                            showStep(2);
-                            inputJumlah.focus();
-                        } else {
-                            inputRekening.value = '';
-                            inputRekening.focus();
-                            Swal.fire({ 
-                                icon: 'error', 
-                                title: 'Tidak Ditemukan', 
-                                text: data.message || 'Rekening tidak ditemukan.' 
-                            });
-                        }
-                    })
-                    .catch(() => {
-                        Swal.close();
-                        Swal.fire({ 
-                            icon: 'error', 
-                            title: 'Error', 
-                            text: 'Kesalahan jaringan.' 
-                        });
-                    });
-                }, 3000);
-            });
 
-            // Format Rupiah
-            inputJumlah.addEventListener('input', function(e) {
-                let value = this.value.replace(/[^0-9]/g, '');
-                if (value.length > 8) value = value.slice(0, 8);
-                this.value = value === '' ? '' : formatRupiahInput(value);
-            });
+                let no_rekening = $('#no_rekening').val();
+                let $btn = $('#cekButton');
 
-            // Step 2: Lanjutkan
-            confirmAmount.addEventListener('click', function() {
-                const btn = this;
-                const amount = parseInt(inputJumlah.value.replace(/[^0-9]/g, '')) || 0;
-                
-                if (amount < 1 || amount > 99999999) {
-                    inputJumlah.setAttribute('aria-invalid', 'true');
-                    jumlahError.textContent = amount < 1 ? 'Minimal Rp 1.' : 'Maksimal Rp 99.999.999.';
-                    jumlahError.classList.add('show');
+                if (no_rekening.length < 8) {
+                    $('#no_rekening').addClass('error-input');
+                    $('#rek-error').text('Nomor rekening harus 8 digit').show();
                     return;
                 }
 
-                btn.classList.add('loading');
-                btn.disabled = true;
+                $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Mengecek...');
 
-                Swal.fire({
-                    title: 'Mengecek saldo...',
-                    allowOutsideClick: false,
-                    showConfirmButton: false,
-                    didOpen: () => Swal.showLoading()
-                });
+                setTimeout(function () {
+                    $.ajax({
+                        url: '<?php echo $base_url; ?>/pages/petugas/proses_tarik.php',
+                        type: 'POST',
+                        data: {
+                            action: 'cek_rekening',
+                            no_rekening: no_rekening
+                        },
+                        dataType: 'json',
+                        success: function (response) {
+                            $btn.prop('disabled', false).text('Cek Rekening');
 
-                setTimeout(() => {
-                    fetch('proses_tarik.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `action=check_balance&no_rekening=${inputRekening.value}&jumlah=${amount}`
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        Swal.close();
-                        btn.classList.remove('loading');
-                        btn.disabled = false;
+                            if (response.status === 'success') {
+                                // Populate data
+                                $('#displayNama').text(response.nama);
+                                $('#displayJurusan').text(response.jurusan || '-');
+                                $('#displayKelas').text(response.kelas || '-');
+                                $('#hidden_saldo').val(response.saldo);
+                                $('#hidden_user_id').val(response.user_id);
+                                $('#hidden_no_rekening').val(no_rekening);
 
-                        if (data.status === 'success') {
-                            depositAmount = amount;
-                            document.getElementById('pinNoRek').textContent = inputRekening.value;
-                            document.getElementById('pinNama').textContent = accountData.nama;
-                            document.getElementById('pinJumlah').textContent = formatRupiah(amount);
-                            showStep(3);
-                            inputPin.focus();
-                        } else {
-                            Swal.fire({ 
-                                icon: 'error', 
-                                title: 'Saldo Tidak Cukup', 
-                                text: data.message 
-                            });
-                        }
-                    })
-                    .catch(() => {
-                        Swal.close();
-                        btn.classList.remove('loading');
-                        btn.disabled = false;
-                        Swal.fire({ 
-                            icon: 'error', 
-                            title: 'Error', 
-                            text: 'Gagal memeriksa saldo.' 
-                        });
-                    });
-                }, 3000);
-            });
+                                // Next Step
+                                $('#step1-indicator').removeClass('active').addClass('completed');
+                                $('#step2-indicator').addClass('active');
 
-            cancelAmount.addEventListener('click', resetForm);
-
-            // Step 3: Verifikasi PIN
-            verifyPin.addEventListener('click', function() {
-                if (isPinLocked) {
-                    Swal.fire({ 
-                        icon: 'error', 
-                        title: 'Akun Terkunci', 
-                        text: 'Akun terkunci karena terlalu banyak percobaan salah.' 
-                    });
-                    return;
-                }
-
-                const pin = inputPin.value;
-                if (pin.length !== 6) {
-                    inputPin.setAttribute('aria-invalid', 'true');
-                    pinError.textContent = 'PIN harus 6 digit.';
-                    pinError.classList.add('show');
-                    return;
-                }
-
-                // === PERBAIKAN: Tambahkan loading spinner SweetAlert2 untuk verifikasi PIN dengan delay 3 detik ===
-                Swal.fire({
-                    title: 'Verifikasi PIN...',
-                    allowOutsideClick: false,
-                    showConfirmButton: false,
-                    didOpen: () => Swal.showLoading()
-                });
-
-                setTimeout(() => {
-                    fetch('proses_tarik.php', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `action=verify_pin&user_id=${accountData.user_id}&pin=${pin}`
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        Swal.close();
-                        if (data.status === 'success') {
-                            document.getElementById('confirmNoRek').textContent = inputRekening.value;
-                            document.getElementById('confirmNama').textContent = accountData.nama;
-                            document.getElementById('confirmJurusan').textContent = accountData.jurusan;
-                            document.getElementById('confirmKelas').textContent = accountData.kelas;
-                            document.getElementById('confirmJumlah').textContent = formatRupiah(depositAmount);
-                            showStep(4);
-                        } else {
-                            pinAttempts++;
-                            const remaining = MAX_ATTEMPTS - pinAttempts;
-                            inputPin.value = '';
-                            inputPin.focus();
-                            
-                            if (remaining <= 0) {
-                                isPinLocked = true;
+                                $('#checkAccountStep').slideUp();
+                                $('#amountDetails').slideDown();
+                                $('#jumlah').focus();
+                            } else {
                                 Swal.fire({
                                     icon: 'error',
-                                    title: 'Akun Terkunci',
-                                    text: 'PIN salah 3 kali. Transaksi dibatalkan.'
-                                }).then(resetForm);
+                                    title: 'Tidak Ditemukan',
+                                    text: response.message,
+                                    confirmButtonColor: '#1e293b'
+                                });
+                            }
+                        },
+                        error: function () {
+                            $btn.prop('disabled', false).text('Cek Rekening');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Terjadi Kesalahan',
+                                text: 'Gagal menghubungkan ke server.',
+                                confirmButtonColor: '#1e293b'
+                            });
+                        }
+                    });
+                }, 2000); // 2s delay
+            });
+
+            // --- STEP 2: CHECK BALANCE & PROCEED TO PIN ---
+            $('#confirmAmount').on('click', function () {
+                let jumlahStr = $('#jumlah').val().replace(/\./g, '');
+                let jumlah = parseInt(jumlahStr);
+                let saldo = parseFloat($('#hidden_saldo').val());
+
+                if (!jumlah || jumlah <= 0) {
+                    $('#jumlah').addClass('error-input');
+                    $('#jumlah-error').text('Masukkan nominal yang valid').show();
+                    return;
+                }
+
+                if (jumlah > saldo) {
+                    $('#jumlah').addClass('error-input');
+                    $('#jumlah-error').text('Saldo tidak mencukupi!').show();
+                    return;
+                }
+
+                // Next Step
+                $('#step2-indicator').removeClass('active').addClass('completed');
+                $('#step3-indicator').addClass('active');
+
+                $('#amountDetails').slideUp();
+                $('#pinStep').slideDown();
+                clearPinInputs();
+            });
+
+            $('#cancelAmount').on('click', function () {
+                $('#step2-indicator').removeClass('active');
+                $('#step1-indicator').removeClass('completed').addClass('active');
+                $('#amountDetails').slideUp();
+                $('#checkAccountStep').slideDown();
+                $('#jumlah').val('');
+            });
+
+            // --- STEP 3: VERIFY PIN ---
+            $('#formPin').on('submit', function (e) {
+                e.preventDefault();
+                let pin = $('#pin').val();
+                let user_id = $('#hidden_user_id').val();
+                let $btn = $('#submitPin');
+
+                if (pin.length < 6) {
+                    $('#pin').addClass('error-input');
+                    $('#pin-error').text('PIN harus 6 digit').show();
+                    return;
+                }
+
+                $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Memverifikasi...');
+
+                setTimeout(function () {
+                    $.ajax({
+                        url: '<?php echo $base_url; ?>/pages/petugas/proses_tarik.php',
+                        type: 'POST',
+                        data: {
+                            action: 'verify_pin',
+                            pin: pin,
+                            user_id: user_id
+                        },
+                        dataType: 'json',
+                        success: function (response) {
+                            $btn.prop('disabled', false).text('Verifikasi PIN');
+
+                            if (response.status === 'success') {
+                                // Populate Confirmation
+                                $('#confirmNoRek').text($('#hidden_no_rekening').val());
+                                $('#confirmNama').text($('#displayNama').text());
+                                $('#confirmJumlah').text('Rp ' + $('#jumlah').val());
+
+                                // Next Step
+                                $('#step3-indicator').removeClass('active').addClass('completed');
+                                $('#step4-indicator').addClass('active');
+
+                                $('#pinStep').slideUp();
+                                $('#confirmationDetails').slideDown();
                             } else {
-                                pinError.textContent = `PIN salah. Sisa ${remaining} kesempatan.`;
-                                pinError.classList.add('show');
                                 Swal.fire({
                                     icon: 'error',
                                     title: 'PIN Salah',
-                                    text: `Sisa ${remaining} kesempatan.`,
-                                    timer: 2000,
-                                    showConfirmButton: false
+                                    text: response.message,
+                                    confirmButtonColor: '#1e293b'
                                 });
+                                clearPinInputs();
                             }
-                        }
-                    })
-                    .catch(() => {
-                        Swal.close();
-                        Swal.fire({ 
-                            icon: 'error', 
-                            title: 'Error', 
-                            text: 'Gagal memverifikasi PIN.' 
-                        });
-                    });
-                }, 3000);
-            });
-
-            backToAmount.addEventListener('click', () => { 
-                showStep(2); 
-                inputJumlah.focus(); 
-            });
-
-            // Step 4: Proses Penarikan
-            processDeposit.addEventListener('click', function() {
-                const noRek = inputRekening.value;
-                const nama = accountData.nama;
-                const jurusan = accountData.jurusan;
-                const kelas = accountData.kelas;
-                const jumlah = formatRupiah(depositAmount);
-
-                Swal.fire({
-                    title: 'Konfirmasi Penarikan',
-                    html: `
-                        <div style="text-align:left; font-size:0.95rem; margin:15px 0;">
-                            <div style="background: #f8fafc; border-radius: 5px; padding: 15px; margin-bottom: 10px;">
-                                <div style="display: table; width: 100%; border-collapse: collapse;">
-                                    <div style="display: table-row;">
-                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">No Rekening:</div>
-                                        <div style="display: table-cell; padding: 5px 0; text-align: right;"><strong>${noRek}</strong></div>
-                                    </div>
-                                    <div style="display: table-row;">
-                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Nama:</div>
-                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${nama}</div>
-                                    </div>
-                                    <div style="display: table-row;">
-                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Jurusan:</div>
-                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${jurusan}</div>
-                                    </div>
-                                    <div style="display: table-row;">
-                                        <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Kelas:</div>
-                                        <div style="display: table-cell; padding: 5px 0; text-align: right;">${kelas}</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div style="text-align: center; margin-top: 20px; padding: 15px;">
-                                <div style="font-weight: bold; font-size: 1.4rem; margin-bottom: 5px;">Jumlah Penarikan</div>
-                                <div style="font-weight: bold; font-size: 1.6rem;">${jumlah}</div>
-                            </div>
-                        </div>
-                    `,
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonText: 'Proses Sekarang',
-                    cancelButtonText: 'Batal',
-                    confirmButtonColor: '#1e3a8a',
-                    cancelButtonColor: '#e74c3c',
-                    width: window.innerWidth < 600 ? '95%' : '600px'
-                }).then(result => {
-                    if (result.isConfirmed) {
-                        Swal.fire({ 
-                            title: 'Memproses...', 
-                            allowOutsideClick: false, 
-                            showConfirmButton: false, 
-                            didOpen: () => Swal.showLoading() 
-                        });
-                        
-                        fetch('proses_tarik.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                            body: `action=tarik_tunai&no_rekening=${noRek}&jumlah=${depositAmount}&petugas_id=<?php echo $_SESSION['user_id']; ?>`
-                        })
-                        .then(res => res.json())
-                        .then(data => {
-                            Swal.close();
-                            if (data.status === 'success') {
-                                Swal.fire({ 
-                                    icon: 'success', 
-                                    title: 'Sukses!', 
-                                    text: 'Penarikan berhasil diproses.', 
-                                    confirmButtonColor: '#1e3a8a',
-                                    timer: 3000,
-                                    timerProgressBar: true
-                                }).then(resetForm);
-                            } else {
-                                Swal.fire({ 
-                                    icon: 'error', 
-                                    title: 'Gagal!', 
-                                    text: data.message || 'Gagal memproses penarikan.', 
-                                    confirmButtonColor: '#1e3a8a' 
-                                });
-                            }
-                        })
-                        .catch(() => {
-                            Swal.close();
-                            Swal.fire({ 
-                                icon: 'error', 
-                                title: 'Error', 
-                                text: 'Terjadi kesalahan saat memproses penarikan.', 
-                                confirmButtonColor: '#1e3a8a' 
+                        },
+                        error: function () {
+                            $btn.prop('disabled', false).text('Verifikasi PIN');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Terjadi Kesalahan',
+                                text: 'Gagal memverifikasi PIN.',
+                                confirmButtonColor: '#1e293b'
                             });
-                        });
-                    }
-                });
+                        }
+                    });
+                }, 2000); // 2s delay
             });
 
-            backToPin.addEventListener('click', () => { 
-                showStep(3); 
-                inputPin.focus(); 
+            $('#cancelPin').on('click', function () {
+                $('#step3-indicator').removeClass('active');
+                $('#step2-indicator').removeClass('completed').addClass('active');
+                $('#pinStep').slideUp();
+                $('#amountDetails').slideDown();
+                $('#pin').val('');
             });
 
-            inputRekening.focus();
+            // --- STEP 4: PROCESS WITHDRAW ---
+            $('#backToPin').on('click', function () {
+                $('#step4-indicator').removeClass('active');
+                $('#step3-indicator').removeClass('completed').addClass('active');
+                $('#confirmationDetails').slideUp();
+                $('#pinStep').slideDown();
+            });
+
+            $('#processWithdraw').on('click', function () {
+                let $btn = $(this);
+                let no_rekening = $('#hidden_no_rekening').val();
+                let jumlah = $('#jumlah').val().replace(/\./g, '');
+
+                $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Memproses...');
+
+                setTimeout(function () {
+                    $.ajax({
+                        url: '<?php echo $base_url; ?>/pages/petugas/proses_tarik.php',
+                        type: 'POST',
+                        data: {
+                            action: 'tarik_tunai',
+                            no_rekening: no_rekening,
+                            jumlah: jumlah,
+                            user_id: $('#hidden_user_id').val()
+                        },
+                        dataType: 'json',
+                        success: function (response) {
+                            $btn.prop('disabled', false).text('Proses Tarik Tunai');
+
+                            if (response.status === 'success') {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'Berhasil!',
+                                    text: response.message,
+                                    confirmButtonColor: '#10b981'
+                                }).then(() => {
+                                    location.reload();
+                                });
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Gagal',
+                                    text: response.message,
+                                    confirmButtonColor: '#1e293b'
+                                });
+                            }
+                        },
+                        error: function () {
+                            $btn.prop('disabled', false).text('Proses Tarik Tunai');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Terjadi Kesalahan',
+                                text: 'Gagal memproses transaksi.',
+                                confirmButtonColor: '#1e293b'
+                            });
+                        }
+                    });
+                }, 2000); // 2s delay
+            });
         });
     </script>
 </body>
+
 </html>

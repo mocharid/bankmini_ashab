@@ -88,37 +88,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
-function generateUsername($nama, $conn)
+function generateUsername($conn, $length = 8)
 {
-    $base_username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nama));
-    $base_username = substr($base_username, 0, 20);
-    if ($base_username === '') {
-        $base_username = 'user';
-    }
-
-    $username = $base_username;
-    $counter  = 1;
+    $uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    $lowercase = 'abcdefghjkmnpqrstuvwxyz';
+    $numbers = '23456789';
+    $symbols = '@#$%&*';
 
     $check_query = "SELECT id FROM users WHERE username = ?";
-    $check_stmt  = $conn->prepare($check_query);
+    $check_stmt = $conn->prepare($check_query);
     if (!$check_stmt) {
         error_log("Error preparing username check: " . $conn->error);
-        return $base_username . rand(100, 999);
+        // Fallback: generate tanpa check
+        $allChars = $uppercase . $lowercase . $numbers;
+        $username = '';
+        for ($i = 0; $i < $length; $i++) {
+            $username .= $allChars[random_int(0, strlen($allChars) - 1)];
+        }
+        return $username;
     }
 
+    $maxAttempts = 50;
+    $attempts = 0;
+
     do {
+        // Generate username random dengan campuran karakter
+        $username = '';
+        $username .= $uppercase[random_int(0, strlen($uppercase) - 1)];
+        $username .= $lowercase[random_int(0, strlen($lowercase) - 1)];
+        $username .= $numbers[random_int(0, strlen($numbers) - 1)];
+        $username .= $symbols[random_int(0, strlen($symbols) - 1)];
+
+        // Tambah karakter random untuk sisa panjang
+        $allChars = $uppercase . $lowercase . $numbers . $symbols;
+        for ($i = 4; $i < $length; $i++) {
+            $username .= $allChars[random_int(0, strlen($allChars) - 1)];
+        }
+
+        // Acak urutan karakter
+        $username = str_shuffle($username);
+
+        // Check apakah sudah ada di database
         $check_stmt->bind_param("s", $username);
         $check_stmt->execute();
         $result = $check_stmt->get_result();
+
         if ($result->num_rows === 0) {
             break;
         }
-        $username = $base_username . $counter;
-        $counter++;
-    } while ($counter <= 50);
+
+        $attempts++;
+    } while ($attempts < $maxAttempts);
 
     $check_stmt->close();
     return $username;
+}
+
+function generateRandomPassword($length = 6)
+{
+    $uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    $lowercase = 'abcdefghjkmnpqrstuvwxyz';
+    $numbers = '23456789';
+    $symbols = '@#$%&*';
+
+    // Pastikan ada minimal 1 dari setiap jenis
+    $password = '';
+    $password .= $uppercase[random_int(0, strlen($uppercase) - 1)];
+    $password .= $lowercase[random_int(0, strlen($lowercase) - 1)];
+    $password .= $numbers[random_int(0, strlen($numbers) - 1)];
+    $password .= $symbols[random_int(0, strlen($symbols) - 1)];
+
+    // Tambah karakter random untuk sisa panjang
+    $allChars = $uppercase . $lowercase . $numbers . $symbols;
+    for ($i = 4; $i < $length; $i++) {
+        $password .= $allChars[random_int(0, strlen($allChars) - 1)];
+    }
+
+    // Acak urutan karakter
+    $password = str_shuffle($password);
+
+    return $password;
 }
 
 function checkUniqueField($field, $value, $conn, $table = 'users')
@@ -130,7 +179,7 @@ function checkUniqueField($field, $value, $conn, $table = 'users')
     $table = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
 
     $query = "SELECT id FROM $table WHERE $field = ?";
-    $stmt  = $conn->prepare($query);
+    $stmt = $conn->prepare($query);
     if (!$stmt) {
         error_log("Error preparing unique check for $field: " . $conn->error);
         return "Terjadi kesalahan server.";
@@ -166,39 +215,40 @@ function sendEmailConfirmation(
     try {
         $mail = new PHPMailer(true);
         $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'myschobank@gmail.com';
-        $mail->Password   = 'xpni zzju utfu mkth';
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port       = 587;
-        $mail->CharSet    = 'UTF-8';
+        $mail->Host = 'mail.kasdig.web.id';
+        $mail->SMTPAuth = true;
+        $mail->Username = 'noreply@kasdig.web.id';
+        $mail->Password = 'BtRjT4wP8qeTL5M';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        $mail->Port = 465;
+        $mail->Timeout = 30;
+        $mail->CharSet = 'UTF-8';
 
-        $mail->setFrom('myschobank@gmail.com', 'Schobank Student Digital Banking');
+        $mail->setFrom('noreply@kasdig.web.id', 'KASDIG');
         $mail->addAddress($email, $nama);
-        $mail->addReplyTo('no-reply@myschobank.com', 'No Reply');
+        $mail->addReplyTo('noreply@kasdig.web.id', 'KASDIG');
 
-        $unique_id       = uniqid('myschobank_', true) . '@myschobank.com';
+        $unique_id = uniqid('kasdig_', true) . '@kasdig.web.id';
         $mail->MessageID = '<' . $unique_id . '>';
-        $mail->addCustomHeader('X-Mailer', 'MY-SCHOBANK-System-v1.0');
+        $mail->addCustomHeader('X-Mailer', 'KASDIG-System-v1.0');
         $mail->addCustomHeader('X-Priority', '1');
         $mail->addCustomHeader('Importance', 'High');
 
         $mail->isHTML(true);
         $mail->Subject = 'Pembukaan Rekening';
 
-        $protocol   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
-        $host       = $_SERVER['HTTP_HOST'];
-        $base_path  = dirname(dirname(dirname($_SERVER['SCRIPT_NAME'])));
-        $base_path  = rtrim(str_replace('\\', '/', $base_path), '/');
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? "https" : "http";
+        $host = $_SERVER['HTTP_HOST'];
+        $base_path = dirname(dirname(dirname($_SERVER['SCRIPT_NAME'])));
+        $base_path = rtrim(str_replace('\\', '/', $base_path), '/');
         $login_link = $protocol . "://" . $host . $base_path . "/pages/login.php";
 
-        $kelas_lengkap         = trim($tingkatan_name . ' ' . $kelas_name);
-        $alamat_display        = $alamat_lengkap ?: 'Tidak diisi';
-        $nis_display           = $nis_nisn ?: 'Tidak diisi';
+        $kelas_lengkap = trim($tingkatan_name . ' ' . $kelas_name);
+        $alamat_display = $alamat_lengkap ?: 'Tidak diisi';
+        $nis_display = $nis_nisn ?: 'Tidak diisi';
         $jenis_kelamin_display = $jenis_kelamin ? ($jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan') : 'Tidak diisi';
         $tanggal_lahir_display = $tanggal_lahir ? date('d F Y', strtotime($tanggal_lahir)) : 'Tidak diisi';
-        $tanggal_pembukaan     = date('d F Y H:i:s') . ' WIB';
+        $tanggal_pembukaan = date('d F Y H:i:s') . ' WIB';
 
         $emailBody = "
         <div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
@@ -232,7 +282,7 @@ function sendEmailConfirmation(
             </div>
             <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
             <p style='font-size: 12px; color: #999;'>
-                Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+                Ini adalah pesan otomatis dari sistem KASDIG.<br>
                 Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
             </p>
         </div>";
@@ -240,18 +290,18 @@ function sendEmailConfirmation(
         $mail->Body = $emailBody;
 
         $labels = [
-            'Nama Lengkap'          => $nama,
-            'Jenis Kelamin'         => $jenis_kelamin_display,
-            'Tanggal Lahir'         => $tanggal_lahir_display,
-            'Alamat Lengkap'        => $alamat_display,
-            'NIS/NISN'              => $nis_display,
-            'Nomor Rekening'        => $no_rekening,
-            'Username'              => $username,
-            'Kata Sandi Sementara'  => $password,
-            'Jurusan'               => $jurusan_name,
-            'Kelas'                 => $kelas_lengkap,
-            'Tanggal Aktivasi'      => $tanggal_pembukaan,
-            'Saldo Awal'            => 'Rp 0'
+            'Nama Lengkap' => $nama,
+            'Jenis Kelamin' => $jenis_kelamin_display,
+            'Tanggal Lahir' => $tanggal_lahir_display,
+            'Alamat Lengkap' => $alamat_display,
+            'NIS/NISN' => $nis_display,
+            'Nomor Rekening' => $no_rekening,
+            'Username' => $username,
+            'Kata Sandi Sementara' => $password,
+            'Jurusan' => $jurusan_name,
+            'Kelas' => $kelas_lengkap,
+            'Tanggal Aktivasi' => $tanggal_pembukaan,
+            'Saldo Awal' => 'Rp 0'
         ];
 
         $max_label_length = max(array_map('strlen', array_keys($labels)));
@@ -262,8 +312,8 @@ function sendEmailConfirmation(
         }
         $text_rows[] = "\nPENTING: Segera ganti kata sandi sementara dan atur PIN transaksi setelah login pertama.";
         $text_rows[] = "Masuk ke akun: {$login_link}";
-        $text_rows[] = "Hubungi dukungan: myschobank@gmail.com";
-        $text_rows[] = "\nHormat kami,\nTim Schobank Student Digital Banking";
+        $text_rows[] = "Hubungi dukungan: info.schobank@schobank.web.id";
+        $text_rows[] = "\nHormat kami,\nTim KASDIG";
         $text_rows[] = "\nPesan otomatis, mohon tidak membalas.";
 
         $mail->AltBody = implode("\n", $text_rows);
@@ -299,18 +349,16 @@ if (isset($_POST['cancel'])) {
     exit();
 }
 
-$nama               = trim($_POST['nama'] ?? '');
-$tipe_rekening      = trim($_POST['tipe_rekening'] ?? 'fisik');
-$email              = trim($_POST['email'] ?? '') ?: null;
-$pin                = trim($_POST['pin'] ?? '') ?: null;
-$confirm_pin        = trim($_POST['confirm_pin'] ?? '') ?: null;
-$alamat_lengkap     = trim($_POST['alamat_lengkap'] ?? '') ?: null;
-$nis_nisn           = trim($_POST['nis_nisn'] ?? '') ?: null;
-$jenis_kelamin_raw  = trim($_POST['jenis_kelamin'] ?? '') ?: null;
-$tanggal_lahir      = trim($_POST['tanggal_lahir'] ?? '') ?: null;
-$jurusan_id         = (int)($_POST['jurusan_id'] ?? 0);
-$tingkatan_kelas_id = (int)($_POST['tingkatan_kelas_id'] ?? 0);
-$kelas_id           = (int)($_POST['kelas_id'] ?? 0);
+$nama = trim($_POST['nama'] ?? '');
+$tipe_rekening = 'digital'; // Semua rekening adalah digital
+$email = trim($_POST['email'] ?? '') ?: null;
+$alamat_lengkap = trim($_POST['alamat_lengkap'] ?? '') ?: null;
+$nis_nisn = trim($_POST['nis_nisn'] ?? '') ?: null;
+$jenis_kelamin_raw = trim($_POST['jenis_kelamin'] ?? '') ?: null;
+$tanggal_lahir = trim($_POST['tanggal_lahir'] ?? '') ?: null;
+$jurusan_id = (int) ($_POST['jurusan_id'] ?? 0);
+$tingkatan_kelas_id = (int) ($_POST['tingkatan_kelas_id'] ?? 0);
+$kelas_id = (int) ($_POST['kelas_id'] ?? 0);
 
 $errors = [];
 
@@ -327,11 +375,9 @@ if (empty($nama) || strlen($nama) < 3) {
 if (!empty($email) && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
     $errors['email'] = "Format email tidak valid!";
 }
-if ($tipe_rekening === 'digital' && empty($email)) {
-    $errors['email'] = "Email wajib diisi untuk rekening digital!";
-}
-if (!in_array($tipe_rekening, ['digital', 'fisik'])) {
-    $errors['tipe_rekening'] = "Tipe rekening tidak valid!";
+// Email wajib untuk semua rekening
+if (empty($email)) {
+    $errors['email'] = "Email wajib diisi!";
 }
 if ($jurusan_id <= 0) {
     $errors['jurusan_id'] = "Jurusan wajib dipilih!";
@@ -343,29 +389,7 @@ if ($kelas_id <= 0) {
     $errors['kelas_id'] = "Kelas wajib dipilih!";
 }
 
-// Validasi khusus rekening fisik
-if ($tipe_rekening === 'fisik') {
-    $email = null; // fisik tidak pakai email
 
-    if (empty($jenis_kelamin)) {
-        $errors['jenis_kelamin'] = "Jenis kelamin wajib dipilih untuk rekening fisik!";
-    }
-    if (empty($tanggal_lahir) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal_lahir)) {
-        $errors['tanggal_lahir'] = "Tanggal lahir wajib dan format harus YYYY-MM-DD untuk rekening fisik!";
-    }
-    if (empty($alamat_lengkap)) {
-        $errors['alamat_lengkap'] = "Alamat lengkap wajib diisi untuk rekening fisik!";
-    }
-    if (empty($pin) || !preg_match('/^\d{6}$/', $pin)) {
-        $errors['pin'] = "PIN wajib 6 digit angka untuk rekening fisik!";
-    }
-    if (empty($confirm_pin) || !preg_match('/^\d{6}$/', $confirm_pin)) {
-        $errors['confirm_pin'] = "Konfirmasi PIN wajib 6 digit angka untuk rekening fisik!";
-    }
-    if (!empty($pin) && !empty($confirm_pin) && $pin !== $confirm_pin) {
-        $errors['confirm_pin'] = "PIN dan konfirmasi PIN tidak cocok!";
-    }
-}
 
 // Unique email (hanya jika ada)
 if (!$errors && !empty($email) && ($error = checkUniqueField('email', $email, $conn))) {
@@ -382,22 +406,22 @@ if ($errors) {
 // SUBMIT KEDUA (confirmed) -> INSERT DB 4 TABEL
 // ========================================
 if (isset($_POST['confirmed'])) {
-    $username       = ($tipe_rekening === 'digital') ? $_POST['username'] : null;
-    $no_rekening    = $_POST['no_rekening'];
-    $password_plain = ($tipe_rekening === 'digital') ? '12345' : null;
-    $jurusan_name   = $_POST['jurusan_name'];
+    $username = $_POST['username'];
+    $no_rekening = $_POST['no_rekening'];
+    $password_plain = $_POST['password'];
+    $jurusan_name = $_POST['jurusan_name'];
     $tingkatan_name = $_POST['tingkatan_name'];
-    $kelas_name     = $_POST['kelas_name'];
+    $kelas_name = $_POST['kelas_name'];
 
     $conn->begin_transaction();
     try {
         // 1. INSERT users
         $hashed_password = $password_plain ? password_hash($password_plain, PASSWORD_BCRYPT) : null;
-        $email_status    = $email ? 'terisi' : 'kosong';
+        $email_status = $email ? 'terisi' : 'kosong';
 
         $query_user = "INSERT INTO users (username, password, role, nama, email, email_status)
                        VALUES (?, ?, 'siswa', ?, ?, ?)";
-        $stmt_user  = $conn->prepare($query_user);
+        $stmt_user = $conn->prepare($query_user);
         if (!$stmt_user) {
             throw new Exception("Gagal menyiapkan users: " . $conn->error);
         }
@@ -412,14 +436,14 @@ if (isset($_POST['confirmed'])) {
         $query_profile = "INSERT INTO siswa_profiles 
                             (user_id, nis_nisn, alamat_lengkap, jenis_kelamin, tanggal_lahir, jurusan_id, kelas_id)
                           VALUES (?, ?, ?, ?, ?, ?, ?)";
-        $stmt_profile  = $conn->prepare($query_profile);
+        $stmt_profile = $conn->prepare($query_profile);
         if (!$stmt_profile) {
             throw new Exception("Gagal menyiapkan siswa_profiles: " . $conn->error);
         }
 
-        $jk_param     = $jenis_kelamin ?: null;
-        $tgl_param    = $tanggal_lahir ?: null;   // sudah divalidasi YYYY-MM-DD
-        $nis_param    = $nis_nisn ?: null;
+        $jk_param = $jenis_kelamin ?: null;
+        $tgl_param = $tanggal_lahir ?: null;   // sudah divalidasi YYYY-MM-DD
+        $nis_param = $nis_nisn ?: null;
         $alamat_param = $alamat_lengkap ?: null;
 
         $stmt_profile->bind_param(
@@ -437,22 +461,11 @@ if (isset($_POST['confirmed'])) {
         }
         $stmt_profile->close();
 
-        // 3. INSERT user_security (PIN BCRYPT)
-        if (!empty($pin)) {
-            $hashed_pin = password_hash($pin, PASSWORD_BCRYPT);
-            $query_security = "INSERT INTO user_security (user_id, pin, has_pin) VALUES (?, ?, 1)";
-            $stmt_security  = $conn->prepare($query_security);
-            if (!$stmt_security) {
-                throw new Exception("Gagal menyiapkan user_security: " . $conn->error);
-            }
-            $stmt_security->bind_param("is", $user_id, $hashed_pin);
-            $stmt_security->execute();
-            $stmt_security->close();
-        }
+
 
         // 4. INSERT rekening
         $query_rekening = "INSERT INTO rekening (no_rekening, user_id, saldo) VALUES (?, ?, 0.00)";
-        $stmt_rekening  = $conn->prepare($query_rekening);
+        $stmt_rekening = $conn->prepare($query_rekening);
         if (!$stmt_rekening) {
             throw new Exception("Gagal menyiapkan rekening: " . $conn->error);
         }
@@ -462,8 +475,8 @@ if (isset($_POST['confirmed'])) {
         }
         $stmt_rekening->close();
 
-        // 5. Email digital
-        if ($tipe_rekening === 'digital' && !empty($email)) {
+        // 4. Email konfirmasi
+        if (!empty($email)) {
             $email_result = sendEmailConfirmation(
                 $email,
                 $nama,
@@ -498,12 +511,12 @@ if (isset($_POST['confirmed'])) {
 // ========================================
 // SUBMIT PERTAMA: GENERATE DATA KONFIRMASI
 // ========================================
-$username = ($tipe_rekening === 'digital') ? generateUsername($nama, $conn) : null;
+$username = generateUsername($conn);
 
 // Generate no rekening unik
 $jurusan_kode = sprintf('%02d', $jurusan_id);
-$no_rekening  = $jurusan_kode . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
-$counter      = 1;
+$no_rekening = $jurusan_kode . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
+$counter = 1;
 while (checkUniqueField('no_rekening', $no_rekening, $conn, 'rekening') && $counter <= 10) {
     $no_rekening = $jurusan_kode . str_pad(mt_rand(1, 999999), 6, '0', STR_PAD_LEFT);
     $counter++;
@@ -511,7 +524,7 @@ while (checkUniqueField('no_rekening', $no_rekening, $conn, 'rekening') && $coun
 
 // Nama referensi
 $query_jurusan_name = "SELECT nama_jurusan FROM jurusan WHERE id = ?";
-$stmt_jurusan       = $conn->prepare($query_jurusan_name);
+$stmt_jurusan = $conn->prepare($query_jurusan_name);
 $stmt_jurusan->bind_param("i", $jurusan_id);
 $stmt_jurusan->execute();
 $result_jurusan_name = $stmt_jurusan->get_result();
@@ -519,7 +532,7 @@ $jurusan_name = $result_jurusan_name->num_rows > 0 ? $result_jurusan_name->fetch
 $stmt_jurusan->close();
 
 $query_tingkatan_name = "SELECT nama_tingkatan FROM tingkatan_kelas WHERE id = ?";
-$stmt_tingkatan       = $conn->prepare($query_tingkatan_name);
+$stmt_tingkatan = $conn->prepare($query_tingkatan_name);
 $stmt_tingkatan->bind_param("i", $tingkatan_kelas_id);
 $stmt_tingkatan->execute();
 $result_tingkatan_name = $stmt_tingkatan->get_result();
@@ -527,7 +540,7 @@ $tingkatan_name = $result_tingkatan_name->num_rows > 0 ? $result_tingkatan_name-
 $stmt_tingkatan->close();
 
 $query_kelas_name = "SELECT nama_kelas FROM kelas WHERE id = ?";
-$stmt_kelas       = $conn->prepare($query_kelas_name);
+$stmt_kelas = $conn->prepare($query_kelas_name);
 $stmt_kelas->bind_param("i", $kelas_id);
 $stmt_kelas->execute();
 $result_kelas_name = $stmt_kelas->get_result();
@@ -535,24 +548,22 @@ $kelas_name = $result_kelas_name->num_rows > 0 ? $result_kelas_name->fetch_assoc
 $stmt_kelas->close();
 
 $formData = [
-    'nama'               => $nama,
-    'username'           => $username,
-    'password'           => ($tipe_rekening === 'digital') ? '12345' : null,
-    'pin'                => $pin,
-    'confirm_pin'        => $confirm_pin,
-    'jurusan_id'         => $jurusan_id,
+    'nama' => $nama,
+    'username' => $username,
+    'password' => generateRandomPassword(),
+    'jurusan_id' => $jurusan_id,
     'tingkatan_kelas_id' => $tingkatan_kelas_id,
-    'kelas_id'           => $kelas_id,
-    'no_rekening'        => $no_rekening,
-    'email'              => $email,
-    'tipe_rekening'      => $tipe_rekening,
-    'alamat_lengkap'     => $alamat_lengkap,
-    'nis_nisn'           => $nis_nisn,
-    'jenis_kelamin'      => $jenis_kelamin,
-    'tanggal_lahir'      => $tanggal_lahir,
-    'jurusan_name'       => $jurusan_name,
-    'tingkatan_name'     => $tingkatan_name,
-    'kelas_name'         => $kelas_name
+    'kelas_id' => $kelas_id,
+    'no_rekening' => $no_rekening,
+    'email' => $email,
+    'tipe_rekening' => $tipe_rekening,
+    'alamat_lengkap' => $alamat_lengkap,
+    'nis_nisn' => $nis_nisn,
+    'jenis_kelamin' => $jenis_kelamin,
+    'tanggal_lahir' => $tanggal_lahir,
+    'jurusan_name' => $jurusan_name,
+    'tingkatan_name' => $tingkatan_name,
+    'kelas_name' => $kelas_name
 ];
 
 $encoded_data = base64_encode(json_encode($formData));

@@ -1,240 +1,119 @@
-[24-Nov-2025 13:14:20 Asia/Jakarta] Total Debit: 55001, Total Kredit: 10005
-[24-Nov-2025 13:14:20 Asia/Jakarta] Saldo Bersih: 44996
-[25-Nov-2025 05:34:10 Asia/Jakarta] Total Debit: 55001, Total Kredit: 10005
-[25-Nov-2025 05:34:10 Asia/Jakarta] Saldo Bersih: 44996
-[25-Nov-2025 05:42:59 Asia/Jakarta] Total Debit: 55001, Total Kredit: 20006
-[25-Nov-2025 05:42:59 Asia/Jakarta] Saldo Bersih: 34995
-[25-Nov-2025 12:44:06 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:44:06 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:44:25 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:44:25 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:49:22 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:49:22 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:49:38 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:49:38 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:53:48 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:53:48 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:53:58 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:53:58 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:56:01 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:56:01 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:59:32 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:59:32 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 12:59:54 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 12:59:54 Asia/Jakarta] Saldo Bersih: 5000
-[25-Nov-2025 20:01:36 Asia/Jakarta] Total Debit: 5000, Total Kredit: 0
-[25-Nov-2025 20:01:36 Asia/Jakarta] Saldo Bersih: 5000
-[26-Nov-2025 12:38:37 Asia/Jakarta] Total Debit: 10010000, Total Kredit: 0
-[26-Nov-2025 12:38:37 Asia/Jakarta] Saldo Bersih: 10010000
-[26-Nov-2025 16:30:55 Asia/Jakarta] Total Debit: 10010000, Total Kredit: 0
-[26-Nov-2025 16:30:55 Asia/Jakarta] Saldo Bersih: 10010000
-[29-Nov-2025 21:09:37 Asia/Jakarta] Total Debit: 10010000, Total Kredit: 0
-[29-Nov-2025 21:09:37 Asia/Jakarta] Saldo Bersih: 10010000
-[04-Dec-2025 06:24:41 Asia/Jakarta] Total Debit: 10016000, Total Kredit: 0
-[04-Dec-2025 06:24:41 Asia/Jakarta] Saldo Bersih: 10016000
-[04-Dec-2025 06:37:01 Asia/Jakarta] Total Debit: 10016000, Total Kredit: 0
-[04-Dec-2025 06:37:01 Asia/Jakarta] Saldo Bersih: 10016000
-[05-Dec-2025 07:39:47 Asia/Jakarta] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'u.kelas_id' in 'on clause' in C:\xampp\htdocs\schobank\pages\admin\transaksi_admin.php:60
+[25-Dec-2025 06:53:34 Asia/Jakarta] Total Debit: 290000, Total Kredit: 0
+[25-Dec-2025 06:53:34 Asia/Jakarta] Saldo Bersih: 290000
+[26-Dec-2025 09:15:27 Asia/Jakarta] Total Debit: 350000, Total Kredit: 0
+[26-Dec-2025 09:15:27 Asia/Jakarta] Saldo Bersih: 350000
+[26-Dec-2025 18:00:34 Asia/Jakarta] Total Debit: 350000, Total Kredit: 0
+[26-Dec-2025 18:00:34 Asia/Jakarta] Saldo Bersih: 350000
+[26-Dec-2025 18:00:42 Asia/Jakarta] Total Debit: 350000, Total Kredit: 0
+[26-Dec-2025 18:00:42 Asia/Jakarta] Saldo Bersih: 350000
+[30-Dec-2025 09:51:04 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
+[30-Dec-2025 09:51:04 Asia/Jakarta] Saldo Bersih: 0
+[30-Dec-2025 11:17:09 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
+[30-Dec-2025 11:17:09 Asia/Jakarta] Saldo Bersih: 0
+[30-Dec-2025 11:17:30 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
+[30-Dec-2025 11:17:30 Asia/Jakarta] Saldo Bersih: 0
+[04-Jan-2026 14:13:17 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - float in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:860
 Stack trace:
-#0 C:\xampp\htdocs\schobank\pages\admin\transaksi_admin.php(60): mysqli->prepare('SELECT\r\n    COU...')
-#1 {main}
-  thrown in C:\xampp\htdocs\schobank\pages\admin\transaksi_admin.php on line 60
-[06-Dec-2025 06:38:35 Asia/Jakarta] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'u.kelas_id' in 'on clause' in C:\laragon\www\schobank\pages\admin\transaksi_admin.php:60
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 860
+[04-Jan-2026 14:14:19 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:872
 Stack trace:
-#0 C:\laragon\www\schobank\pages\admin\transaksi_admin.php(60): mysqli->prepare('SELECT\r\n    COU...')
-#1 {main}
-  thrown in C:\laragon\www\schobank\pages\admin\transaksi_admin.php on line 60
-[06-Dec-2025 06:38:46 Asia/Jakarta] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'u.kelas_id' in 'on clause' in C:\laragon\www\schobank\pages\admin\transaksi_admin.php:60
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 872
+[04-Jan-2026 14:15:47 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:872
 Stack trace:
-#0 C:\laragon\www\schobank\pages\admin\transaksi_admin.php(60): mysqli->prepare('SELECT\r\n    COU...')
-#1 {main}
-  thrown in C:\laragon\www\schobank\pages\admin\transaksi_admin.php on line 60
-[06-Dec-2025 06:40:34 Asia/Jakarta] PHP Fatal error:  Uncaught mysqli_sql_exception: Unknown column 'u.kelas_id' in 'on clause' in C:\laragon\www\schobank\pages\admin\transaksi_admin.php:60
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 872
+[04-Jan-2026 14:16:51 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:872
 Stack trace:
-#0 C:\laragon\www\schobank\pages\admin\transaksi_admin.php(60): mysqli->prepare('SELECT\r\n    COU...')
-#1 {main}
-  thrown in C:\laragon\www\schobank\pages\admin\transaksi_admin.php on line 60
-[06-Dec-2025 06:44:15 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:44:15 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:44:45 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:44:45 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:44:51 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:44:51 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:44:54 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:44:54 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:44:55 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:44:55 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:45:24 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:45:24 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:46:42 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:46:42 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:50:41 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:50:41 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 06:51:33 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 06:51:33 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:12:49 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:12:49 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:13:02 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:13:02 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:13:03 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:13:03 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:17:20 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:17:20 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:19:50 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:19:50 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:23:20 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:23:20 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:23:49 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:23:49 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:23:55 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:23:55 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:24:07 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:24:07 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:24:13 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:24:13 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:24:38 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:24:38 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:25:34 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:25:34 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:25:40 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:25:40 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:25:46 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:25:46 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:25:59 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:25:59 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:26:05 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:26:05 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:26:32 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:26:32 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:26:47 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:26:47 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:29:20 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:29:20 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:31:44 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:31:44 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:16 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:16 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:17 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:17 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:18 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:18 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:18 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:18 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:30 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:30 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:35 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:35 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:41 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:41 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:34:47 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:34:47 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:37:07 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:37:07 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:40:19 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:40:19 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:40:54 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:40:54 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:45:34 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:45:34 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:45:35 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:45:35 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:48:37 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:48:37 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:48:48 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:48:48 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:51:02 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:51:02 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:53:51 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:53:51 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:54:01 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:54:01 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:54:11 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:54:11 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:54:15 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:54:15 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:56:50 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:56:50 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:57:21 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:57:21 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:57:43 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:57:43 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:57:53 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:57:53 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:58:56 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:58:56 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 07:59:23 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 07:59:23 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 09:36:01 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 09:36:01 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 09:39:58 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 09:39:58 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 09:43:07 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 09:43:07 Asia/Jakarta] Saldo Bersih: 0
-[06-Dec-2025 09:48:48 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[06-Dec-2025 09:48:48 Asia/Jakarta] Saldo Bersih: 0
-[07-Dec-2025 07:49:44 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[07-Dec-2025 07:49:44 Asia/Jakarta] Saldo Bersih: 0
-[07-Dec-2025 10:11:20 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:11:20 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:11:38 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:11:38 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:14:19 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:14:19 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:21:01 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:21:01 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:21:02 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:21:02 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:21:04 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:21:04 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:21:04 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:21:04 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:21:06 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:21:06 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 10:21:07 Asia/Jakarta] Total Debit: 5000, Total Kredit: 1000
-[07-Dec-2025 10:21:07 Asia/Jakarta] Saldo Bersih: 4000
-[07-Dec-2025 11:27:23 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 11:27:23 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 12:30:42 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 12:30:42 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 12:31:54 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 12:31:54 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 12:59:54 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 12:59:54 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:04:49 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:04:49 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:05:51 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:05:51 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:05:52 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:05:53 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:05:53 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:05:53 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:05:53 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:06:00 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:06:00 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:06:02 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:06:02 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:06:12 Asia/Jakarta] Total Debit: 0, Total Kredit: 0
-[07-Dec-2025 13:06:12 Asia/Jakarta] Saldo Bersih: 0
-[07-Dec-2025 13:06:13 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:06:13 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:06:41 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:06:41 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:09:00 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:09:00 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:14:27 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:14:27 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:14:31 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:14:31 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:16:15 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:16:15 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:17:09 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:17:09 Asia/Jakarta] Saldo Bersih: 24000
-[07-Dec-2025 13:18:13 Asia/Jakarta] Total Debit: 25000, Total Kredit: 1000
-[07-Dec-2025 13:18:13 Asia/Jakarta] Saldo Bersih: 24000
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 872
+[04-Jan-2026 14:17:55 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:872
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 872
+[04-Jan-2026 14:18:15 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:872
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 872
+[04-Jan-2026 14:42:44 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:43:21 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:44:15 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:47:20 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:47:21 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:47:21 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:47:21 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:47:21 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:47:21 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:901
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 901
+[04-Jan-2026 14:48:15 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:48:16 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:48:16 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:48:16 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:49:27 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:49:28 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:49:28 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:49:28 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:49:28 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 14:49:29 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:900
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 900
+[04-Jan-2026 15:28:45 Asia/Jakarta] PHP Fatal error:  Uncaught TypeError: Unsupported operand types: string - int in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php:853
+Stack trace:
+#0 {main}
+  thrown in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 853
+[04-Jan-2026 15:30:58 Asia/Jakarta] PHP Warning:  Undefined variable $total_records in C:\laragon\www\schobank\pages\admin\data_riwayat_transaksi_admin.php on line 875

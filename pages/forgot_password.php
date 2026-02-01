@@ -1,7 +1,80 @@
 <?php
+/**
+ * Forgot Password Page - Clean Banking Design
+ * File: pages/forgot_password.php
+ */
+
+// ============================================
+// ADAPTIVE PATH DETECTION
+// ============================================
+$current_file = __FILE__;
+$current_dir = dirname($current_file);
+$project_root = null;
+
+if (basename($current_dir) === 'pages') {
+    $project_root = dirname($current_dir);
+} elseif (is_dir($current_dir . '/includes')) {
+    $project_root = $current_dir;
+} elseif (is_dir(dirname($current_dir) . '/includes')) {
+    $project_root = dirname($current_dir);
+} else {
+    $temp_dir = $current_dir;
+    for ($i = 0; $i < 5; $i++) {
+        $temp_dir = dirname($temp_dir);
+        if (is_dir($temp_dir . '/includes')) {
+            $project_root = $temp_dir;
+            break;
+        }
+    }
+}
+
+if (!$project_root) {
+    $project_root = $current_dir;
+}
+
+// ============================================
+// DEFINE PATH CONSTANTS
+// ============================================
+if (!defined('PROJECT_ROOT')) {
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+}
+
+if (!defined('INCLUDES_PATH')) {
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+}
+
+if (!defined('ASSETS_PATH')) {
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
+}
+
+// ============================================
+// DEFINE WEB BASE URL
+// ============================================
+function getBaseUrl()
+{
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'];
+    $script = $_SERVER['SCRIPT_NAME'];
+    $base_path = dirname($script);
+    $base_path = preg_replace('#/pages$#', '', $base_path);
+    if ($base_path !== '/' && !empty($base_path)) {
+        $base_path = '/' . ltrim($base_path, '/');
+    }
+    return $protocol . $host . $base_path;
+}
+
+if (!defined('BASE_URL')) {
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
+}
+
+define('ASSETS_URL', BASE_URL . '/assets');
+
+// ============================================
+// START SESSION & LOAD DEPENDENCIES
+// ============================================
 session_start();
-require_once '../includes/db_connection.php';
-require '../vendor/autoload.php';
+require_once INCLUDES_PATH . '/db_connection.php';
+require PROJECT_ROOT . '/vendor/autoload.php';
 date_default_timezone_set('Asia/Jakarta');
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -11,19 +84,20 @@ $success_message = "";
 $error_message = "";
 
 // Fungsi untuk cek cooldown periode
-function checkCooldownPeriod($conn, $user_id, $method) {
+function checkCooldownPeriod($conn, $user_id, $method)
+{
     $query = "SELECT last_reset_request FROM reset_request_cooldown WHERE user_id = ? AND method = ?";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("is", $user_id, $method);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     if ($result->num_rows > 0) {
         $row = $result->fetch_assoc();
         $last_request_time = strtotime($row['last_reset_request']);
         $current_time = time();
         $cooldown_period = 15 * 60; // 15 menit cooldown
-        
+
         if (($current_time - $last_request_time) < $cooldown_period) {
             $remaining_seconds = $cooldown_period - ($current_time - $last_request_time);
             $remaining_minutes = ceil($remaining_seconds / 60);
@@ -34,15 +108,16 @@ function checkCooldownPeriod($conn, $user_id, $method) {
 }
 
 // Fungsi untuk update waktu permintaan reset
-function updateResetRequestTime($conn, $user_id, $method) {
+function updateResetRequestTime($conn, $user_id, $method)
+{
     $current_time = date('Y-m-d H:i:s');
-    
+
     $check_query = "SELECT id FROM reset_request_cooldown WHERE user_id = ? AND method = ?";
     $check_stmt = $conn->prepare($check_query);
     $check_stmt->bind_param("is", $user_id, $method);
     $check_stmt->execute();
     $check_result = $check_stmt->get_result();
-    
+
     if ($check_result->num_rows > 0) {
         $update_query = "UPDATE reset_request_cooldown SET last_reset_request = ? WHERE user_id = ? AND method = ?";
         $update_stmt = $conn->prepare($update_query);
@@ -73,43 +148,39 @@ if ($check_table_result->num_rows == 0) {
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $identifier = trim($_POST['identifier']);
     $method = 'email';
-    
+
     $query = "SELECT id, nama, email FROM users WHERE email = ?";
     $stmt = $conn->prepare($query);
     $stmt->bind_param("s", $identifier);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     if ($result->num_rows > 0) {
         $user = $result->fetch_assoc();
-        
+
         $cooldown_minutes = checkCooldownPeriod($conn, $user['id'], $method);
         if ($cooldown_minutes > 0) {
             $error_message = "Tunggu {$cooldown_minutes} menit sebelum mengirim permintaan baru.";
         } else {
             $token = bin2hex(random_bytes(32));
             $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
-            
+
             $delete_query = "DELETE FROM password_reset WHERE user_id = ?";
             $delete_stmt = $conn->prepare($delete_query);
             $delete_stmt->bind_param("i", $user['id']);
             $delete_stmt->execute();
-            
+
             $insert_query = "INSERT INTO password_reset (user_id, token, expiry) VALUES (?, ?, ?)";
             $insert_stmt = $conn->prepare($insert_query);
             $insert_stmt->bind_param("iss", $user['id'], $token, $expiry);
             $success = $insert_stmt->execute();
-            
+
             if (!$success) {
                 error_log("Database error: " . $conn->error);
                 $error_message = "Gagal memproses permintaan. Coba lagi nanti.";
             } else {
-                $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
-                $host = $_SERVER['HTTP_HOST'];
-                $baseUrl = $protocol . "://" . $host;
-                $path = dirname($_SERVER['PHP_SELF']);
-                $reset_link = $baseUrl . $path . "/reset_password.php?token=" . $token;
-                
+                $reset_link = BASE_URL . "/pages/reset_password.php?token=" . $token;
+
                 $subject = "Reset Password";
                 $message = "
         <div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
@@ -134,30 +205,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
            
             <p style='font-size: 12px; color: #999;'>
-                Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+                Ini adalah pesan otomatis dari sistem KASDIG.<br>
                 Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
             </p>
         </div>
                 ";
-                
+
                 try {
                     $mail = new PHPMailer(true);
                     $mail->isSMTP();
-                    $mail->Host = 'smtp.gmail.com';
+                    $mail->SMTPDebug = 0; // Disable debug untuk production
+                    $mail->Host = 'mail.kasdig.web.id';
                     $mail->SMTPAuth = true;
-                    $mail->Username = 'myschobank@gmail.com';
-                    $mail->Password = 'xpni zzju utfu mkth';
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    $mail->Port = 587;
+                    $mail->Username = 'noreply@kasdig.web.id';
+                    $mail->Password = 'BtRjT4wP8qeTL5M';
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    $mail->Port = 465;
+                    $mail->Timeout = 30; // Timeout 30 detik
                     $mail->CharSet = 'UTF-8';
 
-                    $mail->setFrom('myschobank@gmail.com', 'Schobank Student Digital Banking');
+                    $mail->setFrom('noreply@kasdig.web.id', 'KASDIG');
                     $mail->addAddress($user['email'], $user['nama']);
 
                     $mail->isHTML(true);
                     $mail->Subject = $subject;
                     $mail->Body = $message;
-                    
+
                     $labels = [
                         'Nama' => $user['nama'],
                         'Link Reset' => $reset_link,
@@ -170,20 +243,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $text_rows[] = str_pad($label, $max_label_length, ' ') . " : " . $value;
                     }
                     $text_rows[] = "\nJika bukan Anda, abaikan email ini.";
-                    $text_rows[] = "\nHormat kami,\nTim Schobank Student Digital Banking";
+                    $text_rows[] = "\nHormat kami,\nTim KASDIG";
                     $text_rows[] = "\nPesan otomatis, mohon tidak membalas.";
                     $altBody = implode("\n", $text_rows);
                     $mail->AltBody = $altBody;
 
                     $mail->send();
-                    
+
                     updateResetRequestTime($conn, $user['id'], $method);
-                    
-                    // PESAN SUKSES DIPERBARUI DI SINI
+
                     $success_message = "Link Reset Berhasil Dikirim ke email mu";
                 } catch (Exception $e) {
                     error_log("Mail error: " . $mail->ErrorInfo);
-                    $error_message = "Gagal mengirim email. Coba lagi atau hubungi admin.";
+                    $error_message = "Gagal: " . $mail->ErrorInfo;
                 }
             }
         }
@@ -203,259 +275,350 @@ unset($_SESSION['success_message'], $_SESSION['error_message']);
 ?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
-    <title>Lupa Password | My Schobank</title>
-    <link rel="icon" type="image/jpeg" href="/schobank/assets/images/logo.jpg">
+    <title>Lupa Password | KASDIG</title>
+    <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #1A237E;
-            --primary-dark: #0d1452;
-            --danger-color: #dc2626;
-            --success-color: #16a34a;
-            --text-primary: #000000;
-            --bg-white: #ffffff;
-            --border-light: #e2e8f0;
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            --radius-lg: 0.75rem;
-            --radius-md: 0.5rem;
-            --transition: all 0.3s ease;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; }
-        html, body { height: 100%; touch-action: manipulation; }
+
+        html,
         body {
+            height: 100%;
+            font-family: 'Poppins', sans-serif;
             background: #ffffff;
+        }
+
+        body {
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
             min-height: 100vh;
+            padding: 20px;
         }
+
         .login-container {
-            position: relative;
-            background: var(--bg-white);
-            padding: 2.5rem;
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-lg);
             width: 100%;
-            max-width: 420px;
-            border: 1px solid var(--border-light);
+            max-width: 400px;
+            padding: 20px;
         }
-        .close-btn {
-            position: absolute;
-            top: 16px;
-            right: 16px;
-            background: none;
-            border: none;
-            font-size: 1.5rem;
-            color: #64748b;
-            cursor: pointer;
-            padding: 4px;
-            border-radius: 50%;
-        }
-        .header-section {
+
+        /* Logo Section */
+        .logo-section {
             text-align: center;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1.25rem;
-            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 24px;
         }
-        .logo-container { margin-bottom: 1rem; }
-        .logo {
-            height: auto;
-            max-height: 80px;
+
+        .logo-icon img {
+            height: 150px;
             width: auto;
-            max-width: 100%;
-            object-fit: contain;
-            transition: var(--transition);
         }
-        .logo:hover { transform: scale(1.03); }
+
+        /* Description */
         .description {
-            color: var(--text-primary);
+            text-align: center;
+            color: #666;
             font-size: 0.85rem;
-            font-weight: 400;
-            line-height: 1.5;
-            text-align: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
         }
-        .input-group { margin-bottom: 1.25rem; position: relative; }
-        .input-wrapper { position: relative; }
-        .input-icon {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #64748b;
-            font-size: 1.1rem;
-            z-index: 2;
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 20px;
         }
-        .input-field {
-            width: 100%;
-            padding: 14px 14px 14px 46px;
-            border: 2px solid var(--border-light);
-            border-radius: var(--radius-md);
-            font-size: 15px;
-            background: #fdfdfd;
-            transition: var(--transition);
-            color: var(--text-primary);
-        }
-        .input-field:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            background: var(--bg-white);
-            box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.12);
-        }
-        .error-message, .success-message {
-            padding: 12px 16px;
-            margin-bottom: 1rem;
-            text-align: center;
-            font-size: 0.875rem;
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            transition: opacity 0.4s ease;
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 8px;
             font-weight: 500;
         }
-        .error-message {
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 14px 40px 14px 0;
+            border: none;
+            border-bottom: 1.5px solid #e0e0e0;
+            font-size: 1rem;
+            color: #1a1a2e;
+            background: transparent;
+            transition: border-color 0.3s ease;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-bottom-color: #1a1a2e;
+        }
+
+        .form-input::placeholder {
+            color: #c0c0c0;
+        }
+
+        .form-input.input-error {
+            border-bottom-color: #e74c3c;
+        }
+
+        .input-icon {
+            position: absolute;
+            right: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #3498db;
+            font-size: 1rem;
+        }
+
+        .error-text {
+            color: #e74c3c;
+            font-size: 0.75rem;
+            margin-top: 6px;
+        }
+
+        /* General Error & Success */
+        .general-error,
+        .general-success {
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .general-error {
             background: #fef2f2;
             border: 1px solid #fecaca;
-            color: var(--danger-color);
         }
-        .success-message {
+
+        .general-error i {
+            color: #e74c3c;
+        }
+
+        .general-error span {
+            color: #991b1b;
+            font-size: 0.85rem;
+        }
+
+        .general-success {
             background: #f0fdf4;
             border: 1px solid #bbf7d0;
-            color: var(--success-color);
         }
-        .error-message.fade-out, .success-message.fade-out { opacity: 0; }
-        .submit-button {
+
+        .general-success i {
+            color: #16a34a;
+        }
+
+        .general-success span {
+            color: #166534;
+            font-size: 0.85rem;
+        }
+
+        /* Submit Button */
+        .submit-btn {
             width: 100%;
-            padding: 14px 20px;
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            color: white;
+            padding: 16px;
+            background: #1a1a2e;
+            color: #ffffff;
             border: none;
-            border-radius: var(--radius-md);
-            font-size: 15px;
-            font-weight: 600;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 500;
             cursor: pointer;
-            transition: var(--transition);
+            transition: all 0.3s ease;
+            font-family: inherit;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.75rem;
-            position: relative;
-            overflow: hidden;
+            gap: 10px;
+            margin-top: 10px;
         }
-        .submit-button:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
+
+        .submit-btn:hover {
+            background: #2d2d4a;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(26, 26, 46, 0.3);
         }
-        .submit-button:disabled {
+
+        .submit-btn:active {
+            transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
             opacity: 0.7;
             cursor: not-allowed;
             transform: none;
         }
+
         .loading-spinner {
             display: none;
             width: 18px;
             height: 18px;
             border: 2px solid transparent;
-            border-top: 2px solid white;
+            border-top: 2px solid #ffffff;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
 
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Back Link */
+        .back-link {
+            text-align: center;
+            margin-top: 25px;
+        }
+
+        .back-link a {
+            color: #8e8e8e;
+            text-decoration: none;
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: color 0.3s ease;
+        }
+
+        .back-link a:hover {
+            color: #1a1a2e;
+        }
+
+        /* Responsive */
         @media (max-width: 480px) {
-            body { padding: 15px; }
-            .login-container { padding: 2rem; }
-            .logo { max-height: 70px; }
-            .input-field { font-size: 14px; padding: 12px 12px 12px 42px; }
-            .submit-button { padding: 12px 18px; font-size: 14px; }
-            .description { font-size: 0.8rem; }
+            body {
+                padding: 20px;
+            }
+
+            .login-container {
+                padding: 20px;
+            }
+
+            .logo-section {
+                margin-bottom: 20px;
+            }
+
+            .logo-icon img {
+                height: 120px;
+            }
+
+            .description {
+                font-size: 0.8rem;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="login-container">
-        <button type="button" class="close-btn" onclick="window.location.href='login.php'">
-            <i class="fas fa-times"></i>
-        </button>
-
-        <div class="header-section">
-            <div class="logo-container">
-                <img src="/schobank/assets/images/header.png" alt="My Schobank Logo" class="logo">
+        <!-- Logo Section -->
+        <div class="logo-section">
+            <div class="logo-icon">
+                <img src="<?= ASSETS_URL ?>/images/header.png" alt="KASDIG" draggable="false">
             </div>
         </div>
 
+        <!-- Description -->
         <p class="description">
-            Masukkan email Anda untuk memulai proses reset password akun My Schobank. Kami akan mengirimkan link reset ke email tersebut.
+            Masukkan email Anda untuk menerima link reset password.
         </p>
 
+        <!-- Error Message -->
         <?php if (!empty($error_message)): ?>
-            <div class="error-message" id="errorMessage">
-                <i class="fas fa-exclamation-triangle"></i>
-                <?= htmlspecialchars($error_message) ?>
+            <div class="general-error" id="generalError">
+                <i class="fas fa-exclamation-circle"></i>
+                <span><?= htmlspecialchars($error_message) ?></span>
             </div>
         <?php endif; ?>
 
+        <!-- Success Message -->
         <?php if (!empty($success_message)): ?>
-            <div class="success-message" id="successMessage">
+            <div class="general-success" id="generalSuccess">
                 <i class="fas fa-check-circle"></i>
-                <?= htmlspecialchars($success_message) ?>
+                <span><?= htmlspecialchars($success_message) ?></span>
             </div>
             <script>
-                setTimeout(function() {
+                setTimeout(function () {
                     window.location.href = 'login.php';
                 }, 3000);
             </script>
         <?php else: ?>
-            <form method="POST" id="forgotForm">
-                <div class="input-group">
+            <!-- Forgot Password Form -->
+            <form method="POST" id="forgot-form">
+                <!-- Email -->
+                <div class="form-group">
+                    <label class="form-label">Email</label>
                     <div class="input-wrapper">
-                        <input type="email" name="identifier" id="identifier" class="input-field" 
-                               placeholder="contoh@gmail.com" required autocomplete="email">
-                        <i class="fas fa-envelope input-icon"></i>
+                        <input type="email" name="identifier" id="identifier" class="form-input"
+                            placeholder="Masukkan email Anda" required autocomplete="email">
+                        <i class="fas fa-envelope input-icon" style="color: #8e8e8e;"></i>
                     </div>
                 </div>
 
-                <button type="submit" class="submit-button" id="submitButton">
-                    <i class="fas fa-paper-plane" id="btnIcon"></i>
+                <!-- Submit Button -->
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    <span id="btnText">Kirim Link Reset</span>
                     <div class="loading-spinner" id="loadingSpinner"></div>
-                    <span id="buttonText">Kirim Link Reset</span>
                 </button>
             </form>
         <?php endif; ?>
+
+        <!-- Back to Login -->
+        <div class="back-link">
+            <a href="<?= BASE_URL ?>/pages/login.php">
+                <i class="fas fa-arrow-left"></i>
+                Kembali ke halaman masuk
+            </a>
+        </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const form = document.getElementById('forgotForm');
-            const submitBtn = document.getElementById('submitButton');
-            const btnText = document.getElementById('buttonText');
-            const btnIcon = document.getElementById('btnIcon');
+        document.addEventListener('DOMContentLoaded', function () {
+            const form = document.getElementById('forgot-form');
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
             const spinner = document.getElementById('loadingSpinner');
 
-            const errorEl = document.getElementById('errorMessage');
-            if (errorEl) {
+            // Auto-hide error message
+            const generalError = document.getElementById('generalError');
+            if (generalError) {
                 setTimeout(() => {
-                    errorEl.classList.add('fade-out');
-                    setTimeout(() => errorEl.remove(), 400);
-                }, 3000);
+                    generalError.style.opacity = '0';
+                    generalError.style.transition = 'opacity 0.4s ease';
+                    setTimeout(() => generalError.remove(), 400);
+                }, 5000);
             }
 
-            if (form) {
-                form.addEventListener('submit', function() {
-                    if (btnIcon) btnIcon.style.display = 'none';
-                    if (spinner) spinner.style.display = 'block';
-                    if (btnText) btnText.textContent = 'Mengirim...';
-                    submitBtn.disabled = true;
-                });
-            }
+            // Form submit with loading
+            form?.addEventListener('submit', function () {
+                btnText.textContent = 'Mengirim...';
+                spinner.style.display = 'block';
+                submitBtn.disabled = true;
+
+                setTimeout(() => {
+                    btnText.textContent = 'Kirim Link Reset';
+                    spinner.style.display = 'none';
+                    submitBtn.disabled = false;
+                }, 10000);
+            });
         });
     </script>
 </body>
+
 </html>

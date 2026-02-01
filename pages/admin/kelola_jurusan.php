@@ -8,7 +8,7 @@
 // ADAPTIVE PATH & CONFIGURATION
 // ============================================
 $current_file = __FILE__;
-$current_dir  = dirname($current_file);
+$current_dir = dirname($current_file);
 $project_root = null;
 
 if (basename($current_dir) === 'pages') {
@@ -27,23 +27,30 @@ if (basename($current_dir) === 'pages') {
         }
     }
 }
-if (!$project_root) $project_root = $current_dir;
+if (!$project_root)
+    $project_root = $current_dir;
 
-if (!defined('PROJECT_ROOT')) define('PROJECT_ROOT', rtrim($project_root, '/'));
-if (!defined('INCLUDES_PATH')) define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
-if (!defined('ASSETS_PATH'))   define('ASSETS_PATH',   PROJECT_ROOT . '/assets');
+if (!defined('PROJECT_ROOT'))
+    define('PROJECT_ROOT', rtrim($project_root, '/'));
+if (!defined('INCLUDES_PATH'))
+    define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
+if (!defined('ASSETS_PATH'))
+    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
 
-function getBaseUrl() {
+function getBaseUrl()
+{
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
     $host = $_SERVER['HTTP_HOST'];
     $script = $_SERVER['SCRIPT_NAME'];
     $base_path = dirname($script);
     $base_path = str_replace('\\', '/', $base_path);
     $base_path = preg_replace('#/pages.*$#', '', $base_path);
-    if ($base_path !== '/' && !empty($base_path)) $base_path = '/' . ltrim($base_path, '/');
+    if ($base_path !== '/' && !empty($base_path))
+        $base_path = '/' . ltrim($base_path, '/');
     return $protocol . $host . $base_path;
 }
-if (!defined('BASE_URL')) define('BASE_URL', rtrim(getBaseUrl(), '/'));
+if (!defined('BASE_URL'))
+    define('BASE_URL', rtrim(getBaseUrl(), '/'));
 define('ASSETS_URL', BASE_URL . '/assets');
 
 // ============================================
@@ -70,10 +77,12 @@ if (!isset($_SESSION['form_token'])) {
 $token = $_SESSION['form_token'];
 
 // Flash Messages
-function setFlash($type, $msg) {
+function setFlash($type, $msg)
+{
     $_SESSION['flash'][$type] = $msg;
 }
-function getFlash($type) {
+function getFlash($type)
+{
     if (isset($_SESSION['flash'][$type])) {
         $msg = $_SESSION['flash'][$type];
         unset($_SESSION['flash'][$type]);
@@ -88,7 +97,7 @@ $nama_jurusan = '';
 
 // Pagination
 $items_per_page = 15;
-$page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int)$_GET['page'] : 1;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) && $_GET['page'] > 0 ? (int) $_GET['page'] : 1;
 $offset = ($page - 1) * $items_per_page;
 
 // Total jurusan
@@ -101,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['token']) && $_POST['t
 
     // HAPUS (dari SweetAlert)
     if (isset($_POST['hapus_id'])) {
-        $id = (int)$_POST['hapus_id'];
+        $id = (int) $_POST['hapus_id'];
 
         $cek1 = $conn->query("SELECT 1 FROM siswa_profiles WHERE jurusan_id = $id LIMIT 1")->num_rows;
         $cek2 = $conn->query("SELECT 1 FROM kelas WHERE jurusan_id = $id LIMIT 1")->num_rows;
@@ -125,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['token']) && $_POST['t
         setFlash('error', 'Nama jurusan minimal 3 karakter!');
     } else {
         if (isset($_POST['edit_id']) && !empty($_POST['edit_id'])) {
-            $id = (int)$_POST['edit_id'];
+            $id = (int) $_POST['edit_id'];
 
             $old = $conn->prepare("SELECT nama_jurusan FROM jurusan WHERE id = ?");
             $old->bind_param("i", $id);
@@ -171,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['token']) && $_POST['t
 
 // ======================================== HANDLE EDIT (GET) ========================================
 if (isset($_GET['edit']) && is_numeric($_GET['edit'])) {
-    $edit_id = (int)$_GET['edit'];
+    $edit_id = (int) $_GET['edit'];
     $res = $conn->prepare("SELECT nama_jurusan FROM jurusan WHERE id = ?");
     $res->bind_param("i", $edit_id);
     $res->execute();
@@ -196,146 +205,529 @@ $stmt->close();
 
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
-    <title>Kelola Jurusan | MY Schobank</title>
+    <title>Kelola Jurusan | KASDIG</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a; --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6; --bg-light: #f0f5ff;
-            --text-primary: #333; --text-secondary: #666;
-            --shadow-sm: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins',sans-serif; }
-        body { background-color: var(--bg-light); color: var(--text-primary); display: flex; min-height: 100vh; overflow-x: hidden; }
-        
-        /* SIDEBAR OVERLAY FIX */
-        body.sidebar-open { overflow: hidden; }
-        body.sidebar-open::before {
-            content: ''; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.5); z-index: 998; backdrop-filter: blur(5px);
-        }
-        
-        .main-content { flex: 1; margin-left: 280px; padding: 30px; max-width: calc(100% - 280px); position: relative; z-index: 1; }
-        
-        .welcome-banner { 
-            background: linear-gradient(135deg, var(--primary-dark), var(--secondary-color)); 
-            color: white; padding: 30px; border-radius: 8px; margin-bottom: 30px; 
-            box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 20px; 
-        }
-        .welcome-banner h2 { font-size: 1.5rem; margin: 0; }
-        .welcome-banner p { margin: 0; opacity: 0.9; }
-        .menu-toggle { display: none; font-size: 1.5rem; cursor: pointer; align-self: center; margin-right: auto; }
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
 
-        .form-card, .jadwal-list { background: white; border-radius: 8px; padding: 25px; box-shadow: var(--shadow-sm); margin-bottom: 30px; }
-        .form-row { display: flex; gap: 20px; margin-bottom: 15px; }
-        .form-group { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-        label { font-weight: 500; font-size: 0.9rem; color: var(--text-secondary); }
+            --primary-color: var(--gray-800);
+            --primary-dark: var(--gray-900);
+            --secondary-color: var(--gray-600);
+
+            --bg-light: #f8fafc;
+            --text-primary: var(--gray-800);
+            --text-secondary: var(--gray-500);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 0.5rem;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-light);
+            color: var(--text-primary);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* SIDEBAR OVERLAY FIX */
+        body.sidebar-open {
+            overflow: hidden;
+        }
+
+        body.sidebar-open::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 998;
+            backdrop-filter: blur(5px);
+        }
+
+        .main-content {
+            flex: 1;
+            margin-left: 280px;
+            padding: 2rem;
+            max-width: calc(100% - 280px);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Page Title Section */
+        .page-title-section {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+            padding: 1.5rem 2rem;
+            margin: -2rem -2rem 1.5rem -2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .page-title-content {
+            flex: 1;
+        }
+
+        .page-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .page-subtitle {
+            color: var(--gray-500);
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        .page-hamburger {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--gray-700);
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .page-hamburger:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--gray-800);
+        }
+
+        /* Cards */
+        .card,
+        .form-card,
+        .jadwal-list {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border: 1px solid var(--gray-100);
+        }
+
+        .card-header {
+            background: var(--gray-100);
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .card-header-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--gray-600) 0%, var(--gray-500) 100%);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .card-header-text {
+            flex: 1;
+        }
+
+        .card-header-text h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .card-header-text p {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+
+        .form-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
 
         input[type="text"] {
-            width: 100%; padding: 12px 15px; border: 1px solid #e2e8f0; border-radius: 6px;
-            font-size: 0.95rem; height: 48px; background: #fff;
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            height: 48px;
+            background: #fff;
+            color: var(--gray-800);
+            transition: all 0.2s;
         }
-        input:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(30,58,138,0.1); outline: none; }
 
-        .btn { 
-            background: var(--primary-color); color: white; border: none; padding: 12px 25px; border-radius: 6px; 
-            cursor: pointer; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; 
-            transition: 0.3s; text-decoration: none !important;
+        input:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.1);
+            outline: none;
         }
-        .btn:hover { background: var(--primary-dark); transform: translateY(-2px); }
-        .btn-cancel { background: #e2e8f0; color: #475569; text-decoration: none !important; }
-        .btn-cancel:hover { background: #cbd5e1; }
 
-        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #f1f5f9; }
-        table { width: 100%; border-collapse: collapse; min-width: 600px; }
-        th { background: #f8fafc; padding: 15px; text-align: left; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid #e2e8f0; }
-        td { padding: 15px; border-bottom: 1px solid #f1f5f9; }
+        /* Button */
+        .btn {
+            background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-600) 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            text-decoration: none !important;
+            font-size: 0.95rem;
+            box-shadow: var(--shadow-sm);
+        }
 
-        .action-icon {
-            font-size: 1.1rem; cursor: pointer; padding: 8px; border-radius: 6px; transition: 0.2s;
-            width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center;
+        .btn:hover {
+            background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-700) 100%);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-cancel {
+            background: white;
+            color: var(--gray-600);
+            border: 1px solid var(--gray-300);
+            box-shadow: none;
+        }
+
+        .btn-cancel:hover {
+            background: var(--gray-100);
+            border-color: var(--gray-400);
+        }
+
+        .btn-action {
+            background: linear-gradient(135deg, var(--gray-600) 0%, var(--gray-500) 100%);
+            color: white;
+        }
+
+        .btn-action:hover {
+            background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-600) 100%);
+        }
+
+        /* Data Table */
+        .table-wrapper {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .data-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .data-table th {
+            background: var(--gray-100);
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 2px solid var(--gray-200);
+            font-weight: 600;
+            color: var(--gray-500);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .data-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--gray-100);
+            vertical-align: middle;
+        }
+
+        .data-table tbody tr {
+            background: white;
+        }
+
+        .data-table tr:hover {
+            background: var(--gray-100) !important;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .actions .btn {
+            padding: 8px 16px;
+            border-radius: var(--radius);
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .actions .btn i {
+            margin-right: 4px;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            padding: 1.5rem;
+            gap: 0.5rem;
+        }
+
+        .page-link {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            text-decoration: none;
+            color: var(--gray-600);
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .page-link:hover {
+            background: var(--gray-100);
+        }
+
+        .page-link.active {
+            background: var(--gray-600);
+            color: white;
+            border-color: var(--gray-600);
+        }
+
+        a,
+        a:hover,
+        a:visited,
+        a:active {
             text-decoration: none !important;
         }
-        .action-icon.edit { background: var(--secondary-color); color: #fff; }
-        .action-icon.delete { background: #ef4444; color: #fff; }
-        .action-icon:hover { opacity: 0.9; transform: scale(1.1); }
-
-        a, a:hover, a:visited, a:active { text-decoration: none !important; }
 
         /* SweetAlert Custom Fixes */
-        .swal2-input { height: 48px !important; margin: 10px auto !important; }
+        .swal2-input {
+            height: 48px !important;
+            margin: 10px auto !important;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                padding: 1rem;
+                max-width: 100%;
+            }
+
+            .page-title-section {
+                padding: 1rem;
+                margin: -1rem -1rem 1rem -1rem;
+            }
+
+            .page-hamburger {
+                display: flex;
+            }
+        }
 
         @media (max-width: 768px) {
-            .main-content { margin-left: 0; padding: 15px; max-width: 100%; }
-            .menu-toggle { display: block; }
-            .welcome-banner { 
-                flex-direction: row; 
-                align-items: center; 
-                gap: 15px; 
-                padding: 20px; 
+            .form-row {
+                flex-direction: column;
+                gap: 15px;
             }
-            .welcome-banner h2 { font-size: 1.2rem; margin: 0; }
-            .welcome-banner p { font-size: 0.9rem; margin: 0; opacity: 0.9; }
-            .form-row { flex-direction: column; gap: 15px; }
+
+            .card-body {
+                padding: 1rem;
+            }
+
+            .card-header {
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+
+            .data-table {
+                min-width: auto;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 0.5rem;
+                font-size: 0.75rem;
+                white-space: nowrap;
+            }
+
+            .actions {
+                flex-direction: row;
+                flex-wrap: nowrap;
+                gap: 4px;
+            }
+
+            .actions .btn {
+                padding: 6px 12px;
+                font-size: 0.75rem;
+                white-space: nowrap;
+            }
+
+            .actions .btn i {
+                margin-right: 2px;
+            }
+
+            .pagination {
+                flex-wrap: wrap;
+                padding: 1rem;
+            }
+
+            .page-link {
+                padding: 0.4rem 0.75rem;
+                font-size: 0.85rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .page-title-section {
+                margin: -0.75rem -0.75rem 0.75rem -0.75rem;
+                padding: 0.75rem;
+            }
+
+            .page-title {
+                font-size: 1.1rem;
+            }
+
+            .page-subtitle {
+                font-size: 0.8rem;
+            }
         }
     </style>
 </head>
+
 <body>
     <?php include INCLUDES_PATH . '/sidebar_admin.php'; ?>
 
     <div class="main-content" id="mainContent">
-        <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></span>
-            <div>
-                <h2>Kelola Jurusan</h2>
-                <p>Tambah, edit, atau hapus data jurusan sekolah</p>
+        <!-- Page Title Section -->
+        <div class="page-title-section">
+            <button class="page-hamburger" id="pageHamburgerBtn" aria-label="Toggle Menu">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="page-title-content">
+                <h1 class="page-title">Kelola Jurusan</h1>
+                <p class="page-subtitle">Tambah, edit, atau hapus data jurusan sekolah</p>
             </div>
         </div>
 
-        <!-- FORM TAMBAH / EDIT -->
-        <div class="form-card">
-            <form method="POST" id="jurusanForm">
-                <input type="hidden" name="token" value="<?= $token ?>">
-                <?php if ($edit_id): ?>
-                    <input type="hidden" name="edit_id" value="<?= $edit_id ?>">
-                <?php endif; ?>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Nama Jurusan</label>
-                        <input type="text" id="namaInput" name="nama_jurusan" value="<?= htmlspecialchars($nama_jurusan) ?>" placeholder="Contoh: Rekayasa Perangkat Lunak" required maxlength="100">
-                    </div>
+        <!-- Card Tambah / Edit Jurusan -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-header-icon">
+                    <i class="fas fa-<?= $edit_id ? 'edit' : 'plus' ?>"></i>
                 </div>
-
-                <div style="display:flex; gap:12px; margin-top:10px;">
-                    <button type="button" id="submitBtn" class="btn">
-                        <?= $edit_id ? 'Update Jurusan' : 'Tambah Jurusan' ?>
-                    </button>
+                <div class="card-header-text">
+                    <h3><?= $edit_id ? 'Edit Jurusan' : 'Tambah Jurusan' ?></h3>
+                    <p>Kelola data jurusan sekolah</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="jurusanForm">
+                    <input type="hidden" name="token" value="<?= $token ?>">
                     <?php if ($edit_id): ?>
-                        <a href="kelola_jurusan.php" class="btn btn-cancel">Batal</a>
+                        <input type="hidden" name="edit_id" value="<?= $edit_id ?>">
                     <?php endif; ?>
-                </div>
-            </form>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Nama Jurusan</label>
+                            <input type="text" id="namaInput" name="nama_jurusan"
+                                value="<?= htmlspecialchars($nama_jurusan) ?>"
+                                placeholder="Contoh: Rekayasa Perangkat Lunak" required maxlength="100">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:12px; margin-top:10px;">
+                        <button type="button" id="submitBtn" class="btn">
+                            <i class="fas fa-save"></i> <?= $edit_id ? 'Update Jurusan' : 'Tambah Jurusan' ?>
+                        </button>
+                        <?php if ($edit_id): ?>
+                            <a href="kelola_jurusan.php" class="btn btn-cancel">Batal</a>
+                        <?php endif; ?>
+                    </div>
+                </form>
+            </div>
         </div>
 
-        <!-- DAFTAR JURUSAN -->
-        <div class="jadwal-list">
-            <h3>Daftar Jurusan</h3>
+        <!-- Card Daftar Jurusan -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-header-icon">
+                    <i class="fas fa-graduation-cap"></i>
+                </div>
+                <div class="card-header-text">
+                    <h3>Daftar Jurusan</h3>
+                    <p>Semua jurusan yang tersedia</p>
+                </div>
+            </div>
 
-            <div class="table-wrapper">
-                <table>
+            <div class="table-wrapper" style="padding-top: 1.5rem; background: var(--gray-100);">
+                <table class="data-table">
                     <thead>
                         <tr>
                             <th>No</th>
                             <th>Nama Jurusan</th>
-                            <th style="width:120px; text-align:center;">Aksi</th>
+                            <th>Aksi</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -350,13 +742,16 @@ $stmt->close();
                                 <tr>
                                     <td><?= $offset + $i + 1 ?></td>
                                     <td><strong><?= htmlspecialchars($j['nama_jurusan']) ?></strong></td>
-                                    <td style="text-align:center;">
-                                        <a href="?edit=<?= $j['id'] ?>" class="action-icon edit" title="Edit">
-                                            <i class="fas fa-pencil-alt"></i>
-                                        </a>
-                                        <span class="action-icon delete" onclick="hapusJurusan(<?= $j['id'] ?>, '<?= htmlspecialchars(addslashes($j['nama_jurusan']), ENT_QUOTES) ?>')" title="Hapus">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </span>
+                                    <td>
+                                        <div class="actions">
+                                            <a href="?edit=<?= $j['id'] ?>" class="btn btn-action">
+                                                <i class="fas fa-pencil-alt"></i> Edit
+                                            </a>
+                                            <button type="button" class="btn btn-action"
+                                                onclick="hapusJurusan(<?= $j['id'] ?>, '<?= htmlspecialchars(addslashes($j['nama_jurusan']), ENT_QUOTES) ?>')">
+                                                <i class="fas fa-trash-alt"></i> Hapus
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -365,24 +760,24 @@ $stmt->close();
                 </table>
             </div>
 
-            <!-- PAGINATION -->
+            <!-- Pagination -->
             <?php if ($total_pages > 1): ?>
-            <div style="margin-top:20px; display:flex; justify-content:center; gap:5px;">
-                <?php for($i=1; $i<=$total_pages; $i++): ?>
-                    <a href="?page=<?= $i ?>" class="btn" style="padding:8px 12px; <?= $i==$page ? 'background:var(--primary-dark);' : 'opacity:0.7;' ?>">
-                        <?= $i ?>
-                    </a>
-                <?php endfor; ?>
-            </div>
+                <div class="pagination">
+                    <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                        <a href="?page=<?php echo $i; ?>" class="page-link <?php echo $page == $i ? 'active' : ''; ?>">
+                            <?php echo $i; ?>
+                        </a>
+                    <?php endfor; ?>
+                </div>
             <?php endif; ?>
         </div>
     </div>
 
     <script>
         // ============================================
-        // FIXED SIDEBAR MOBILE BEHAVIOR (sama persis dengan rekap_absensi)
+        // FIXED SIDEBAR MOBILE BEHAVIOR
         // ============================================
-        const menuToggle = document.getElementById('menuToggle');
+        const menuToggle = document.getElementById('pageHamburgerBtn');
         const sidebar = document.getElementById('sidebar');
         const body = document.body;
 
@@ -397,7 +792,7 @@ $stmt->close();
         }
 
         if (menuToggle) {
-            menuToggle.addEventListener('click', function(e) {
+            menuToggle.addEventListener('click', function (e) {
                 e.stopPropagation();
                 if (body.classList.contains('sidebar-open')) {
                     closeSidebar();
@@ -407,22 +802,22 @@ $stmt->close();
             });
         }
 
-        document.addEventListener('click', function(e) {
-            if (body.classList.contains('sidebar-open') && 
-                !sidebar?.contains(e.target) && 
+        document.addEventListener('click', function (e) {
+            if (body.classList.contains('sidebar-open') &&
+                !sidebar?.contains(e.target) &&
                 !menuToggle?.contains(e.target)) {
                 closeSidebar();
             }
         });
 
-        document.addEventListener('keydown', function(e) {
+        document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && body.classList.contains('sidebar-open')) {
                 closeSidebar();
             }
         });
 
         // Tambah / Update dengan Konfirmasi
-        document.getElementById('submitBtn').addEventListener('click', function(e) {
+        document.getElementById('submitBtn').addEventListener('click', function (e) {
             e.preventDefault();
             const input = document.getElementById('namaInput');
             const nama = input.value.trim();
@@ -439,7 +834,7 @@ $stmt->close();
                 showCancelButton: true,
                 confirmButtonText: 'Ya, <?= $edit_id ? 'Update' : 'Tambah' ?>',
                 cancelButtonText: 'Batal',
-                confirmButtonColor: '#1e3a8a'
+                confirmButtonColor: '#334155'
             }).then((result) => {
                 if (result.isConfirmed) {
                     document.getElementById('jurusanForm').submit();
@@ -484,4 +879,5 @@ $stmt->close();
         <?php endif; ?>
     </script>
 </body>
+
 </html>

@@ -1,26 +1,93 @@
+<?php
+/**
+ * Sidebar Admin - Harmonized Version
+ * File: includes/sidebar_admin.php
+ */
+
+// ============================================
+// BASE URL DETECTION
+// ============================================
+if (!defined('BASE_URL')) {
+    function getBaseUrlAdmin()
+    {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'];
+        $script = $_SERVER['SCRIPT_NAME'];
+        $base_path = dirname($script);
+
+        // Remove '/pages/admin', '/pages/petugas', etc.
+        $base_path = preg_replace('#/pages(/[^/]+)?$#', '', $base_path);
+
+        if ($base_path !== '/' && !empty($base_path)) {
+            $base_path = '/' . ltrim($base_path, '/');
+        }
+
+        return $protocol . $host . $base_path;
+    }
+    define('BASE_URL', rtrim(getBaseUrlAdmin(), '/'));
+}
+
+// ============================================
+// LOAD AUTH
+// ============================================
+// Adjust path to auth.php based on location (assuming this file is in includes/)
+$auth_path = __DIR__ . '/auth.php';
+if (file_exists($auth_path)) {
+    require_once $auth_path;
+} else {
+    // Fallback if not found directly
+    $root_path = dirname(__DIR__);
+    if (file_exists($root_path . '/includes/auth.php')) {
+        require_once $root_path . '/includes/auth.php';
+    }
+}
+
+$current_page = basename($_SERVER['PHP_SELF']);
+$admin_id = $_SESSION['user_id'] ?? 0;
+
+// Ensure strictly admin
+if ($admin_id <= 0 || (isset($_SESSION['role']) && $_SESSION['role'] !== 'admin')) {
+    // Optional: Redirect if needed, or handle in the page itself
+}
+?>
 <!DOCTYPE html>
 <html>
+
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
+            --gray-50: #f9fafb;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --primary-color: var(--gray-800);
+            --primary-dark: var(--gray-900);
+            --secondary-color: var(--gray-600);
+            --secondary-dark: var(--gray-700);
             --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f0f5ff;
+            --bg-light: #f8fafc;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
-            --scrollbar-track: #1e1b4b;
-            --scrollbar-thumb: #3b82f6;
-            --scrollbar-thumb-hover: #60a5fa;
+            --scrollbar-track: var(--gray-900);
+            --scrollbar-thumb: var(--gray-600);
+            --scrollbar-thumb-hover: var(--gray-500);
         }
 
         * {
@@ -32,6 +99,7 @@
             -ms-user-select: none;
             user-select: none;
             -webkit-touch-callout: none;
+            /* Font sizes synchronized with sidebar_petugas.php */
         }
 
         .sidebar {
@@ -68,25 +136,14 @@
             justify-content: center;
             align-items: center;
             width: 100%;
-            height: 70px;
             text-align: center;
         }
 
-        .logo-text {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: white;
-            letter-spacing: 1px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            margin-bottom: 4px;
-        }
-
-        .logo-subtitle {
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.8);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            font-weight: 400;
+        .logo-img {
+            max-width: 160px;
+            height: auto;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
         }
 
         .sidebar-content {
@@ -124,15 +181,18 @@
             background: var(--scrollbar-thumb-hover);
         }
 
+        .sidebar-menu {
+            padding: 10px 0;
+        }
+
         .menu-label {
-            padding: 10px 25px 8px;
-            font-size: 0.7rem;
+            padding: 15px 25px 10px;
+            font-size: 0.8rem;
             text-transform: uppercase;
-            letter-spacing: 1.2px;
-            color: rgba(255, 255, 255, 0.5);
-            font-weight: 600;
-            margin-top: 12px;
-            user-select: none;
+            letter-spacing: 1.5px;
+            color: rgba(255, 255, 255, 0.6);
+            font-weight: 500;
+            margin-top: 10px;
         }
 
         .menu-item {
@@ -157,6 +217,12 @@
             background-color: rgba(255, 255, 255, 0.1);
             border-left-color: var(--secondary-color);
             color: white;
+        }
+
+        .menu-item a.disabled {
+            color: rgba(255, 255, 255, 0.4);
+            cursor: not-allowed;
+            pointer-events: none;
         }
 
         .menu-item i {
@@ -184,7 +250,7 @@
         }
 
         .dropdown-btn:hover,
-        .dropdown-btn.active {
+        .dropdown-btn.active-dropdown {
             background-color: rgba(255, 255, 255, 0.1);
             border-left-color: var(--secondary-color);
             color: white;
@@ -207,7 +273,7 @@
             font-size: 0.8rem;
         }
 
-        .dropdown-btn.active .arrow {
+        .dropdown-btn.active-dropdown .arrow {
             transform: rotate(180deg);
         }
 
@@ -256,6 +322,11 @@
                 transform: translateX(0);
             }
 
+            /* Compatibility for harmonized pages (Admin style toggle) */
+            body.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+
             body.sidebar-active::before {
                 content: '';
                 position: fixed;
@@ -269,7 +340,7 @@
                 opacity: 1;
             }
 
-            body:not(.sidebar-active)::before {
+            body:not(.sidebar-active):not(.sidebar-open)::before {
                 opacity: 0;
                 pointer-events: none;
             }
@@ -285,16 +356,8 @@
                 min-height: 75px;
             }
 
-            .logo-container {
-                height: 55px;
-            }
-
-            .logo-text {
-                font-size: 1.5rem;
-            }
-
-            .logo-subtitle {
-                font-size: 0.7rem;
+            .logo-img {
+                max-width: 130px;
             }
 
             .menu-item a,
@@ -310,233 +373,239 @@
         }
     </style>
 </head>
-<body>
-    <?php
-    require_once '../../includes/auth.php';
-    $admin_id = $_SESSION['user_id'] ?? 0;
-    if ($admin_id <= 0) {
-        header('Location: ../login.php');
-        exit();
-    }
-    ?>
 
+<body>
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="logo-container">
-                <div class="logo-text">My Schobank</div>
-                <div class="logo-subtitle">Admin Panel</div>
+                <img src="<?= BASE_URL ?>/assets/images/side.png" alt="KASDIG" class="logo-img">
             </div>
         </div>
 
         <div class="sidebar-content">
             <div class="sidebar-menu">
-                <div class="menu-label">Utama</div>
+                <div class="menu-label">Menu Utama</div>
+
+                <!-- Dashboard -->
                 <div class="menu-item">
-                    <a href="dashboard.php">
-                        <i class="fas fa-chart-pie"></i> Dashboard 
+                    <a href="dashboard.php" class="<?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>">
+                        <i class="fas fa-home"></i> Dashboard
                     </a>
                 </div>
 
-                <div class="menu-label">Transaksi</div>
+                <!-- Transaksi -->
                 <div class="menu-item">
-                    <button class="dropdown-btn" id="transaksiDropdown">
+                    <?php
+                    $transaksi_pages = ['setor.php', 'tarik.php'];
+                    $is_transaksi_active = in_array($current_page, $transaksi_pages);
+                    ?>
+                    <button class="dropdown-btn <?php echo $is_transaksi_active ? 'active-dropdown' : ''; ?>"
+                        id="transaksiDropdown">
                         <div class="menu-icon">
-                            <i class="fas fa-money-check-alt"></i>  Transaksi
+                            <i class="fas fa-exchange-alt"></i> Transaksi
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
-                    <div class="dropdown-container" id="transaksiDropdownContainer">
-                        <a href="setor.php">
-                            <i class="fas fa-hand-holding-usd"></i> Setoran
+                    <div class="dropdown-container <?php echo $is_transaksi_active ? 'show' : ''; ?>"
+                        id="transaksiDropdownContainer">
+                        <a href="setor.php" class="<?php echo $current_page == 'setor.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-arrow-circle-down"></i> Setor
                         </a>
-                        <a href="tarik.php">
-                            <i class="fas fa-money-bill-wave"></i> Penarikan
+                        <a href="tarik.php" class="<?php echo $current_page == 'tarik.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-arrow-circle-up"></i> Tarik
                         </a>
                     </div>
                 </div>
 
-                <div class="menu-label">Nasabah & Petugas</div>
+                <div class="menu-label">Kelola Data</div>
+
+                <!-- Data Rekening Siswa -->
                 <div class="menu-item">
-                    <a href="kelola_rekening.php">
-                        <i class="fas fa-address-card"></i> Rekening Nasabah
+                    <a href="data_rekening_siswa.php"
+                        class="<?php echo $current_page == 'data_rekening_siswa.php' ? 'active' : ''; ?>">
+                        <i class="fas fa-address-card"></i> Data Rekening Siswa
                     </a>
                 </div>
 
+                <!-- Manajemen Akun Siswa -->
                 <div class="menu-item">
-                    <a href="manajemen_akun.php">
-                        <i class="fas fa-users-cog"></i> Kelola Akun Nasabah
+                    <a href="manajemen_akun.php"
+                        class="<?php echo $current_page == 'manajemen_akun.php' ? 'active' : ''; ?>">
+                        <i class="fas fa-users-cog"></i> Manajemen Akun Siswa
                     </a>
                 </div>
 
+                <!-- Manajemen Petugas -->
                 <div class="menu-item">
-                    <button class="dropdown-btn" id="petugasDropdown">
+                    <?php
+                    $petugas_pages = ['kelola_akun_petugas.php', 'kelola_jadwal.php'];
+                    $is_petugas_active = in_array($current_page, $petugas_pages);
+                    ?>
+                    <button class="dropdown-btn <?php echo $is_petugas_active ? 'active-dropdown' : ''; ?>"
+                        id="petugasDropdown">
                         <div class="menu-icon">
                             <i class="fas fa-user-tie"></i> Manajemen Petugas
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
-                    <div class="dropdown-container" id="petugasDropdownContainer">
-                        <a href="kelola_akun_petugas.php">
-                            <i class="fas fa-id-card"></i> Data Akun Petugas
+                    <div class="dropdown-container <?php echo $is_petugas_active ? 'show' : ''; ?>"
+                        id="petugasDropdownContainer">
+                        <a href="kelola_akun_petugas.php"
+                            class="<?php echo $current_page == 'kelola_akun_petugas.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-id-card"></i> Kelola Akun Petugas
                         </a>
-                        <a href="kelola_jadwal.php">
-                            <i class="fas fa-calendar-check"></i> Jadwal Petugas
-                        </a>
-                        <a href="kontrol_akses_petugas.php">
-                            <i class="fas fa-key"></i> Hak Akses Sistem
+                        <a href="kelola_jadwal.php"
+                            class="<?php echo $current_page == 'kelola_jadwal.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-calendar-check"></i> Kelola Jadwal Petugas
                         </a>
                     </div>
                 </div>
 
-                <div class="menu-label">Data & Laporan</div>
+                <!-- Data Master Sekolah -->
                 <div class="menu-item">
-                    <button class="dropdown-btn" id="dataMasterDropdown">
+                    <?php
+                    $master_pages = ['kelola_jurusan.php', 'kelola_tingkatan.php', 'kelola_kelas.php'];
+                    $is_master_active = in_array($current_page, $master_pages);
+                    ?>
+                    <button class="dropdown-btn <?php echo $is_master_active ? 'active-dropdown' : ''; ?>"
+                        id="dataMasterDropdown">
                         <div class="menu-icon">
                             <i class="fas fa-database"></i> Data Master Sekolah
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
-                    <div class="dropdown-container" id="dataMasterDropdownContainer">
-                        <a href="kelola_jurusan.php">
-                            <i class="fas fa-book-open"></i> Data Jurusan
+                    <div class="dropdown-container <?php echo $is_master_active ? 'show' : ''; ?>"
+                        id="dataMasterDropdownContainer">
+                        <a href="kelola_jurusan.php"
+                            class="<?php echo $current_page == 'kelola_jurusan.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-book-open"></i> Kelola Jurusan
                         </a>
-                        <a href="kelola_tingkatan.php">
-                            <i class="fas fa-layer-group"></i> Tingkatan Kelas
+                        <a href="kelola_tingkatan.php"
+                            class="<?php echo $current_page == 'kelola_tingkatan.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-layer-group"></i> Kelola Tingkatan Kelas
                         </a>
-                        <a href="kelola_kelas.php">
-                            <i class="fas fa-chalkboard"></i> Data Kelas
+                        <a href="kelola_kelas.php"
+                            class="<?php echo $current_page == 'kelola_kelas.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-chalkboard"></i> Kelola Kelas
                         </a>
                     </div>
                 </div>
 
+                <!-- Laporan Keuangan -->
                 <div class="menu-item">
-                    <button class="dropdown-btn" id="laporanDropdown">
+                    <?php
+                    $laporan_pages = ['data_riwayat_transaksi_admin.php', 'data_riwayat_transaksi_petugas.php', 'rekapitulasi_transaksi.php', 'download_rekap_transaksi.php'];
+                    $is_laporan_active = in_array($current_page, $laporan_pages);
+                    ?>
+                    <button class="dropdown-btn <?php echo $is_laporan_active ? 'active-dropdown' : ''; ?>"
+                        id="laporanDropdown">
                         <div class="menu-icon">
-                            <i class="fas fa-file-contract"></i> Laporan Keuangan
+                            <i class="fas fa-file-invoice-dollar"></i> Laporan Keuangan
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
-                    <div class="dropdown-container" id="laporanDropdownContainer">
-                        <a href="transaksi_admin.php">
+                    <div class="dropdown-container <?php echo $is_laporan_active ? 'show' : ''; ?>"
+                        id="laporanDropdownContainer">
+                        <a href="data_riwayat_transaksi_admin.php"
+                            class="<?php echo $current_page == 'data_riwayat_transaksi_admin.php' ? 'active' : ''; ?>">
                             <i class="fas fa-receipt"></i> Riwayat Transaksi Admin
                         </a>
-                        <a href="transaksi_petugas.php">
+                        <a href="data_riwayat_transaksi_petugas.php"
+                            class="<?php echo $current_page == 'data_riwayat_transaksi_petugas.php' ? 'active' : ''; ?>">
                             <i class="fas fa-file-invoice"></i> Riwayat Transaksi Petugas
                         </a>
-                        <a href="rekapitulasi_transaksi.php">
-                            <i class="fas fa-calculator"></i> Rekap Transaksi 
+                        <a href="rekapitulasi_transaksi.php"
+                            class="<?php echo $current_page == 'rekapitulasi_transaksi.php' ? 'active' : ''; ?>">
+                            <i class="fas fa-calculator"></i> Rekapitulasi Transaksi
                         </a>
                     </div>
                 </div>
 
+                <!-- Data Kehadiran Petugas -->
                 <div class="menu-item">
-                    <a href="rekapitulasi_absensi.php">
-                        <i class="fas fa-clipboard-check"></i> Rekap Kehadiran Petugas
+                    <a href="data_kehadiran_petugas.php"
+                        class="<?php echo $current_page == 'data_kehadiran_petugas.php' ? 'active' : ''; ?>">
+                        <i class="fas fa-clipboard-check"></i> Data Kehadiran Petugas
                     </a>
                 </div>
 
-                <div class="menu-label">Pengaturan</div>
+                <div class="menu-label">Lainnya</div>
+
+                <!-- Pengaturan Akun -->
                 <div class="menu-item">
-                    <a href="pengaturan.php">
+                    <a href="pengaturan.php" class="<?php echo $current_page == 'pengaturan.php' ? 'active' : ''; ?>">
                         <i class="fas fa-cog"></i> Pengaturan Akun
                     </a>
                 </div>
+
             </div>
         </div>
 
         <div class="sidebar-footer">
             <div class="menu-item">
-                <a href="../../logout.php" class="logout-btn">
-                    <i class="fas fa-power-off"></i> Keluar
+                <a href="javascript:void(0)" onclick="confirmLogout()" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Keluar
                 </a>
             </div>
         </div>
-    </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const currentPath = window.location.pathname.split('/').pop();
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const dropdownBtns = document.querySelectorAll('.dropdown-btn');
 
-            const dropdownButtons = document.querySelectorAll('.dropdown-btn');
-            dropdownButtons.forEach(button => {
-                const dropdownContainer = button.nextElementSibling;
-                const links = dropdownContainer.querySelectorAll('a');
+                dropdownBtns.forEach(btn => {
+                    btn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        const container = this.nextElementSibling;
+                        const isOpen = container.classList.contains('show');
 
-                let isActive = false;
-                links.forEach(link => {
-                    const linkPath = link.getAttribute('href').split('/').pop();
-                    if (linkPath === currentPath) {
-                        link.classList.add('active');
-                        isActive = true;
-                    }
-                });
+                        // Close other dropdowns
+                        document.querySelectorAll('.dropdown-container').forEach(c => {
+                            if (c !== container) c.classList.remove('show');
+                        });
 
-                if (isActive) {
-                    button.classList.add('active');
-                    dropdownContainer.classList.add('show');
-                }
+                        document.querySelectorAll('.dropdown-btn').forEach(b => {
+                            if (b !== this) b.classList.remove('active-dropdown');
+                        });
 
-                button.addEventListener('click', function (e) {
-                    e.stopPropagation();
-                    const isCurrentlyActive = this.classList.contains('active');
-
-                    dropdownButtons.forEach(btn => {
-                        const container = btn.nextElementSibling;
-                        if (btn !== this) {
-                            btn.classList.remove('active');
+                        // Toggle current
+                        if (!isOpen) {
+                            container.classList.add('show');
+                            this.classList.add('active-dropdown');
+                        } else {
                             container.classList.remove('show');
+                            this.classList.remove('active-dropdown');
                         }
                     });
-
-                    if (!isCurrentlyActive) {
-                        this.classList.add('active');
-                        dropdownContainer.classList.add('show');
-                    } else {
-                        this.classList.remove('active');
-                        dropdownContainer.classList.remove('show');
-                    }
                 });
             });
 
-            document.addEventListener('click', function (e) {
-                dropdownButtons.forEach(button => {
-                    const dropdownContainer = button.nextElementSibling;
-                    const links = dropdownContainer.querySelectorAll('a');
-                    let keepOpen = false;
-
-                    links.forEach(link => {
-                        const linkPath = link.getAttribute('href').split('/').pop();
-                        if (linkPath === currentPath) {
-                            keepOpen = true;
-                        }
-                    });
-
-                    if (!keepOpen && !button.contains(e.target)) {
-                        button.classList.remove('active');
-                        dropdownContainer.classList.remove('show');
+            function confirmLogout() {
+                Swal.fire({
+                    title: 'Konfirmasi Keluar',
+                    text: 'Apakah Anda yakin ingin keluar dari sistem?',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#e74c3c',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-sign-out-alt"></i> Ya, Keluar',
+                    cancelButtonText: '<i class="fas fa-times"></i> Batal',
+                    reverseButtons: false,
+                    customClass: {
+                        popup: 'swal-popup-custom',
+                        title: 'swal-title-custom',
+                        confirmButton: 'swal-confirm-custom',
+                        cancelButton: 'swal-cancel-custom'
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // Assuming logout.php is in the root
+                        window.location.href = '<?= BASE_URL ?>/logout.php';
                     }
                 });
-            });
-
-            const highlightLinks = [
-                "dashboard.php",
-                "pengaturan.php",
-                "../../logout.php",
-                "kelola_rekening.php",
-                "manajemen_akun.php",
-                "kontrol_akses_petugas.php",
-                "kelola_akun_petugas.php",
-                "kelola_jadwal.php",
-                "rekapitulasi_absensi.php",
-            ];
-
-            highlightLinks.forEach(linkHref => {
-                const link = document.querySelector(`a[href="${linkHref}"]`);
-                if (link && currentPath === linkHref.split('/').pop()) {
-                    link.classList.add('active');
-                }
-            });
-        });
-    </script>
+            }
+        </script>
+    </div>
 </body>
+
 </html>

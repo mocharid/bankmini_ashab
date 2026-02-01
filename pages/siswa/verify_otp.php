@@ -62,22 +62,23 @@ if (!defined('ASSETS_PATH')) {
 // ============================================
 // DEFINE WEB BASE URL (for browser access)
 // ============================================
-function getBaseUrl() {
+function getBaseUrl()
+{
     $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
     $host = $_SERVER['HTTP_HOST'];
     $script = $_SERVER['SCRIPT_NAME'];
-    
+
     // Remove filename and get directory
     $base_path = dirname($script);
-    
+
     // Remove '/pages/siswa' if exists
     $base_path = preg_replace('#/pages/siswa$#', '', $base_path);
-    
+
     // Ensure base_path starts with /
     if ($base_path !== '/' && !empty($base_path)) {
         $base_path = '/' . ltrim($base_path, '/');
     }
-    
+
     return $protocol . $host . $base_path;
 }
 
@@ -124,6 +125,8 @@ if (isset($_SESSION['otp_success'])) {
 // Determine OTP type and target
 if ($otp_type === 'email' && isset($_SESSION['new_email']) && !empty($_SESSION['new_email'])) {
     $otp_target = $_SESSION['new_email'];
+} elseif ($otp_type === 'username' && isset($_SESSION['new_username']) && !empty($_SESSION['new_username'])) {
+    $otp_target = $_SESSION['new_username'];
 } elseif ($otp_type === 'no_wa' && (isset($_SESSION['new_no_wa']) || $_SESSION['new_no_wa'] === '')) {
     if ($_SESSION['new_no_wa'] === '') {
         $query = "SELECT no_wa FROM siswa_profiles WHERE user_id = ?";
@@ -183,6 +186,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_log("Failed to update email for user {$_SESSION['user_id']}");
                 $_SESSION['otp_error'] = "Gagal memperbarui email. Silakan coba lagi.";
             }
+        } elseif ($otp_type === 'username') {
+            $new_username = $_SESSION['new_username'];
+            $update_query = "UPDATE users SET username = ? WHERE id = ?";
+            $update_stmt = $conn->prepare($update_query);
+            $update_stmt->bind_param("si", $new_username, $_SESSION['user_id']);
+            if ($update_stmt->execute()) {
+                // Clear OTP
+                $clear_otp = $conn->prepare("UPDATE siswa_profiles SET otp = NULL, otp_expiry = NULL WHERE user_id = ?");
+                $clear_otp->bind_param("i", $_SESSION['user_id']);
+                $clear_otp->execute();
+
+                // Destroy session and redirect to login
+                unset($_SESSION['new_username'], $_SESSION['otp_type']);
+                session_destroy();
+                header("Location: " . BASE_URL . "/pages/login.php?success=" . urlencode("Username berhasil diubah! Silakan login dengan username baru."));
+                exit;
+            } else {
+                error_log("Failed to update username for user {$_SESSION['user_id']}");
+                $_SESSION['otp_error'] = "Gagal memperbarui username. Silakan coba lagi.";
+            }
         } elseif ($otp_type === 'no_wa') {
             $new_no_wa = $_SESSION['new_no_wa'] === '' ? NULL : $_SESSION['new_no_wa'];
             $update_query = "UPDATE siswa_profiles SET no_wa = ? WHERE user_id = ?";
@@ -213,408 +236,417 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
-    <title>Verifikasi OTP - SCHOBANK SYSTEM</title>
+    <title>Verifikasi OTP - KASDIG</title>
     <!-- ADAPTIVE FAVICON PATH -->
     <link rel="icon" type="image/png" href="<?= ASSETS_URL ?>/images/tab.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
-            --primary-color: #1A237E;
-            --primary-dark: #0d1452;
-            --primary-light: #534bae;
-            --secondary-color: #00B4D8;
-            --danger-color: #dc2626;
-            --success-color: #16a34a;
-            --text-primary: #000000;
-            --text-secondary: #000000;
-            --bg-white: #ffffff;
-            --border-light: #e2e8f0;
-            --border-medium: #cbd5e1;
-            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            --radius-sm: 0.375rem;
-            --radius-md: 0.5rem;
-            --radius-lg: 0.75rem;
-            --transition: all 0.3s ease;
+            --elegant-dark: #2c3e50;
+            --elegant-gray: #434343;
+            --gray-50: #F9FAFB;
+            --gray-100: #F3F4F6;
+            --gray-200: #E5E7EB;
+            --gray-300: #D1D5DB;
+            --gray-400: #9CA3AF;
+            --gray-500: #6B7280;
+            --gray-600: #4B5563;
+            --gray-700: #374151;
+            --gray-800: #1F2937;
+            --gray-900: #111827;
+            --white: #FFFFFF;
+            --success: #10b981;
+            --danger: #ef4444;
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+            --radius: 12px;
+            --radius-lg: 16px;
         }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Poppins', sans-serif;
         }
-        html, body {
-            height: 100%;
-            touch-action: manipulation;
-        }
+
         body {
-            background: #ffffff;
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--gray-50);
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             padding: 20px;
-            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
         }
-        .login-container {
-            background: var(--bg-white);
-            padding: 2.5rem;
+
+        .container {
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .card {
+            background: var(--white);
             border-radius: var(--radius-lg);
+            padding: 32px 28px;
             box-shadow: var(--shadow-lg);
-            width: 100%;
-            max-width: 420px;
-            border: 1px solid var(--border-light);
-            transition: var(--transition);
         }
-        .header-section {
+
+        /* Header */
+        .header {
             text-align: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1.5rem;
-            border-bottom: 1px solid var(--border-light);
+            margin-bottom: 32px;
         }
-        .logo-container {
-            margin-bottom: 1rem;
-        }
+
         .logo {
-            height: auto;
-            max-height: 80px;
+            height: 50px;
             width: auto;
-            max-width: 100%;
-            object-fit: contain;
-            transition: var(--transition);
+            margin-bottom: 20px;
         }
-        .logo:hover {
-            transform: scale(1.03);
+
+        .title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 8px;
         }
+
         .subtitle {
-            color: var(--text-secondary);
-            font-size: 0.95rem;
-            font-weight: 400;
+            font-size: 14px;
+            color: var(--gray-500);
+            line-height: 1.5;
         }
-        .form-section {
-            margin-bottom: 1.5rem;
-        }
-        .input-group {
-            margin-bottom: 1.25rem;
-            position: relative;
-        }
-        .input-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-        .input-wrapper {
-            position: relative;
-        }
-        .input-icon {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            z-index: 2;
-        }
-        .input-field {
-            width: 100%;
-            padding: 14px 14px 14px 46px;
-            border: 2px solid var(--border-light);
-            border-radius: var(--radius-md);
-            font-size: 15px;
-            background: #fdfdfd;
-            transition: var(--transition);
-            color: var(--text-primary);
-        }
-        .input-field:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            background: var(--bg-white);
-            box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.12);
-        }
-        .input-field.input-error {
-            border-color: var(--danger-color);
-            background: #fef2f2;
-        }
-        .input-field.input-error:focus {
-            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
-        }
-        .toggle-password {
-            position: absolute;
-            right: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            cursor: pointer;
-            font-size: 1.1rem;
-            padding: 4px;
-            border-radius: var(--radius-sm);
-            transition: var(--transition);
-        }
-        .toggle-password:hover {
-            color: var(--primary-color);
-            background: rgba(26, 35, 126, 0.08);
-        }
-        .error-message {
-            color: var(--danger-color);
-            font-size: 0.8rem;
-            margin-top: 0.5rem;
+
+        .target-info {
+            background: var(--gray-50);
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            margin-top: 16px;
             display: flex;
             align-items: center;
-            gap: 0.4rem;
+            gap: 10px;
         }
-        .general-error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            border-radius: var(--radius-md);
-            padding: 12px 16px;
-            margin-bottom: 1rem;
-            text-align: center;
-            font-size: 0.9rem;
-            transition: opacity 0.4s ease;
-        }
-        .general-error.fade-out {
-            opacity: 0;
-        }
-        .forgot-password {
-            text-align: right;
-            margin: -0.5rem 0 1.5rem 0;
-        }
-        .forgot-link {
-            color: var(--text-primary);
-            font-size: 0.75rem;
-            font-weight: 500;
-            text-decoration: none;
-            transition: var(--transition);
-        }
-        .forgot-link .link-here {
-            color: #2563eb;
-            text-decoration: none;
-        }
-        .forgot-link:hover .link-here {
-            color: #1d4ed8;
-            text-decoration: none;
-        }
-        .submit-button {
-            width: 100%;
-            padding: 14px 20px;
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            color: white;
-            border: none;
-            border-radius: var(--radius-md);
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
+
+        .target-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--elegant-dark);
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.75rem;
-            position: relative;
-            overflow: hidden;
+            color: var(--white);
+            font-size: 14px;
         }
-        .submit-button:hover {
+
+        .target-text {
+            flex: 1;
+        }
+
+        .target-label {
+            font-size: 11px;
+            color: var(--gray-500);
+            margin-bottom: 2px;
+        }
+
+        .target-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--gray-900);
+        }
+
+        /* OTP Inputs */
+        .otp-section {
+            margin-bottom: 24px;
+        }
+
+        .otp-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--gray-700);
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .otp-inputs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .otp-input {
+            width: 48px;
+            height: 56px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--gray-900);
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius);
+            background: var(--white);
+            transition: all 0.2s ease;
+            outline: none;
+        }
+
+        .otp-input:focus {
+            border-color: var(--elegant-dark);
+            box-shadow: 0 0 0 3px rgba(44, 62, 80, 0.1);
+        }
+
+        .otp-input:not(:placeholder-shown) {
+            border-color: var(--elegant-dark);
+            background: var(--gray-50);
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 14px 20px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--elegant-dark);
+            color: var(--white);
+        }
+
+        .btn-primary:hover {
+            background: var(--elegant-gray);
             transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
+            box-shadow: var(--shadow-md);
         }
-        .submit-button:disabled {
-            opacity: 0.7;
+
+        .btn-primary:disabled {
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
         }
-        .loading-spinner {
-            display: none;
+
+        .btn-secondary {
+            background: transparent;
+            color: var(--gray-600);
+            margin-top: 12px;
+        }
+
+        .btn-secondary:hover {
+            color: var(--elegant-dark);
+            background: var(--gray-50);
+        }
+
+        /* Loading Spinner */
+        .spinner {
             width: 18px;
             height: 18px;
             border: 2px solid transparent;
-            border-top: 2px solid white;
+            border-top-color: var(--white);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
+            display: none;
         }
+
         @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .otp-inputs {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 1.5rem;
-        }
-        .otp-inputs input {
-            width: 40px;
-            height: 50px;
-            text-align: center;
-            padding: 0;
-            font-size: 18px;
-            border: 1px solid #d1d9e6;
-            border-radius: 6px;
-            background: #fbfdff;
-            transition: all 0.3s ease;
-        }
-
-        .otp-inputs input:focus {
-            border-color: transparent;
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(0, 180, 216, 0.2);
-            background: linear-gradient(90deg, #ffffff 0%, #f0faff 100%);
-        }
-
-        .form-description {
-            color: #4a5568;
-            font-size: 0.9rem;
-            margin-bottom: 1.5rem;
-            line-height: 1.4;
-            font-weight: 400;
-        }
-
-        .success-message {
-            background: #e6fffa;
-            color: #2c7a7b;
-            padding: 0.8rem;
-            border-radius: 6px;
-            margin-bottom: 1.5rem;
-            font-size: 0.9rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            border: 1px solid #b2f5ea;
-            box-shadow: 0 1px 6px rgba(178, 245, 234, 0.15);
-        }
-
-        .back-to-login {
-            text-align: center;
-            margin-top: 1.5rem;
-        }
-
-        .back-to-login a {
-            color: #1A237E;
-            font-size: 0.9rem;
-            text-decoration: none;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            display: inline-flex;
-            align-items: center;
-        }
-
-        .back-to-login a i {
-            margin-right: 5px;
-        }
-
-        .back-to-login a:hover {
-            color: #00B4D8;
-            text-decoration: underline;
-            transform: scale(1.05);
-        }
-
-        /* Responsif */
-        @media (max-width: 480px) {
-            body { padding: 15px; }
-            .login-container {
-                padding: 2rem;
-                border-radius: var(--radius-md);
+            to {
+                transform: rotate(360deg);
             }
-            .logo { max-height: 70px; }
-            .input-field { font-size: 14px; padding: 12px 12px 12px 42px; }
-            .submit-button { padding: 12px 18px; font-size: 14px; }
-            .forgot-link { font-size: 0.7rem; }
         }
-        @media (max-height: 600px) and (orientation: landscape) {
-            body { align-items: flex-start; padding-top: 20px; }
+
+        /* Messages */
+        .alert {
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .alert-error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+
+        .alert-success {
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            color: #059669;
+        }
+
+        .alert i {
+            font-size: 16px;
+            margin-top: 1px;
+        }
+
+        .alert-content {
+            flex: 1;
+            line-height: 1.5;
+        }
+
+        /* Success State */
+        .success-state {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .success-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            color: var(--white);
+            font-size: 28px;
+        }
+
+        .success-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+
+        .success-desc {
+            font-size: 13px;
+            color: var(--gray-500);
+            line-height: 1.6;
+        }
+
+        .redirect-info {
+            margin-top: 20px;
+            padding: 12px;
+            background: var(--gray-50);
+            border-radius: var(--radius);
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        /* Responsive */
+        @media (max-width: 420px) {
+            .card {
+                padding: 24px 20px;
+            }
+
+            .otp-input {
+                width: 42px;
+                height: 50px;
+                font-size: 18px;
+            }
+
+            .otp-inputs {
+                gap: 8px;
+            }
         }
     </style>
 </head>
-<body>
-    <div class="login-container">
-        <!-- Header -->
-        <div class="header-section">
-            <div class="logo-container">
-                <!-- ADAPTIVE LOGO PATH -->
-                <img src="<?= ASSETS_URL ?>/images/header.png" alt="SCHOBANK" class="logo">
-            </div>
-            <p class="subtitle">Verifikasi Kode OTP</p>
-        </div>
 
-        <!-- General Error (Auto-hide in 5 seconds) -->
-        <?php if (!empty($error)): ?>
-            <div class="general-error" id="generalError">
-                <i class="fas fa-exclamation-triangle"></i>
-                <?= htmlspecialchars($error) ?>
+<body>
+    <div class="container">
+        <div class="card">
+            <!-- Header -->
+            <div class="header">
+                <h1 class="title">Verifikasi OTP</h1>
+                <p class="subtitle">Masukkan 6 digit kode verifikasi yang telah dikirim ke email Anda.</p>
             </div>
-        <?php endif; ?>
-        
-        <?php if ($verification_success): ?>
-            <div class="success-message" id="success-alert">
-                <i class="fas fa-check-circle"></i>
-                <?php echo htmlspecialchars($success); ?>
-            </div>
-            <div class="form-description">
-                <?php echo $otp_type === 'email' ? 
-                    'Email Anda telah berhasil diperbarui.' : 
-                    'Nomor WhatsApp Anda telah berhasil diperbarui.'; ?>
-                Anda akan diarahkan ke halaman profil dalam 3 detik...
-            </div>
-            <div class="back-to-login">
-                <a href="<?= BASE_URL ?>/pages/siswa/profil.php"><i class="fas fa-arrow-left"></i> Kembali ke halaman profil</a>
-            </div>
-        <?php else: ?>
-            <form method="POST" id="otp_form">
-                <div class="otp-inputs">
-                    <?php for ($i = 1; $i <= 6; $i++): ?>
-                        <input type="tel" inputmode="numeric" name="otp<?php echo $i; ?>" maxlength="1" 
-                               class="otp-input" data-index="<?php echo $i; ?>" 
-                               pattern="[0-9]" required>
-                    <?php endfor; ?>
+
+            <!-- Error Alert -->
+            <?php if (!empty($error)): ?>
+                <div class="alert alert-error" id="alertError">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div class="alert-content"><?= htmlspecialchars($error) ?></div>
                 </div>
-                <button type="submit" class="submit-button" id="submitButton">
-                    <i class="fas fa-sign-in-alt"></i>
-                    <span id="buttonText">Verifikasi OTP</span>
-                    <div class="loading-spinner" id="loadingSpinner"></div>
-                </button>
-            </form>
-            
-            <div class="back-to-login">
-                <a href="<?= BASE_URL ?>/pages/siswa/profil.php"><i class="fas fa-arrow-left"></i> Kembali ke halaman profil</a>
-            </div>
-        <?php endif; ?>
+            <?php endif; ?>
+
+            <?php if ($verification_success): ?>
+                <!-- Success State -->
+                <div class="success-state">
+                    <div class="success-icon">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <h2 class="success-title">Verifikasi Berhasil!</h2>
+                    <p class="success-desc"><?= htmlspecialchars($success) ?></p>
+                    <div class="redirect-info">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        Mengarahkan ke halaman profil dalam 3 detik...
+                    </div>
+                </div>
+                <a href="<?= BASE_URL ?>/pages/siswa/profil.php" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Kembali
+                </a>
+            <?php else: ?>
+                <!-- OTP Form -->
+                <form method="POST" id="otp_form">
+                    <div class="otp-section">
+                        <div class="otp-label">Kode OTP</div>
+                        <div class="otp-inputs">
+                            <?php for ($i = 1; $i <= 6; $i++): ?>
+                                <input type="tel" inputmode="numeric" name="otp<?= $i ?>" maxlength="1" class="otp-input"
+                                    data-index="<?= $i ?>" pattern="[0-9]" required placeholder="•">
+                            <?php endfor; ?>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span id="btnText">Verifikasi</span>
+                        <div class="spinner" id="spinner"></div>
+                    </button>
+                </form>
+
+                <a href="<?= BASE_URL ?>/pages/siswa/profil.php" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Kembali
+                </a>
+            <?php endif; ?>
+        </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const form = document.getElementById('otp_form');
-            const submitBtn = document.getElementById('submitButton');
-            const btnText = document.getElementById('buttonText');
-            const spinner = document.getElementById('loadingSpinner');
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('spinner');
             const otpInputs = document.querySelectorAll('.otp-input');
 
-            // Auto-hide general error after 5 seconds
-            const generalError = document.getElementById('generalError');
-            if (generalError) {
+            // Auto-hide error after 5 seconds
+            const alertError = document.getElementById('alertError');
+            if (alertError) {
                 setTimeout(() => {
-                    generalError.classList.add('fade-out');
-                    setTimeout(() => generalError.remove(), 400);
+                    alertError.style.opacity = '0';
+                    alertError.style.transition = 'opacity 0.4s ease';
+                    setTimeout(() => alertError.remove(), 400);
                 }, 5000);
             }
 
             // Submit loading
-            if (form) {
-                form.addEventListener('submit', function() {
-                    btnText.style.display = 'none';
-                    spinner.style.display = 'block';
+            if (form && submitBtn) {
+                form.addEventListener('submit', function () {
+                    if (btnText) btnText.style.display = 'none';
+                    if (spinner) spinner.style.display = 'block';
                     submitBtn.disabled = true;
-                    submitBtn.innerHTML = '<div class="loading-spinner" style="display:block;"></div>';
 
                     setTimeout(() => {
-                        btnText.style.display = 'inline';
-                        spinner.style.display = 'none';
+                        if (btnText) btnText.style.display = 'inline';
+                        if (spinner) spinner.style.display = 'none';
                         submitBtn.disabled = false;
-                        submitBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i><span id="buttonText">Verifikasi OTP</span>';
                     }, 5000);
                 });
             }
@@ -677,4 +709,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
     </script>
 </body>
+
 </html>

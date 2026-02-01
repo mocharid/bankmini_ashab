@@ -1,822 +1,724 @@
 <?php
 /**
- * Pengaturan Akun Petugas - Adaptive Path Version
+ * Pengaturan Akun Petugas - Settings Sidebar Layout
  * File: pages/petugas/pengaturan_akun.php
- *
- * Compatible with:
- * - Local: schobank/pages/petugas/pengaturan_akun.php
- * - Hosting: public_html/pages/petugas/pengaturan_akun.php
  */
-// ============================================
-// ERROR HANDLING & TIMEZONE
-// ============================================
 error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 ini_set('display_errors', 0);
-ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
-// ============================================
-// ADAPTIVE PATH DETECTION
-// ============================================
-$current_file = __FILE__;
-$current_dir = dirname($current_file);
-$project_root = null;
-// Strategy 1: jika di folder 'pages' atau 'petugas'
-if (basename($current_dir) === 'petugas') {
-    $project_root = dirname(dirname($current_dir));
-} elseif (basename($current_dir) === 'pages') {
-    $project_root = dirname($current_dir);
-}
-// Strategy 2: cek includes/ di parent
-elseif (is_dir(dirname($current_dir) . '/includes')) {
-    $project_root = dirname($current_dir);
-}
-// Strategy 3: cek includes/ di current dir
-elseif (is_dir($current_dir . '/includes')) {
-    $project_root = $current_dir;
-}
-// Strategy 4: naik max 5 level cari includes/
-else {
-    $temp_dir = $current_dir;
-    for ($i = 0; $i < 5; $i++) {
-        $temp_dir = dirname($temp_dir);
-        if (is_dir($temp_dir . '/includes')) {
-            $project_root = $temp_dir;
-            break;
-        }
-    }
-}
-// Fallback: pakai current dir
-if (!$project_root) {
-    $project_root = $current_dir;
-}
-// ============================================
-// DEFINE PATH CONSTANTS
-// ============================================
-if (!defined('PROJECT_ROOT')) {
-    define('PROJECT_ROOT', rtrim($project_root, '/'));
-}
-if (!defined('INCLUDES_PATH')) {
+
+$current_dir = dirname(__FILE__);
+$project_root = dirname(dirname($current_dir));
+if (!defined('PROJECT_ROOT'))
+    define('PROJECT_ROOT', $project_root);
+if (!defined('INCLUDES_PATH'))
     define('INCLUDES_PATH', PROJECT_ROOT . '/includes');
-}
-if (!defined('ASSETS_PATH')) {
-    define('ASSETS_PATH', PROJECT_ROOT . '/assets');
-}
-// ============================================
-// LOAD REQUIRED FILES
-// ============================================
-if (!file_exists(INCLUDES_PATH . '/auth.php')) {
-    die('Error: File auth.php tidak ditemukan di ' . INCLUDES_PATH);
-}
-if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
-    die('Error: File db_connection.php tidak ditemukan di ' . INCLUDES_PATH);
-}
+
 require_once INCLUDES_PATH . '/auth.php';
 require_once INCLUDES_PATH . '/db_connection.php';
-// ============================================
-// AUTHORIZATION CHECK
-// ============================================
-if (session_status() === PHP_SESSION_NONE) {
+
+if (session_status() === PHP_SESSION_NONE)
     session_start();
-}
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'petugas') {
     header('Location: ../login.php');
     exit();
 }
-// Generate or validate CSRF token
-if (!isset($_SESSION['csrf_token'])) {
+
+if (!isset($_SESSION['csrf_token']))
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
 $token = $_SESSION['csrf_token'];
-// Fetch user data
+
 $query = "SELECT username, email, nama FROM users WHERE id = ?";
 $stmt = $conn->prepare($query);
 $stmt->bind_param("i", $_SESSION['user_id']);
 $stmt->execute();
-$result = $stmt->get_result();
-$current_user = $result->fetch_assoc();
-if (!$current_user) {
-    die("Data pengguna tidak ditemukan.");
-}
-// Function Masking Username
-function maskUsername($username) {
-    if (strlen($username) <= 2) return $username;
-    $first = $username[0];
-    $last = substr($username, -1);
-    $len = strlen($username) - 2;
-    return $first . str_repeat('*', max(3, $len)) . $last;
-}
-$masked_username = maskUsername($current_user['username']);
-// Handle AJAX requests
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_account') {
+$current_user = $stmt->get_result()->fetch_assoc();
+
+// Handle AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     header('Content-Type: application/json');
-   
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        echo json_encode(['status' => 'error', 'message' => 'Token CSRF tidak valid']);
-        exit();
+    if ($_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        echo json_encode(['status' => 'error', 'message' => 'Token tidak valid']);
+        exit;
     }
-   
-    $new_username = trim($_POST['username'] ?? '');
-    $new_email = trim($_POST['email'] ?? '');
+
     $password_lama = trim($_POST['password_lama'] ?? '');
-    $password_baru = trim($_POST['password_baru'] ?? '');
-    $konfirmasi_password = trim($_POST['konfirmasi_password'] ?? '');
-    // Gunakan data lama jika input kosong
-    if (empty($new_username)) $new_username = $current_user['username'];
-    if (empty($new_email)) $new_email = $current_user['email'];
-    // Validasi format email
-    if (!empty($new_email) && !filter_var($new_email, FILTER_VALIDATE_EMAIL)) {
-        echo json_encode(['status' => 'error', 'message' => 'Format email tidak valid!']);
-        exit;
-    }
-    if (empty($password_lama)) {
-        echo json_encode(['status' => 'error', 'message' => 'Password Lama wajib diisi untuk konfirmasi!']);
-        exit;
-    }
-    // Verifikasi Password Lama
-    $q_check = "SELECT password FROM users WHERE id = ?";
-    $stmt_check = $conn->prepare($q_check);
-    $stmt_check->bind_param("i", $_SESSION['user_id']);
-    $stmt_check->execute();
-    $user_data = $stmt_check->get_result()->fetch_assoc();
-    $stored_pass = $user_data['password'];
-    if (!password_verify($password_lama, $stored_pass)) {
+    $q = $conn->prepare("SELECT password FROM users WHERE id = ?");
+    $q->bind_param("i", $_SESSION['user_id']);
+    $q->execute();
+    $stored = $q->get_result()->fetch_assoc()['password'];
+
+    if (!password_verify($password_lama, $stored)) {
         echo json_encode(['status' => 'error', 'message' => 'Password saat ini salah!']);
         exit;
     }
-    // Cek Unik Username & Email
-    $check_query = "SELECT id FROM users WHERE (username = ? OR (email = ? AND email != '')) AND id != ?";
-    $check_stmt = $conn->prepare($check_query);
-    $check_stmt->bind_param("ssi", $new_username, $new_email, $_SESSION['user_id']);
-    $check_stmt->execute();
-    if ($check_stmt->get_result()->num_rows > 0) {
-        echo json_encode(['status' => 'error', 'message' => 'Username atau Email sudah digunakan!']);
+
+    $action = $_POST['action'];
+
+    if ($action === 'update_username') {
+        $val = trim($_POST['new_value'] ?? '');
+        if (empty($val)) {
+            echo json_encode(['status' => 'error', 'message' => 'Username tidak boleh kosong!']);
+            exit;
+        }
+        $c = $conn->prepare("SELECT id FROM users WHERE username = ? AND id != ?");
+        $c->bind_param("si", $val, $_SESSION['user_id']);
+        $c->execute();
+        if ($c->get_result()->num_rows > 0) {
+            echo json_encode(['status' => 'error', 'message' => 'Username sudah digunakan!']);
+            exit;
+        }
+        $u = $conn->prepare("UPDATE users SET username = ? WHERE id = ?");
+        $u->bind_param("si", $val, $_SESSION['user_id']);
+        $u->execute();
+        session_destroy();
+        echo json_encode(['status' => 'success', 'message' => 'Username berhasil diperbarui! Silakan login kembali.', 'logout' => true]);
         exit;
     }
-    $conn->begin_transaction();
-    try {
-        $update_sql = "UPDATE users SET username = ?, email = ?";
-        $types = "ss";
-        $params = [$new_username, $new_email];
-        // Update Password jika diisi
-        if (!empty($password_baru)) {
-            if (strlen($password_baru) < 8) throw new Exception("Password baru minimal 8 karakter.");
-            if (!preg_match('/[A-Z]/', $password_baru)) throw new Exception("Password harus ada huruf kapital.");
-            if (!preg_match('/[0-9]/', $password_baru)) throw new Exception("Password harus ada angka.");
-            if ($password_baru !== $konfirmasi_password) throw new Exception("Konfirmasi password tidak cocok.");
-           
-            $new_hash = password_hash($password_baru, PASSWORD_BCRYPT);
-           
-            $update_sql .= ", password = ?";
-            $types .= "s";
-            $params[] = $new_hash;
+
+    if ($action === 'update_email') {
+        $val = trim($_POST['new_value'] ?? '');
+        if (!empty($val) && !filter_var($val, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['status' => 'error', 'message' => 'Format email tidak valid!']);
+            exit;
         }
-        $update_sql .= " WHERE id = ?";
-        $types .= "i";
-        $params[] = $_SESSION['user_id'];
-        $stmt_update = $conn->prepare($update_sql);
-        $stmt_update->bind_param($types, ...$params);
-       
-        if (!$stmt_update->execute()) {
-            throw new Exception("Gagal mengupdate data.");
+        $u = $conn->prepare("UPDATE users SET email = ? WHERE id = ?");
+        $u->bind_param("si", $val, $_SESSION['user_id']);
+        $u->execute();
+        echo json_encode(['status' => 'success', 'message' => 'Email berhasil diperbarui!', 'reload' => true]);
+        exit;
+    }
+
+    if ($action === 'update_password') {
+        $val = trim($_POST['new_value'] ?? '');
+        $confirm = trim($_POST['confirm_value'] ?? '');
+        if (strlen($val) < 8) {
+            echo json_encode(['status' => 'error', 'message' => 'Password minimal 8 karakter!']);
+            exit;
         }
-        $conn->commit();
+        if (!preg_match('/[A-Z]/', $val)) {
+            echo json_encode(['status' => 'error', 'message' => 'Password harus ada huruf kapital!']);
+            exit;
+        }
+        if (!preg_match('/[0-9]/', $val)) {
+            echo json_encode(['status' => 'error', 'message' => 'Password harus ada angka!']);
+            exit;
+        }
+        if ($val !== $confirm) {
+            echo json_encode(['status' => 'error', 'message' => 'Konfirmasi password tidak cocok!']);
+            exit;
+        }
+        $hash = password_hash($val, PASSWORD_BCRYPT);
+        $u = $conn->prepare("UPDATE users SET password = ? WHERE id = ?");
+        $u->bind_param("si", $hash, $_SESSION['user_id']);
+        $u->execute();
         session_destroy();
-       
-        echo json_encode(['status' => 'success', 'message' => 'Akun berhasil diperbarui! Silakan login kembali.']);
-    } catch (Exception $e) {
-        $conn->rollback();
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        echo json_encode(['status' => 'success', 'message' => 'Password berhasil diperbarui!', 'logout' => true]);
+        exit;
     }
     exit;
 }
-// ============================================
-// DETECT BASE URL FOR ASSETS
-// ============================================
+
 $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
-$host = $_SERVER['HTTP_HOST'];
-$script_name = $_SERVER['SCRIPT_NAME'];
-$path_parts = explode('/', trim(dirname($script_name), '/'));
-// Deteksi base path (schobank atau public_html)
-$base_path = '';
-if (in_array('schobank', $path_parts)) {
-    $base_path = '/schobank';
-} elseif (in_array('public_html', $path_parts)) {
-    $base_path = '';
-}
-$base_url = $protocol . '://' . $host . $base_path;
+$base_url = $protocol . '://' . $_SERVER['HTTP_HOST'] . '/schobank';
 ?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
-    <title>Pengaturan Akun | MY Schobank</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="<?= $base_url ?>/assets/images/tab.png">
+    <title>Pengaturan Akun | KASDIG</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
-            --text-primary: #1a202c;
-            --text-secondary: #4a5568;
-            --text-light: #718096;
-            --bg-light: #f0f5ff;
-            --bg-table: #ffffff;
-            --border-color: #e2e8f0;
-            --success-color: #059669;
-            --danger-color: #dc2626;
-            --warning-color: #f59e0b;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
+            --gray-50: #f9fafb;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --bg-light: #f8fafc;
+            --text-primary: var(--gray-800);
+            --border-light: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --radius: 0.5rem;
             --transition: all 0.3s ease;
         }
+
+        /* Base Styles */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
-            -webkit-user-select: none;
-            user-select: none;
+            -webkit-font-smoothing: antialiased;
         }
-        html, body {
-            width: 100%;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
+
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
             display: flex;
-            min-height: 100vh;
-            font-size: 14px;
-            touch-action: pan-y;
         }
-       
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 30px;
-            max-width: calc(100% - 280px);
-            transition: margin-left 0.3s ease;
+
+        /* Sidebar State */
+        body.sidebar-open {
+            overflow: hidden;
+        }
+
+        body.sidebar-active::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            overflow-y: auto;
-            min-height: 100vh;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            transition: opacity 0.3s ease;
+            opacity: 1;
         }
-       
-        body.sidebar-active .main-content {
-            opacity: 0.3;
+
+        body:not(.sidebar-active):not(.sidebar-open)::before {
+            opacity: 0;
             pointer-events: none;
         }
-        /* Welcome Banner - Updated to match previous syntax */
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 5px;
-            margin-bottom: 35px;
-            box-shadow: var(--shadow-md);
-            animation: fadeIn 1s ease-in-out;
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-       
-        .welcome-banner .content {
+
+        /* Layout */
+        .main-content {
+            margin-left: 280px;
+            padding: 2rem;
             flex: 1;
+            min-height: 100vh;
+            transition: margin-left 0.3s ease;
+            width: calc(100% - 280px);
+            background: var(--bg-light);
         }
-       
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            font-weight: 600;
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+        }
+
+        /* Page Title */
+        .page-title-section {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+            padding: 1.5rem 2rem;
+            margin: -2rem -2rem 1.5rem -2rem;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 1rem;
+            border-bottom: 1px solid var(--gray-200);
         }
-       
-        .welcome-banner p {
-            font-size: clamp(0.85rem, 2vw, 0.9rem);
-            font-weight: 400;
-            opacity: 0.8;
+
+        .page-title-content h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-800);
             margin: 0;
         }
-       
-        .menu-toggle {
-            font-size: 1.5rem;
-            cursor: pointer;
-            color: white;
-            flex-shrink: 0;
-            display: none;
-            align-self: center;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        /* Form Container */
-        .form-section {
-            background: var(--bg-table);
-            border-radius: 5px;
-            padding: 35px;
-            box-shadow: var(--shadow-sm);
-            margin: 0 auto;
-            width: 100%;
-        }
-        .section-header {
-            margin-bottom: 25px;
-            border-bottom: 2px solid var(--border-color);
-            padding-bottom: 12px;
-        }
-        .section-header h3 {
-            color: var(--primary-color);
-            font-size: 1.15rem;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-weight: 600;
-        }
-        /* Form Grid - 3 Kolom per Baris */
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 25px;
-        }
-        .form-group {
-            display: flex;
-            flex-direction: column;
-        }
-       
-        label {
-            display: block;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
+
+        .page-subtitle {
+            color: var(--gray-500);
             font-size: 0.9rem;
+            margin: 0;
         }
-        label i {
-            color: var(--primary-color);
-            width: 18px;
-            text-align: center;
-            margin-right: 6px;
-        }
-        .input-wrapper {
-            position: relative;
-            width: 100%;
-        }
-       
-        input[type="text"],
-        input[type="password"],
-        input[type="email"] {
-            width: 100%;
-            padding: 12px 45px 12px 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            font-size: 0.95rem;
-            transition: border-color 0.3s, box-shadow 0.3s;
-            height: 45px;
-            box-sizing: border-box;
-            -webkit-user-select: text;
-            user-select: text;
-        }
-        input:focus {
-            border-color: var(--primary-color);
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-        }
-       
-        .toggle-pass {
-            position: absolute;
-            right: 0;
-            top: 0;
-            height: 100%;
-            width: 45px;
-            display: flex;
+
+        .page-hamburger {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--gray-700);
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
             align-items: center;
             justify-content: center;
-            cursor: pointer;
-            color: var(--text-light);
-            font-size: 1.05rem;
-            transition: color 0.3s;
         }
-        .toggle-pass:hover { color: var(--primary-color); }
-        .username-edit-link {
-            margin-top: 6px;
-            text-align: right;
+
+        .page-hamburger:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--gray-800);
         }
-        .username-edit-link a {
-            color: var(--primary-color);
-            text-decoration: none;
-            font-size: 0.85rem;
-            transition: color 0.3s;
+
+        /* Cards & Containers */
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border: 1px solid var(--gray-200);
         }
-        .username-edit-link a:hover {
-            color: var(--secondary-color);
-            text-decoration: underline;
-        }
-        .divider {
-            height: 1px;
-            background: var(--border-color);
-            margin: 30px 0 25px 0;
-            position: relative;
-        }
-        .divider span {
-            position: absolute;
-            top: -10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--bg-table);
-            padding: 0 15px;
-            color: var(--text-light);
-            font-size: 0.85rem;
-            white-space: nowrap;
-            font-weight: 500;
-        }
-        /* Password Indicator */
-        .password-indicator {
-            margin-top: 8px;
-            font-size: 0.8rem;
-            color: var(--text-light);
+
+        /* Settings Specific Layout */
+        .settings-container {
             display: flex;
-            flex-direction: column;
-            gap: 4px;
+            background: white;
+            border-radius: 16px;
+            border: 1px solid var(--gray-200);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            min-height: 500px;
         }
-        .indicator-item {
+
+        .settings-sidebar {
+            width: 240px;
+            border-right: 1px solid var(--gray-200);
+            padding: 1.5rem 0;
+            flex-shrink: 0;
+            background: var(--gray-50);
+        }
+
+        .sidebar-category {
+            padding: 0.5rem 1.5rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--gray-500);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 0.5rem;
+        }
+
+        .sidebar-category:first-child {
+            margin-top: 0;
+        }
+
+        .sidebar-item {
             display: flex;
             align-items: center;
-            gap: 6px;
-            transition: color 0.3s;
-        }
-        .indicator-item i { font-size: 0.7rem; }
-        .indicator-item.valid { color: var(--success-color); }
-        .indicator-item.invalid { color: var(--text-light); }
-        /* Button Section - Centered */
-        .btn-section {
-            text-align: center;
-            margin-top: 30px;
-        }
-        .btn {
-            padding: 0 40px;
-            border: none;
-            border-radius: 5px;
-            font-weight: 600;
+            gap: 12px;
+            padding: 0.75rem 1.5rem;
+            color: var(--gray-600);
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
+            border-left: 3px solid transparent;
+            font-size: 0.95rem;
+            font-weight: 500;
+        }
+
+        .sidebar-item:hover {
+            background: var(--gray-100);
+            color: var(--gray-900);
+        }
+
+        .sidebar-item.active {
+            background: white;
+            color: var(--gray-900);
+            border-left-color: var(--gray-800);
+            font-weight: 600;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .sidebar-item i {
+            width: 20px;
+            text-align: center;
+        }
+
+        .settings-content {
+            flex: 1;
+            padding: 2.5rem;
+        }
+
+        .content-panel {
+            display: none;
+        }
+
+        .content-panel.active {
+            display: block;
+        }
+
+        .panel-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 0.5rem;
+        }
+
+        .panel-desc {
+            color: var(--gray-500);
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--gray-700);
+        }
+
+        .form-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            background: #fff;
+            color: var(--gray-800);
+            height: 48px;
+        }
+
+        .form-input:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.1);
+            outline: none;
+        }
+
+        .form-input:disabled {
+            background: var(--gray-100);
+            color: var(--gray-500);
+            cursor: not-allowed;
+        }
+
+        .form-hint {
+            font-size: 0.8rem;
+            color: var(--gray-500);
+            margin-top: 0.5rem;
+        }
+
+        .btn-save {
+            background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-600) 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 500;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
-            font-size: 1rem;
-            height: 48px;
-            min-width: 200px;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            font-size: 0.95rem;
+            box-shadow: var(--shadow-sm);
         }
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary-dark), var(--secondary-color));
-            color: white;
+
+        .btn-save:hover {
+            background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-700) 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
-            transform: translateY(-2px);
+
+        .divider {
+            height: 1px;
+            background: var(--gray-200);
+            margin: 2rem 0;
         }
-        .btn-primary:active {
-            transform: translateY(0);
-        }
-        /* RESPONSIVE */
-        @media (max-width: 992px) {
-            .main-content {
-                margin-left: 0;
-                padding: 20px;
-                max-width: 100%;
-            }
-           
-            .form-section {
-                padding: 25px;
-            }
-        }
-        @media (max-width: 768px) {
-            .menu-toggle {
+
+        @media (max-width: 1024px) {
+            .page-hamburger {
                 display: block;
             }
-           
+
+            .page-title-section {
+                padding: 1rem 1.5rem;
+                margin: -1rem -1rem 1.5rem -1rem;
+            }
+
             .main-content {
-                margin-left: 0;
-                padding: 15px;
-                max-width: 100%;
+                padding: 1rem;
             }
-           
-            .welcome-banner {
-                padding: 20px;
-                border-radius: 5px;
-                margin-bottom: 25px;
-                align-items: center;
+
+            .settings-container {
+                flex-direction: column;
             }
-           
-            .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.4rem);
-            }
-           
-            .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.85rem);
-            }
-            .form-section {
-                padding: 20px 15px;
-            }
-            /* Mobile: 1 Kolom */
-            .form-grid {
-                grid-template-columns: 1fr !important;
-                gap: 15px;
-            }
-           
-            input[type="text"],
-            input[type="password"],
-            input[type="email"] {
-                font-size: 16px; /* Prevent iOS zoom */
-            }
-            .btn {
+
+            .settings-sidebar {
                 width: 100%;
-                min-width: unset;
+                border-right: none;
+                border-bottom: 1px solid var(--gray-200);
+                padding: 1rem;
+                display: flex;
+                overflow-x: auto;
+                gap: 0.5rem;
+                background: white;
             }
-        }
-       
-        @media (max-width: 480px) {
-            .welcome-banner {
-                padding: 15px;
-                border-radius: 5px;
+
+            .sidebar-category {
+                display: none;
             }
-           
-            .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.8vw, 1.3rem);
+
+            .sidebar-item {
+                border-left: none;
+                border-bottom: 2px solid transparent;
+                padding: 0.5rem 1rem;
+                flex-shrink: 0;
+                border-radius: 8px;
+                background: var(--gray-50);
             }
-           
-            .welcome-banner p {
-                font-size: clamp(0.75rem, 1.8vw, 0.8rem);
+
+            .sidebar-item.active {
+                border-left: none;
+                background: var(--gray-800);
+                color: white;
+            }
+
+            .settings-content {
+                padding: 1.5rem;
+            }
+
+            .form-input {
+                max-width: 100%;
             }
         }
     </style>
 </head>
+
 <body>
     <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
+
     <div class="main-content" id="mainContent">
-        <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle">
+        <!-- New Page Title Section -->
+        <div class="page-title-section">
+            <button class="page-hamburger" id="menuToggle">
                 <i class="fas fa-bars"></i>
-            </span>
-            <div class="content">
-                <h2><i class="fas fa-user-cog"></i> Pengaturan Akun</h2>
-                <p>Kelola informasi login dan keamanan akun Anda</p>
+            </button>
+            <div class="page-title-content">
+                <h1>Pengaturan Akun</h1>
+                <p class="page-subtitle">Kelola informasi profil dan keamanan akun Anda</p>
             </div>
         </div>
-        <div class="form-section">
-            <form id="accountForm">
-                <input type="hidden" name="action" value="update_account">
-                <input type="hidden" name="csrf_token" value="<?= $token ?>">
-                <div class="section-header">
-                    <h3><i class="fas fa-id-card"></i> Informasi Profil</h3>
+
+        <div class="settings-container">
+            <div class="settings-sidebar">
+                <div class="sidebar-category">Akun</div>
+                <div class="sidebar-item active" data-panel="profile">
+                    <i class="fas fa-user"></i> Profil
                 </div>
-                <!-- BARIS 1: Nama Lengkap | Email | Username -->
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label><i class="fas fa-user"></i> Nama Lengkap</label>
-                        <div class="input-wrapper">
-                            <input type="text" value="<?= htmlspecialchars($current_user['nama']) ?>" disabled style="background-color: #f8fafc; color: #64748b; padding-right: 15px;">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-envelope"></i> Email</label>
-                        <div class="input-wrapper">
-                            <input type="email" id="email" name="email" value="<?= htmlspecialchars($current_user['email'] ?? '') ?>" placeholder="Email (Opsional)">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="username"><i class="fas fa-user-tag"></i> Username</label>
-                        <div class="input-wrapper">
-                            <input type="text" id="username_display" value="<?= $masked_username ?>" disabled style="background-color: #f8fafc; color: #64748b; padding-right: 15px;">
-                            <input type="hidden" name="username" id="username_real" value="<?= htmlspecialchars($current_user['username']) ?>">
-                        </div>
-                        <div class="username-edit-link">
-                            <a href="#" id="editUsernameBtn">Ubah Username?</a>
-                        </div>
-                    </div>
+                <div class="sidebar-item" data-panel="username">
+                    <i class="fas fa-at"></i> Username
                 </div>
-                <div class="divider"><span>Keamanan Password</span></div>
-                <!-- BARIS 2: Password Baru | Ulangi Password | Password Lama -->
-                <div class="form-grid">
+                <div class="sidebar-item" data-panel="email">
+                    <i class="fas fa-envelope"></i> Email
+                </div>
+
+                <div class="sidebar-category">Keamanan</div>
+                <div class="sidebar-item" data-panel="password">
+                    <i class="fas fa-lock"></i> Ubah Password
+                </div>
+            </div>
+
+            <div class="settings-content">
+                <!-- Profile Panel -->
+                <div class="content-panel active" id="panel-profile">
+                    <h2 class="panel-title">Profil Saya</h2>
+                    <p class="panel-desc">Informasi dasar akun Anda yang terdaftar di sistem.</p>
+
                     <div class="form-group">
-                        <label for="password_baru"><i class="fas fa-key"></i> Password Baru</label>
-                        <div class="input-wrapper">
-                            <input type="password" id="password_baru" name="password_baru" placeholder="Biarkan kosong jika tidak ubah" autocomplete="new-password">
-                            <div class="toggle-pass" onclick="togglePassword('password_baru')">
-                                <i class="fas fa-eye"></i>
-                            </div>
-                        </div>
-                        <div class="password-indicator" id="passwordRules">
-                            <div class="indicator-item invalid" id="rule-length"><i class="fas fa-circle"></i> Min. 8 Karakter</div>
-                            <div class="indicator-item invalid" id="rule-number"><i class="fas fa-circle"></i> Mengandung Angka</div>
-                            <div class="indicator-item invalid" id="rule-capital"><i class="fas fa-circle"></i> Huruf Kapital</div>
-                        </div>
+                        <label class="form-label">Nama Lengkap</label>
+                        <input type="text" class="form-input" value="<?= htmlspecialchars($current_user['nama']) ?>"
+                            disabled>
+                        <p class="form-hint">Nama sesuai data pegawai. Hubungi admin jika terdapat kesalahan.</p>
                     </div>
+
                     <div class="form-group">
-                        <label for="konfirmasi_password"><i class="fas fa-check-double"></i> Ulangi Password</label>
-                        <div class="input-wrapper">
-                            <input type="password" id="konfirmasi_password" name="konfirmasi_password" placeholder="Konfirmasi password baru" autocomplete="new-password">
-                            <div class="toggle-pass" onclick="togglePassword('konfirmasi_password')">
-                                <i class="fas fa-eye"></i>
-                            </div>
-                        </div>
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-input" value="<?= htmlspecialchars($current_user['username']) ?>"
+                            disabled>
                     </div>
+
                     <div class="form-group">
-                        <label for="password_lama" style="color: var(--danger-color);"><i class="fas fa-lock" style="color: var(--danger-color);"></i> Password Lama <span style="color: var(--danger-color);">(Wajib)</span></label>
-                        <div class="input-wrapper">
-                            <input type="password" id="password_lama" name="password_lama" placeholder="Masukkan password saat ini" required autocomplete="current-password" style="border-color: #fed7aa; background: #fff7ed;">
-                            <div class="toggle-pass" onclick="togglePassword('password_lama')">
-                                <i class="fas fa-eye"></i>
-                            </div>
-                        </div>
+                        <label class="form-label">Email Terdaftar</label>
+                        <input type="text" class="form-input"
+                            value="<?= htmlspecialchars($current_user['email'] ?? '-') ?>" disabled>
                     </div>
                 </div>
-                <!-- TOMBOL SIMPAN - CENTER -->
-                <div class="btn-section">
-                    <button type="submit" class="btn btn-primary" id="saveBtn">
-                        <i class="fas fa-save"></i> Simpan Perubahan
-                    </button>
+
+                <!-- Username Panel -->
+                <div class="content-panel" id="panel-username">
+                    <h2 class="panel-title">Ubah Username</h2>
+                    <p class="panel-desc">Ganti username yang digunakan untuk masuk ke dalam sistem.</p>
+
+                    <form id="formUsername">
+                        <div class="form-group">
+                            <label class="form-label">Username Baru</label>
+                            <input type="text" class="form-input" name="new_value"
+                                value="<?= htmlspecialchars($current_user['username']) ?>" required
+                                placeholder="Masukkan username baru">
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="form-group">
+                            <label class="form-label">Konfirmasi Password</label>
+                            <input type="password" class="form-input" name="password_lama"
+                                placeholder="Masukkan password Anda saat ini" required>
+                            <p class="form-hint">Kami memerlukan password Anda untuk memverifikasi perubahan ini.</p>
+                        </div>
+
+                        <button type="submit" class="btn-save"><i class="fas fa-save"></i> Simpan Username</button>
+                    </form>
                 </div>
-            </form>
+
+                <!-- Email Panel -->
+                <div class="content-panel" id="panel-email">
+                    <h2 class="panel-title">Ubah Email</h2>
+                    <p class="panel-desc">Perbarui alamat email untuk notifikasi dan pemulihan akun.</p>
+
+                    <form id="formEmail">
+                        <div class="form-group">
+                            <label class="form-label">Email Baru</label>
+                            <input type="email" class="form-input" name="new_value"
+                                value="<?= htmlspecialchars($current_user['email'] ?? '') ?>"
+                                placeholder="contoh@email.com">
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="form-group">
+                            <label class="form-label">Konfirmasi Password</label>
+                            <input type="password" class="form-input" name="password_lama"
+                                placeholder="Masukkan password Anda saat ini" required>
+                        </div>
+
+                        <button type="submit" class="btn-save"><i class="fas fa-save"></i> Simpan Email</button>
+                    </form>
+                </div>
+
+                <!-- Password Panel -->
+                <div class="content-panel" id="panel-password">
+                    <h2 class="panel-title">Ubah Password</h2>
+                    <p class="panel-desc">Pastikan akun Anda tetap aman dengan password yang kuat.</p>
+
+                    <form id="formPassword">
+                        <div class="form-group">
+                            <label class="form-label">Password Baru</label>
+                            <input type="password" class="form-input" name="new_value"
+                                placeholder="Minimal 8 karakter, huruf kapital, dan angka" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Ulangi Password Baru</label>
+                            <input type="password" class="form-input" name="confirm_value"
+                                placeholder="Ketik ulang password baru" required>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <div class="form-group">
+                            <label class="form-label">Password Lama</label>
+                            <input type="password" class="form-input" name="password_lama"
+                                placeholder="Masukkan password lama Anda" required>
+                        </div>
+
+                        <button type="submit" class="btn-save"><i class="fas fa-key"></i> Update Password</button>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
+
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-            if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', e => {
-                    e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
-                });
-                document.addEventListener('click', e => {
-                    if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                        sidebar.classList.remove('active');
-                        document.body.classList.remove('sidebar-active');
+        // Sidebar Toggle Mobile
+        const menuToggle = document.getElementById('menuToggle');
+        const sidebar = document.getElementById('sidebar');
+
+        if (menuToggle) {
+            menuToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                // Toggle sidebar classes used in sidebar_petugas.php
+                sidebar.classList.toggle('active');
+                document.body.classList.toggle('sidebar-active');
+            });
+        }
+
+        document.addEventListener('click', function (e) {
+            if (sidebar && sidebar.classList.contains('active') &&
+                !sidebar.contains(e.target) &&
+                (!menuToggle || !menuToggle.contains(e.target))) {
+                sidebar.classList.remove('active');
+                document.body.classList.remove('sidebar-active');
+            }
+        });
+
+        // Settings Tab Navigation
+        document.querySelectorAll('.sidebar-item').forEach(item => {
+            item.addEventListener('click', function () {
+                document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+                document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+                document.getElementById('panel-' + this.dataset.panel).classList.add('active');
+            });
+        });
+
+        const csrfToken = '<?= $token ?>';
+
+        function submitForm(action, formData) {
+            formData.append('action', action);
+            formData.append('csrf_token', csrfToken);
+
+            $.ajax({
+                url: '',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function (res) {
+                    if (res.status === 'success') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil!',
+                            text: res.message,
+                            confirmButtonColor: '#334155'
+                        }).then(() => {
+                            if (res.logout) window.location.href = '../login.php';
+                            else if (res.reload) location.reload();
+                        });
+                    } else {
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Gagal',
+                            text: res.message,
+                            confirmButtonColor: '#334155'
+                        });
                     }
-                });
-            }
-        });
-        // Toggle Edit Username
-        $('#editUsernameBtn').on('click', function(e) {
-            e.preventDefault();
-            const displayInput = $('#username_display');
-            const realInput = $('#username_real');
-           
-            if (displayInput.prop('disabled')) {
-                displayInput.prop('disabled', false)
-                    .val(realInput.val())
-                    .focus()
-                    .css({
-                        'background-color': '#fff',
-                        'color': 'var(--text-primary)',
-                        'padding-right': '15px'
-                    });
-                $(this).text('Batal Ubah');
-            } else {
-                displayInput.prop('disabled', true)
-                    .val('<?= $masked_username ?>')
-                    .css({
-                        'background-color': '#f8fafc',
-                        'color': '#64748b'
-                    });
-                realInput.val('<?= htmlspecialchars($current_user['username']) ?>');
-                $(this).text('Ubah Username?');
-            }
-        });
-        $('#username_display').on('input', function() {
-            $('#username_real').val($(this).val());
-        });
-        function togglePassword(id) {
-            const input = document.getElementById(id);
-            const icon = input.nextElementSibling.querySelector('i');
-            if (input.type === "password") {
-                input.type = "text";
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            } else {
-                input.type = "password";
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            }
-        }
-        $('#password_baru').on('input', function() {
-            const val = $(this).val();
-            updateIndicator('rule-length', val.length >= 8);
-            updateIndicator('rule-number', /[0-9]/.test(val));
-            updateIndicator('rule-capital', /[A-Z]/.test(val));
-        });
-        function updateIndicator(id, isValid) {
-            const el = $('#' + id);
-            const icon = el.find('i');
-            if (isValid) {
-                el.addClass('valid').removeClass('invalid');
-                icon.removeClass('fa-circle').addClass('fa-check-circle');
-            } else {
-                el.removeClass('valid').addClass('invalid');
-                icon.removeClass('fa-check-circle').addClass('fa-circle');
-            }
-        }
-        $('#accountForm').on('submit', function(e) {
-            e.preventDefault();
-           
-            const passBaru = $('#password_baru').val();
-            const passKonf = $('#konfirmasi_password').val();
-            if (passBaru) {
-                if (passBaru.length < 8) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Password Lemah',
-                        text: 'Password minimal 8 karakter.',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    return;
-                }
-                if (!/[0-9]/.test(passBaru) || !/[A-Z]/.test(passBaru)) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Password Lemah',
-                        text: 'Harus mengandung angka dan huruf kapital.',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    return;
-                }
-                if (passBaru !== passKonf) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Tidak Cocok',
-                        text: 'Konfirmasi password tidak sesuai.',
-                        confirmButtonColor: '#dc2626'
-                    });
-                    return;
-                }
-            }
-            Swal.fire({
-                title: 'Simpan Perubahan?',
-                text: 'Anda akan otomatis logout setelah berhasil.',
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonText: 'Ya, Simpan & Logout',
-                cancelButtonText: 'Batal',
-                confirmButtonColor: '#1e3a8a',
-                cancelButtonColor: '#64748b'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    Swal.fire({
-                        title: 'Menyimpan...',
-                        allowOutsideClick: false,
-                        didOpen: () => Swal.showLoading()
-                    });
-                    $.ajax({
-                        url: '',
-                        type: 'POST',
-                        data: $(this).serialize(),
-                        dataType: 'json',
-                        success: function(res) {
-                            if (res.status === 'success') {
-                                Swal.fire({
-                                    icon: 'success',
-                                    title: 'Berhasil!',
-                                    text: res.message,
-                                    confirmButtonColor: '#10b981',
-                                    timer: 2000,
-                                    showConfirmButton: false
-                                }).then(() => {
-                                    window.location.href = '../login.php';
-                                });
-                            } else {
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Gagal',
-                                    text: res.message,
-                                    confirmButtonColor: '#dc2626'
-                                });
-                            }
-                        },
-                        error: function() {
-                            Swal.close();
-                            Swal.fire({
-                                icon: 'error',
-                                title: 'Error',
-                                text: 'Terjadi kesalahan server.',
-                                confirmButtonColor: '#dc2626'
-                            });
-                        }
-                    });
                 }
             });
+        }
+
+        $('#formUsername').submit(function (e) {
+            e.preventDefault();
+            submitForm('update_username', new FormData(this));
+        });
+
+        $('#formEmail').submit(function (e) {
+            e.preventDefault();
+            submitForm('update_email', new FormData(this));
+        });
+
+        $('#formPassword').submit(function (e) {
+            e.preventDefault();
+            submitForm('update_password', new FormData(this));
         });
     </script>
 </body>
+
 </html>

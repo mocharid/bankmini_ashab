@@ -18,7 +18,7 @@ date_default_timezone_set('Asia/Jakarta');
 // ADAPTIVE PATH DETECTION
 // ============================================
 $current_file = __FILE__;
-$current_dir  = dirname($current_file);
+$current_dir = dirname($current_file);
 $project_root = null;
 
 // Strategy 1: jika di folder 'pages' atau 'admin'
@@ -83,7 +83,7 @@ if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
         'email_status' => 'none',
         'debug' => [
             'includes_path' => INCLUDES_PATH,
-            'project_root'  => PROJECT_ROOT
+            'project_root' => PROJECT_ROOT
         ]
     ]);
     exit;
@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
         }
         $stmt->close();
-        
+
     } elseif ($action === 'setor_tunai') {
         // Validasi format no_rekening: 8 digit angka
         if (empty($no_rekening) || strlen($no_rekening) !== 8 || !preg_match('/^[0-9]{8}$/', $no_rekening)) {
@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $date_prefix = date('ymd');
                 $random_8digit = sprintf('%08d', mt_rand(10000000, 99999999));
                 $id_transaksi = $date_prefix . $random_8digit;
-                
+
                 $check_id_query = "SELECT id FROM transaksi WHERE id_transaksi = ?";
                 $check_id_stmt = $conn->prepare($check_id_query);
                 $check_id_stmt->bind_param('s', $id_transaksi);
@@ -283,7 +283,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $date_prefix = date('ymd');
                 $random_6digit = sprintf('%06d', mt_rand(100000, 999999));
                 $no_transaksi = 'TRXSP' . $date_prefix . $random_6digit;
-                
+
                 $check_query = "SELECT id FROM transaksi WHERE no_transaksi = ?";
                 $check_stmt = $conn->prepare($check_query);
                 $check_stmt->bind_param('s', $no_transaksi);
@@ -357,9 +357,18 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 // Konversi bulan ke bahasa Indonesia
                 $bulan = [
-                    'Jan' => 'Januari', 'Feb' => 'Februari', 'Mar' => 'Maret', 'Apr' => 'April',
-                    'May' => 'Mei', 'Jun' => 'Juni', 'Jul' => 'Juli', 'Aug' => 'Agustus',
-                    'Sep' => 'September', 'Oct' => 'Oktober', 'Nov' => 'November', 'Dec' => 'Desember'
+                    'Jan' => 'Januari',
+                    'Feb' => 'Februari',
+                    'Mar' => 'Maret',
+                    'Apr' => 'April',
+                    'May' => 'Mei',
+                    'Jun' => 'Juni',
+                    'Jul' => 'Juli',
+                    'Aug' => 'Agustus',
+                    'Sep' => 'September',
+                    'Oct' => 'Oktober',
+                    'Nov' => 'November',
+                    'Dec' => 'Desember'
                 ];
                 $tanggal_transaksi = date('d M Y, H:i');
                 foreach ($bulan as $en => $id_bulan) {
@@ -394,7 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     
     <div style='margin-bottom: 18px;'>
         <p style='margin:0 0 6px; font-size:13px; color:#808080;'>Rekening Tujuan</p>
-        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>Schobank • {$no_rekening}</span></p>
+        <p style='margin:0; font-size:16px; font-weight:600; color:#1a1a1a;'>{$nama_nasabah}<br><span style='font-size:14px; color:#808080;'>KASDIG • {$no_rekening}</span></p>
     </div>
     
     <div style='margin-bottom: 18px;'>
@@ -420,7 +429,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
 
     <p style='font-size: 12px; color: #999;'>
-        Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+        Ini adalah pesan otomatis dari sistem KASDIG.<br>
         Jika Anda memiliki pertanyaan, silakan hubungi petugas sekolah.
     </p>
 </div>";
@@ -433,19 +442,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     $mail->clearReplyTos();
 
                     $mail->isSMTP();
-                    $mail->Host       = 'smtp.gmail.com';
-                    $mail->SMTPAuth   = true;
-                    $mail->Username   = 'myschobank@gmail.com';
-                    $mail->Password   = 'xpni zzju utfu mkth';
-                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                    $mail->Port       = 587;
-                    $mail->CharSet    = 'UTF-8';
+                    $mail->Host = 'mail.kasdig.web.id';
+                    $mail->SMTPAuth = true;
+                    $mail->Username = 'noreply@kasdig.web.id';
+                    $mail->Password = 'BtRjT4wP8qeTL5M';
+                    $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                    $mail->Port = 465;
+                    $mail->Timeout = 30;
+                    $mail->CharSet = 'UTF-8';
 
-                    $mail->setFrom('myschobank@gmail.com', 'Schobank Student Digital Banking');
+                    $mail->setFrom('noreply@kasdig.web.id', 'KASDIG');
                     $mail->addAddress($email, $nama_nasabah);
-                    $mail->addReplyTo('no-reply@myschobank.com', 'No Reply');
+                    $mail->addReplyTo('noreply@schobank.web.id', 'KASDIG');
 
-                    $unique_id = uniqid('myschobank_', true) . '@myschobank.com';
+                    $unique_id = uniqid('kasdig_', true) . '@kasdig.web.id';
                     $mail->MessageID = '<' . $unique_id . '>';
 
                     $mail->addCustomHeader('X-Transaction-ID', $id_transaksi);
@@ -453,8 +463,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                     $mail->isHTML(true);
                     $mail->Subject = $subject;
-                    $mail->Body    = $message_email;
-                    
+                    $mail->Body = $message_email;
+
                     // Plain text version
                     $labels = [
                         'Nama' => $nama_nasabah,
@@ -473,7 +483,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     foreach ($labels as $label => $value) {
                         $text_rows[] = str_pad($label, $max_label_length, ' ') . " : " . $value;
                     }
-                    $text_rows[] = "\nHormat kami,\nTim Schobank Student Digital Banking";
+                    $text_rows[] = "\nHormat kami,\nTim KASDIG";
                     $text_rows[] = "\nPesan otomatis, mohon tidak membalas.";
                     $mail->AltBody = implode("\n", $text_rows);
 
@@ -500,14 +510,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             }
 
             echo json_encode([
-                'status'       => 'success',
-                'message'      => $response_message,
+                'status' => 'success',
+                'message' => $response_message,
                 'email_status' => $email_status,
                 'id_transaksi' => $id_transaksi,
                 'no_transaksi' => $no_transaksi,
-                'saldo_baru'   => number_format($saldo_baru, 0, ',', '.')
+                'saldo_baru' => number_format($saldo_baru, 0, ',', '.')
             ]);
-            
+
         } catch (Exception $e) {
             $conn->rollback();
             echo json_encode(['status' => 'error', 'message' => $e->getMessage(), 'email_status' => 'none']);

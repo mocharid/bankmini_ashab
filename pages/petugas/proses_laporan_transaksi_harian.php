@@ -88,11 +88,12 @@ $today = date('Y-m-d');
 
 // Pagination settings
 $limit = 10;
-$page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
 $offset = ($page - 1) * $limit;
 
 // Calculate summary statistics for today
-function getSummaryStatistics($conn, $today) {
+function getSummaryStatistics($conn, $today, $user_id)
+{
     $total_query = "SELECT 
         COUNT(id) as total_transactions,
         SUM(CASE WHEN jenis_transaksi = 'setor' AND (status = 'approved' OR status IS NULL) THEN jumlah ELSE 0 END) as total_debit,
@@ -100,46 +101,48 @@ function getSummaryStatistics($conn, $today) {
         FROM transaksi 
         WHERE DATE(created_at) = ? 
         AND jenis_transaksi != 'transfer'
-        AND petugas_id IS NOT NULL";
-    
+        AND petugas_id = ?";
+
     $stmt = $conn->prepare($total_query);
     if (!$stmt) {
         error_log("Error preparing total query: " . $conn->error);
         return ['total_transactions' => 0, 'total_debit' => 0, 'total_kredit' => 0];
     }
-    
-    $stmt->bind_param("s", $today);
+
+    $stmt->bind_param("si", $today, $user_id);
     $stmt->execute();
     $totals = $stmt->get_result()->fetch_assoc();
     $stmt->close();
-    
+
     return $totals;
 }
 
 // Calculate total records for pagination
-function getTotalRecords($conn, $today) {
+function getTotalRecords($conn, $today, $user_id)
+{
     $total_records_query = "SELECT COUNT(*) as total 
                            FROM transaksi 
                            WHERE DATE(created_at) = ? 
                            AND jenis_transaksi != 'transfer'
-                           AND petugas_id IS NOT NULL";
-    
+                           AND petugas_id = ?";
+
     $stmt_total = $conn->prepare($total_records_query);
     if (!$stmt_total) {
         error_log("Error preparing total records query: " . $conn->error);
         return 0;
     }
-    
-    $stmt_total->bind_param("s", $today);
+
+    $stmt_total->bind_param("si", $today, $user_id);
     $stmt_total->execute();
     $total_records = $stmt_total->get_result()->fetch_assoc()['total'];
     $stmt_total->close();
-    
+
     return $total_records;
 }
 
 // Fetch transactions with class information
-function getTransactions($conn, $today, $limit, $offset) {
+function getTransactions($conn, $today, $limit, $offset, $user_id)
+{
     try {
         $query = "SELECT 
             t.no_transaksi,
@@ -156,28 +159,28 @@ function getTransactions($conn, $today, $limit, $offset) {
             LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id
             WHERE DATE(t.created_at) = ? 
             AND t.jenis_transaksi != 'transfer' 
-            AND t.petugas_id IS NOT NULL 
+            AND t.petugas_id = ? 
             AND (t.status = 'approved' OR t.status IS NULL)
             ORDER BY t.created_at DESC 
             LIMIT ? OFFSET ?";
-        
+
         $stmt_trans = $conn->prepare($query);
         if (!$stmt_trans) {
             throw new Exception("Failed to prepare transaction query: " . $conn->error);
         }
-        
-        $stmt_trans->bind_param("sii", $today, $limit, $offset);
+
+        $stmt_trans->bind_param("siii", $today, $user_id, $limit, $offset);
         $stmt_trans->execute();
         $result = $stmt_trans->get_result();
-        
+
         $transactions = [];
         while ($row = $result->fetch_assoc()) {
             $transactions[] = $row;
         }
-        
+
         $stmt_trans->close();
         return $transactions;
-        
+
     } catch (Exception $e) {
         error_log("Error fetching transactions: " . $e->getMessage());
         return [];
@@ -185,15 +188,16 @@ function getTransactions($conn, $today, $limit, $offset) {
 }
 
 // Function to format Rupiah
-function formatRupiah($amount) {
+function formatRupiah($amount)
+{
     return 'Rp ' . number_format($amount, 0, ',', '.');
 }
 
 // Get data
-$totals = getSummaryStatistics($conn, $today);
-$total_records = getTotalRecords($conn, $today);
+$totals = getSummaryStatistics($conn, $today, $user_id);
+$total_records = getTotalRecords($conn, $today, $user_id);
 $total_pages = ceil($total_records / $limit);
-$transactions = getTransactions($conn, $today, $limit, $offset);
+$transactions = getTransactions($conn, $today, $limit, $offset, $user_id);
 
 // Calculate net balance
 $saldo_bersih = ($totals['total_debit'] ?? 0) - ($totals['total_kredit'] ?? 0);

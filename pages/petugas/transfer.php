@@ -1,11 +1,7 @@
 <?php
 /**
- * Transfer - Adaptive Path Version
+ * Transfer - Step-Based UI Version
  * File: pages/petugas/transfer.php
- *
- * Compatible with:
- * - Local: schobank/pages/petugas/transfer.php
- * - Hosting: public_html/pages/petugas/transfer.php
  */
 // ============================================
 // ERROR HANDLING & TIMEZONE
@@ -14,28 +10,23 @@ error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 date_default_timezone_set('Asia/Jakarta');
+
 // ============================================
 // ADAPTIVE PATH DETECTION
 // ============================================
 $current_file = __FILE__;
 $current_dir = dirname($current_file);
 $project_root = null;
-// Strategy 1: jika di folder 'pages' atau 'petugas'
+
 if (basename($current_dir) === 'petugas') {
     $project_root = dirname(dirname($current_dir));
 } elseif (basename($current_dir) === 'pages') {
     $project_root = dirname($current_dir);
-}
-// Strategy 2: cek includes/ di parent
-elseif (is_dir(dirname($current_dir) . '/includes')) {
+} elseif (is_dir(dirname($current_dir) . '/includes')) {
     $project_root = dirname($current_dir);
-}
-// Strategy 3: cek includes/ di current dir
-elseif (is_dir($current_dir . '/includes')) {
+} elseif (is_dir($current_dir . '/includes')) {
     $project_root = $current_dir;
-}
-// Strategy 4: naik max 5 level cari includes/
-else {
+} else {
     $temp_dir = $current_dir;
     for ($i = 0; $i < 5; $i++) {
         $temp_dir = dirname($temp_dir);
@@ -45,10 +36,11 @@ else {
         }
     }
 }
-// Fallback: pakai current dir
+
 if (!$project_root) {
     $project_root = $current_dir;
 }
+
 // ============================================
 // DEFINE PATH CONSTANTS
 // ============================================
@@ -64,12 +56,14 @@ if (!defined('VENDOR_PATH')) {
 if (!defined('ASSETS_PATH')) {
     define('ASSETS_PATH', PROJECT_ROOT . '/assets');
 }
+
 // ============================================
 // SESSION
 // ============================================
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
+
 // ============================================
 // LOAD REQUIRED FILES
 // ============================================
@@ -79,32 +73,15 @@ if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
 require_once INCLUDES_PATH . '/db_connection.php';
 require VENDOR_PATH . '/autoload.php';
 require_once INCLUDES_PATH . '/session_validator.php';
+
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['role'])) {
     header("Location: login.php");
     exit;
 }
+
 $user_id = $_SESSION['user_id'];
 $role = $_SESSION['role'];
-$stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$user = $stmt->get_result()->fetch_assoc();
-$stmt->close();
-$rekening = null;
-$rekening_display = '';
-if ($role == 'siswa') {
-    $stmt = $conn->prepare("SELECT * FROM rekening WHERE user_id = ?");
-    $stmt->bind_param("i", $user_id);
-    $stmt->execute();
-    $rekening = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-   
-    // Format nomor rekening: 3 digit awal + *** + 2 digit akhir
-    if ($rekening && isset($rekening['no_rekening'])) {
-        $no_rek = $rekening['no_rekening'];
-        $rekening_display = substr($no_rek, 0, 3) . '***' . substr($no_rek, -2);
-    }
-}
+
 // ============================================
 // DETECT BASE URL FOR ASSETS
 // ============================================
@@ -112,7 +89,7 @@ $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : '
 $host = $_SERVER['HTTP_HOST'];
 $script_name = $_SERVER['SCRIPT_NAME'];
 $path_parts = explode('/', trim(dirname($script_name), '/'));
-// Deteksi base path (schobank atau public_html)
+
 $base_path = '';
 if (in_array('schobank', $path_parts)) {
     $base_path = '/schobank';
@@ -123,210 +100,411 @@ $base_url = $protocol . '://' . $host . $base_path;
 ?>
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Transfer | MY Schobank</title>
+    <title>Transfer | KASDIG</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
-            --danger-color: #e74c3c;
-            --text-primary: #333;
-            --text-secondary: #666;
-            --bg-light: #f0f5ff;
-            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
-            --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-            --scrollbar-track: #1e1b4b;
-            --scrollbar-thumb: #3b82f6;
-            --scrollbar-thumb-hover: #60a5fa;
+            --gray-50: #f9fafb;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --primary-color: var(--gray-800);
+            --primary-dark: var(--gray-900);
+            --secondary-color: var(--gray-600);
+
+            --bg-light: #f8fafc;
+            --text-primary: var(--gray-800);
+            --text-secondary: var(--gray-500);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 0.5rem;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
-            -webkit-user-select: none;
-            user-select: none;
+            -webkit-font-smoothing: antialiased;
         }
-        html {
-            width: 100%;
-            min-height: 100vh;
-            overflow-x: hidden;
-            overflow-y: auto;
-        }
+
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
-            display: flex;
-            transition: background-color 0.3s ease;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
             min-height: 100vh;
-            touch-action: pan-y;
+            display: flex;
         }
+
+        body.sidebar-open {
+            overflow: hidden;
+        }
+
+        body.sidebar-active::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            transition: opacity 0.3s ease;
+            opacity: 1;
+        }
+
         .main-content {
-            flex: 1;
             margin-left: 280px;
-            padding: 30px;
-            transition: margin-left 0.3s ease;
-            max-width: calc(100% - 280px);
-            overflow-y: auto;
-            min-height: 100vh;
-        }
-       
-        body.sidebar-active .main-content {
-            opacity: 0.3;
-            pointer-events: none;
-        }
-        /* Welcome Banner - Updated to match previous syntax */
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 5px;
-            margin-bottom: 35px;
-            box-shadow: var(--shadow-md);
-            animation: fadeIn 1s ease-in-out;
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-       
-        .welcome-banner .content {
+            padding: 2rem;
             flex: 1;
+            min-height: 100vh;
+            transition: margin-left 0.3s ease;
+            width: calc(100% - 280px);
         }
-       
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            font-weight: 600;
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+        }
+
+        .page-title-section {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+            padding: 1.5rem 2rem;
+            margin: -2rem -2rem 1.5rem -2rem;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 1rem;
+            border-bottom: 1px solid var(--gray-200);
         }
-       
-        .welcome-banner p {
-            font-size: clamp(0.85rem, 2vw, 0.9rem);
-            font-weight: 400;
-            opacity: 0.8;
-        }
-       
-        .menu-toggle {
+
+        .page-title-content h1 {
             font-size: 1.5rem;
-            cursor: pointer;
-            color: white;
-            flex-shrink: 0;
+            font-weight: 700;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .page-subtitle {
+            color: var(--gray-500);
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        .page-hamburger {
             display: none;
-            align-self: center;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--gray-700);
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            align-items: center;
+            justify-content: center;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+
+        .page-hamburger:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--gray-800);
         }
-        .form-section {
+
+        .card {
             background: white;
-            border-radius: 5px;
-            padding: 30px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border: 1px solid var(--gray-100);
+            max-width: 900px;
             margin-left: auto;
             margin-right: auto;
         }
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
-        }
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            position: relative;
-        }
-        label {
-            font-weight: 500;
-            color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+
+        .card-header {
+            background: var(--gray-100);
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 0.75rem;
         }
-       
-        label i {
+
+        .card-header-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--gray-600) 0%, var(--gray-500) 100%);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .card-header-text h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .card-header-text p {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Steps Section */
+        .steps-section {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px dashed var(--gray-200);
+            position: relative;
+        }
+
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            opacity: 0.5;
+            padding: 0.5rem 1rem;
+            border-radius: 99px;
+            transition: var(--transition);
+        }
+
+        .step-item.active {
+            opacity: 1;
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+        }
+
+        .step-item.completed {
+            opacity: 1;
             color: var(--primary-color);
-            font-size: 0.95em;
         }
+
+        .step-number {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background-color: var(--gray-200);
+            color: var(--gray-600);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+
+        .step-item.active .step-number {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .step-item.completed .step-number {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .step-text {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            background: #fff;
+            height: 48px;
+            color: var(--gray-800);
+        }
+
+        input:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.1);
+            outline: none;
+        }
+
+        input.error-input {
+            border-color: #ef4444;
+            animation: shake 0.5s;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-600) 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            text-decoration: none;
+            font-size: 0.95rem;
+            width: auto;
+            min-width: 130px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-700) 100%);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn:disabled {
+            background: var(--gray-400);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-cancel {
+            background: var(--gray-100);
+            color: var(--gray-600);
+            border: 1px solid var(--gray-200);
+        }
+
+        .btn-cancel:hover {
+            background: var(--gray-200);
+            color: var(--gray-800);
+            transform: translateY(-1px);
+        }
+
+        /* Detail Rows */
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 0.95rem;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--gray-500);
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: var(--gray-800);
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .content-step {
+            display: none;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .content-step.active {
+            display: block;
+        }
+
+        /* PIN Input Boxes */
+        .pin-input-container {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .pin-digit {
+            width: 42px;
+            height: 48px;
+            text-align: center;
+            font-size: 1.25rem;
+            font-weight: 600;
+            border: 2px solid var(--gray-300);
+            border-radius: var(--radius);
+            background: white;
+            color: var(--gray-800);
+            transition: all 0.2s;
+        }
+
+        .pin-digit:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.15);
+            outline: none;
+        }
+
+        .pin-digit.filled {
+            border-color: var(--gray-500);
+            background: var(--gray-50);
+        }
+
+        /* Search Results */
         .search-wrapper {
             position: relative;
         }
-        .search-input-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-        input {
-            width: 100%;
-            padding: 12px 40px 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            line-height: 1.5;
-            min-height: 44px;
-            transition: var(--transition);
-            -webkit-user-select: text;
-            user-select: text;
-            background-color: #fff;
-        }
-        input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
-        }
-        input[readonly] {
-            background-color: #f8fafc;
-            cursor: default;
-            padding-right: 15px;
-            letter-spacing: 1px;
-            font-weight: 500;
-        }
-        .clear-btn {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            color: #9ca3af;
-            cursor: pointer;
-            font-size: 1.2rem;
-            padding: 5px;
-            display: none;
-            transition: var(--transition);
-            z-index: 10;
-        }
-        .clear-btn:hover {
-            color: var(--danger-color);
-        }
-        .clear-btn.show {
-            display: block;
-        }
+
         .search-results {
             position: absolute;
             top: 100%;
             left: 0;
             right: 0;
             background: white;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
             margin-top: 4px;
             box-shadow: var(--shadow-md);
             max-height: 250px;
@@ -334,614 +512,718 @@ $base_url = $protocol . '://' . $host . $base_path;
             z-index: 100;
             display: none;
         }
+
         .search-results.show {
             display: block;
         }
+
         .search-result-item {
             padding: 12px 15px;
             cursor: pointer;
             transition: background-color 0.2s;
-            border-bottom: 1px solid #f3f4f6;
+            border-bottom: 1px solid var(--gray-100);
         }
+
         .search-result-item:last-child {
             border-bottom: none;
         }
+
         .search-result-item:hover {
-            background-color: var(--bg-light);
+            background-color: var(--gray-50);
         }
+
         .search-result-name {
-            font-weight: 500;
-            color: var(--text-primary);
+            font-weight: 600;
+            color: var(--gray-800);
             font-size: 0.95rem;
         }
+
         .search-result-account {
             font-size: 0.85rem;
-            color: var(--text-secondary);
+            color: var(--gray-500);
             margin-top: 2px;
-            letter-spacing: 1px;
         }
+
+        .search-result-detail {
+            font-size: 0.8rem;
+            color: var(--gray-400);
+            margin-top: 4px;
+        }
+
         .no-results {
             padding: 12px 15px;
-            color: var(--text-secondary);
+            color: var(--gray-500);
             font-size: 0.9rem;
             text-align: center;
         }
-        .btn-container {
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        .action-buttons {
             display: flex;
-            justify-content: center;
-            margin-top: 30px;
+            gap: 1rem;
+            margin-top: 2rem;
         }
-        .btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            border: none;
-            padding: 12px 40px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: clamp(0.95rem, 2vw, 1.05rem);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            transition: var(--transition);
-            min-width: 200px;
-        }
-        .btn:hover {
-            background: linear-gradient(135deg, var(--secondary-dark) 0%, var(--primary-dark) 100%);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-sm);
-        }
-        .btn:active {
-            transform: scale(0.95);
-        }
+
         @media (max-width: 768px) {
-            .menu-toggle {
+            .page-title-section {
+                padding: 1.25rem;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+                margin: -1rem -1rem 1rem -1rem;
+            }
+
+            .page-hamburger {
+                display: flex;
+            }
+
+            .steps-section {
+                gap: 1rem;
+                overflow-x: auto;
+                justify-content: flex-start;
+                padding-bottom: 1rem;
+            }
+
+            .step-text {
+                display: none;
+            }
+
+            .step-item.active .step-text {
                 display: block;
             }
-            .main-content {
-                margin-left: 0;
-                padding: 15px;
-                max-width: 100%;
+
+            .action-buttons {
+                flex-direction: column;
             }
-            .welcome-banner {
-                padding: 20px;
-                border-radius: 5px;
-                align-items: center;
-            }
-           
-            .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.4rem);
-            }
-           
-            .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.85rem);
-            }
-            .form-section {
-                padding: 20px 15px;
-            }
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-           
+
             .btn {
                 width: 100%;
-                max-width: 300px;
-            }
-        }
-        @media (max-width: 480px) {
-            .welcome-banner {
-                padding: 15px;
-                border-radius: 5px;
-            }
-           
-            .welcome-banner h2 {
-                font-size: clamp(1.2rem, 2.8vw, 1.3rem);
-            }
-           
-            .welcome-banner p {
-                font-size: clamp(0.75rem, 1.8vw, 0.8rem);
-            }
-           
-            .form-section {
-                padding: 15px;
-            }
-           
-            .btn {
-                max-width: 100%;
             }
         }
     </style>
 </head>
+
 <body>
     <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
+
     <div class="main-content" id="mainContent">
-        <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle">
+        <!-- Page Title Section -->
+        <div class="page-title-section">
+            <button class="page-hamburger" id="menuToggle">
                 <i class="fas fa-bars"></i>
-            </span>
-            <div class="content">
-                <h2><i class="fas fa-exchange-alt"></i> Transfer Antar Rekening</h2>
-                <p>Kirim uang antar rekening Schobank Student Digital Banking</p>
+            </button>
+            <div class="page-title-content">
+                <h1>Transfer</h1>
+                <p class="page-subtitle">Kirim uang antar rekening KASDIG dengan cepat dan aman</p>
             </div>
         </div>
-        <div class="form-section">
-            <form id="transferForm">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="rekening_asal"><i class="fas fa-wallet"></i> Rekening Asal</label>
-                        <?php if ($role == 'siswa' && $rekening): ?>
-                            <input type="text" id="rekening_asal_display" value="<?= htmlspecialchars($rekening_display) ?>" readonly>
-                            <input type="hidden" id="rekening_asal" name="rekening_asal" value="<?= htmlspecialchars($rekening['no_rekening']) ?>">
-                        <?php else: ?>
-                            <div class="search-wrapper">
-                                <div class="search-input-container">
-                                    <input type="text" id="rekening_asal_search" placeholder="Input nama atau nomor rekening asal" autocomplete="off">
-                                    <button type="button" class="clear-btn" id="clear_asal">
-                                        <i class="fas fa-times-circle"></i>
-                                    </button>
-                                </div>
-                                <div class="search-results" id="results_asal"></div>
-                                <input type="hidden" id="rekening_asal" name="rekening_asal">
-                            </div>
-                        <?php endif; ?>
+
+        <div class="card">
+            <div class="card-header">
+                <div class="card-header-icon">
+                    <i class="fas fa-paper-plane"></i>
+                </div>
+                <div class="card-header-text">
+                    <h3>Form Transfer</h3>
+                    <p>Ikuti langkah-langkah di bawah ini</p>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <!-- Step Indicators -->
+                <div class="steps-section">
+                    <div class="step-item active" id="step1-indicator">
+                        <div class="step-number">1</div>
+                        <div class="step-text">Rekening Asal</div>
                     </div>
+                    <div class="step-item" id="step2-indicator">
+                        <div class="step-number">2</div>
+                        <div class="step-text">Tujuan & Nominal</div>
+                    </div>
+                    <div class="step-item" id="step3-indicator">
+                        <div class="step-number">3</div>
+                        <div class="step-text">Verifikasi PIN</div>
+                    </div>
+                    <div class="step-item" id="step4-indicator">
+                        <div class="step-number">4</div>
+                        <div class="step-text">Konfirmasi</div>
+                    </div>
+                </div>
+
+                <!-- Step 1: Pilih Rekening Asal -->
+                <div id="step1" class="content-step active">
                     <div class="form-group">
-                        <label for="rekening_tujuan"><i class="fas fa-user"></i> Rekening Tujuan</label>
+                        <label class="form-label">Cari Rekening Pengirim</label>
                         <div class="search-wrapper">
-                            <div class="search-input-container">
-                                <input type="text" id="rekening_tujuan_search" placeholder="Input nama atau nomor rekening tujuan" autocomplete="off">
-                                <button type="button" class="clear-btn" id="clear_tujuan">
-                                    <i class="fas fa-times-circle"></i>
-                                </button>
+                            <input type="text" id="search_asal" placeholder="Cari nama atau nomor rekening..."
+                                autocomplete="off">
+                            <div class="search-results" id="results_asal"></div>
+                        </div>
+                        <input type="hidden" id="rekening_asal">
+                        <input type="hidden" id="user_id_asal">
+                    </div>
+                    <div class="action-buttons">
+                        <button type="button" class="btn" id="btnStep1">
+                            <span class="btn-text">Lanjutkan</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Rekening Tujuan & Nominal -->
+                <div id="step2" class="content-step">
+                    <div class="card"
+                        style="border: 1px dashed var(--gray-300); background: var(--gray-50); box-shadow: none;">
+                        <div class="card-body" style="padding: 1rem;">
+                            <div class="detail-row">
+                                <span class="detail-label">Nama Pengirim</span>
+                                <span class="detail-value" id="detail-nama-asal">-</span>
                             </div>
-                            <div class="search-results" id="results_tujuan"></div>
-                            <input type="hidden" id="rekening_tujuan" name="rekening_tujuan">
+                            <div class="detail-row">
+                                <span class="detail-label">Jurusan</span>
+                                <span class="detail-value" id="detail-jurusan-asal">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Kelas</span>
+                                <span class="detail-value" id="detail-kelas-asal">-</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-               
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="jumlah"><i class="fas fa-money-bill-wave"></i> Nominal Transfer</label>
-                        <input type="text" id="jumlah" name="jumlah" required inputmode="numeric" placeholder="Input nominal transfer....">
+
+                    <div class="form-group" style="margin-top: 1.5rem;">
+                        <label class="form-label">Cari Rekening Tujuan</label>
+                        <div class="search-wrapper">
+                            <input type="text" id="search_tujuan" placeholder="Cari nama atau nomor rekening..."
+                                autocomplete="off">
+                            <div class="search-results" id="results_tujuan"></div>
+                        </div>
+                        <input type="hidden" id="rekening_tujuan">
                     </div>
+
                     <div class="form-group">
-                        <label for="keterangan"><i class="fas fa-comment-alt"></i> Keterangan (Opsional)</label>
-                        <input type="text" id="keterangan" name="keterangan" placeholder="Input keterangan transfer (opsional)">
+                        <label class="form-label">Nominal Transfer</label>
+                        <input type="text" id="jumlah" placeholder="Rp 0" inputmode="numeric">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Keterangan (Opsional)</label>
+                        <input type="text" id="keterangan" placeholder="Tambahkan catatan...">
+                    </div>
+
+                    <div class="action-buttons">
+                        <button type="button" class="btn" id="btnStep2">
+                            <span class="btn-text">Lanjutkan</span>
+                        </button>
+                        <button type="button" class="btn btn-cancel" onclick="prevStep(1)">Kembali</button>
                     </div>
                 </div>
-                <div class="btn-container">
-                    <button type="button" class="btn" id="transferBtn">
-                        <i class="fas fa-paper-plane"></i> Proses Transfer
-                    </button>
+
+                <!-- Step 3: Verify PIN -->
+                <div id="step3" class="content-step">
+                    <div style="text-align: center; margin-bottom: 2rem;">
+                        <i class="fas fa-lock"
+                            style="font-size: 3rem; color: var(--gray-400); margin-bottom: 1rem;"></i>
+                        <h4 style="color: var(--gray-700); margin-bottom: 0.5rem;">Verifikasi Keamanan</h4>
+                        <p style="color: var(--gray-500); font-size: 0.9rem;">Masukkan PIN pengirim untuk melanjutkan
+                            transfer</p>
+                    </div>
+
+                    <form id="pinForm">
+                        <div class="form-group">
+                            <label class="form-label" style="text-align: center; display: block;">Masukkan PIN 6
+                                Digit</label>
+                            <div class="pin-input-container">
+                                <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                    data-index="0">
+                                <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                    data-index="1">
+                                <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                    data-index="2">
+                                <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                    data-index="3">
+                                <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                    data-index="4">
+                                <input type="password" class="pin-digit" maxlength="1" inputmode="numeric"
+                                    data-index="5">
+                            </div>
+                            <input type="hidden" id="pin" name="pin">
+                        </div>
+                        <div class="action-buttons" style="justify-content: center;">
+                            <button type="submit" class="btn" id="btnPin">
+                                <span class="btn-text">Verifikasi PIN</span>
+                            </button>
+                            <button type="button" class="btn btn-cancel" onclick="prevStep(2)">Kembali</button>
+                        </div>
+                    </form>
                 </div>
-            </form>
+
+                <!-- Step 4: Confirmation -->
+                <div id="step4" class="content-step">
+                    <div style="text-align: center; margin-bottom: 2rem;">
+                        <div
+                            style="width: 80px; height: 80px; background: var(--gray-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem;">
+                            <i class="fas fa-check-circle" style="font-size: 2.5rem; color: var(--primary-color);"></i>
+                        </div>
+                        <h3 style="color: var(--gray-800); margin-bottom: 0.5rem;">Konfirmasi Transfer</h3>
+                        <p style="color: var(--gray-500);">Pastikan data berikut sudah benar</p>
+                    </div>
+
+                    <div class="card" style="border: 1px solid var(--gray-200); box-shadow: none;">
+                        <div class="card-body">
+                            <div class="detail-row">
+                                <span class="detail-label">Pengirim</span>
+                                <span class="detail-value" id="confirm-pengirim">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Penerima</span>
+                                <span class="detail-value" id="confirm-penerima">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Nominal Transfer</span>
+                                <span class="detail-value" id="confirm-jumlah" style="font-size: 1.1rem;">-</span>
+                            </div>
+                            <div class="detail-row">
+                                <span class="detail-label">Keterangan</span>
+                                <span class="detail-value" id="confirm-keterangan">-</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons" style="justify-content: center;">
+                        <button type="button" class="btn" id="btnProcess">
+                            <span class="btn-text">Proses Transfer</span>
+                        </button>
+                        <button type="button" class="btn btn-cancel" onclick="prevStep(3)">Batal</button>
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
+
     <script>
-        let searchTimeout;
-       
-        // Function to format account number: 3 digits + *** + 2 digits
-        function formatAccountNumber(accountNumber) {
-            if (!accountNumber || accountNumber.length < 5) return accountNumber;
-            return accountNumber.substring(0, 3) + '***' + accountNumber.substring(accountNumber.length - 2);
+        let currentData = {
+            rekening_asal: '',
+            nama_asal: '',
+            jurusan_asal: '',
+            kelas_asal: '',
+            user_id_asal: 0,
+            rekening_tujuan: '',
+            nama_tujuan: '',
+            jumlah: 0,
+            keterangan: ''
+        };
+
+        const formatRupiah = (angka) => {
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(angka);
+        };
+
+        const parseRupiah = (str) => {
+            return parseInt(str.replace(/[^0-9]/g, '')) || 0;
+        };
+
+        function showStep(step) {
+            $('.content-step').removeClass('active');
+            $(`#step${step}`).addClass('active');
+
+            $('.step-item').removeClass('active completed');
+            for (let i = 1; i <= 4; i++) {
+                if (i < step) $(`#step${i}-indicator`).addClass('completed');
+                if (i === step) $(`#step${i}-indicator`).addClass('active');
+            }
         }
-       
-        function initSearch(searchInputId, resultsId, hiddenInputId, clearBtnId) {
-            const searchInput = document.getElementById(searchInputId);
-            const resultsDiv = document.getElementById(resultsId);
-            const hiddenInput = document.getElementById(hiddenInputId);
-            const clearBtn = document.getElementById(clearBtnId);
-           
-            if (!searchInput || !resultsDiv || !hiddenInput || !clearBtn) return;
-           
-            searchInput.addEventListener('input', async function() {
+
+        function prevStep(step) {
+            showStep(step);
+        }
+
+        function setLoading(btnId, isLoading, text = '') {
+            const btn = $(btnId);
+            const originalText = btn.data('original-text');
+
+            if (isLoading) {
+                if (!originalText) btn.data('original-text', btn.find('.btn-text').text());
+                btn.prop('disabled', true);
+                btn.find('.btn-text').html(`<i class="fas fa-spinner fa-spin"></i> ${text}`);
+            } else {
+                btn.prop('disabled', false);
+                btn.find('.btn-text').text(originalText || btn.text());
+            }
+        }
+
+        // Search functionality
+        let searchTimeout;
+        function initSearch(inputId, resultsId, type) {
+            const input = document.getElementById(inputId);
+            const results = document.getElementById(resultsId);
+
+            if (!input || !results) return;
+
+            input.addEventListener('input', function () {
                 const query = this.value.trim();
-               
                 if (query.length < 2) {
-                    resultsDiv.classList.remove('show');
-                    clearBtn.classList.remove('show');
-                    hiddenInput.value = '';
+                    results.classList.remove('show');
                     return;
                 }
-               
-                clearBtn.classList.add('show');
+
                 clearTimeout(searchTimeout);
-               
                 searchTimeout = setTimeout(async () => {
                     const formData = new FormData();
                     formData.append('ajax_action', 'search_account');
                     formData.append('search', query);
-                   
+
                     try {
                         const response = await fetch('proses_transfer.php', { method: 'POST', body: formData });
                         const result = await response.json();
-                       
+
                         if (result.success && result.accounts.length > 0) {
-                            resultsDiv.innerHTML = '';
+                            results.innerHTML = '';
                             result.accounts.forEach(account => {
+                                // Filter out source account in destination search
+                                if (type === 'tujuan' && account.no_rekening === currentData.rekening_asal) {
+                                    return;
+                                }
+
                                 const item = document.createElement('div');
                                 item.className = 'search-result-item';
-                                const displayNumber = formatAccountNumber(account.no_rekening);
                                 item.innerHTML = `
                                     <div class="search-result-name">${account.nama}</div>
-                                    <div class="search-result-account">${displayNumber}</div>
+                                    <div class="search-result-account">${account.no_rekening}</div>
+                                    <div class="search-result-detail">${account.kelas || '-'} • ${account.jurusan || '-'}</div>
                                 `;
                                 item.addEventListener('click', () => {
-                                    searchInput.value = `${account.nama} - ${displayNumber}`;
-                                    hiddenInput.value = account.no_rekening;
-                                    if (searchInputId === 'rekening_asal_search') {
-                                        accountAsal = { nama: account.nama, no_rekening: account.no_rekening };
+                                    input.value = `${account.nama} - ${account.no_rekening}`;
+                                    results.classList.remove('show');
+
+                                    if (type === 'asal') {
+                                        currentData.rekening_asal = account.no_rekening;
+                                        currentData.nama_asal = account.nama;
+                                        currentData.jurusan_asal = account.jurusan || '-';
+                                        currentData.kelas_asal = account.kelas || '-';
+                                        currentData.user_id_asal = account.user_id;
+                                        $('#rekening_asal').val(account.no_rekening);
+                                        $('#user_id_asal').val(account.user_id);
                                     } else {
-                                        accountTujuan = { nama: account.nama, no_rekening: account.no_rekening };
+                                        currentData.rekening_tujuan = account.no_rekening;
+                                        currentData.nama_tujuan = account.nama;
+                                        $('#rekening_tujuan').val(account.no_rekening);
                                     }
-                                    resultsDiv.classList.remove('show');
-                                    clearBtn.classList.add('show');
                                 });
-                                resultsDiv.appendChild(item);
+                                results.appendChild(item);
                             });
-                            resultsDiv.classList.add('show');
+                            results.classList.add('show');
                         } else {
-                            resultsDiv.innerHTML = '<div class="no-results">Tidak ada hasil ditemukan</div>';
-                            resultsDiv.classList.add('show');
+                            results.innerHTML = '<div class="no-results">Tidak ada hasil ditemukan</div>';
+                            results.classList.add('show');
                         }
                     } catch (error) {
                         console.error('Search error:', error);
                     }
                 }, 300);
             });
-           
-            clearBtn.addEventListener('click', () => {
-                searchInput.value = '';
-                hiddenInput.value = '';
-                clearBtn.classList.remove('show');
-                resultsDiv.classList.remove('show');
-                searchInput.focus();
-                if (searchInputId === 'rekening_asal_search') {
-                    accountAsal = {};
-                } else {
-                    accountTujuan = {};
-                }
-            });
-           
+
             document.addEventListener('click', (e) => {
-                if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
-                    resultsDiv.classList.remove('show');
+                if (!input.contains(e.target) && !results.contains(e.target)) {
+                    results.classList.remove('show');
                 }
             });
         }
-       
-        // Function to ask for PIN with retry logic
-        async function askForPIN() {
-            const { value: pin } = await Swal.fire({
-                title: 'Masukkan PIN',
-                input: 'password',
-                inputLabel: 'PIN (6 digit)',
-                inputPlaceholder: 'Masukkan PIN Anda',
-                inputAttributes: {
-                    maxlength: 6,
-                    autocapitalize: 'off',
-                    autocorrect: 'off'
-                },
-                showCancelButton: true,
-                confirmButtonText: 'Verifikasi',
-                cancelButtonText: 'Batal',
-                confirmButtonColor: '#1e3a8a',
-                cancelButtonColor: '#6b7280',
-                inputValidator: (value) => {
-                    if (!value || value.length !== 6) {
-                        return 'PIN harus 6 digit';
-                    }
-                }
-            });
-           
-            return pin;
-        }
-       
-        document.addEventListener('DOMContentLoaded', function() {
+
+        $(document).ready(function () {
+            // Sidebar Toggle
             const menuToggle = document.getElementById('menuToggle');
             const sidebar = document.getElementById('sidebar');
-           
+
             if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', function(e) {
+                menuToggle.addEventListener('click', function (e) {
                     e.stopPropagation();
                     sidebar.classList.toggle('active');
                     document.body.classList.toggle('sidebar-active');
                 });
             }
-            document.addEventListener('click', function(e) {
+
+            document.addEventListener('click', function (e) {
                 if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
                     sidebar.classList.remove('active');
                     document.body.classList.remove('sidebar-active');
                 }
             });
-            let accountAsal = <?php if ($role == 'siswa' && $rekening): ?> { nama: '<?php echo addslashes($user['nama']); ?>', no_rekening: '<?php echo $rekening['no_rekening']; ?>' } <?php else: ?> {} <?php endif; ?>;
-            let accountTujuan = {};
-           
-            <?php if ($role != 'siswa' || !$rekening): ?>
-            initSearch('rekening_asal_search', 'results_asal', 'rekening_asal', 'clear_asal');
-            <?php endif; ?>
-           
-            initSearch('rekening_tujuan_search', 'results_tujuan', 'rekening_tujuan', 'clear_tujuan');
-           
-            const amountInput = document.getElementById('jumlah');
-            if (amountInput) {
-                amountInput.addEventListener('input', function(e) {
-                    let value = this.value.replace(/[^0-9]/g, '');
-                    this.value = value ? parseInt(value).toLocaleString('id-ID') : '';
-                });
-            }
-            // Clear only amount and description
-            function clearAmountOnly() {
-                document.getElementById('jumlah').value = '';
-                document.getElementById('keterangan').value = '';
-            }
-            // Clear entire form including accounts
-            function clearForm() {
-                document.getElementById('jumlah').value = '';
-                document.getElementById('keterangan').value = '';
-               
-                const tujuanSearch = document.getElementById('rekening_tujuan_search');
-                const tujuanHidden = document.getElementById('rekening_tujuan');
-                const clearTujuan = document.getElementById('clear_tujuan');
-                if (tujuanSearch) {
-                    tujuanSearch.value = '';
-                    tujuanHidden.value = '';
-                    clearTujuan.classList.remove('show');
-                    accountTujuan = {};
-                }
-               
-                <?php if ($role != 'siswa' || !$rekening): ?>
-                const asalSearch = document.getElementById('rekening_asal_search');
-                const asalHidden = document.getElementById('rekening_asal');
-                const clearAsal = document.getElementById('clear_asal');
-                if (asalSearch) {
-                    asalSearch.value = '';
-                    asalHidden.value = '';
-                    clearAsal.classList.remove('show');
-                    accountAsal = {};
-                }
-                <?php endif; ?>
-            }
-            document.getElementById('transferBtn').addEventListener('click', async function() {
-                const rekeningAsal = document.querySelector('input[name="rekening_asal"]').value;
-                const rekeningTujuan = document.querySelector('input[name="rekening_tujuan"]').value;
-                const jumlah = document.getElementById('jumlah').value.replace(/[^0-9]/g, '');
-                const keterangan = document.getElementById('keterangan').value.trim();
-               
-                if (!rekeningAsal || !rekeningTujuan || !jumlah) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Mohon lengkapi semua field yang wajib diisi',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    return;
-                }
-               
-                if (rekeningAsal === rekeningTujuan) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Rekening tujuan tidak boleh sama dengan rekening asal',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    return;
-                }
-               
-                if (parseInt(jumlah) < 1000) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Jumlah transfer minimal Rp 1.000',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    return;
-                }
-                Swal.fire({
-                    title: 'Memeriksa saldo...',
-                    allowOutsideClick: false,
-                    didOpen: () => { Swal.showLoading(); }
-                });
-               
-                try {
-                    const balanceFormData = new FormData();
-                    balanceFormData.append('ajax_action', 'check_balance');
-                    balanceFormData.append('rekening_asal', rekeningAsal);
-                    balanceFormData.append('jumlah', jumlah);
-                   
-                    const balanceResponse = await fetch('proses_transfer.php', { method: 'POST', body: balanceFormData });
-                    const balanceResult = await balanceResponse.json();
-                   
-                    if (!balanceResult.success) {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Saldo Tidak Mencukupi',
-                            text: balanceResult.message,
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                        // Only clear amount, keep accounts
-                        clearAmountOnly();
-                        return;
-                    }
-                   
-                    // Close loading and ask for PIN
-                    Swal.close();
-                   
-                    // PIN verification loop
-                    let pinVerified = false;
-                    let attemptCount = 0;
-                    const maxAttempts = 3;
-                   
-                    while (!pinVerified && attemptCount < maxAttempts) {
-                        const pin = await askForPIN();
-                       
-                        if (!pin) {
-                            // User cancelled - reset attempts to 3
-                            attemptCount = 0;
-                            return;
-                        }
-                       
-                        Swal.fire({
-                            title: 'Memvalidasi PIN...',
-                            allowOutsideClick: false,
-                            didOpen: () => { Swal.showLoading(); }
-                        });
-                       
-                        const pinFormData = new FormData();
-                        pinFormData.append('ajax_action', 'validate_pin');
-                        pinFormData.append('rekening_asal', rekeningAsal);
-                        pinFormData.append('pin', pin);
-                       
-                        const pinResponse = await fetch('proses_transfer.php', { method: 'POST', body: pinFormData });
-                        const pinResult = await pinResponse.json();
-                       
-                        if (pinResult.success) {
-                            pinVerified = true;
-                            Swal.close();
-                        } else {
-                            attemptCount++;
-                            Swal.close();
-                           
-                            if (attemptCount >= maxAttempts) {
-                                await Swal.fire({
-                                    icon: 'error',
-                                    title: 'PIN Salah',
-                                    text: 'Anda telah mencapai batas maksimal percobaan. Transaksi dibatalkan.',
-                                    confirmButtonColor: '#1e3a8a'
-                                });
-                                clearForm();
-                                return;
-                            } else {
-                                await Swal.fire({
-                                    icon: 'error',
-                                    title: 'PIN Salah',
-                                    html: `${pinResult.message}<br><br>Sisa percobaan: <strong>${maxAttempts - attemptCount}</strong>`,
-                                    confirmButtonText: 'Coba Lagi',
-                                    confirmButtonColor: '#1e3a8a'
-                                });
-                            }
+
+            // Init search
+            initSearch('search_asal', 'results_asal', 'asal');
+            initSearch('search_tujuan', 'results_tujuan', 'tujuan');
+
+            // Rupiah input
+            $('#jumlah').on('input', function () {
+                let val = parseRupiah($(this).val());
+                $(this).val(val > 0 ? formatRupiah(val).replace('Rp', '').trim() : '');
+            });
+
+            // PIN Digit Input Handler
+            const pinDigits = document.querySelectorAll('.pin-digit');
+
+            pinDigits.forEach((input, index) => {
+                input.addEventListener('input', function (e) {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+
+                    if (this.value.length === 1) {
+                        this.classList.add('filled');
+                        if (index < 5) {
+                            pinDigits[index + 1].focus();
                         }
                     }
-                   
-                    if (!pinVerified) {
-                        return;
+                    updatePinValue();
+                });
+
+                input.addEventListener('keydown', function (e) {
+                    if (e.key === 'Backspace' && this.value === '' && index > 0) {
+                        pinDigits[index - 1].focus();
+                        pinDigits[index - 1].value = '';
+                        pinDigits[index - 1].classList.remove('filled');
+                    }
+                });
+
+                input.addEventListener('paste', function (e) {
+                    e.preventDefault();
+                    const pastedData = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+
+                    for (let i = 0; i < pastedData.length && i < 6; i++) {
+                        pinDigits[i].value = pastedData[i];
+                        pinDigits[i].classList.add('filled');
                     }
 
-                    // Fetch nama if not set (safety fallback)
-                    if (!accountAsal.nama) {
-                        try {
-                            const formData = new FormData();
-                            formData.append('ajax_action', 'search_account');
-                            formData.append('search', rekeningAsal);
-                            const response = await fetch('proses_transfer.php', { method: 'POST', body: formData });
-                            const result = await response.json();
-                            if (result.success && result.accounts && result.accounts.length > 0) {
-                                accountAsal.nama = result.accounts[0].nama;
-                            }
-                        } catch (e) {
-                            console.error('Error fetching nama asal:', e);
-                        }
-                    }
-                    if (!accountTujuan.nama) {
-                        try {
-                            const formData = new FormData();
-                            formData.append('ajax_action', 'search_account');
-                            formData.append('search', rekeningTujuan);
-                            const response = await fetch('proses_transfer.php', { method: 'POST', body: formData });
-                            const result = await response.json();
-                            if (result.success && result.accounts && result.accounts.length > 0) {
-                                accountTujuan.nama = result.accounts[0].nama;
-                            }
-                        } catch (e) {
-                            console.error('Error fetching nama tujuan:', e);
-                        }
-                    }
-                   
-                    // Show confirmation
-                    const confirmResult = await Swal.fire({
-                        title: 'Konfirmasi Transfer',
-                        html: `
-                            <div style="text-align:left; font-size:0.95rem; margin:15px 0;">
-                                <div style="background: #f8fafc; border-radius: 5px; padding: 15px; margin-bottom: 10px;">
-                                    <div style="display: table; width: 100%; border-collapse: collapse;">
-                                        <div style="display: table-row;">
-                                            <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Asal:</div>
-                                            <div style="display: table-cell; padding: 5px 0; text-align: right;"><strong>${formatAccountNumber(rekeningAsal)}</strong><br>${accountAsal.nama || 'Unknown'}</div>
-                                        </div>
-                                        <div style="display: table-row;">
-                                            <div style="display: table-cell; padding: 5px 0; width: 120px; font-weight: bold;">Tujuan:</div>
-                                            <div style="display: table-cell; padding: 5px 0; text-align: right;"><strong>${formatAccountNumber(rekeningTujuan)}</strong><br>${accountTujuan.nama || 'Unknown'}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="text-align: center; margin-top: 20px; padding: 15px;">
-                                    <div style="font-weight: bold; font-size: 1.4rem; margin-bottom: 5px;">Jumlah Transfer</div>
-                                    <div style="font-weight: bold; font-size: 1.6rem;">Rp ${parseInt(jumlah).toLocaleString('id-ID')}</div>
-                                    <div style="margin-top: 10px; font-size: 0.9rem; color: #666;">Keterangan: ${keterangan || '-'}</div>
-                                </div>
-                            </div>
-                        `,
-                        icon: 'question',
-                        showCancelButton: true,
-                        confirmButtonText: 'Proses Sekarang',
-                        cancelButtonText: 'Batal',
-                        confirmButtonColor: '#1e3a8a',
-                        cancelButtonColor: '#e74c3c',
-                        width: window.innerWidth < 600 ? '95%' : '600px'
-                    });
-                   
-                    if (!confirmResult.isConfirmed) {
-                        return;
-                    }
-                   
-                    Swal.fire({
-                        title: 'Memproses transfer...',
-                        allowOutsideClick: false,
-                        didOpen: () => { Swal.showLoading(); }
-                    });
-                   
-                    const transferFormData = new FormData();
-                    transferFormData.append('ajax_action', 'process_transfer');
-                    transferFormData.append('rekening_asal', rekeningAsal);
-                    transferFormData.append('rekening_tujuan', rekeningTujuan);
-                    transferFormData.append('jumlah', jumlah);
-                    transferFormData.append('keterangan', keterangan);
-                   
-                    const transferResponse = await fetch('proses_transfer.php', { method: 'POST', body: transferFormData });
-                    const transferResult = await transferResponse.json();
-                   
-                    if (transferResult.success) {
-                        await Swal.fire({
-                            icon: 'success',
-                            title: 'Transfer Berhasil!',
-                            text: 'Transaksi Anda telah berhasil diproses',
-                            confirmButtonText: 'OK',
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                        clearForm();
+                    const nextEmpty = Array.from(pinDigits).findIndex(d => d.value === '');
+                    if (nextEmpty !== -1) {
+                        pinDigits[nextEmpty].focus();
                     } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Gagal',
-                            text: transferResult.message,
-                            confirmButtonColor: '#1e3a8a'
-                        });
-                        clearForm();
+                        pinDigits[5].focus();
                     }
-                   
-                } catch (error) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Error',
-                        text: 'Terjadi kesalahan sistem',
-                        confirmButtonColor: '#1e3a8a'
-                    });
-                    clearForm();
+
+                    updatePinValue();
+                });
+
+                input.addEventListener('blur', function () {
+                    if (this.value === '') {
+                        this.classList.remove('filled');
+                    }
+                });
+            });
+
+            function updatePinValue() {
+                let pin = '';
+                pinDigits.forEach(input => {
+                    pin += input.value;
+                });
+                $('#pin').val(pin);
+            }
+
+            function clearPinInputs() {
+                pinDigits.forEach(input => {
+                    input.value = '';
+                    input.classList.remove('filled');
+                });
+                $('#pin').val('');
+                if (pinDigits.length > 0) {
+                    pinDigits[0].focus();
                 }
+            }
+
+            // STEP 1: Pilih Rekening Asal
+            $('#btnStep1').click(function () {
+                if (!currentData.rekening_asal) {
+                    Swal.fire('Error', 'Pilih rekening pengirim terlebih dahulu', 'warning');
+                    return;
+                }
+
+                setLoading('#btnStep1', true, 'Mengecek...');
+
+                setTimeout(() => {
+                    // Populate step 2 details
+                    $('#detail-nama-asal').text(currentData.nama_asal);
+                    $('#detail-jurusan-asal').text(currentData.jurusan_asal);
+                    $('#detail-kelas-asal').text(currentData.kelas_asal);
+
+                    setLoading('#btnStep1', false);
+                    showStep(2);
+                    $('#search_tujuan').focus();
+                }, 1000);
+            });
+
+            // STEP 2: Input Tujuan & Nominal
+            $('#btnStep2').click(function () {
+                const tujuan = currentData.rekening_tujuan;
+                const jumlah = parseRupiah($('#jumlah').val());
+                const keterangan = $('#keterangan').val().trim() || '-';
+
+                if (!tujuan) {
+                    Swal.fire('Error', 'Pilih rekening tujuan terlebih dahulu', 'warning');
+                    return;
+                }
+
+                if (jumlah <= 0) {
+                    Swal.fire('Error', 'Masukkan nominal yang valid', 'warning');
+                    return;
+                }
+
+                currentData.jumlah = jumlah;
+                currentData.keterangan = keterangan;
+
+                setLoading('#btnStep2', true, 'Mengecek saldo...');
+
+                setTimeout(() => {
+                    // Check balance via backend
+                    $.ajax({
+                        url: 'proses_transfer.php',
+                        type: 'POST',
+                        data: {
+                            ajax_action: 'check_balance',
+                            rekening_asal: currentData.rekening_asal,
+                            jumlah: jumlah
+                        },
+                        dataType: 'json',
+                        success: function (resp) {
+                            setLoading('#btnStep2', false);
+                            if (resp.success) {
+                                showStep(3);
+                                clearPinInputs();
+                            } else {
+                                Swal.fire('Gagal', resp.message || 'Saldo tidak mencukupi', 'error');
+                            }
+                        },
+                        error: function () {
+                            setLoading('#btnStep2', false);
+                            Swal.fire('Error', 'Gagal memverifikasi saldo', 'error');
+                        }
+                    });
+                }, 1500);
+            });
+
+            // STEP 3: Verify PIN
+            $('#pinForm').submit(function (e) {
+                e.preventDefault();
+                const pin = $('#pin').val().trim();
+
+                if (pin.length !== 6) {
+                    Swal.fire('Error', 'PIN harus 6 digit angka', 'warning');
+                    return;
+                }
+
+                setLoading('#btnPin', true, 'Verifikasi...');
+
+                setTimeout(() => {
+                    $.ajax({
+                        url: 'proses_transfer.php',
+                        type: 'POST',
+                        data: {
+                            ajax_action: 'validate_pin',
+                            rekening_asal: currentData.rekening_asal,
+                            pin: pin
+                        },
+                        dataType: 'json',
+                        success: function (resp) {
+                            setLoading('#btnPin', false);
+                            if (resp.success) {
+                                // Populate Confirmation Data
+                                $('#confirm-pengirim').text(currentData.nama_asal);
+                                $('#confirm-penerima').text(currentData.nama_tujuan);
+                                $('#confirm-jumlah').text(formatRupiah(currentData.jumlah));
+                                $('#confirm-keterangan').text(currentData.keterangan);
+                                showStep(4);
+                            } else {
+                                Swal.fire('Gagal', resp.message || 'PIN salah', 'error');
+                                clearPinInputs();
+                            }
+                        },
+                        error: function () {
+                            setLoading('#btnPin', false);
+                            Swal.fire('Error', 'Gagal memverifikasi PIN', 'error');
+                        }
+                    });
+                }, 2000);
+            });
+
+            // STEP 4: Process Transfer
+            $('#btnProcess').click(function () {
+                Swal.fire({
+                    title: 'Proses Transfer?',
+                    text: `Transfer sebesar ${formatRupiah(currentData.jumlah)} ke ${currentData.nama_tujuan}?`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Ya, Proses',
+                    cancelButtonText: 'Batal',
+                    confirmButtonColor: '#1e293b'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        setLoading('#btnProcess', true, 'Memproses...');
+
+                        setTimeout(() => {
+                            $.ajax({
+                                url: 'proses_transfer.php',
+                                type: 'POST',
+                                data: {
+                                    ajax_action: 'process_transfer',
+                                    rekening_asal: currentData.rekening_asal,
+                                    rekening_tujuan: currentData.rekening_tujuan,
+                                    jumlah: currentData.jumlah,
+                                    keterangan: currentData.keterangan
+                                },
+                                dataType: 'json',
+                                success: function (resp) {
+                                    setLoading('#btnProcess', false);
+                                    if (resp.success) {
+                                        Swal.fire({
+                                            title: 'Berhasil!',
+                                            text: resp.message || 'Transfer berhasil diproses',
+                                            icon: 'success',
+                                            confirmButtonColor: '#1e293b'
+                                        }).then(() => {
+                                            location.reload();
+                                        });
+                                    } else {
+                                        Swal.fire('Gagal', resp.message || 'Transfer gagal', 'error');
+                                    }
+                                },
+                                error: function () {
+                                    setLoading('#btnProcess', false);
+                                    Swal.fire('Error', 'Gagal memproses transfer', 'error');
+                                }
+                            });
+                        }, 2000);
+                    }
+                });
             });
         });
     </script>
 </body>
+
 </html>

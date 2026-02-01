@@ -103,333 +103,604 @@ $base_url = $protocol . '://' . $host . $base_path;
 
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <meta name="format-detection" content="telephone=no">
-    <title>Validasi Transaksi | MY Schobank</title>
+    <title>Cek Validasi Transaksi | KASDIG</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --text-primary: #1a202c;
-            --text-secondary: #4a5568;
-            --text-light: #718096;
-            --bg-light: #f7fafc;
-            --bg-table: #ffffff;
-            --border-color: #e2e8f0;
-            --success-color: #059669;
-            --danger-color: #dc2626;
-            --warning-color: #f59e0b;
-            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
+            --gray-50: #f9fafb;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --primary-color: var(--gray-800);
+            --primary-dark: var(--gray-900);
+            --secondary-color: var(--gray-600);
+
+            --bg-light: #f8fafc;
+            --text-primary: var(--gray-800);
+            --text-secondary: var(--gray-500);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 0.5rem;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', sans-serif; user-select: none; }
-        html { width: 100%; min-height: 100vh; overflow-x: hidden; }
+
+        /* Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
-            display: flex;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+            line-height: 1.5;
             min-height: 100vh;
+            display: flex;
         }
+
+        /* Sidebar State */
+        body.sidebar-open {
+            overflow: hidden;
+        }
+
+        /* Mobile Overlay for Sidebar */
+        body.sidebar-active::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            transition: opacity 0.3s ease;
+            opacity: 1;
+        }
+
+        body:not(.sidebar-active):not(.sidebar-open)::before {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Layout */
         .main-content {
-            flex: 1;
             margin-left: 280px;
-            padding: 30px;
-            max-width: calc(100% - 280px);
-            overflow-y: auto;
+            padding: 2rem;
+            flex: 1;
             min-height: 100vh;
             transition: margin-left 0.3s ease;
+            width: calc(100% - 280px);
         }
-        
-        /* Welcome Banner - Fixed Layout */
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            box-shadow: var(--shadow-md);
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+        }
+
+        /* Page Title */
+        .page-title-section {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+            padding: 1.5rem 2rem;
+            margin: -2rem -2rem 1.5rem -2rem;
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 1rem;
+            border-bottom: 1px solid var(--gray-200);
         }
-        .welcome-banner .banner-content { flex: 1; }
-        .welcome-banner h2 {
-            margin: 0 0 5px 0;
-            font-size: clamp(1.5rem, 3vw, 1.8rem);
-            display: flex; align-items: center; gap: 10px;
-        }
-        .welcome-banner p { opacity: 0.9; margin: 0; font-size: clamp(0.9rem, 2vw, 1rem); }
-        
-        .menu-toggle {
-            display: none;
-            color: white;
+
+        .page-title-content h1 {
             font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .page-subtitle {
+            color: var(--gray-500);
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        .page-hamburger {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--gray-700);
+            font-size: 1.25rem;
             cursor: pointer;
+            transition: all 0.2s ease;
+            align-items: center;
+            justify-content: center;
         }
 
-        .form-section {
-            background: var(--bg-table);
-            border-radius: 5px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
+        .page-hamburger:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--gray-800);
         }
-        .form-group { display: flex; flex-direction: column; gap: 8px; position: relative; }
-        label {
-            font-weight: 500; color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            display: flex; align-items: center; gap: 6px;
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border: 1px solid var(--gray-100);
         }
-        label i { color: var(--primary-color); font-size: 0.95em; }
-        .input-wrapper { position: relative; width: 100%; }
+
+        .card-header {
+            background: var(--gray-100);
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .card-header-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--gray-600) 0%, var(--gray-500) 100%);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .card-header-text h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .card-header-text p {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 1.25rem;
+            position: relative;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
         input[type="text"] {
-            width: 100%; padding: 12px 40px 12px 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 5px; font-size: clamp(0.9rem, 2vw, 1rem);
-            line-height: 1.5; min-height: 44px;
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-            -webkit-user-select: text; user-select: text;
-            background-color: #fff;
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            background: #fff;
+            height: 48px;
+            color: var(--gray-800);
         }
-        .clear-btn {
-            position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-            background: none; border: none; color: var(--text-light);
-            cursor: pointer; padding: 5px; display: none;
-            align-items: center; justify-content: center;
-            width: 24px; height: 24px; border-radius: 50%;
-            transition: all 0.3s ease; font-size: 0.9rem;
-        }
-        .clear-btn:hover { background-color: var(--border-color); color: var(--danger-color); }
-        .clear-btn.show { display: flex; }
-        
-        input:focus { outline: none; border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1); }
-        
-        .btn-container { display: flex; justify-content: center; margin-top: 20px; }
-        .btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white; border: none; padding: 12px 25px;
-            border-radius: 5px; cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem); font-weight: 500;
-            display: flex; align-items: center; justify-content: center;
-            gap: 8px; transition: var(--transition); min-height: 44px;
-        }
-        .btn:hover { background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-dark) 100%); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
-        .btn:active { transform: scale(0.95); }
-        
-        .results-card {
-            background: var(--bg-table); border-radius: 5px;
-            padding: 25px; box-shadow: var(--shadow-sm); margin-bottom: 30px;
-        }
-        .results-card.status-approved { background: linear-gradient(135deg, rgba(16, 185, 129, 0.02) 0%, rgba(5, 150, 105, 0.02) 100%); }
-        .results-card.status-rejected { background: linear-gradient(135deg, rgba(239, 68, 68, 0.02) 0%, rgba(220, 38, 38, 0.02) 100%); }
-        .results-card.status-pending { background: linear-gradient(135deg, rgba(245, 158, 11, 0.02) 0%, rgba(217, 119, 6, 0.02) 100%); }
-        
-        .section-title {
-            font-size: clamp(1.1rem, 2.2vw, 1.3rem); color: var(--primary-dark);
-            margin-bottom: 22px; display: flex; align-items: center; gap: 10px; font-weight: 700;
-        }
-        .detail-row {
-            display: grid; grid-template-columns: 1fr 2fr; align-items: center;
-            padding: 14px 0; gap: 10px; font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            border-bottom: 1px solid var(--border-color);
-        }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { color: var(--text-secondary); font-weight: 600; text-align: left; }
-        .detail-value { font-weight: 600; color: var(--text-primary); text-align: left; word-break: break-word; }
-        .detail-divider { border-top: 1px solid var(--border-color); margin: 18px 0; }
-        .detail-subheading {
-            color: var(--primary-dark); font-size: clamp(0.95rem, 1.8vw, 1.05rem);
-            font-weight: 700; display: flex; align-items: center; gap: 8px; margin: 20px 0 16px 0;
-        }
-        
-        .badge {
-            display: inline-block; padding: 6px 12px; border-radius: 5px;
-            font-size: clamp(0.7rem, 1.4vw, 0.8rem); font-weight: 700; text-transform: uppercase;
-        }
-        .badge-setor, .badge-approved { background-color: #d1fae5; color: #065f46; }
-        .badge-tarik, .badge-pending { background-color: #fef3c7; color: #92400e; }
-        .badge-transfer { background-color: #dbeafe; color: #0c4a6e; }
-        .badge-transaksi_qr { background-color: #f3e8ff; color: #6b21a8; }
-        .badge-rejected { background-color: #fee2e2; color: #991b1b; }
-        .amount-positive { color: var(--success-color); font-weight: 700; }
-        
-        .action-buttons { display: flex; gap: 10px; margin-top: 22px; flex-wrap: wrap; }
-        .action-buttons .btn { flex: 1; min-width: 140px; }
-        .btn-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
-        .btn-success:hover { background: linear-gradient(135deg, #059669 0%, #047857 100%); }
-        .btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
-        .btn-danger:hover { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); }
-        
-        .info-box, .warning-box, .error-box {
-            border-radius: 5px; padding: 14px 16px; margin-top: 18px;
-            font-size: 0.9rem; display: flex; align-items: center; gap: 10px; font-weight: 500;
-        }
-        .info-box { background: linear-gradient(135deg, #f0fdf4 0%, #f1f5fe 100%); color: #065f46; }
-        .info-box i { color: var(--success-color); font-size: 1.2rem; }
-        .warning-box { background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); color: #78350f; }
-        .warning-box i { color: var(--warning-color); font-size: 1.2rem; }
-        .error-box { background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); color: #7c2d12; }
-        .error-box i { color: var(--danger-color); font-size: 1.2rem; }
 
-        /* SweetAlert Custom */
-        .swal2-popup, .swal2-title, .swal2-html-container, .swal2-confirm, .swal2-cancel { font-family: 'Poppins', sans-serif !important; border-radius: 5px !important; }
-        
+        input:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.1);
+            outline: none;
+        }
+
+        .clear-btn {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            border: none;
+            background: none;
+            color: var(--gray-500);
+            cursor: pointer;
+            display: none;
+            padding: 4px;
+        }
+
+        .clear-btn.show {
+            display: block;
+        }
+
+        /* Buttons */
+        .btn {
+            background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-600) 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            text-decoration: none;
+            font-size: 0.95rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-700) 100%);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+
+        /* Transaction Details Custom Styles */
+        .detail-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: var(--gray-500);
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: var(--gray-800);
+            font-weight: 600;
+            word-break: break-word;
+        }
+
+        .detail-subheading {
+            color: var(--gray-800);
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 1.5rem 0 1rem 0;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--gray-100);
+        }
+
+        .badge {
+            display: inline-flex;
+            padding: 0.25rem 0.75rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-setor,
+        .badge-approved {
+            background-color: #dcfce7;
+            color: #15803d;
+        }
+
+        .badge-tarik,
+        .badge-pending {
+            background-color: #fef9c3;
+            color: #854d0e;
+        }
+
+        .badge-transfer {
+            background-color: #dbeafe;
+            color: #1e40af;
+        }
+
+        .badge-transaksi_qr {
+            background-color: #f3e8ff;
+            color: #6b21a8;
+        }
+
+        .badge-rejected {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #047857 0%, #064e3b 100%);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        }
+
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+        }
+
+        .info-box,
+        .warning-box,
+        .error-box {
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+        }
+
+        .info-box {
+            background-color: #f0fdf4;
+            color: #166534;
+            border: 1px solid #dcfce7;
+        }
+
+        .warning-box {
+            background-color: #fefce8;
+            color: #854d0e;
+            border: 1px solid #fef9c3;
+        }
+
+        .error-box {
+            background-color: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fee2e2;
+        }
+
+        @media (max-width: 1024px) {
+            .page-hamburger {
+                display: block;
+            }
+
+            .page-title-section {
+                padding: 1rem 1.5rem;
+                margin: -1rem -1rem 1.5rem -1rem;
+            }
+        }
+
         @media (max-width: 768px) {
-            .menu-toggle { display: block; }
-            .main-content { margin-left: 0; padding: 20px 15px; max-width: 100%; }
-            .welcome-banner { padding: 20px; margin-bottom: 20px; border-radius: 8px; }
-            .welcome-banner h2 { font-size: 1.3rem; }
-            
-            .form-section, .results-card { padding: 16px; margin-bottom: 16px; }
-            .detail-row { grid-template-columns: 1fr; gap: 6px; }
-            .action-buttons { flex-direction: column; }
-            .action-buttons .btn { width: 100%; }
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .action-buttons .btn {
+                width: 100%;
+            }
+
+            .detail-row {
+                grid-template-columns: 1fr;
+                gap: 0.25rem;
+            }
         }
     </style>
 </head>
+
 <body>
     <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
 
     <div class="main-content" id="mainContent">
-        <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></span>
-            <div class="banner-content">
-                <h2><i class="fas fa-search"></i> Validasi Transaksi</h2>
-                <p>Cari dan verifikasi transaksi berdasarkan nomor transaksi</p>
+        <!-- Page Title Section -->
+        <div class="page-title-section">
+            <button class="page-hamburger" id="menuToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="page-title-content">
+                <h1>Cek Validasi Transaksi</h1>
+                <p class="page-subtitle">Verifikasi dan validasi transaksi nasabah</p>
             </div>
         </div>
 
-        <div class="form-section">
-            <form id="searchForm">
-                <div class="form-group">
-                    <label for="no_transaksi"><i class="fas fa-receipt"></i> No Transaksi</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="no_transaksi" name="no_transaksi" placeholder="Masukkan nomor transaksi..." required maxlength="20" autofocus autocomplete="off">
-                        <button type="button" class="clear-btn" id="clearBtn">
-                            <i class="fas fa-times"></i>
-                        </button>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-header-icon">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="card-header-text">
+                    <h3>Form Validasi</h3>
+                    <p>Masukkan nomor transaksi untuk memproses</p>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="searchForm">
+                    <div class="form-group">
+                        <label class="form-label" for="no_transaksi">No Transaksi</label>
+                        <div style="position: relative;">
+                            <input type="text" id="no_transaksi" name="no_transaksi"
+                                placeholder="Masukkan nomor transaksi..." required maxlength="20" autofocus
+                                autocomplete="off">
+                            <button type="button" class="clear-btn" id="clearBtn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <div class="btn-container">
-                    <button type="submit" class="btn" id="searchBtn"><i class="fas fa-search"></i> Cari</button>
-                </div>
-            </form>
+                    <div class="btn-container">
+                        <button type="submit" class="btn" id="searchBtn"><i class="fas fa-search"></i> Cari
+                            Transaksi</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <div id="results"></div>
     </div>
 
     <script>
-    $(document).ready(function() {
-        const menuToggle = $('#menuToggle');
-        const sidebar = $('#sidebar');
-        const noTransaksiInput = $('#no_transaksi');
-        const clearBtn = $('#clearBtn');
-        
-        function toggleClearBtn() {
-            if (noTransaksiInput.val().trim().length > 0) {
-                clearBtn.addClass('show');
-            } else {
-                clearBtn.removeClass('show');
-            }
-        }
-        
-        function clearInputAndResults() {
-            noTransaksiInput.val('');
-            clearBtn.removeClass('show');
-            $('#results').html('');
-            noTransaksiInput.focus();
-        }
-        
-        clearBtn.on('click', function() {
-            clearInputAndResults();
-        });
-        
-        if (menuToggle.length && sidebar.length) {
-            menuToggle.on('click', function(e) {
-                e.stopPropagation();
-                sidebar.toggleClass('active');
-                $('body').toggleClass('sidebar-active');
-            });
-        }
-        
-        $(document).on('click', function(e) {
-            if (sidebar.hasClass('active') && !sidebar.is(e.target) && sidebar.has(e.target).length === 0 && !menuToggle.is(e.target)) {
-                sidebar.removeClass('active');
-                $('body').removeClass('sidebar-active');
-            }
-        });
-        
-        noTransaksiInput.on('input', function() {
-            this.value = this.value.substring(0, 20);
-            toggleClearBtn();
-            if (this.value.trim().length === 0) {
-                $('#results').html('');
-            }
-        });
-        
-        noTransaksiInput.on('paste', function(e) {
-            e.preventDefault();
-            let pastedData = (e.originalEvent || e).clipboardData.getData('text/plain');
-            pastedData = pastedData.trim().substring(0, 20);
-            const start = this.selectionStart;
-            const end = this.selectionEnd;
-            const val = this.value;
-            this.value = (val.slice(0, start) + pastedData + val.slice(end)).substring(0, 20);
-            toggleClearBtn();
-        });
-        
-        $('#searchForm').on('submit', function(e) {
-            e.preventDefault();
-            const transaksi = noTransaksiInput.val().trim();
-            
-            if (!transaksi || transaksi.length > 20) {
-                Swal.fire({ 
-                    icon: 'error', 
-                    title: 'Validasi Gagal', 
-                    text: 'No Transaksi tidak valid. Maksimum 20 karakter.', 
-                    confirmButtonColor: '#1e3a8a' 
-                }).then(() => {
-                    clearInputAndResults();
-                });
-                return;
-            }
-            loadTransaction(transaksi);
-        });
-        
-        toggleClearBtn();
-    });
+        $(document).ready(function () {
+            const menuToggle = $('#menuToggle');
+            const sidebar = $('#sidebar');
+            const noTransaksiInput = $('#no_transaksi');
+            const clearBtn = $('#clearBtn');
 
-    function loadTransaction(noTransaksi) {
-        Swal.fire({ title: 'Mencari transaksi...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-        
-        setTimeout(() => {
-            $.ajax({
-                url: 'proses_validasi_transaksi.php',
-                type: 'POST',
-                data: { action: 'load_transaction', no_transaksi: noTransaksi },
-                dataType: 'json',
-                success: function(response) {
-                    Swal.close();
-                    if (response.success) {
-                        $('#results').html(response.html);
-                    } else {
-                        $('#results').html('');
-                        Swal.fire({ 
-                            icon: 'error', 
-                            title: 'Gagal!', 
-                            text: response.message, 
-                            confirmButtonColor: '#1e3a8a' 
+            function toggleClearBtn() {
+                if (noTransaksiInput.val().trim().length > 0) {
+                    clearBtn.addClass('show');
+                } else {
+                    clearBtn.removeClass('show');
+                }
+            }
+
+            function clearInputAndResults() {
+                noTransaksiInput.val('');
+                clearBtn.removeClass('show');
+                $('#results').html('');
+                noTransaksiInput.focus();
+            }
+
+            clearBtn.on('click', function () {
+                clearInputAndResults();
+            });
+
+            if (menuToggle.length) {
+                menuToggle.on('click', function (e) {
+                    e.stopPropagation();
+                    $('#sidebar').toggleClass('active');
+                    $('body').toggleClass('sidebar-active');
+                });
+            }
+
+            $(document).on('click', function (e) {
+                if (sidebar.hasClass('active') && !sidebar.is(e.target) && sidebar.has(e.target).length === 0 && !menuToggle.is(e.target)) {
+                    sidebar.removeClass('active');
+                    $('body').removeClass('sidebar-active');
+                }
+            });
+
+            noTransaksiInput.on('input', function () {
+                this.value = this.value.substring(0, 20);
+                toggleClearBtn();
+                if (this.value.trim().length === 0) {
+                    $('#results').html('');
+                }
+            });
+
+            noTransaksiInput.on('paste', function (e) {
+                e.preventDefault();
+                let pastedData = (e.originalEvent || e).clipboardData.getData('text/plain');
+                pastedData = pastedData.trim().substring(0, 20);
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const val = this.value;
+                this.value = (val.slice(0, start) + pastedData + val.slice(end)).substring(0, 20);
+                toggleClearBtn();
+            });
+
+            $('#searchForm').on('submit', function (e) {
+                e.preventDefault();
+                const transaksi = noTransaksiInput.val().trim();
+
+                if (!transaksi || transaksi.length > 20) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Validasi Gagal',
+                        text: 'No Transaksi tidak valid. Maksimum 20 karakter.',
+                        confirmButtonColor: '#1e3a8a'
+                    }).then(() => {
+                        clearInputAndResults();
+                    });
+                    return;
+                }
+                loadTransaction(transaksi, $('#searchBtn'));
+            });
+
+            toggleClearBtn();
+        });
+
+        function loadTransaction(noTransaksi, loadingBtn = null) {
+            let originalBtnHtml = '';
+
+            if (loadingBtn) {
+                originalBtnHtml = loadingBtn.html();
+                loadingBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Mencari...');
+            } else {
+                Swal.fire({ title: 'Mencari transaksi...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+            }
+
+            setTimeout(() => {
+                $.ajax({
+                    url: 'proses_validasi_transaksi.php',
+                    type: 'POST',
+                    data: { action: 'load_transaction', no_transaksi: noTransaksi },
+                    dataType: 'json',
+                    success: function (response) {
+                        if (loadingBtn) {
+                            loadingBtn.prop('disabled', false).html(originalBtnHtml);
+                        } else {
+                            Swal.close();
+                        }
+
+                        if (response.success) {
+                            $('#results').html(response.html);
+                        } else {
+                            $('#results').html('');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Gagal!',
+                                text: response.message,
+                                confirmButtonColor: '#1e3a8a'
+                            }).then(() => {
+                                // Clear input setelah alert ditutup
+                                $('#no_transaksi').val('');
+                                $('#clearBtn').removeClass('show');
+                                $('#no_transaksi').focus();
+                            });
+                        }
+                    },
+                    error: function () {
+                        if (loadingBtn) {
+                            loadingBtn.prop('disabled', false).html(originalBtnHtml);
+                        } else {
+                            Swal.close();
+                        }
+                        Swal.fire({
+                            icon: 'error',
+                            title: 'Kesalahan Server',
+                            text: 'Terjadi kesalahan saat memuat data',
+                            confirmButtonColor: '#1e3a8a'
                         }).then(() => {
                             // Clear input setelah alert ditutup
                             $('#no_transaksi').val('');
@@ -437,68 +708,63 @@ $base_url = $protocol . '://' . $host . $base_path;
                             $('#no_transaksi').focus();
                         });
                     }
-                },
-                error: function() {
-                    Swal.close();
-                    Swal.fire({ 
-                        icon: 'error', 
-                        title: 'Kesalahan Server', 
-                        text: 'Terjadi kesalahan saat memuat data', 
-                        confirmButtonColor: '#1e3a8a' 
-                    }).then(() => {
-                        // Clear input setelah alert ditutup
-                        $('#no_transaksi').val('');
-                        $('#clearBtn').removeClass('show');
-                        $('#no_transaksi').focus();
-                    });
-                }
+                });
+            }, 1000); // Reduced delay
+        }
+
+        function approveTransaction(transactionId) {
+            Swal.fire({
+                title: 'Setujui Transaksi?', text: 'Apakah Anda yakin ingin menyetujui transaksi ini?', icon: 'question',
+                showCancelButton: true, confirmButtonText: 'Ya, Setujui', cancelButtonText: 'Batal',
+                confirmButtonColor: '#10b981', cancelButtonColor: '#6b7280'
+            }).then((result) => {
+                if (result.isConfirmed) updateTransactionStatus(transactionId, 'approved');
             });
-        }, 3000);
-    }
+        }
 
-    function approveTransaction(transactionId) {
-        Swal.fire({
-            title: 'Setujui Transaksi?', text: 'Apakah Anda yakin ingin menyetujui transaksi ini?', icon: 'question',
-            showCancelButton: true, confirmButtonText: 'Ya, Setujui', cancelButtonText: 'Batal',
-            confirmButtonColor: '#10b981', cancelButtonColor: '#6b7280'
-        }).then((result) => {
-            if (result.isConfirmed) updateTransactionStatus(transactionId, 'approved');
-        });
-    }
+        function rejectTransaction(transactionId) {
+            Swal.fire({
+                title: 'Tolak Transaksi?', text: 'Apakah Anda yakin ingin menolak transaksi ini?', icon: 'warning',
+                showCancelButton: true, confirmButtonText: 'Ya, Tolak', cancelButtonText: 'Batal',
+                confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280'
+            }).then((result) => {
+                if (result.isConfirmed) updateTransactionStatus(transactionId, 'rejected');
+            });
+        }
 
-    function rejectTransaction(transactionId) {
-        Swal.fire({
-            title: 'Tolak Transaksi?', text: 'Apakah Anda yakin ingin menolak transaksi ini?', icon: 'warning',
-            showCancelButton: true, confirmButtonText: 'Ya, Tolak', cancelButtonText: 'Batal',
-            confirmButtonColor: '#ef4444', cancelButtonColor: '#6b7280'
-        }).then((result) => {
-            if (result.isConfirmed) updateTransactionStatus(transactionId, 'rejected');
-        });
-    }
+        function updateTransactionStatus(transactionId, status) {
+            Swal.fire({ title: 'Memproses...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
 
-    function updateTransactionStatus(transactionId, status) {
-        Swal.fire({ title: 'Memproses...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-
-        fetch('../../includes/update_transaction_status.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: 'id=' + transactionId + '&status=' + status
-        })
-        .then(response => response.json())
-        .then(data => {
-            Swal.close();
-            if (data.success) {
-                Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'Status transaksi telah diperbarui', confirmButtonColor: '#1e3a8a' })
-                .then(() => { location.reload(); });
-            } else {
-                Swal.fire({ icon: 'error', title: 'Gagal!', text: data.message || 'Terjadi kesalahan', confirmButtonColor: '#1e3a8a' });
-            }
-        })
-        .catch(error => {
-            Swal.close();
-            Swal.fire({ icon: 'error', title: 'Kesalahan!', text: 'Terjadi kesalahan: ' + error, confirmButtonColor: '#1e3a8a' });
-        });
-    }
+            fetch('../../includes/update_transaction_status.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `transaction_id=${transactionId}&status=${status}`
+            })
+                .then(response => response.json())
+                .then(data => {
+                    Swal.close();
+                    if (data.success) {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Berhasil',
+                            text: 'Status transaksi berhasil diperbarui.',
+                            timer: 1500,
+                            showConfirmButton: false
+                        }).then(() => {
+                            // Reload data after success
+                            const currentTrans = $('#no_transaksi').val().trim();
+                            if (currentTrans) loadTransaction(currentTrans);
+                        });
+                    } else {
+                        Swal.fire('Gagal', data.message || 'Terjadi kesalahan', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    Swal.fire('Error', 'Terjadi kesalahan koneksi', 'error');
+                });
+        }
     </script>
 </body>
+
 </html>

@@ -77,7 +77,7 @@ if (!file_exists(INCLUDES_PATH . '/db_connection.php')) {
     die('File db_connection.php tidak ditemukan.');
 }
 require_once INCLUDES_PATH . '/db_connection.php';
-require_once INCLUDES_PATH . '/session_validator.php'; 
+require_once INCLUDES_PATH . '/session_validator.php';
 require_once VENDOR_PATH . '/autoload.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
@@ -92,23 +92,24 @@ if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['petugas', 'admin
 }
 
 // Function to generate unique username
-function generateUsername($nama, $conn) {
+function generateUsername($nama, $conn)
+{
     $base_username = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $nama));
     $username = $base_username;
     $counter = 1;
-    
+
     $check_query = "SELECT id FROM users WHERE username = ?";
     $check_stmt = $conn->prepare($check_query);
-    
+
     if (!$check_stmt) {
         error_log("Error preparing username check: " . $conn->error);
         return $base_username . rand(100, 999);
     }
-    
+
     $check_stmt->bind_param("s", $username);
     $check_stmt->execute();
     $result = $check_stmt->get_result();
-    
+
     while ($result->num_rows > 0) {
         $username = $base_username . $counter;
         $check_stmt->bind_param("s", $username);
@@ -116,49 +117,51 @@ function generateUsername($nama, $conn) {
         $result = $check_stmt->get_result();
         $counter++;
     }
-    
+
     $check_stmt->close();
     return $username;
 }
 
 // Function to send email confirmation  
-function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $tingkatan_name, $kelas_name, $tipe_lama = 'Fisik', $tipe_baru = 'Digital') {
+function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password, $jurusan_name, $tingkatan_name, $kelas_name, $tipe_lama = 'Fisik', $tipe_baru = 'Digital')
+{
     if (empty($email)) {
         error_log("Skipping email sending as email is empty");
         return ['success' => true];
     }
-    
+
     try {
         $mail = new PHPMailer(true);
         $mail->isSMTP();
-        $mail->Host = 'smtp.gmail.com';
+        $mail->Host = 'mail.kasdig.web.id';
         $mail->SMTPAuth = true;
-        $mail->Username = 'myschobank@gmail.com';
-        $mail->Password = 'xpni zzju utfu mkth';
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-        $mail->Port = 587;
+        $mail->Username = 'noreply@kasdig.web.id';
+        $mail->Password = 'BtRjT4wP8qeTL5M';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        $mail->Port = 465;
+        $mail->Timeout = 30;
         $mail->CharSet = 'UTF-8';
-        
-        $mail->setFrom('myschobank@gmail.com', 'Schobank Student Digital Banking');
+
+        $mail->setFrom('noreply@kasdig.web.id', 'KASDIG');
         $mail->addAddress($email, $nama);
-        $mail->addReplyTo('no-reply@myschobank.com', 'No Reply');
-        
-        $unique_id = uniqid('myschobank_', true) . '@myschobank.com';
+        $mail->addReplyTo('noreply@kasdig.web.id', 'KASDIG');
+
+        $unique_id = uniqid('kasdig_', true) . '@kasdig.web.id';
         $mail->MessageID = '<' . $unique_id . '>';
-        $mail->addCustomHeader('X-Mailer', 'MY-SCHOBANK-System-v1.0');
+        $mail->addCustomHeader('X-Mailer', 'KASDIG-System-v1.0');
         $mail->addCustomHeader('X-Priority', '1');
         $mail->addCustomHeader('Importance', 'High');
-        
+
         $mail->isHTML(true);
         $mail->Subject = 'Perubahan Jenis Rekening';
-        
+
         $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
         $host = $_SERVER['HTTP_HOST'];
         $path = dirname(dirname($_SERVER['PHP_SELF']));
         $login_link = $protocol . "://" . $host . $path . "/login.php";
-        
+
         $kelas_lengkap = trim($tingkatan_name . ' ' . $kelas_name);
-        
+
         // Template Email Sederhana & Rapi
         $emailBody = "
         <div style='font-family: Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333333; line-height: 1.6;'>
@@ -210,14 +213,14 @@ function sendEmailConfirmation($email, $nama, $username, $no_rekening, $password
             <hr style='border: none; border-top: 1px solid #eeeeee; margin: 30px 0;'>
             
             <p style='font-size: 12px; color: #999;'>
-                Ini adalah pesan otomatis dari sistem Schobank Student Digital Banking.<br>
+                Ini adalah pesan otomatis dari sistem KASDIG.<br>
                 Jika Anda tidak merasa melakukan perubahan ini, silakan hubungi petugas sekolah.
             </p>
         </div>";
-        
+
         $mail->Body = $emailBody;
         $mail->AltBody = "Halo {$nama}, Jenis rekening Anda berhasil diubah menjadi {$tipe_baru}. Login dengan Username: {$username} dan Password: {$password}. Segera ganti password Anda.";
-        
+
         if ($mail->send()) {
             return ['success' => true];
         }
@@ -233,32 +236,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     // Validate CSRF token
     $received_token = trim($_POST['token'] ?? '');
     $session_token = $_SESSION['form_token'] ?? '';
-    
+
     if (empty($received_token) || empty($session_token)) {
         echo json_encode(['success' => false, 'message' => 'Token tidak ditemukan! Refresh halaman dan coba lagi.']);
         exit();
     }
-    
+
     if ($received_token !== $session_token) {
         echo json_encode(['success' => false, 'message' => 'Token tidak valid! Session expired. Refresh halaman.']);
         exit();
     }
-    
+
     $no_rekening = trim($_POST['no_rekening'] ?? '');
     $new_tipe = trim($_POST['new_tipe_rekening'] ?? '');
-    $user_id = (int)($_POST['user_id'] ?? 0);
-    
+    $user_id = (int) ($_POST['user_id'] ?? 0);
+
     // Get verification inputs based on type
     $email_siswa = trim($_POST['email_siswa'] ?? ''); // For fisik → digital
     $pin_input = trim($_POST['pin_input'] ?? ''); // For fisik → digital
     $password_input = trim($_POST['password_input'] ?? ''); // For digital → fisik
-    
+
     // Basic validation
     if (empty($no_rekening) || empty($user_id) || !in_array($new_tipe, ['digital', 'fisik'])) {
         echo json_encode(['success' => false, 'message' => 'Data tidak lengkap!']);
         exit();
     }
-    
+
     // Get user data
     $query_user = "SELECT u.*, r.no_rekening, j.nama_jurusan, tk.nama_tingkatan, k.nama_kelas, sp.*, us.pin, us.has_pin 
                    FROM users u 
@@ -270,59 +273,78 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                    LEFT JOIN tingkatan_kelas tk ON k.tingkatan_kelas_id = tk.id 
                    WHERE u.id = ? AND u.role = 'siswa'";
     $stmt_user = $conn->prepare($query_user);
-    
+
     if (!$stmt_user) {
         error_log("Prepare failed: " . $conn->error);
         echo json_encode(['success' => false, 'message' => 'Gagal memuat data siswa!']);
         exit();
     }
-    
+
     $stmt_user->bind_param("i", $user_id);
     $stmt_user->execute();
     $result_user = $stmt_user->get_result();
-    
+
     if ($result_user->num_rows === 0) {
         echo json_encode(['success' => false, 'message' => 'Nasabah tidak ditemukan!']);
         $stmt_user->close();
         exit();
     }
-    
+
     $selected_user = $result_user->fetch_assoc();
     $stmt_user->close();
-    
+
     $current_tipe = $selected_user['email_status'] === 'terisi' ? 'digital' : 'fisik';
-    
+
     if ($new_tipe === $current_tipe) {
         echo json_encode(['success' => false, 'message' => 'Jenis rekening sudah sama dengan saat ini!']);
         exit();
     }
-    
+
     // Verify based on direction
     if ($new_tipe === 'fisik') {
-        // Digital → Fisik: verify password
-        if (empty($password_input)) {
+        // Digital → Fisik: verify PIN (same as fisik → digital)
+        if (empty($pin_input)) {
             echo json_encode([
                 'success' => false,
                 'error_type' => 'verification',
-                'message' => 'Password wajib diisi untuk verifikasi!'
+                'message' => 'PIN wajib diisi untuk verifikasi!'
             ]);
             exit();
         }
-        
-        if (empty($selected_user['password'])) {
+
+        if (strlen($pin_input) !== 6 || !ctype_digit($pin_input)) {
             echo json_encode([
                 'success' => false,
                 'error_type' => 'verification',
-                'message' => 'Siswa belum memiliki password! Tidak bisa ubah ke fisik.'
+                'message' => 'PIN harus 6 digit angka!'
             ]);
             exit();
         }
-        
-        if (!password_verify($password_input, $selected_user['password'])) {
+
+        // Check if user has PIN
+        if (!$selected_user['has_pin'] || $selected_user['has_pin'] == 0) {
             echo json_encode([
                 'success' => false,
                 'error_type' => 'verification',
-                'message' => 'Password siswa salah! Verifikasi gagal.'
+                'message' => 'Siswa belum memiliki PIN! Silakan atur PIN terlebih dahulu.'
+            ]);
+            exit();
+        }
+
+        if (empty($selected_user['pin'])) {
+            echo json_encode([
+                'success' => false,
+                'error_type' => 'verification',
+                'message' => 'PIN siswa belum terdaftar!'
+            ]);
+            exit();
+        }
+
+        if (!password_verify($pin_input, $selected_user['pin'])) {
+            echo json_encode([
+                'success' => false,
+                'error_type' => 'verification',
+                'message' => 'PIN siswa salah! Verifikasi gagal.'
             ]);
             exit();
         }
@@ -336,7 +358,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
             exit();
         }
-        
+
         if (!filter_var($email_siswa, FILTER_VALIDATE_EMAIL)) {
             echo json_encode([
                 'success' => false,
@@ -345,7 +367,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
             exit();
         }
-        
+
         // Check if email already exists
         $check_email_query = "SELECT id FROM users WHERE email = ? AND id != ?";
         $check_email_stmt = $conn->prepare($check_email_query);
@@ -353,7 +375,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         $check_email_stmt->execute();
         $email_exists = $check_email_stmt->get_result()->num_rows > 0;
         $check_email_stmt->close();
-        
+
         if ($email_exists) {
             echo json_encode([
                 'success' => false,
@@ -362,7 +384,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
             exit();
         }
-        
+
         if (empty($pin_input)) {
             echo json_encode([
                 'success' => false,
@@ -371,7 +393,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
             exit();
         }
-        
+
         if (strlen($pin_input) !== 6 || !ctype_digit($pin_input)) {
             echo json_encode([
                 'success' => false,
@@ -380,7 +402,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
             exit();
         }
-        
+
         // Check if user has PIN
         if (!$selected_user['has_pin'] || $selected_user['has_pin'] == 0) {
             echo json_encode([
@@ -390,7 +412,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
             exit();
         }
-        
+
         if (empty($selected_user['pin'])) {
             echo json_encode([
                 'success' => false,
@@ -399,7 +421,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             ]);
             exit();
         }
-        
+
         if (!password_verify($pin_input, $selected_user['pin'])) {
             echo json_encode([
                 'success' => false,
@@ -409,50 +431,50 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
             exit();
         }
     }
-    
+
     // Process update
     $conn->begin_transaction();
     try {
         $password = '12345'; // Default password
         $email_status = $new_tipe === 'digital' ? 'terisi' : 'kosong';
-        
+
         $new_username = null;
         $new_email = null;
-        
+
         if ($new_tipe === 'digital') {
             // Generate username for fisik → digital, use provided email
             $new_username = generateUsername($selected_user['nama'], $conn);
             $new_email = $email_siswa; // Use user-provided email
-            
+
             $hashed_password = password_hash($password, PASSWORD_BCRYPT);
             $query_update = "UPDATE users SET email = ?, email_status = ?, username = ?, password = ? WHERE id = ?";
             $stmt_update = $conn->prepare($query_update);
-            
+
             if (!$stmt_update) {
                 throw new Exception("Gagal menyiapkan update: " . $conn->error);
             }
-            
+
             $stmt_update->bind_param("ssssi", $new_email, $email_status, $new_username, $hashed_password, $user_id);
         } else {
             // Digital → Fisik: clear email, username, password
             $query_update = "UPDATE users SET email = NULL, email_status = ?, username = NULL, password = NULL WHERE id = ?";
             $stmt_update = $conn->prepare($query_update);
-            
+
             if (!$stmt_update) {
                 throw new Exception("Gagal menyiapkan update: " . $conn->error);
             }
-            
+
             $stmt_update->bind_param("si", $email_status, $user_id);
         }
-        
+
         if (!$stmt_update->execute()) {
             throw new Exception("Gagal update jenis: " . $stmt_update->error);
         }
         $stmt_update->close();
-        
+
         $tipe_display = $new_tipe === 'digital' ? 'Digital' : 'Fisik';
         $tipe_lama_display = $current_tipe === 'digital' ? 'Digital' : 'Fisik';
-        
+
         // Send email for fisik → digital
         if ($new_tipe === 'digital') {
             $email_result = sendEmailConfirmation(
@@ -467,31 +489,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $tipe_lama_display,
                 $tipe_display
             );
-            
+
             if (!$email_result['success']) {
                 error_log("Email sending failed but continuing: " . ($email_result['error'] ?? 'Unknown error'));
             }
         }
-        
+
         $conn->commit();
-        
+
         if ($new_tipe === 'digital') {
             $success_msg = "Jenis rekening berhasil diubah menjadi {$tipe_display}! Kredensial login telah dikirim ke email {$new_email}.";
         } else {
             $success_msg = "Jenis rekening berhasil diubah menjadi {$tipe_display}! Email, username, dan password telah dihapus dari sistem.";
         }
-        
+
         // Generate NEW token only after successful commit
         $new_token = bin2hex(random_bytes(32));
         $_SESSION['form_token'] = $new_token;
-        
+
         echo json_encode([
             'success' => true,
             'message' => $success_msg,
             'new_token' => $new_token // Send new token to frontend
         ]);
         exit();
-        
+
     } catch (Exception $e) {
         $conn->rollback();
         error_log("Update jenis gagal: " . $e->getMessage());

@@ -94,12 +94,12 @@ $token = $_SESSION['form_token'];
 if (isset($_GET['action']) && $_GET['action'] === 'fetch_user' && isset($_GET['no_rekening'])) {
     header('Content-Type: application/json');
     $no_rekening = trim($_GET['no_rekening']);
-    
+
     if (empty($no_rekening)) {
         echo json_encode(['error' => 'Nomor rekening tidak boleh kosong!']);
         exit;
     }
-    
+
     $query = "SELECT u.*, r.no_rekening, j.nama_jurusan, tk.nama_tingkatan, k.nama_kelas 
               FROM users u 
               JOIN rekening r ON u.id = r.user_id 
@@ -112,7 +112,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'fetch_user' && isset($_GET['n
     $stmt->bind_param("s", $no_rekening);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     if ($result->num_rows === 0) {
         echo json_encode(['error' => 'Nasabah dengan nomor rekening tersebut tidak ditemukan!']);
     } else {
@@ -148,994 +148,870 @@ $base_url = $protocol . '://' . $host . $base_path;
 
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <link rel="icon" type="image/png" href="<?php echo $base_url; ?>/assets/images/tab.png">
     <meta name="format-detection" content="telephone=no">
-    <title>Ubah Jenis Rekening | MY Schobank</title>
+    <title>Ubah Jenis Rekening | KASDIG</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --text-primary: #1a202c;
-            --text-secondary: #4a5568;
-            --text-light: #718096;
-            --bg-light: #f7fafc;
-            --bg-table: #ffffff;
-            --border-color: #e2e8f0;
-            --success-color: #059669;
-            --danger-color: #dc2626;
-            --warning-color: #f59e0b;
-            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
-            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
+            --gray-50: #f9fafb;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --primary-color: var(--gray-800);
+            --primary-dark: var(--gray-900);
+            --secondary-color: var(--gray-600);
+
+            --bg-light: #f8fafc;
+            --text-primary: var(--gray-800);
+            --text-secondary: var(--gray-500);
+            --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --radius: 0.5rem;
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
+
+        /* Base Styles */
         * {
-            margin: 0; padding: 0;
+            margin: 0;
+            padding: 0;
             box-sizing: border-box;
             font-family: 'Poppins', sans-serif;
-            user-select: none;
+            -webkit-font-smoothing: antialiased;
         }
-        html {
-            width: 100%; min-height: 100vh; overflow-x: hidden;
-        }
+
         body {
             background-color: var(--bg-light);
             color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
             display: flex;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            min-height: 100vh;
         }
-        .main-content {
-            flex: 1;
-            margin-left: 280px;
-            padding: 30px;
-            max-width: calc(100% - 280px);
-            overflow-y: auto;
-            min-height: 100vh;
-            transition: margin-left 0.3s ease;
+
+        /* Sidebar State */
+        body.sidebar-open {
+            overflow: hidden;
         }
-        
-        body.sidebar-active .main-content {
-            opacity: 0.3;
+
+        /* Mobile Overlay for Sidebar */
+        body.sidebar-active::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            transition: opacity 0.3s ease;
+            opacity: 1;
+        }
+
+        body:not(.sidebar-active):not(.sidebar-open)::before {
+            opacity: 0;
             pointer-events: none;
         }
-        
-        /* Welcome Banner - Updated */
-        .welcome-banner {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            padding: 30px;
-            border-radius: 5px;
-            margin-bottom: 35px;
-            box-shadow: var(--shadow-md);
-            animation: fadeIn 1s ease-in-out;
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-        
-        .welcome-banner .content {
+
+        /* Layout */
+        .main-content {
+            margin-left: 280px;
+            padding: 2rem;
             flex: 1;
+            min-height: 100vh;
+            transition: margin-left 0.3s ease;
+            width: calc(100% - 280px);
         }
-        
-        .welcome-banner h2 {
-            margin-bottom: 10px;
-            font-size: clamp(1.4rem, 3vw, 1.6rem);
-            font-weight: 600;
+
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0;
+                width: 100%;
+                padding: 1rem;
+            }
+        }
+
+        /* Page Title */
+        .page-title-section {
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 50%, #f1f5f9 100%);
+            padding: 1.5rem 2rem;
+            margin: -2rem -2rem 1.5rem -2rem;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 1rem;
+            border-bottom: 1px solid var(--gray-200);
         }
-        
-        .welcome-banner p {
-            font-size: clamp(0.85rem, 2vw, 0.9rem);
-            font-weight: 400;
-            opacity: 0.8;
-        }
-        
-        .menu-toggle {
+
+        .page-title-content h1 {
             font-size: 1.5rem;
-            cursor: pointer;
-            color: white;
-            flex-shrink: 0;
+            font-weight: 700;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .page-subtitle {
+            color: var(--gray-500);
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        .page-hamburger {
             display: none;
-            align-self: center;
+            width: 40px;
+            height: 40px;
+            border: none;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--gray-700);
+            font-size: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            align-items: center;
+            justify-content: center;
         }
-        
-        .form-card {
-            background: var(--bg-table);
-            border-radius: 5px;
-            padding: 25px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 30px;
+
+        .page-hamburger:hover {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--gray-800);
         }
-        
-        .form-group {
+
+        /* Cards */
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border: 1px solid var(--gray-100);
+        }
+
+        .card-header {
+            background: var(--gray-100);
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--gray-100);
             display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-bottom: 15px;
+            align-items: center;
+            gap: 0.75rem;
         }
-        
-        label {
+
+        .card-header-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--gray-600) 0%, var(--gray-500) 100%);
+            border-radius: var(--radius);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .card-header-text h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--gray-800);
+            margin: 0;
+        }
+
+        .card-header-text p {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+            margin: 0;
+        }
+
+        .card-body {
+            padding: 1.5rem;
+        }
+
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 1.25rem;
+            position: relative;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
             font-weight: 500;
             color: var(--text-secondary);
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
-            display: flex;
-            align-items: center;
-            gap: 6px;
         }
-        
-        label i {
-            color: var(--primary-color);
-            font-size: 0.95em;
-        }
-        
+
         .input-wrapper {
             position: relative;
             width: 100%;
         }
-        
-        input[type="text"], input[type="email"], input[type="password"] {
-            width: 100%;
-            padding: 12px 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            font-size: clamp(0.9rem, 2vw, 1rem);
+
+        .clear-btn {
+            position: absolute;
+            right: 1.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--gray-400);
+            cursor: pointer;
+            padding: 5px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
             transition: var(--transition);
-            -webkit-user-select: text;
-            user-select: text;
         }
-        
+
+        .clear-btn:hover {
+            color: var(--gray-600);
+        }
+
+        .clear-btn.show {
+            display: flex;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            background: #fff;
+            height: 48px;
+            color: var(--gray-800);
+        }
+
         input:focus {
+            border-color: var(--gray-600);
+            box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.1);
             outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1);
         }
-        
+
         input.error-input {
-            border-color: var(--danger-color);
+            border-color: #ef4444;
             animation: shake 0.5s;
         }
-        
+
         @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-            20%, 40%, 60%, 80% { transform: translateX(5px); }
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            10%,
+            30%,
+            50%,
+            70%,
+            90% {
+                transform: translateX(-5px);
+            }
+
+            20%,
+            40%,
+            60%,
+            80% {
+                transform: translateX(5px);
+            }
         }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        
+
         .error-message {
-            color: var(--danger-color);
-            font-size: clamp(0.75rem, 1.5vw, 0.85rem);
+            color: #ef4444;
+            font-size: 0.85rem;
             margin-top: 4px;
             display: none;
         }
-        
+
         .error-message.show {
             display: block;
         }
-        
+
+        /* Buttons */
+        .btn,
         .btn-search {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
+            background: linear-gradient(135deg, var(--gray-700) 0%, var(--gray-600) 100%);
             color: white;
             border: none;
-            padding: 12px 25px;
-            border-radius: 5px;
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius);
             cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem);
             font-weight: 500;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            width: 100%;
-            max-width: 200px;
-            margin: 15px auto 0;
-            transition: var(--transition);
+            gap: 0.5rem;
+            transition: all 0.2s;
+            text-decoration: none;
+            font-size: 0.95rem;
+            box-shadow: var(--shadow-sm);
+            width: auto;
+            min-width: 150px;
         }
-        
+
+        .btn:hover,
         .btn-search:hover {
-            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-dark) 100%);
-            transform: translateY(-2px);
+            background: linear-gradient(135deg, var(--gray-800) 0%, var(--gray-700) 100%);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
         }
-        
-        .btn-search:active {
-            transform: scale(0.95);
-        }
-        
+
+        .btn:disabled,
         .btn-search:disabled {
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
         }
-        
+
+        .btn-container {
+            margin-top: 1.5rem;
+        }
+
+
         .details-wrapper {
             display: none;
-            gap: 20px;
-            margin: 20px 0;
+            gap: 1.5rem;
+            margin-top: 2rem;
             grid-template-columns: 1fr 1fr;
         }
-        
+
         .details-wrapper.show {
             display: grid;
         }
-        
-        .user-details, .new-tipe-section {
-            background: #f8fafc;
-            border: 1px solid var(--border-color);
-            border-radius: 5px;
-            padding: 20px;
+
+        .user-details,
+        .new-tipe-section {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1.5rem;
         }
-        
-        .user-details h3, .new-tipe-section h3 {
-            color: var(--primary-color);
-            margin-bottom: 15px;
-            font-size: clamp(0.95rem, 2vw, 1.05rem);
+
+        .user-details h3,
+        .new-tipe-section h3 {
+            color: var(--gray-800);
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--gray-200);
         }
-        
+
         .detail-row {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            padding: 8px 0;
-            border-bottom: 1px solid var(--border-color);
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            gap: 10px;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--gray-200);
+            font-size: 0.95rem;
         }
-        
-        .detail-row:last-child { border-bottom: none; }
-        
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
         .detail-row .label {
-            color: var(--text-secondary);
+            color: var(--gray-500);
             font-weight: 500;
             flex-shrink: 0;
         }
-        
+
         .detail-row .value {
-            color: var(--text-primary);
+            color: var(--gray-800);
             font-weight: 600;
             text-align: right;
             word-break: break-word;
         }
-        
+
         .tipe-badge {
             display: inline-block;
             padding: 4px 12px;
-            border-radius: 5px;
-            font-size: clamp(0.75rem, 1.6vw, 0.85rem);
+            border-radius: 999px;
+            font-size: 0.85rem;
             font-weight: 600;
         }
-        
+
         .tipe-badge.digital {
             background: #dbeafe;
             color: #1e40af;
         }
-        
+
         .tipe-badge.fisik {
             background: #fef3c7;
             color: #92400e;
         }
-        
+
         .new-tipe-display {
             background: white;
-            border: 2px solid var(--primary-color);
-            border-radius: 5px;
-            padding: 15px;
+            border: 2px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem;
             text-align: center;
-            margin: 15px 0;
+            margin: 1rem 0;
         }
-        
+
         .new-tipe-display .tipe-badge {
-            font-size: clamp(0.95rem, 2vw, 1.1rem);
-            padding: 8px 20px;
+            font-size: 1.1rem;
+            padding: 0.5rem 1.5rem;
         }
-        
+
         .info-box {
-            background: #fef3c7;
-            border: 1px solid #fbbf24;
-            border-radius: 5px;
-            padding: 15px;
-            margin: 15px 0;
+            background: #fffbeb;
+            border: 1px solid #fcd34d;
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin: 1rem 0;
             display: none;
         }
-        
-        .info-box.show { display: block; }
-        
+
+        .info-box.show {
+            display: block;
+        }
+
         .info-box h4 {
             color: #92400e;
-            font-size: clamp(0.85rem, 1.8vw, 0.95rem);
+            font-size: 0.95rem;
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 0.5rem;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 0.5rem;
         }
-        
+
         .info-box ul {
-            margin: 8px 0 0 20px;
+            margin: 0.5rem 0 0 1.5rem;
             padding: 0;
             list-style: none;
         }
-        
+
         .info-box li {
             color: #78350f;
-            font-size: clamp(0.75rem, 1.6vw, 0.85rem);
-            line-height: 1.6;
-            margin-bottom: 5px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 0.25rem;
             position: relative;
-            padding-left: 18px;
         }
-        
+
         .info-box li::before {
             content: '✓';
-            position: absolute;
-            left: 0;
             color: #f59e0b;
             font-weight: bold;
+            margin-right: 0.5rem;
         }
-        
+
         .verification-section {
             display: none;
-            margin-top: 15px;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--gray-200);
         }
-        
-        .verification-section.show { display: block; }
-        
-        .btn {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary-color) 100%);
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: clamp(0.9rem, 2vw, 1rem);
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 100%;
-            max-width: 200px;
-            margin: 20px auto;
-            transition: var(--transition);
+
+        .verification-section.show {
+            display: block;
         }
-        
-        .btn:hover {
-            background: linear-gradient(135deg, var(--secondary-color) 0%, var(--primary-dark) 100%);
-            transform: translateY(-2px);
-        }
-        
-        .btn:active { transform: scale(0.95); }
-        
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
+
+
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .page-hamburger {
+                display: block;
+            }
+
+            .page-title-section {
+                padding: 1rem 1.5rem;
+                margin: -1rem -1rem 1.5rem -1rem;
+            }
         }
 
         @media (max-width: 768px) {
-            .menu-toggle { display: block; }
-            
-            .main-content {
-                margin-left: 0;
-                padding: 15px;
-                max-width: 100%;
-            }
-            
-            .welcome-banner {
-                padding: 20px;
-                border-radius: 5px;
-                align-items: center;
-            }
-            
-            .welcome-banner h2 {
-                font-size: clamp(1.3rem, 3vw, 1.4rem);
-            }
-            
-            .welcome-banner p {
-                font-size: clamp(0.8rem, 2vw, 0.85rem);
-            }
-            
-            .form-card { padding: 16px; }
-            
-            .details-wrapper.show {
+            .details-wrapper {
                 grid-template-columns: 1fr;
             }
-            
-            .detail-row {
-                flex-direction: column;
-                gap: 4px;
-                align-items: flex-start;
-            }
-            
-            .detail-row .value {
-                text-align: left;
-                width: 100%;
-            }
-            
-            .btn, .btn-search { max-width: 100%; }
         }
     </style>
 </head>
+
 <body>
     <?php include INCLUDES_PATH . '/sidebar_petugas.php'; ?>
 
     <div class="main-content" id="mainContent">
-        <div class="welcome-banner">
-            <span class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></span>
-            <div class="content">
-                <h2><i class="fas fa-exchange-alt"></i> Ubah Jenis Rekening</h2>
-                <p>Ubah jenis rekening nasabah dari Digital ke Fisik atau sebaliknya</p>
+        <!-- Page Title Section -->
+        <div class="page-title-section">
+            <button class="page-hamburger" id="menuToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="page-title-content">
+                <h1>Ubah Jenis Rekening</h1>
+                <p class="page-subtitle">Ubah tipe rekening nasabah (Fisik / Digital)</p>
             </div>
         </div>
 
-        <div class="form-card">
-            <form id="searchForm">
-                <div class="form-group">
-                    <label for="no_rekening"><i class="fas fa-hashtag"></i> Nomor Rekening</label>
-                    <div class="input-wrapper">
-                        <input type="text" id="no_rekening" name="no_rekening" placeholder="Masukkan nomor rekening (8 digit)" maxlength="8" required autocomplete="off" autofocus>
-                    </div>
-                    <span class="error-message" id="no-rekening-error"></span>
+        <div class="card">
+            <div class="card-header">
+                <div class="card-header-icon">
+                    <i class="fas fa-exchange-alt"></i>
                 </div>
-                
-                <button type="submit" class="btn-search" id="searchBtn">
-                    <i class="fas fa-search"></i> Cari Nasabah
-                </button>
-            </form>
-            
-            <form id="ubahForm" style="display:none;">
-                <input type="hidden" name="token" id="form_token" value="<?php echo htmlspecialchars($token); ?>">
-                <input type="hidden" id="user_id" name="user_id" value="">
-                <input type="hidden" id="new_tipe_rekening" name="new_tipe_rekening" value="">
-                <input type="hidden" id="current_tipe_value" value="">
-
-                <div id="details-wrapper" class="details-wrapper">
-                    <div class="user-details">
-                        <h3><i class="fas fa-user-circle"></i> Detail Nasabah</h3>
-                        <div id="detail-content"></div>
-                    </div>
-
-                    <div class="new-tipe-section">
-                        <h3><i class="fas fa-arrow-right"></i> Jenis Rekening Baru</h3>
-                        <div class="new-tipe-display">
-                            <div id="new-tipe-badge"></div>
-                        </div>
-
-                        <div id="fisik-info-box" class="info-box">
-                            <h4><i class="fas fa-info-circle"></i> Rekening Fisik</h4>
-                            <ul>
-                                <li>Tidak bisa login ke sistem online</li>
-                                <li>Dilengkapi dengan buku cetak</li>
-                                <li>Transaksi hanya melalui petugas</li>
-                                <li>Cocok untuk siswa tanpa email/smartphone</li>
-                            </ul>
-                        </div>
-
-                        <!-- Verification Section -->
-                        <div id="verification-section" class="verification-section">
-                            <!-- Email input (for fisik → digital) -->
-                            <div id="email-input-wrapper" style="display: none;">
-                                <div class="form-group">
-                                    <label for="email_siswa"><i class="fas fa-envelope"></i> Email Siswa (Wajib)</label>
-                                    <input type="email" id="email_siswa" name="email_siswa" placeholder="Masukkan email siswa untuk menerima kredensial" disabled autocomplete="off">
-                                    <span class="error-message" id="email-error"></span>
-                                </div>
-                            </div>
-
-                            <!-- PIN input (for fisik → digital) -->
-                            <div id="pin-input-wrapper" style="display: none;">
-                                <div class="form-group">
-                                    <label for="pin_input"><i class="fas fa-key"></i> PIN Siswa (6 digit)</label>
-                                    <input type="password" id="pin_input" name="pin_input" placeholder="Masukkan PIN siswa untuk verifikasi" maxlength="6" disabled autocomplete="off">
-                                    <span class="error-message" id="pin-error"></span>
-                                </div>
-                            </div>
-
-                            <!-- Password input (for digital → fisik) -->
-                            <div id="password-input-wrapper" style="display: none;">
-                                <div class="form-group">
-                                    <label for="password_input"><i class="fas fa-lock"></i> Password Siswa</label>
-                                    <input type="password" id="password_input" name="password_input" placeholder="Masukkan password siswa untuk verifikasi" disabled autocomplete="off">
-                                    <span class="error-message" id="password-error"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                <div class="card-header-text">
+                    <h3>Form Perubahan</h3>
+                    <p>Cari nasabah dan tentukan jenis rekening baru</p>
                 </div>
+            </div>
 
-                <button type="submit" id="submit-btn" class="btn" disabled>
-                    <span><i class="fas fa-save"></i> Ubah Jenis</span>
-                </button>
-            </form>
+            <div class="card-body">
+                <form id="searchForm">
+                    <div class="form-group">
+                        <label class="form-label" for="no_rekening">Nomor Rekening</label>
+                        <div class="input-wrapper">
+                            <input type="text" id="no_rekening" name="no_rekening"
+                                placeholder="Masukkan nomor rekening (8 digit)" maxlength="8" required
+                                autocomplete="off" autofocus>
+                            <button type="button" class="clear-btn" id="clearBtn">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <span class="error-message" id="no-rekening-error"></span>
+                    </div>
+
+                    <div class="btn-container">
+                        <button type="submit" class="btn-search" id="searchBtn">
+                            <i class="fas fa-search"></i> Cari Nasabah
+                        </button>
+                    </div>
+                </form>
+
+                <form id="ubahForm" style="display:none;">
+                    <input type="hidden" name="token" id="form_token" value="<?php echo htmlspecialchars($token); ?>">
+                    <input type="hidden" id="user_id" name="user_id" value="">
+                    <input type="hidden" id="new_tipe_rekening" name="new_tipe_rekening" value="">
+                    <input type="hidden" id="hidden_no_rekening" name="no_rekening" value="">
+                    <input type="hidden" id="current_tipe_value" value="">
+
+                    <div id="details-wrapper" class="details-wrapper">
+                        <div class="user-details">
+                            <h3><i class="fas fa-user-circle"></i> Detail Nasabah</h3>
+                            <div id="detail-content"></div>
+                        </div>
+
+                        <div class="new-tipe-section">
+                            <h3><i class="fas fa-arrow-right"></i> Jenis Rekening Baru</h3>
+                            <div class="new-tipe-display">
+                                <div id="new-tipe-badge"></div>
+                            </div>
+
+                            <div id="fisik-info-box" class="info-box">
+                                <h4><i class="fas fa-info-circle"></i> Rekening Fisik</h4>
+                                <ul>
+                                    <li>Tidak bisa login ke sistem online</li>
+                                    <li>Dilengkapi dengan buku cetak</li>
+                                    <li>Transaksi hanya melalui petugas</li>
+                                    <li>Cocok untuk siswa tanpa email/smartphone</li>
+                                </ul>
+                            </div>
+
+                            <!-- Verification Section -->
+                            <div id="verification-section" class="verification-section">
+                                <!-- Email input (for fisik → digital) -->
+                                <div id="email-input-wrapper" style="display: none;">
+                                    <div class="form-group">
+                                        <label class="form-label" for="email_siswa">Email Siswa (Wajib)</label>
+                                        <input type="email" id="email_siswa" name="email_siswa"
+                                            placeholder="Masukkan email siswa untuk menerima kredensial" disabled
+                                            autocomplete="off">
+                                        <span class="error-message" id="email-error"></span>
+                                    </div>
+                                </div>
+
+                                <!-- PIN input (for fisik → digital) -->
+                                <div id="pin-input-wrapper" style="display: none;">
+                                    <div class="form-group">
+                                        <label class="form-label" for="pin_input">PIN Siswa (6 digit)</label>
+                                        <input type="password" id="pin_input" name="pin_input"
+                                            placeholder="Masukkan PIN siswa untuk verifikasi" maxlength="6" disabled
+                                            autocomplete="off">
+                                        <span class="error-message" id="pin-error"></span>
+                                    </div>
+                                </div>
+
+                                <!-- Password input (for digital → fisik) -->
+                                <div id="password-input-wrapper" style="display: none;">
+                                    <div class="form-group">
+                                        <label class="form-label" for="password_input">Password Siswa</label>
+                                        <input type="password" id="password_input" name="password_input"
+                                            placeholder="Masukkan password siswa untuk verifikasi" disabled
+                                            autocomplete="off">
+                                        <span class="error-message" id="password-error"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="btn-container">
+                                <button type="submit" class="btn" id="submitBtn" disabled>
+                                    <i class="fas fa-save"></i> Simpan Perubahan
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <script>
-        let currentTipe = null;
-        let currentUserData = null;
+        $(document).ready(function () {
+            const menuToggle = $('#menuToggle');
+            const sidebar = $('#sidebar');
 
-        function resetForm() {
-            $('#no_rekening').val('');
-            $('#user_id').val('');
-            $('#new_tipe_rekening').val('');
-            $('#current_tipe_value').val('');
-            $('#email_siswa').val('');
-            $('#pin_input').val('');
-            $('#password_input').val('');
-            $('#details-wrapper').removeClass('show');
-            $('#verification-section').removeClass('show');
-            $('#fisik-info-box').hide();
-            $('#email-input-wrapper, #pin-input-wrapper, #password-input-wrapper').hide();
-            $('#email_siswa, #pin_input, #password_input').prop('disabled', true).prop('required', false);
-            $('#submit-btn').prop('disabled', true);
-            $('.error-message').text('').removeClass('show');
-            $('input').removeClass('error-input');
-            $('#searchForm').show();
-            $('#ubahForm').hide();
-            currentTipe = null;
-            currentUserData = null;
-
-            setTimeout(() => {
-                $('#no_rekening').focus();
-            }, 300);
-        }
-
-        function clearVerificationOnly() {
-            const newTipe = $('#new_tipe_rekening').val();
-            
-            if (newTipe === 'digital') {
-                $('#email_siswa').val('').removeClass('error-input');
-                $('#pin_input').val('').removeClass('error-input');
-                $('#email-error').text('').removeClass('show');
-                $('#pin-error').text('').removeClass('show');
-                $('#email_siswa').focus();
-            } else {
-                $('#password_input').val('').removeClass('error-input').focus();
-                $('#password-error').text('').removeClass('show');
-            }
-            
-            $('#submit-btn').prop('disabled', true);
-        }
-
-        <?php if ($success): ?>
-        Swal.fire({
-            icon: 'success',
-            title: 'Berhasil!',
-            text: '<?php echo addslashes($success); ?>',
-            confirmButtonColor: '#1e3a8a'
-        }).then(() => {
-            resetForm();
-        });
-        <?php endif; ?>
-
-        // Only allow numbers for no_rekening
-        $('#no_rekening').on('input', function() {
-            this.value = this.value.replace(/[^0-9]/g, '').substring(0, 8);
-        });
-
-        // Search form submit
-        $('#searchForm').on('submit', function(e) {
-            e.preventDefault();
-            const noRek = $('#no_rekening').val().trim();
-            
-            if (noRek.length !== 8) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Validasi Gagal',
-                    text: 'Nomor rekening harus 8 digit!',
-                    confirmButtonColor: '#1e3a8a'
-                }).then(() => {
-                    $('#no_rekening').val('').focus();
-                });
-                return;
-            }
-            
-            // Disable search button and show loading
-            $('#searchBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Mencari...');
-            
-            $.ajax({
-                url: '?action=fetch_user&no_rekening=' + encodeURIComponent(noRek),
-                type: 'GET',
-                dataType: 'json',
-                success: function(data) {
-                    $('#searchBtn').prop('disabled', false).html('<i class="fas fa-search"></i> Cari Nasabah');
-                    
-                    if (data.success) {
-                        const user = data.user;
-                        currentTipe = data.current_tipe;
-                        currentUserData = user;
-                        $('#user_id').val(user.id);
-                        $('#current_tipe_value').val(currentTipe);
-
-                        let detailHtml = '';
-                        detailHtml += `<div class="detail-row"><span class="label">No. Rekening:</span><span class="value">${user.no_rekening}</span></div>`;
-                        detailHtml += `<div class="detail-row"><span class="label">Nama:</span><span class="value">${user.nama}</span></div>`;
-                        detailHtml += `<div class="detail-row"><span class="label">Kelas:</span><span class="value">${user.nama_tingkatan} ${user.nama_kelas}</span></div>`;
-                        detailHtml += `<div class="detail-row"><span class="label">Jurusan:</span><span class="value">${user.nama_jurusan || '-'}</span></div>`;
-
-                        if (currentTipe === 'digital') {
-                            detailHtml += `<div class="detail-row"><span class="label">Email:</span><span class="value">${user.email || '-'}</span></div>`;
-                        }
-
-                        const tipeBadge = currentTipe === 'digital'
-                            ? '<span class="tipe-badge digital">Digital</span>'
-                            : '<span class="tipe-badge fisik">Fisik</span>';
-                        detailHtml += `<div class="detail-row"><span class="label">Jenis Rekening:</span><span class="value">${tipeBadge}</span></div>`;
-
-                        $('#detail-content').html(detailHtml);
-
-                        const oppositeTipe = currentTipe === 'digital' ? 'fisik' : 'digital';
-                        $('#new_tipe_rekening').val(oppositeTipe);
-
-                        const newTipeBadge = oppositeTipe === 'digital'
-                            ? '<span class="tipe-badge digital">Digital (Online)</span>'
-                            : '<span class="tipe-badge fisik">Fisik (Offline)</span>';
-                        $('#new-tipe-badge').html(newTipeBadge);
-
-                        $('#details-wrapper').addClass('show');
-                        $('#verification-section').addClass('show');
-
-                        // Hide all input wrappers first
-                        $('#email-input-wrapper, #pin-input-wrapper, #password-input-wrapper').hide();
-                        $('#email_siswa, #pin_input, #password_input').prop('disabled', true).prop('required', false).val('');
-
-                        if (oppositeTipe === 'digital') {
-                            $('#fisik-info-box').hide();
-                            $('#email-input-wrapper').show();
-                            $('#pin-input-wrapper').show();
-                            $('#email_siswa').prop('disabled', false).prop('required', true);
-                            $('#pin_input').prop('disabled', false).prop('required', true);
-                            $('#submit-btn').prop('disabled', true);
-                            setTimeout(() => $('#email_siswa').focus(), 100);
-                        } else {
-                            $('#fisik-info-box').show();
-                            $('#password-input-wrapper').show();
-                            $('#password_input').prop('disabled', false).prop('required', true);
-                            $('#submit-btn').prop('disabled', true);
-                            setTimeout(() => $('#password_input').focus(), 100);
-                        }
-
-                        $('#no-rekening-error').text('').removeClass('show');
-                        
-                        // Hide search form, show ubah form
-                        $('#searchForm').hide();
-                        $('#ubahForm').show();
-                        
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Nasabah Ditemukan!',
-                            text: `Data ${user.nama} berhasil dimuat`,
-                            confirmButtonColor: '#1e3a8a',
-                            timer: 1500,
-                            showConfirmButton: false
-                        });
-                    } else {
-                        Swal.fire({
-                            icon: 'error',
-                            title: 'Nasabah Tidak Ditemukan',
-                            text: data.error,
-                            confirmButtonColor: '#dc2626',
-                            footer: '<small>Pastikan nomor rekening sudah benar</small>'
-                        }).then(() => {
-                            $('#no_rekening').val('').focus();
-                        });
-                    }
-                },
-                error: function() {
-                    $('#searchBtn').prop('disabled', false).html('<i class="fas fa-search"></i> Cari Nasabah');
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Kesalahan Server',
-                        text: 'Gagal memuat data nasabah. Silakan coba lagi.',
-                        confirmButtonColor: '#dc2626'
-                    }).then(() => {
-                        $('#no_rekening').val('').focus();
-                    });
-                }
-            });
-        });
-
-        // Only allow numbers for PIN
-        $('#pin_input').on('input', function() {
-            this.value = this.value.replace(/[^0-9]/g, '').substring(0, 6);
-            validateForm();
-        });
-
-        // Validate email
-        $('#email_siswa').on('input', function() {
-            validateForm();
-        });
-
-        // Validate password
-        $('#password_input').on('input', function() {
-            validateForm();
-        });
-
-        function validateForm() {
-            const newTipe = $('#new_tipe_rekening').val();
-            const submitBtn = $('#submit-btn');
-
-            if (newTipe === 'digital') {
-                const email = $('#email_siswa').val().trim();
-                const pin = $('#pin_input').val().trim();
-                const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-                const pinValid = pin.length === 6;
-
-                if (emailValid && pinValid) {
-                    submitBtn.prop('disabled', false);
-                } else {
-                    submitBtn.prop('disabled', true);
-                }
-            } else {
-                const password = $('#password_input').val().trim();
-                if (password.length > 0) {
-                    submitBtn.prop('disabled', false);
-                } else {
-                    submitBtn.prop('disabled', true);
-                }
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const menuToggle = document.getElementById('menuToggle');
-            const sidebar = document.getElementById('sidebar');
-
-            if (menuToggle && sidebar) {
-                menuToggle.addEventListener('click', (e) => {
+            if (menuToggle.length) {
+                menuToggle.on('click', function (e) {
                     e.stopPropagation();
-                    sidebar.classList.toggle('active');
-                    document.body.classList.toggle('sidebar-active');
+                    $('#sidebar').toggleClass('active');
+                    $('body').toggleClass('sidebar-active');
                 });
             }
 
-            document.addEventListener('click', (e) => {
-                if (sidebar && sidebar.classList.contains('active') && !sidebar.contains(e.target) && !menuToggle.contains(e.target)) {
-                    sidebar.classList.remove('active');
-                    document.body.classList.remove('sidebar-active');
+            $(document).on('click', function (e) {
+                if (sidebar.hasClass('active') && !sidebar.is(e.target) && sidebar.has(e.target).length === 0 && !menuToggle.is(e.target)) {
+                    sidebar.removeClass('active');
+                    $('body').removeClass('sidebar-active');
                 }
             });
 
-            $('#ubahForm').on('submit', function(e) {
+            // Input Validation and Limiting
+            $('#no_rekening, #pin_input').on('input', function () {
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+
+            // Clear Button Logic
+            $('#no_rekening').on('input', function () {
+                if (this.value.length > 0) {
+                    $('#clearBtn').addClass('show');
+                } else {
+                    $('#clearBtn').removeClass('show');
+                }
+                $('#no-rekening-error').removeClass('show').text('');
+                $(this).removeClass('error-input');
+            });
+
+            $('#clearBtn').on('click', function () {
+                $('#no_rekening').val('').focus();
+                $(this).removeClass('show');
+                $('#ubahForm').hide();
+                $('#details-wrapper').removeClass('show');
+                $('#searchBtn').prop('disabled', false);
+            });
+
+            // Search Form Submit
+            $('#searchForm').on('submit', function (e) {
+                e.preventDefault();
+                const noRekening = $('#no_rekening').val().trim();
+                const searchBtn = $('#searchBtn');
+
+                if (noRekening.length !== 8) {
+                    $('#no_rekening').addClass('error-input').focus();
+                    $('#no-rekening-error').text('Nomor rekening harus 8 digit angka.').addClass('show');
+                    return;
+                }
+
+                searchBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Mencari...');
+
+                setTimeout(function () {
+                    $.ajax({
+                        url: 'ubah_jenis_rekening.php',
+                        type: 'GET',
+                        data: { action: 'fetch_user', no_rekening: noRekening },
+                        dataType: 'json',
+                        success: function (response) {
+                            searchBtn.prop('disabled', false).html('<i class="fas fa-search"></i> Cari Nasabah');
+
+                            if (response.success) {
+                                const user = response.user;
+                                const currentTipe = response.current_tipe;
+                                const newTipe = currentTipe === 'digital' ? 'fisik' : 'digital';
+
+                                $('#user_id').val(user.id);
+                                $('#new_tipe_rekening').val(newTipe);
+                                $('#hidden_no_rekening').val(user.no_rekening);
+                                $('#current_tipe_value').val(currentTipe);
+
+                                // Render User Details
+                                let detailsHtml = `
+                                    <div class="detail-row">
+                                        <span class="label">Nama Lengkap</span>
+                                        <span class="value">${user.nama}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="label">NIS/NISN</span>
+                                        <span class="value">${user.nis_nisn || '-'}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="label">Kelas / Jurusan</span>
+                                        <span class="value">${user.nama_tingkatan || ''} ${user.nama_kelas || ''} / ${user.nama_jurusan || '-'}</span>
+                                    </div>
+                                    <div class="detail-row">
+                                        <span class="label">Jenis Rekening Saat Ini</span>
+                                        <span class="value"><span class="tipe-badge ${currentTipe}">${currentTipe.toUpperCase()}</span></span>
+                                    </div>
+                                `;
+                                $('#detail-content').html(detailsHtml);
+
+                                // Set New Tipe Badge
+                                $('#new-tipe-badge').html(`<span class="tipe-badge ${newTipe}">${newTipe.toUpperCase()}</span>`);
+
+                                // Toggle Info Box & Inputs based on transition
+                                if (currentTipe === 'digital') { // Switching to Fisik
+                                    $('#fisik-info-box').addClass('show');
+                                    $('#email-input-wrapper').hide().find('input').prop('disabled', true);
+                                    $('#pin-input-wrapper').show().find('input').prop('disabled', false);
+                                    $('#password-input-wrapper').hide().find('input').prop('disabled', true);
+                                } else { // Switching to Digital
+                                    $('#fisik-info-box').removeClass('show');
+                                    $('#email-input-wrapper, #pin-input-wrapper').show().find('input').prop('disabled', false);
+                                    $('#password-input-wrapper').hide().find('input').prop('disabled', true);
+
+                                    // Pre-fill email if available
+                                    if (user.email && user.email !== '-') {
+                                        $('#email_siswa').val(user.email);
+                                    }
+                                }
+
+                                $('#ubahForm').show();
+                                $('#details-wrapper').addClass('show');
+                                $('#verification-section').addClass('show');
+                                $('#submitBtn').prop('disabled', false);
+
+                                // Scroll to details
+                                $('html, body').animate({
+                                    scrollTop: $("#details-wrapper").offset().top - 100
+                                }, 500);
+
+                            } else {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Tidak Ditemukan',
+                                    text: response.error
+                                });
+                            }
+                        },
+                        error: function () {
+                            searchBtn.prop('disabled', false).html('<i class="fas fa-search"></i> Cari Nasabah');
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error',
+                                text: 'Terjadi kesalahan saat mencari data.'
+                            });
+                        }
+                    });
+                }, 2000);
+            });
+
+            // Final Submit
+            $('#ubahForm').on('submit', function (e) {
                 e.preventDefault();
 
-                const noRek = $('#no_rekening').val().trim();
-                const tipe = $('#new_tipe_rekening').val();
-                const userId = $('#user_id').val();
-                const token = $('#form_token').val();
+                // Client-side validation
+                const newTipe = $('#new_tipe_rekening').val();
+                let isValid = true;
 
-                if (!noRek || !userId) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Data Tidak Lengkap',
-                        text: 'Masukkan nomor rekening yang valid!',
-                        confirmButtonColor: '#dc2626'
-                    }).then(() => {
-                        resetForm();
-                    });
-                    return;
-                }
+                $('.error-message').removeClass('show').text('');
+                $('input').removeClass('error-input');
 
-                if (!tipe) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Jenis Belum Dipilih',
-                        text: 'Pilih jenis rekening baru!',
-                        confirmButtonColor: '#dc2626'
-                    });
-                    return;
-                }
-
-                if (!token) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Token Tidak Valid',
-                        text: 'Session expired. Silakan refresh halaman.',
-                        confirmButtonColor: '#dc2626'
-                    }).then(() => {
-                        location.reload();
-                    });
-                    return;
-                }
-
-                let validationError = null;
-
-                if (tipe === 'digital') {
+                if (newTipe === 'digital') {
                     const email = $('#email_siswa').val().trim();
                     const pin = $('#pin_input').val().trim();
 
                     if (!email) {
-                        validationError = { title: 'Email Wajib Diisi', text: 'Email wajib untuk rekening digital!', focus: '#email_siswa' };
-                    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                        validationError = { title: 'Email Tidak Valid', text: 'Format email tidak sesuai!', focus: '#email_siswa' };
-                    } else if (!pin) {
-                        validationError = { title: 'PIN Wajib Diisi', text: 'PIN wajib untuk verifikasi!', focus: '#pin_input' };
-                    } else if (pin.length !== 6) {
-                        validationError = { title: 'PIN Tidak Valid', text: 'PIN harus 6 digit angka!', focus: '#pin_input' };
+                        $('#email_siswa').addClass('error-input');
+                        $('#email-error').text('Email wajib diisi untuk akun digital.').addClass('show');
+                        isValid = false;
+                    }
+                    if (pin.length !== 6) {
+                        $('#pin_input').addClass('error-input');
+                        $('#pin-error').text('PIN harus 6 digit angka.').addClass('show');
+                        isValid = false;
                     }
                 } else {
-                    const password = $('#password_input').val().trim();
-                    if (!password) {
-                        validationError = { title: 'Password Wajib Diisi', text: 'Password wajib untuk verifikasi!', focus: '#password_input' };
+                    // Digital → Fisik: require PIN verification
+                    const pin = $('#pin_input').val().trim();
+                    if (pin.length !== 6) {
+                        $('#pin_input').addClass('error-input');
+                        $('#pin-error').text('PIN harus 6 digit angka untuk verifikasi.').addClass('show');
+                        isValid = false;
                     }
                 }
 
-                if (validationError) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: validationError.title,
-                        text: validationError.text,
-                        confirmButtonColor: '#dc2626'
-                    }).then(() => {
-                        $(validationError.focus).focus();
-                    });
-                    return;
-                }
-
-                const nama = currentUserData.nama;
-                const email = $('#email_siswa').val().trim();
-
-                let confirmMessage = '';
-                if (tipe === 'digital') {
-                    confirmMessage = `
-                        <div style='text-align: left; padding: 10px;'>
-                            <p style='margin-bottom: 15px;'>Ubah jenis rekening <strong>${nama}</strong> (${noRek}) menjadi <strong>Digital</strong>?</p>
-                            <div style='background: #dbeafe; border: 1px solid #93c5fd; padding: 12px; border-radius: 5px;'>
-                                <p style='margin: 0; font-size: 0.9rem;'><strong>📝 Informasi:</strong></p>
-                                <ul style='margin: 5px 0 0 20px; font-size: 0.85rem; line-height: 1.6;'>
-                                    <li>Username & password akan digenerate otomatis</li>
-                                    <li>Kredensial akan dikirim ke email: <strong>${email}</strong></li>
-                                    <li>Nasabah dapat login ke sistem online</li>
-                                    <li>Dapat melakukan transaksi mandiri</li>
-                                </ul>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    confirmMessage = `
-                        <div style='text-align: left; padding: 10px;'>
-                            <p style='margin-bottom: 15px;'>Ubah jenis rekening <strong>${nama}</strong> (${noRek}) menjadi <strong>Fisik</strong>?</p>
-                            <div style='background: #fef2f2; border: 1px solid #fecaca; padding: 12px; border-radius: 5px;'>
-                                <p style='margin: 0; font-size: 0.9rem;'><strong>⚠️ Peringatan:</strong></p>
-                                <ul style='margin: 5px 0 0 20px; font-size: 0.85rem; line-height: 1.6;'>
-                                    <li>Email akan dihapus dari sistem</li>
-                                    <li>Username akan dihapus</li>
-                                    <li>Password akan dihapus</li>
-                                    <li>Nasabah tidak bisa login ke sistem online</li>
-                                    <li>Transaksi hanya melalui petugas</li>
-                                </ul>
-                            </div>
-                        </div>
-                    `;
-                }
+                if (!isValid) return;
 
                 Swal.fire({
                     title: 'Konfirmasi Perubahan',
-                    html: confirmMessage,
-                    icon: 'question',
+                    text: 'Apakah Anda yakin ingin mengubah jenis rekening nasabah ini?',
+                    icon: 'warning',
                     showCancelButton: true,
-                    confirmButtonText: '<i class="fas fa-check"></i> Ya, Ubah Sekarang!',
-                    cancelButtonText: '<i class="fas fa-times"></i> Batal',
-                    confirmButtonColor: '#1e3a8a',
-                    cancelButtonColor: '#6b7280',
-                    width: window.innerWidth < 600 ? '95%' : '600px'
+                    confirmButtonText: 'Ya, Ubah Rekening',
+                    cancelButtonText: 'Batal'
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        Swal.fire({
-                            title: 'Memproses...',
-                            html: 'Sedang memverifikasi dan mengubah jenis rekening.',
-                            allowOutsideClick: false,
-                            allowEscapeKey: false,
-                            showConfirmButton: false,
-                            didOpen: () => {
-                                Swal.showLoading();
-                            }
-                        });
+                        const submitBtn = $('#submitBtn');
+                        submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Memproses...');
 
-                        $('#submit-btn').html('<span><i class="fas fa-spinner fa-spin"></i> Memproses...</span>').prop('disabled', true);
+                        setTimeout(function () {
+                            $.ajax({
+                                url: 'proses_ubah_jenis_rekening.php',
+                                type: 'POST',
+                                data: $('#ubahForm').serialize(),
+                                dataType: 'json',
+                                success: function (response) {
+                                    submitBtn.prop('disabled', false).html('<i class="fas fa-save"></i> Simpan Perubahan');
 
-                        const formData = {
-                            token: token,
-                            no_rekening: noRek,
-                            user_id: userId,
-                            new_tipe_rekening: tipe
-                        };
-
-                        if (tipe === 'digital') {
-                            formData.email_siswa = $('#email_siswa').val().trim();
-                            formData.pin_input = $('#pin_input').val().trim();
-                        } else {
-                            formData.password_input = $('#password_input').val().trim();
-                        }
-
-                        $.ajax({
-                            url: 'proses_ubah_jenis_rekening.php',
-                            type: 'POST',
-                            data: formData,
-                            dataType: 'json',
-                            success: function(response) {
-                                Swal.close();
-                                $('#submit-btn').html('<span><i class="fas fa-save"></i> Ubah Jenis</span>').prop('disabled', false);
-
-                                if (response.success) {
-                                    Swal.fire({
-                                        icon: 'success',
-                                        title: 'Berhasil!',
-                                        text: response.message,
-                                        confirmButtonColor: '#1e3a8a'
-                                    }).then(() => {
-                                        resetForm();
-                                    });
-                                } else {
-                                    if (response.error_type === 'verification') {
-                                        if (tipe === 'digital') {
-                                            $('#email_siswa').addClass('error-input');
-                                            $('#pin_input').addClass('error-input');
-                                            $('#email-error').text(response.message).addClass('show');
-                                            $('#pin-error').text(response.message).addClass('show');
-                                        } else {
-                                            $('#password_input').addClass('error-input');
-                                            $('#password-error').text(response.message).addClass('show');
-                                        }
-                                        
+                                    if (response.success) {
                                         Swal.fire({
-                                            icon: 'error',
-                                            title: 'Verifikasi Gagal',
-                                            text: response.message,
-                                            confirmButtonColor: '#dc2626',
-                                            footer: '<small>Silakan coba lagi</small>'
+                                            icon: 'success',
+                                            title: 'Berhasil!',
+                                            text: response.message
                                         }).then(() => {
-                                            clearVerificationOnly();
+                                            location.reload();
                                         });
                                     } else {
                                         Swal.fire({
                                             icon: 'error',
-                                            title: 'Gagal!',
-                                            text: response.message,
-                                            confirmButtonColor: '#dc2626'
-                                        }).then(() => {
-                                            resetForm();
+                                            title: 'Gagal',
+                                            text: response.message
                                         });
                                     }
+                                },
+                                error: function () {
+                                    submitBtn.prop('disabled', false).html('<i class="fas fa-save"></i> Simpan Perubahan');
+                                    Swal.fire({
+                                        icon: 'error',
+                                        title: 'Error',
+                                        text: 'Terjadi kesalahan sistem.'
+                                    });
                                 }
-                            },
-                            error: function(xhr, status, error) {
-                                Swal.close();
-                                $('#submit-btn').html('<span><i class="fas fa-save"></i> Ubah Jenis</span>').prop('disabled', false);
-                                
-                                console.error('AJAX Error:', status, error);
-                                console.error('Response:', xhr.responseText);
-                                
-                                Swal.fire({
-                                    icon: 'error',
-                                    title: 'Kesalahan Server',
-                                    text: 'Terjadi kesalahan saat memproses. Silakan coba lagi.',
-                                    confirmButtonColor: '#dc2626'
-                                }).then(() => {
-                                    resetForm();
-                                });
-                            }
-                        });
+                            });
+                        }, 2000);
                     }
                 });
             });
         });
     </script>
 </body>
+
 </html>

@@ -2,6 +2,7 @@
 /**
  * Sidebar Petugas - Adaptive Path Version (Normalized DB)
  * File: includes/sidebar_petugas.php
+ * Re-created and Harmonized for Compatibility
  */
 
 // ============================================
@@ -11,7 +12,7 @@ if (!defined('PROJECT_ROOT')) {
     $current_file = __FILE__;
     $current_dir = dirname($current_file);
     $project_root = null;
-    
+
     // Strategy 1: Check if we're in 'includes' folder
     if (basename($current_dir) === 'includes') {
         $project_root = dirname($current_dir);
@@ -31,28 +32,29 @@ if (!defined('PROJECT_ROOT')) {
             }
         }
     }
-    
+
     if (!$project_root) {
         $project_root = dirname($current_dir);
     }
-    
+
     define('PROJECT_ROOT', rtrim($project_root, '/'));
 }
 
 if (!defined('BASE_URL')) {
-    function getBaseUrlSidebar() {
+    function getBaseUrlSidebar()
+    {
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
         $host = $_SERVER['HTTP_HOST'];
         $script = $_SERVER['SCRIPT_NAME'];
         $base_path = dirname($script);
-        
+
         // Remove '/pages/petugas', '/pages/admin', etc.
         $base_path = preg_replace('#/pages(/[^/]+)?$#', '', $base_path);
-        
+
         if ($base_path !== '/' && !empty($base_path)) {
             $base_path = '/' . ltrim($base_path, '/');
         }
-        
+
         return $protocol . $host . $base_path;
     }
     define('BASE_URL', rtrim(getBaseUrlSidebar(), '/'));
@@ -146,11 +148,11 @@ if ($schedule) {
     // Petugas1 hadir (status = 'hadir')
     // Karena tidak ada kolom waktu_keluar di petugas_status, 
     // kita anggap petugas aktif jika status = 'hadir'
-    $petugas1_present = $petugas1_nama && $attendance_petugas1 && 
-                        $attendance_petugas1['status'] == 'hadir';
+    $petugas1_present = $petugas1_nama && $attendance_petugas1 &&
+        $attendance_petugas1['status'] == 'hadir';
 
-    $petugas2_present = $petugas2_nama && $attendance_petugas2 && 
-                        $attendance_petugas2['status'] == 'hadir';
+    $petugas2_present = $petugas2_nama && $attendance_petugas2 &&
+        $attendance_petugas2['status'] == 'hadir';
 
     // Sudah melakukan absensi (status apa pun)
     $petugas1_checked_in = $petugas1_nama && $attendance_petugas1 && $attendance_petugas1['status'];
@@ -169,16 +171,48 @@ if ($schedule) {
 }
 
 // ============================================
+// CHECK CURRRENT USER CHECKOUT STATUS
+// ============================================
+$current_user_done = false;
+if ($schedule && isset($_SESSION['user_id'])) {
+    // Check Petugas 1
+    if (
+        $schedule['petugas1_id'] == $_SESSION['user_id'] &&
+        $attendance_petugas1 &&
+        $attendance_petugas1['status'] == 'hadir' &&
+        $attendance_petugas1['waktu_keluar']
+    ) {
+        $current_user_done = true;
+    }
+    // Check Petugas 2
+    elseif (
+        $schedule['petugas2_id'] == $_SESSION['user_id'] &&
+        $attendance_petugas2 &&
+        $attendance_petugas2['status'] == 'hadir' &&
+        $attendance_petugas2['waktu_keluar']
+    ) {
+        $current_user_done = true;
+    }
+}
+
+// ============================================
 // PENGATURAN ENABLE/DISABLE MENU
 // ============================================
-if ($show_thank_you) {
-    // Setelah penutupan operasional harian:
-    // hanya Dashboard, Absensi, dan Laporan yang aktif
+$dashboard_enabled = true;
+$settings_enabled = true;
+
+if ($show_thank_you || $current_user_done) {
+    // Setelah penutupan operasional harian ATAU petugas saat ini sudah pulang:
+    // HANYA Absensi, Laporan, dan Keluar yang aktif
     $transaksi_enabled = false;
     $rekening_enabled = false;
-    $search_enabled = false;
+    $search_enabled = !$is_blocked;
     $laporan_enabled = !$is_blocked;
     $absensi_enabled = true;
+
+    // Dashboard & Settings remain enabled
+    $dashboard_enabled = true;
+    $settings_enabled = true;
 } else {
     // Mode operasional normal
     $transaksi_enabled = !$is_blocked && $at_least_one_present;
@@ -186,10 +220,12 @@ if ($show_thank_you) {
     $search_enabled = !$is_blocked && $at_least_one_present;
     $laporan_enabled = !$is_blocked && ($attendance_petugas1 || $attendance_petugas2);
     $absensi_enabled = true;
+    $dashboard_enabled = true;
+    $settings_enabled = true;
 }
 
 $transaksi_pages = ['setor.php', 'tarik.php', 'transfer.php'];
-$rekening_pages = ['buka_rekening.php', 'tutup_rekening.php', 'ubah_jenis_rekening.php'];
+$rekening_pages = ['buka_rekening.php', 'tutup_rekening.php'];
 $search_pages = ['cek_mutasi.php', 'validasi_transaksi.php', 'cek_saldo.php'];
 
 $is_transaksi_active = in_array($current_page, $transaksi_pages);
@@ -198,27 +234,42 @@ $is_search_active = in_array($current_page, $search_pages);
 ?>
 <!DOCTYPE html>
 <html>
+
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         :root {
-            --primary-color: #1e3a8a;
-            --primary-dark: #1e1b4b;
-            --secondary-color: #3b82f6;
-            --secondary-dark: #2563eb;
+            --gray-50: #f9fafb;
+            --gray-100: #f1f5f9;
+            --gray-200: #e2e8f0;
+            --gray-300: #cbd5e1;
+            --gray-400: #94a3b8;
+            --gray-500: #64748b;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1e293b;
+            --gray-900: #0f172a;
+
+            --primary-color: var(--gray-800);
+            --primary-dark: var(--gray-900);
+            --secondary-color: var(--gray-600);
+            --secondary-dark: var(--gray-700);
             --danger-color: #e74c3c;
             --text-primary: #333;
             --text-secondary: #666;
-            --bg-light: #f0f5ff;
+            --bg-light: #f8fafc;
             --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
             --transition: all 0.3s ease;
-            --scrollbar-track: #1e1b4b;
-            --scrollbar-thumb: #3b82f6;
-            --scrollbar-thumb-hover: #60a5fa;
+            --scrollbar-track: var(--gray-900);
+            --scrollbar-thumb: var(--gray-600);
+            --scrollbar-thumb-hover: var(--gray-500);
         }
 
         * {
@@ -266,25 +317,14 @@ $is_search_active = in_array($current_page, $search_pages);
             justify-content: center;
             align-items: center;
             width: 100%;
-            height: 70px;
             text-align: center;
         }
 
-        .logo-text {
-            font-size: 1.8rem;
-            font-weight: 700;
-            color: white;
-            letter-spacing: 1px;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-            margin-bottom: 4px;
-        }
-
-        .logo-subtitle {
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.8);
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            font-weight: 400;
+        .logo-img {
+            max-width: 160px;
+            height: auto;
+            object-fit: contain;
+            filter: brightness(0) invert(1);
         }
 
         .sidebar-content {
@@ -303,12 +343,28 @@ $is_search_active = in_array($current_page, $search_pages);
             padding: 5px 0;
         }
 
-        .sidebar-content::-webkit-scrollbar { width: 8px; }
-        .sidebar-content::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 4px; }
-        .sidebar-content::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; border: 2px solid var(--scrollbar-track); }
-        .sidebar-content::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+        .sidebar-content::-webkit-scrollbar {
+            width: 8px;
+        }
 
-        .sidebar-menu { padding: 10px 0; }
+        .sidebar-content::-webkit-scrollbar-track {
+            background: var(--scrollbar-track);
+            border-radius: 4px;
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 4px;
+            border: 2px solid var(--scrollbar-track);
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover);
+        }
+
+        .sidebar-menu {
+            padding: 10px 0;
+        }
 
         .menu-label {
             padding: 15px 25px 10px;
@@ -387,10 +443,26 @@ $is_search_active = in_array($current_page, $search_pages);
             pointer-events: none;
         }
 
-        .dropdown-btn .menu-icon { display: flex; align-items: center; }
-        .dropdown-btn .menu-icon i:first-child { margin-right: 12px; width: 20px; text-align: center; font-size: 1.1rem; }
-        .dropdown-btn .arrow { transition: transform 0.3s ease; font-size: 0.8rem; }
-        .dropdown-btn.active-dropdown .arrow { transform: rotate(180deg); }
+        .dropdown-btn .menu-icon {
+            display: flex;
+            align-items: center;
+        }
+
+        .dropdown-btn .menu-icon i:first-child {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+
+        .dropdown-btn .arrow {
+            transition: transform 0.3s ease;
+            font-size: 0.8rem;
+        }
+
+        .dropdown-btn.active-dropdown .arrow {
+            transform: rotate(180deg);
+        }
 
         .dropdown-container {
             max-height: 0;
@@ -399,7 +471,9 @@ $is_search_active = in_array($current_page, $search_pages);
             background-color: rgba(0, 0, 0, 0.15);
         }
 
-        .dropdown-container.show { max-height: 300px; }
+        .dropdown-container.show {
+            max-height: 300px;
+        }
 
         .dropdown-container a {
             padding: 12px 20px 12px 60px;
@@ -420,50 +494,99 @@ $is_search_active = in_array($current_page, $search_pages);
         }
 
         .dropdown-container span {
-            display: block; 
+            display: block;
             padding: 10px 20px;
-            color: rgba(255, 255, 255, 0.5); 
-            font-size: 0.8rem; 
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.8rem;
             font-style: italic;
         }
 
-        .logout-btn { color: var(--danger-color); font-weight: 500; }
+        .logout-btn {
+            color: var(--danger-color);
+            font-weight: 500;
+        }
 
         @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); width: 260px; z-index: 1000; }
-            .sidebar.active { transform: translateX(0); }
+            .sidebar {
+                transform: translateX(-100%);
+                width: 260px;
+                z-index: 1000;
+            }
+
+            .sidebar.active {
+                transform: translateX(0);
+            }
+
+            /* Compatibility for harmonized pages (Admin style toggle) */
+            body.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+
             body.sidebar-active::before {
-                content: ''; 
-                position: fixed; 
-                top: 0; 
-                left: 0; 
-                width: 100%; 
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
                 height: 100%;
-                background: rgba(0, 0, 0, 0.5); 
-                z-index: 999; 
-                transition: opacity 0.3s ease; 
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999;
+                transition: opacity 0.3s ease;
                 opacity: 1;
             }
-            body:not(.sidebar-active)::before { opacity: 0; pointer-events: none; }
+
+            body.sidebar-open::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.5);
+                z-index: 999;
+                transition: opacity 0.3s ease;
+                opacity: 1;
+            }
+
+            body:not(.sidebar-active):not(.sidebar-open)::before {
+                opacity: 0;
+                pointer-events: none;
+            }
         }
 
         @media (max-width: 480px) {
-            .sidebar { width: 240px; }
-            .sidebar-header { padding: 10px 15px 5px; min-height: 75px; }
-            .logo-container { height: 55px; }
-            .logo-text { font-size: 1.5rem; }
-            .logo-subtitle { font-size: 0.7rem; }
-            .menu-item a, .dropdown-btn { padding: 12px 20px; font-size: 0.85rem; }
-            .dropdown-container a { padding: 10px 15px 10px 50px; font-size: 0.8rem; }
+            .sidebar {
+                width: 240px;
+            }
+
+            .sidebar-header {
+                padding: 10px 15px 5px;
+                min-height: 75px;
+            }
+
+            .logo-img {
+                max-width: 130px;
+            }
+
+            .menu-item a,
+            .dropdown-btn {
+                padding: 12px 20px;
+                font-size: 0.85rem;
+            }
+
+            .dropdown-container a {
+                padding: 10px 15px 10px 50px;
+                font-size: 0.8rem;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="logo-container">
-                <div class="logo-text">My Schobank</div>
-                <div class="logo-subtitle">Panel Petugas</div>
+                <img src="<?= BASE_URL ?>/assets/images/side.png" alt="KASDIG" class="logo-img">
             </div>
         </div>
 
@@ -473,79 +596,92 @@ $is_search_active = in_array($current_page, $search_pages);
 
                 <!-- Dashboard -->
                 <div class="menu-item">
-                    <a href="dashboard.php" class="<?php echo $current_page == 'dashboard.php' ? 'active' : ''; ?>">
+                    <a href="dashboard.php"
+                        class="<?php echo $current_page == 'dashboard.php' ? 'active' : ($dashboard_enabled ? '' : 'disabled'); ?>">
                         <i class="fas fa-home"></i> Dashboard
                     </a>
                 </div>
 
                 <!-- Menu Transaksi -->
                 <div class="menu-item">
-                    <button 
-                        class="dropdown-btn <?php echo $is_transaksi_active ? 'active-dropdown' : ($transaksi_enabled ? '' : 'disabled'); ?>" 
+                    <button
+                        class="dropdown-btn <?php echo $is_transaksi_active ? 'active-dropdown' : ($transaksi_enabled ? '' : 'disabled'); ?>"
                         id="transaksiDropdown"
-                        title="<?php echo $transaksi_enabled ? 'Layanan transaksi aktif' : 'Layanan transaksi ditutup'; ?>"
-                    >
+                        title="<?php echo $transaksi_enabled ? 'Layanan transaksi aktif' : 'Layanan transaksi ditutup'; ?>">
                         <div class="menu-icon">
                             <i class="fas fa-exchange-alt"></i> Transaksi
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
 
-                    <div class="dropdown-container<?php echo $is_transaksi_active ? ' show' : ''; ?>" id="transaksiDropdownContainer">
+                    <div class="dropdown-container<?php echo $is_transaksi_active ? ' show' : ''; ?>"
+                        id="transaksiDropdownContainer">
                         <?php if (!$transaksi_enabled): ?>
                             <span>Layanan transaksi ditutup.</span>
                         <?php else: ?>
-                            <a href="setor.php" class="<?php echo $current_page == 'setor.php' ? 'active' : ''; ?>"><i class="fas fa-arrow-circle-down"></i> Setoran Tunai</a>
-                            <a href="tarik.php" class="<?php echo $current_page == 'tarik.php' ? 'active' : ''; ?>"><i class="fas fa-arrow-circle-up"></i> Penarikan Tunai</a>
-                            <a href="transfer.php" class="<?php echo $current_page == 'transfer.php' ? 'active' : ''; ?>"><i class="fas fa-paper-plane"></i> Transfer Antar Tabungan</a>
+                            <a href="setor.php" class="<?php echo $current_page == 'setor.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-arrow-circle-down"></i> Setor</a>
+                            <a href="tarik.php" class="<?php echo $current_page == 'tarik.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-arrow-circle-up"></i> Tarik</a>
+                            <a href="transfer.php" class="<?php echo $current_page == 'transfer.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-paper-plane"></i> Transfer</a>
                         <?php endif; ?>
                     </div>
                 </div>
 
                 <!-- Menu Rekening -->
                 <div class="menu-item">
-                    <button 
-                        class="dropdown-btn <?php echo $is_rekening_active ? 'active-dropdown' : ($rekening_enabled ? '' : 'disabled'); ?>" 
+                    <button
+                        class="dropdown-btn <?php echo $is_rekening_active ? 'active-dropdown' : ($rekening_enabled ? '' : 'disabled'); ?>"
                         id="rekeningDropdown"
-                        title="<?php echo $rekening_enabled ? 'Layanan administrasi rekening aktif' : 'Layanan administrasi rekening ditutup'; ?>"
-                    >
+                        title="<?php echo $rekening_enabled ? 'Layanan administrasi rekening aktif' : 'Layanan administrasi rekening ditutup'; ?>">
                         <div class="menu-icon">
-                            <i class="fas fa-users-cog"></i> Rekening 
+                            <i class="fas fa-users-cog"></i> Rekening
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
 
-                    <div class="dropdown-container<?php echo $is_rekening_active ? ' show' : ''; ?>" id="rekeningDropdownContainer">
+                    <div class="dropdown-container<?php echo $is_rekening_active ? ' show' : ''; ?>"
+                        id="rekeningDropdownContainer">
                         <?php if (!$rekening_enabled): ?>
                             <span>Administrasi rekening ditutup.</span>
                         <?php else: ?>
-                            <a href="buka_rekening.php" class="<?php echo $current_page == 'buka_rekening.php' ? 'active' : ''; ?>"><i class="fas fa-user-plus"></i> Pembukaan Rekening</a>
-                            <a href="tutup_rekening.php" class="<?php echo $current_page == 'tutup_rekening.php' ? 'active' : ''; ?>"><i class="fas fa-user-times"></i> Penutupan Rekening</a>
-                            <a href="ubah_jenis_rekening.php" class="<?php echo $current_page == 'ubah_jenis_rekening.php' ? 'active' : ''; ?>"><i class="fas fa-exchange-alt"></i> Perubahan Jenis Rekening</a>
+                            <a href="buka_rekening.php"
+                                class="<?php echo $current_page == 'buka_rekening.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-user-plus"></i> Buka Rekening</a>
+                            <a href="tutup_rekening.php"
+                                class="<?php echo $current_page == 'tutup_rekening.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-user-times"></i> Tutup Rekening</a>
                         <?php endif; ?>
                     </div>
                 </div>
 
                 <!-- Menu Informasi Rekening -->
                 <div class="menu-item">
-                    <button 
-                        class="dropdown-btn <?php echo $is_search_active ? 'active-dropdown' : ($search_enabled ? '' : 'disabled'); ?>" 
+                    <button
+                        class="dropdown-btn <?php echo $is_search_active ? 'active-dropdown' : ($search_enabled ? '' : 'disabled'); ?>"
                         id="searchDropdown"
-                        title="<?php echo $search_enabled ? 'Layanan informasi rekening aktif' : 'Layanan informasi rekening ditutup'; ?>"
-                    >
+                        title="<?php echo $search_enabled ? 'Layanan informasi rekening aktif' : 'Layanan informasi rekening ditutup'; ?>">
                         <div class="menu-icon">
-                            <i class="fas fa-search"></i> Informasi Rekening
+                            <i class="fas fa-search"></i> Informasi
                         </div>
                         <i class="fas fa-chevron-down arrow"></i>
                     </button>
 
-                    <div class="dropdown-container<?php echo $is_search_active ? ' show' : ''; ?>" id="searchDropdownContainer">
+                    <div class="dropdown-container<?php echo $is_search_active ? ' show' : ''; ?>"
+                        id="searchDropdownContainer">
                         <?php if (!$search_enabled): ?>
                             <span>Akses informasi rekening ditutup.</span>
                         <?php else: ?>
-                            <a href="cek_mutasi.php" class="<?php echo $current_page == 'cek_mutasi.php' ? 'active' : ''; ?>"><i class="fas fa-list-alt"></i> Mutasi Rekening</a>
-                            <a href="validasi_transaksi.php" class="<?php echo $current_page == 'validasi_transaksi.php' ? 'active' : ''; ?>"><i class="fas fa-receipt"></i> Validasi Bukti</a>
-                            <a href="cek_saldo.php" class="<?php echo $current_page == 'cek_saldo.php' ? 'active' : ''; ?>"><i class="fas fa-wallet"></i> Informasi Saldo</a>
+                            <a href="cek_mutasi.php"
+                                class="<?php echo $current_page == 'cek_mutasi.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-list-alt"></i> Mutasi Rekening</a>
+                            <a href="validasi_transaksi.php"
+                                class="<?php echo $current_page == 'validasi_transaksi.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-receipt"></i> Validasi Transaksi</a>
+                            <a href="cek_saldo.php"
+                                class="<?php echo $current_page == 'cek_saldo.php' ? 'active' : ''; ?>"><i
+                                    class="fas fa-wallet"></i> Saldo Rekening</a>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -554,19 +690,21 @@ $is_search_active = in_array($current_page, $search_pages);
 
                 <div class="menu-item">
                     <a href="absensi.php" class="<?php echo $current_page == 'absensi.php' ? 'active' : ''; ?>">
-                        <i class="fas fa-user-check"></i> Absensi Petugas
+                        <i class="fas fa-user-check"></i> Absensi
                     </a>
                 </div>
 
                 <div class="menu-item">
-                    <a href="laporan_transaksi_harian.php" class="<?php echo $laporan_enabled && $current_page == 'laporan_transaksi_harian.php' ? 'active' : ($laporan_enabled ? '' : 'disabled'); ?>">
-                        <i class="fas fa-calendar-day"></i> Laporan Harian
+                    <a href="laporan_transaksi_harian.php"
+                        class="<?php echo $laporan_enabled && $current_page == 'laporan_transaksi_harian.php' ? 'active' : ($laporan_enabled ? '' : 'disabled'); ?>">
+                        <i class="fas fa-calendar-day"></i> Laporan Transaksi Harian
                     </a>
                 </div>
 
                 <!-- Menu Tunggal: Pengaturan Akun -->
                 <div class="menu-item">
-                    <a href="pengaturan_akun.php" class="<?php echo $current_page == 'pengaturan_akun.php' ? 'active' : ''; ?>">
+                    <a href="pengaturan_akun.php"
+                        class="<?php echo $current_page == 'pengaturan_akun.php' ? 'active' : ($settings_enabled ? '' : 'disabled'); ?>">
                         <i class="fas fa-cog"></i> Pengaturan Akun
                     </a>
                 </div>
@@ -576,43 +714,68 @@ $is_search_active = in_array($current_page, $search_pages);
 
         <div class="sidebar-footer">
             <div class="menu-item">
-                <a href="<?= BASE_URL ?>/logout.php" class="logout-btn">
-                    <i class="fas fa-sign-out-alt"></i> Keluar dari Sistem
+                <a href="javascript:void(0)" onclick="confirmLogout()" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Keluar
                 </a>
             </div>
         </div>
 
         <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const dropdownBtns = document.querySelectorAll('.dropdown-btn');
+            document.addEventListener('DOMContentLoaded', function () {
+                const dropdownBtns = document.querySelectorAll('.dropdown-btn');
 
-            dropdownBtns.forEach(btn => {
-                btn.addEventListener('click', function(e) {
-                    if (this.classList.contains('disabled')) return;
+                dropdownBtns.forEach(btn => {
+                    btn.addEventListener('click', function (e) {
+                        if (this.classList.contains('disabled')) return;
 
-                    e.preventDefault();
-                    const container = this.nextElementSibling;
-                    const isOpen = container.classList.contains('show');
+                        e.preventDefault();
+                        const container = this.nextElementSibling;
+                        const isOpen = container.classList.contains('show');
 
-                    document.querySelectorAll('.dropdown-container').forEach(c => {
-                        if (c !== container) c.classList.remove('show');
+                        document.querySelectorAll('.dropdown-container').forEach(c => {
+                            if (c !== container) c.classList.remove('show');
+                        });
+
+                        document.querySelectorAll('.dropdown-btn').forEach(b => {
+                            if (b !== this) b.classList.remove('active-dropdown');
+                        });
+
+                        if (!isOpen) {
+                            container.classList.add('show');
+                            this.classList.add('active-dropdown');
+                        } else {
+                            container.classList.remove('show');
+                            this.classList.remove('active-dropdown');
+                        }
                     });
-
-                    document.querySelectorAll('.dropdown-btn').forEach(b => {
-                        if (b !== this) b.classList.remove('active-dropdown');
-                    });
-
-                    if (!isOpen) {
-                        container.classList.add('show');
-                        this.classList.add('active-dropdown');
-                    } else {
-                        container.classList.remove('show');
-                        this.classList.remove('active-dropdown');
-                    }
                 });
             });
-        });
+
+            function confirmLogout() {
+                Swal.fire({
+                    title: 'Konfirmasi Keluar',
+                    text: 'Apakah Anda yakin ingin keluar dari sistem?',
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonColor: '#e74c3c',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fas fa-sign-out-alt"></i> Ya, Keluar',
+                    cancelButtonText: '<i class="fas fa-times"></i> Batal',
+                    reverseButtons: false,
+                    customClass: {
+                        popup: 'swal-popup-custom',
+                        title: 'swal-title-custom',
+                        confirmButton: 'swal-confirm-custom',
+                        cancelButton: 'swal-cancel-custom'
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.location.href = '<?= BASE_URL ?>/logout.php';
+                    }
+                });
+            }
         </script>
     </div>
 </body>
+
 </html>
